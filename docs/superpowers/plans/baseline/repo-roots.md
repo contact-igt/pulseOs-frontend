@@ -57,3 +57,16 @@ Full diffs were inspected (`git -C <repo> diff -- package.json package-lock.json
 3. **Fallback, only if native tooling is ever unavailable in a future execution context**: `git -C invictus-chatbot worktree add ../invictus-chatbot-pulseos-work -b pulseos/foundation` and the equivalent `git -C whatnexus-frontend worktree add ../whatnexus-frontend-pulseos-work -b pulseos/foundation`, with all implementation performed inside those worktree directories rather than the original clones. Any such fallback worktree directory must be verified as git-ignored/excluded from the PulseOS workspace repo's tracking before use (this workspace repo's `.gitignore` already excludes `invictus-chatbot/` and `whatnexus-frontend/` themselves; a sibling `../invictus-chatbot-pulseos-work` directory would sit outside the PulseOS workspace repo entirely and requires no additional ignore rule, but must still never be created inside `/Users/sushil` directly — always as a sibling of the existing repo clone).
 4. No worktree of any kind is created by this task (Task 2) — this section records policy only, per the plan's exact Task 2 scope. The first task that actually enters a worktree is the first later task that edits application code inside `invictus-chatbot` or `whatnexus-frontend`.
 5. No destructive git operation (`reset`, `clean`, force-checkout) is ever performed as part of entering or exiting a worktree under this policy.
+
+## PulseOS baseline commits (established by Plan Task 3, M0)
+
+The pre-existing `npm approve-scripts` dependency-approval changes (documented above) have been isolated into their own dedicated commits in the two repos PulseOS implementation touches. Full diffs were snapshotted to patch files before committing, for permanent attribution evidence: [`backend-pre-existing.patch`](backend-pre-existing.patch), [`frontend-pre-existing.patch`](frontend-pre-existing.patch), [`invictus-chatbot-pre-existing.patch`](invictus-chatbot-pre-existing.patch), [`whatnexus-frontend-pre-existing.patch`](whatnexus-frontend-pre-existing.patch).
+
+| Repo | Isolating commit | New HEAD (= PulseOS baseline) |
+|---|---|---|
+| `invictus-chatbot` | `6852396 chore: capture pre-existing npm approve-scripts changes (not PulseOS work)` | `6852396f6aec75f9ae032520e46057f80d148ee3` |
+| `whatnexus-frontend` | `c327d1c chore: capture pre-existing npm approve-scripts changes (not PulseOS work)` | `c327d1ca20c2edea6d95ac8e16927a091d2cef6d` |
+
+Per the approved spec, `backend` and `frontend` receive no commits during PulseOS implementation — they remain selective-port reference sources only. Their pre-existing dirty `package.json`/`package-lock.json` changes remain uncommitted in their working trees exactly as before, unchanged by this task; their original HEAD hashes (`22b081198f54bb3f3a987b36c5c46dcb1a5175d0` for `backend`, `bf187207fcc1c6cc2dbe65709bd3a4f40a42524d` for `frontend`, both recorded above) are still current.
+
+**Binding rule from here forward**: every subsequent PulseOS implementation task in `invictus-chatbot` diffs against `6852396f6aec75f9ae032520e46057f80d148ee3`, and every subsequent task in `whatnexus-frontend` diffs against `c327d1ca20c2edea6d95ac8e16927a091d2cef6d`. Any commit in either repo prior to these two hashes is pre-existing, non-PulseOS work; any commit after them is PulseOS work.
