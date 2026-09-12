@@ -1,0 +1,45 @@
+{
+  "name": "@pulseos/web",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --port 3310",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --ext .ts,.tsx",
+    "test": "vitest run",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "@pulseos/api-client": "workspace:*",
+    "@pulseos/design-tokens": "workspace:*",
+    "@pulseos/types": "workspace:*",
+    "@pulseos/ui": "workspace:*",
+    "@radix-ui/react-dialog": "^1.1.20",
+    "@radix-ui/react-select": "^2.3.0",
+    "@radix-ui/react-tabs": "^1.1.15",
+    "@tanstack/react-query": "^5.102.0",
+    "@tanstack/react-table": "^9.2.0",
+    "lucide-react": "^1.45.0",
+    "next": "16.3.5",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-hook-form": "^7.88.0",
+    "recharts": "^3.10.0",
+    "zod": "3.24.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@testing-library/react": "^16.2.0",
+    "@types/node": "^22.20.0",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@tailwindcss/postcss": "^4.3.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "jsdom": "^25.0.1",
+    "tailwindcss": "^4.3.0",
+    "typescript": "5.9.3",
+    "vitest": "3.2.4"
+  }
+}

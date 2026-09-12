@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary-50: #eef5f1;
+  --color-primary-100: #d4e6db;
+  --color-primary-200: #a9cdb8;
+  --color-primary-300: #7cb293;
+  --color-primary-400: #549a76;
+  --color-primary-500: #2f6b4e;
+  --color-primary-600: #1f4f39;
+  --color-primary-700: #173d2c;
+  --color-primary-800: #102b1f;
+  --color-primary-900: #0a1c14;
+
+  --color-accent-100: #dff5ec;
+  --color-accent-300: #a6e4cc;
+  --color-accent-500: #5fcba0;
+  --color-accent-700: #2f8f6c;
+
+  --color-neutral-0: #ffffff;
+  --color-neutral-50: #faf9f6;
+  --color-neutral-100: #f2f1ec;
+  --color-neutral-200: #e4e2da;
+  --color-neutral-300: #cdcac0;
+  --color-neutral-400: #a8a49a;
+  --color-neutral-500: #7d7a72;
+  --color-neutral-600: #5b584f;
+  --color-neutral-700: #403d36;
+  --color-neutral-800: #2a2823;
+  --color-neutral-900: #181712;
+
+  --color-slate-500: #5a6472;
+  --color-slate-700: #33394a;
+  --color-slate-900: #1a1e29;
+
+  --color-warning-100: #fdf1d8;
+  --color-warning-500: #c98a1f;
+  --color-warning-700: #8f5f0e;
+
+  --color-danger-100: #fbe1de;
+  --color-danger-500: #c14634;
+  --color-danger-700: #8f2f22;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  background: var(--color-neutral-50);
+  color: var(--color-slate-900);
+  font-family: var(--font-sans);
+}
+
+* {
+  transition-duration: 120ms;
+}

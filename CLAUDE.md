@@ -1,0 +1,35 @@
+# PulseOS — Project Rules
+
+Greenfield India-first Patient Engagement CRM / Hospital Operations Command Centre.
+Source of truth: [docs/superpowers/specs/2026-09-12-pulseos-greenfield-foundation-design.md](docs/superpowers/specs/2026-09-12-pulseos-greenfield-foundation-design.md), [docs/superpowers/plans/2026-09-12-pulseos-greenfield-foundation-plan.md](docs/superpowers/plans/2026-09-12-pulseos-greenfield-foundation-plan.md), execution amendment in the same `plans/` directory.
+
+## Locked decisions
+- `apps/web`/`apps/api` are new — never scaffolded from `whatnexus-frontend`/`invictus-chatbot`/Lead Panel.
+- `Journey` is a dedicated first-class entity. Never Lead-as-Journey.
+- Patient != Journey. A patient can have multiple concurrent journeys.
+
+## Reference repos (read-only, never a runtime dependency)
+`backend`, `frontend` (Lead Panel), `invictus-chatbot`, `whatnexus-frontend` (WhatsNexus), and their `-pulseos-work` variants. Extraction rule: read → identify dependencies → extract smallest useful unit → adapt to PulseOS interfaces → write a failing test first → verify independently. Never import wholesale.
+
+## Stack (locked)
+Node 24, pnpm workspaces, Turborepo. Web: Next.js 16 / React 19 / TS strict / App Router / Tailwind CSS 4 / Radix / Lucide / TanStack Query+Table / React Hook Form / Zod / Recharts. API: Fastify 5 / TS strict / modular monolith / Zod / Drizzle ORM / PostgreSQL. Testing: Vitest + Playwright. Auth: Argon2id, httpOnly session cookie, no token in localStorage/sessionStorage.
+
+No MUI. No generic admin template. No decorative animation libraries. No microservices. Shared `packages/*` only when ≥2 real consumers need them.
+
+## Design system
+`DESIGN_VARIANCE=5`, `MOTION_INTENSITY=3`, `VISUAL_DENSITY=7`. Tokens live in `packages/design-tokens`. Palette: deep forest green primary, mint accent, warm off-white/neutral surfaces, slate/charcoal type, amber/red reserved for operational warnings only. Avoid glassmorphism, gradients, giant KPI cards, decorative motion, brochure layouts, card-grid overload, emoji icons.
+
+## Domain ownership
+PulseOS core owns Patient, Journey, Timeline/Interaction, Task/NextAction, Appointment, ConsultationOutcome, TreatmentOpportunity, CampaignTouchpoint/RevenueEvent, CustomField*, Pipeline/PipelineStage, Consent, AuditEvent. External systems are adapters (`WhatsAppProvider`, `TelephonyProvider`, `AdsProvider`, `LLMProvider`, `StorageProvider`, `HISConnector`) — never `if provider === "runo"` inside domain logic.
+
+## Process
+TDD: failing test → minimal implementation → green → verify → commit. No production code without a failing test first (visual-only CSS/tokens use browser verification instead). Systematic debugging on unexpected failures — reproduce, read the full error, trace the diff, one hypothesis at a time; after 3 failed attempts, stop and reconsider the approach rather than keep patching. No completion claim without fresh evidence (tests, typecheck, lint, build, browser check all run just before claiming done).
+
+## Security
+Tenant isolation mandatory — never trust `tenant_id` from a request body, always derive from session. Server-side role/permission enforcement, not UI-only. No secrets committed (`.env` is gitignored; demo password comes from `DEMO_PASSWORD` env var, never hardcoded). Fictional demo data only, never real patient data.
+
+## Local dev
+- DB: local Postgres, `apps/api/.env` (copy from `.env.example`) sets `DATABASE_URL` + `DEMO_PASSWORD`.
+- `pnpm db:migrate` then `pnpm db:seed` to populate demo data.
+- `pnpm dev` runs both apps via Turborepo.
+- Demo accounts (password = local `DEMO_PASSWORD` value): `admin@pulseos.local` (Hospital Admin), `doctor@pulseos.local` / `doctor2@pulseos.local` (Doctor), `frontdesk@pulseos.local`, `coordinator@pulseos.local`.
