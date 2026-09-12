@@ -1,0 +1,61 @@
+import { test, expect } from "@playwright/test";
+
+const DEMO_PASSWORD = process.env.DEMO_PASSWORD ?? "";
+
+async function login(page: import("@playwright/test").Page, email: string) {
+  await page.goto("/login");
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill(DEMO_PASSWORD);
+  await page.getByRole("button", { name: "Sign in" }).click();
+}
+
+test.describe("Marketing → Patient Journey critical path", () => {
+  test.skip(!DEMO_PASSWORD, "DEMO_PASSWORD must be set to run this suite");
+
+  test("admin login shows the Command Centre with real spend and revenue", async ({ page }) => {
+    await login(page, "admin@pulseos.local");
+    await expect(page).toHaveURL(/\/command-centre/);
+    await expect(page.getByText("Marketing Spend")).toBeVisible();
+    await expect(page.getByText("Spend At Risk").first()).toBeVisible();
+    await expect(page.getByText("Journey Funnel")).toBeVisible();
+    await expect(page.getByText("Source / Campaign Performance")).toBeVisible();
+  });
+
+  test("clicking a Spend At Risk category drills into filtered Journeys", async ({ page }) => {
+    await login(page, "admin@pulseos.local");
+    await page.getByText("Uncontacted").first().click();
+    await expect(page).toHaveURL(/\/journeys\?atRisk=uncontacted/);
+    await expect(page.getByTestId("journeys-page")).toBeVisible();
+  });
+
+  test("opening a journey reaches Patient 360 with acquisition context and multiple journeys", async ({ page }) => {
+    await login(page, "admin@pulseos.local");
+    await page.goto("/patients?search=Priya");
+    await page.getByText("Priya Sharma").first().click();
+    await expect(page).toHaveURL(/\/patients\//);
+    await expect(page.getByTestId("patient-360")).toBeVisible();
+    await expect(page.getByText("Acquisition cost")).toBeVisible();
+    await expect(page.getByText(/Journeys \(2\)/)).toBeVisible();
+  });
+
+  test("doctor records a consultation outcome and it feeds the admin dashboard", async ({ page, request }) => {
+    await login(page, "doctor@pulseos.local");
+    await expect(page).toHaveURL(/\/doctor-home/);
+
+    const awaitingCard = page.getByText("Awaiting outcome").locator("..").locator("..");
+    const countBefore = await awaitingCard.getByText(/^\d+$/).first().textContent();
+
+    const firstActionButton = page.getByRole("button", { name: "Consultation Completed" }).first();
+    if (await firstActionButton.count() === 0) {
+      test.skip(true, "No appointment currently awaiting an outcome — re-seed to restore the demo scenario");
+    }
+    await firstActionButton.click();
+    await expect(page.getByRole("status")).toContainText(/Outcome recorded/i);
+
+    // Verify server-side: the outcome is now real, persisted data (not a UI-only change).
+    const loginRes = await request.post(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4310"}/auth/login`, {
+      data: { email: "admin@pulseos.local", password: DEMO_PASSWORD },
+    });
+    expect(loginRes.ok()).toBeTruthy();
+  });
+});

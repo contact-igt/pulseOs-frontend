@@ -146,3 +146,96 @@ export interface DoctorDashboard {
   today: DoctorTodayItem[];
   awaitingOutcome: DoctorTodayItem[];
 }
+
+export type ConsultationOutcomeValue =
+  | "CONSULTED"
+  | "TREATMENT_ADVISED"
+  | "NO_TREATMENT_REQUIRED"
+  | "DECISION_PENDING"
+  | "FOLLOW_UP_REQUIRED"
+  | "REFERRED"
+  | "OTHER";
+
+export interface RecordOutcomeInput {
+  appointmentId: string;
+  outcome: ConsultationOutcomeValue;
+  notes?: string;
+  treatmentLabel?: string;
+  estimatedValue?: number;
+}
+
+export type JourneyStage = ConversionStageKey | "lost";
+
+export interface PatientListRow {
+  id: string;
+  name: string;
+  phone: string;
+  branchName: string | null;
+  activeJourneyCount: number;
+  currentJourneyType: string | null;
+  currentStage: JourneyStage | null;
+  source: SourceChannel | null;
+  lastInteractionAt: string | null;
+  nextActionDueAt: string | null;
+  ownerName: string | null;
+  appointmentStatus: string | null;
+}
+
+export interface JourneyCardVm {
+  id: string;
+  journeyType: string;
+  stage: JourneyStage;
+  source: SourceChannel;
+  ownerName: string | null;
+  nextActionDueAt: string | null;
+  appointmentTime: string | null;
+  appointmentStatus: string | null;
+  doctorName: string | null;
+  treatmentStatus: string | null;
+  treatmentLabel: string | null;
+}
+
+export interface Patient360 {
+  patient: {
+    id: string;
+    name: string;
+    phone: string;
+    preferredLanguage: string;
+    branchName: string | null;
+  };
+  journeys: JourneyCardVm[];
+  acquisition: {
+    source: SourceChannel | null;
+    campaignName: string | null;
+    firstTouchAt: string | null;
+    allocatedAcquisitionCost: number | null;
+    estimatedTreatmentValue: number;
+    attributedRevenue: number;
+  };
+}
+
+export interface JourneyListRow {
+  id: string;
+  patientId: string;
+  patientName: string;
+  journeyType: string;
+  source: SourceChannel;
+  campaignName: string | null;
+  stage: JourneyStage;
+  branchName: string | null;
+  doctorName: string | null;
+  ownerName: string | null;
+  lastActivityAt: string;
+  nextActionDueAt: string | null;
+  acquisitionCost: number | null;
+  treatmentValue: number;
+}
+
+export interface JourneysSummary {
+  activeJourneys: number;
+  appointmentsPending: number;
+  consultationsPending: number;
+  treatmentDecisionsPending: number;
+  revenueOpportunity: number;
+  spendAtRisk: number;
+}

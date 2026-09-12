@@ -1,0 +1,68 @@
+import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { eq } from "drizzle-orm";
+import { buildApp } from "../app.js";
+import { db, queryClient } from "../db/client.js";
+import { patients } from "../db/schema.js";
+import type { FastifyInstance } from "fastify";
+
+const DEMO_PASSWORD = process.env.DEMO_PASSWORD;
+
+describe.skipIf(!DEMO_PASSWORD)("patients and journeys (integration)", () => {
+  let app: FastifyInstance;
+  let cookie: string;
+
+  beforeAll(async () => {
+    app = await buildApp();
+    await app.ready();
+    const login = await app.inject({ method: "POST", url: "/auth/login", payload: { email: "admin@pulseos.local", password: DEMO_PASSWORD } });
+    cookie = login.cookies.find((c) => c.name === "pulseos_session")!.value;
+  });
+
+  afterAll(async () => {
+    await app.close();
+    await queryClient.end();
+  });
+
+  it("lists patients with search filtering by name", async () => {
+    const res = await app.inject({ method: "GET", url: "/patients?search=Priya", cookies: { pulseos_session: cookie } });
+    expect(res.statusCode).toBe(200);
+    const rows = res.json() as { name: string }[];
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((r) => r.name.toLowerCase().includes("priya"))).toBe(true);
+  });
+
+  it("Patient 360 shows a patient with more than one active journey (Patient != Journey)", async () => {
+    const [priya] = await db.select().from(patients).where(eq(patients.name, "Priya Sharma")).limit(1);
+    const res = await app.inject({ method: "GET", url: `/patients/${priya.id}/360`, cookies: { pulseos_session: cookie } });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.journeys.length).toBeGreaterThanOrEqual(2);
+    const types = body.journeys.map((j: { journeyType: string }) => j.journeyType);
+    expect(new Set(types).size).toBeGreaterThanOrEqual(2); // Fertility + Pregnancy, distinct
+  });
+
+  it("Patient 360 returns 404 for a patient id that does not exist in this tenant", async () => {
+    const res = await app.inject({ method: "GET", url: "/patients/00000000-0000-0000-0000-000000000000/360", cookies: { pulseos_session: cookie } });
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("unauthenticated request cannot read any patient data (tenant isolation baseline)", async () => {
+    const res = await app.inject({ method: "GET", url: "/patients" });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("journeys list supports filtering by stage", async () => {
+    const res = await app.inject({ method: "GET", url: "/journeys?stage=completed", cookies: { pulseos_session: cookie } });
+    expect(res.statusCode).toBe(200);
+    const rows = res.json() as { stage: string }[];
+    expect(rows.every((r) => r.stage === "completed")).toBe(true);
+  });
+
+  it("journeys summary total matches the spend-at-risk total shown on the dashboard", async () => {
+    const [summary, spendAtRisk] = await Promise.all([
+      app.inject({ method: "GET", url: "/journeys/summary", cookies: { pulseos_session: cookie } }),
+      app.inject({ method: "GET", url: "/dashboard/spend-at-risk", cookies: { pulseos_session: cookie } }),
+    ]);
+    expect(summary.json().spendAtRisk).toBe(spendAtRisk.json().total);
+  });
+});

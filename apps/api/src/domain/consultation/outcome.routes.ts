@@ -1,0 +1,39 @@
+import type { FastifyInstance } from "fastify";
+import { z } from "zod";
+import { recordConsultationOutcome } from "./outcome.service.js";
+
+const outcomeBody = z.object({
+  outcome: z.enum(["CONSULTED", "TREATMENT_ADVISED", "NO_TREATMENT_REQUIRED", "DECISION_PENDING", "FOLLOW_UP_REQUIRED", "REFERRED", "OTHER"]),
+  notes: z.string().optional(),
+  treatmentLabel: z.string().optional(),
+  estimatedValue: z.number().int().nonnegative().optional(),
+});
+
+export async function outcomeRoutes(app: FastifyInstance) {
+  app.post("/appointments/:id/outcome", async (request, reply) => {
+    const user = request.sessionUser!;
+    if (user.role !== "DOCTOR") {
+      return reply.status(403).send({ error: "doctor_role_required" });
+    }
+
+    const parsed = outcomeBody.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "invalid_request" });
+    }
+
+    const { id } = request.params as { id: string };
+    const result = await recordConsultationOutcome(app.db, {
+      tenantId: user.tenantId,
+      appointmentId: id,
+      doctorUserId: user.id,
+      ...parsed.data,
+    });
+
+    if (!result.ok) {
+      const status = result.reason === "appointment_not_found" ? 404 : 409;
+      return reply.status(status).send({ error: result.reason });
+    }
+
+    return reply.send(result);
+  });
+}

@@ -8,8 +8,8 @@ export interface NavItem {
 
 const FULL_NAV: NavItem[] = [
   { label: "Command Centre", href: "/command-centre", implemented: true },
-  { label: "Patients", href: "/patients", implemented: false },
-  { label: "Journeys", href: "/journeys", implemented: false },
+  { label: "Patients", href: "/patients", implemented: true },
+  { label: "Journeys", href: "/journeys", implemented: true },
   { label: "Inbox", href: "/inbox", implemented: false },
   { label: "Appointments", href: "/appointments", implemented: false },
   { label: "Follow-ups / Tasks", href: "/follow-ups", implemented: false },
@@ -24,7 +24,7 @@ const FULL_NAV: NavItem[] = [
 const DOCTOR_NAV: NavItem[] = [
   { label: "Command Centre", href: "/doctor-home", implemented: true },
   { label: "Appointments", href: "/appointments", implemented: false },
-  { label: "Patients", href: "/patients", implemented: false },
+  { label: "Patients", href: "/patients", implemented: true },
   { label: "Follow-ups", href: "/follow-ups", implemented: false },
 ];
 

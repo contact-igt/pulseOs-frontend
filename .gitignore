@@ -17,3 +17,5 @@ apps/web/.next/
 dist/
 *.tsbuildinfo
 docs/superpowers/plans/screenshots/
+apps/web/test-results/
+apps/web/playwright-report/

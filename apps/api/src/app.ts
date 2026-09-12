@@ -5,6 +5,9 @@ import { resolveSession } from "./domain/auth/auth.service.js";
 import { authRoutes, SESSION_COOKIE } from "./domain/auth/auth.routes.js";
 import { dashboardRoutes } from "./domain/dashboard/dashboard.routes.js";
 import { doctorDashboardRoutes } from "./domain/dashboard/doctor.routes.js";
+import { patientRoutes } from "./domain/patient/patient.routes.js";
+import { journeyRoutes } from "./domain/journey/journey.routes.js";
+import { outcomeRoutes } from "./domain/consultation/outcome.routes.js";
 
 export async function buildApp() {
   const app = Fastify({ logger: true });
@@ -44,6 +47,9 @@ export async function buildApp() {
     protectedApp.addHook("preHandler", (request, reply, done) => requireAuth(request, reply, done));
     await protectedApp.register(dashboardRoutes);
     await protectedApp.register(doctorDashboardRoutes);
+    await protectedApp.register(patientRoutes);
+    await protectedApp.register(journeyRoutes);
+    await protectedApp.register(outcomeRoutes);
   });
 
   app.get("/health", async () => ({ ok: true }));

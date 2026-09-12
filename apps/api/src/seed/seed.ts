@@ -217,6 +217,15 @@ const JOURNEY_CONFIGS: JourneyConfig[] = [
     appt: { status: "completed", offsetDays: -3, doctor: "arjun" },
     outcome: { value: "CONSULTED" },
   },
+
+  // A second, concurrent journey for Vikram Kumar with today's consultation already
+  // completed but no outcome recorded yet — lets the doctor outcome workflow be
+  // exercised live in the browser against today's date, not just historical data.
+  {
+    patientIdx: 1, journeyType: "General OPD", source: "walk_in", campaignKey: null, stage: "attended",
+    contactedOffsetDays: 0, createdOffsetDays: 0,
+    appt: { status: "completed", offsetDays: 0, doctor: "meera" },
+  },
 ];
 
 async function main() {
