@@ -58,6 +58,24 @@ Full diffs were inspected (`git -C <repo> diff -- package.json package-lock.json
 4. No worktree of any kind is created by this task (Task 2) — this section records policy only, per the plan's exact Task 2 scope. The first task that actually enters a worktree is the first later task that edits application code inside `invictus-chatbot` or `whatnexus-frontend`.
 5. No destructive git operation (`reset`, `clean`, force-checkout) is ever performed as part of entering or exiting a worktree under this policy.
 
+## Worktree safety resolution (established before Task 5, prototype build loop)
+
+Before any code-touching task began, the native-vs-manual worktree question from item 3 above was resolved:
+
+- Checked `~/.claude/settings.json` for a `worktree.baseRef` override — **none found**, meaning `EnterWorktree` would run at its documented default, `fresh` (branches from `origin/<default-branch>`).
+- Our two PulseOS baseline commits — `invictus-chatbot` at `0e27a1232adeb4d5738b203bed7b58ccfa915608` and `whatnexus-frontend` at `c327d1ca20c2edea6d95ac8e16927a091d2cef6d` — are **local-only, never pushed to origin**. A `fresh`-mode worktree would silently branch from `origin/main`, dropping both baseline commits (including the demo tenant seed script) from the isolated branch.
+- Since `head` mode could not be positively confirmed as active, per the established fallback, both worktrees were created manually and deterministically instead: `git -C invictus-chatbot worktree add ../invictus-chatbot-pulseos-work -b pulseos/foundation` and `git -C whatnexus-frontend worktree add ../whatnexus-frontend-pulseos-work -b pulseos/foundation` — `git worktree add -b <branch>` with no explicit start-point always branches from that repo's current local `HEAD`, which is git's own documented, unambiguous default (no origin involved at all).
+- Verified after creation: both worktrees sit exactly at their expected local baseline commits, on a new `pulseos/foundation` branch, working tree clean; the original clones (`invictus-chatbot/`, `whatnexus-frontend/`) remain untouched on `main`.
+- `.gitignore` updated to add `invictus-chatbot-pulseos-work/` and `whatnexus-frontend-pulseos-work/`, so neither worktree directory is ever tracked by the PulseOS workspace repo.
+- Each worktree's untracked runtime files (`.env`/`.env.local`, `node_modules/`) were copied from the corresponding original clone — worktrees share git history but not untracked files — and a dependency-resolution sanity check (`node -e "require(...)"` for core backend/frontend packages) passed in both.
+
+| Worktree | Path | Branch | Rooted at |
+|---|---|---|---|
+| Backend implementation | `invictus-chatbot-pulseos-work/` | `pulseos/foundation` | `0e27a1232adeb4d5738b203bed7b58ccfa915608` |
+| Frontend implementation | `whatnexus-frontend-pulseos-work/` | `pulseos/foundation` | `c327d1ca20c2edea6d95ac8e16927a091d2cef6d` |
+
+**From here forward, all PulseOS implementation (Tasks 5–20 and beyond) happens inside these two worktree directories only** — never in the original `invictus-chatbot/`/`whatnexus-frontend/` clones (which stay on `main`, serving as the clean reference/rollback copies), never in `backend/`/`frontend/` (reference-only, untouched), and never at `/Users/sushil`.
+
 ## PulseOS baseline commits (established by Plan Task 3, M0)
 
 The pre-existing `npm approve-scripts` dependency-approval changes (documented above) have been isolated into their own dedicated commits in the two repos PulseOS implementation touches. Full diffs were snapshotted to patch files before committing, for permanent attribution evidence: [`backend-pre-existing.patch`](backend-pre-existing.patch), [`frontend-pre-existing.patch`](frontend-pre-existing.patch), [`invictus-chatbot-pre-existing.patch`](invictus-chatbot-pre-existing.patch), [`whatnexus-frontend-pre-existing.patch`](whatnexus-frontend-pre-existing.patch).
