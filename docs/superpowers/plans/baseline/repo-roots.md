@@ -70,3 +70,20 @@ The pre-existing `npm approve-scripts` dependency-approval changes (documented a
 Per the approved spec, `backend` and `frontend` receive no commits during PulseOS implementation — they remain selective-port reference sources only. Their pre-existing dirty `package.json`/`package-lock.json` changes remain uncommitted in their working trees exactly as before, unchanged by this task; their original HEAD hashes (`22b081198f54bb3f3a987b36c5c46dcb1a5175d0` for `backend`, `bf187207fcc1c6cc2dbe65709bd3a4f40a42524d` for `frontend`, both recorded above) are still current.
 
 **Binding rule from here forward**: every subsequent PulseOS implementation task in `invictus-chatbot` diffs against `6852396f6aec75f9ae032520e46057f80d148ee3`, and every subsequent task in `whatnexus-frontend` diffs against `c327d1ca20c2edea6d95ac8e16927a091d2cef6d`. Any commit in either repo prior to these two hashes is pre-existing, non-PulseOS work; any commit after them is PulseOS work.
+
+## Demo hospital tenant (established by Plan Task 4, M0)
+
+Seeded in `invictus-chatbot` via `src/scripts/seedPulseOsDemoTenant.js` (`npm run seed:pulseos-demo`), reusing the existing `createTenantService`/`createTenantUserService`/`generateReadableIdFromLast` functions rather than hand-rolled logic. Idempotent — re-running the script detects the existing row by `owner_email` and skips, verified by re-run with no duplicate rows created.
+
+| Field | Value |
+|---|---|
+| `tenant_id` | `TT001` |
+| `tenant_user_id` (tenant_admin login) | `TTU001` |
+| `tenants.type` | `hospital` |
+| `tenants.industry_type` | `healthcare` |
+| `tenants.subscription_plan` | `basic` (lowest existing tier, model default) |
+| `tenants.status` | `active` |
+| Demo admin email | `invictusautomation.igt+pulseos-demo@gmail.com` (env: `PULSEOS_DEMO_ADMIN_EMAIL`) |
+| Demo admin credentials | see `invictus-chatbot/.env` (`PULSEOS_DEMO_ADMIN_*`, gitignored, not committed) |
+
+Every later prototype task that needs a demo tenant/journey context reuses `tenant_id: "TT001"` and `tenant_user_id: "TTU001"` rather than seeding a second one.
