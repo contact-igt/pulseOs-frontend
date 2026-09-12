@@ -1,6 +1,22 @@
 import "dotenv/config";
 import { db, queryClient } from "../db/client.js";
-import { appointments, branches, journeys, patients, sessions, tasks, tenants, users } from "../db/schema.js";
+import {
+  appointments,
+  branches,
+  campaignTouchpoints,
+  consultationOutcomes,
+  journeys,
+  marketingCampaigns,
+  patients,
+  revenueEvents,
+  sessions,
+  tasks,
+  tenants,
+  timelineEvents,
+  treatmentOpportunities,
+  users,
+  type SourceChannelDb,
+} from "../db/schema.js";
 import { hashPassword } from "../domain/auth/auth.service.js";
 
 function requireDemoPassword(): string {
@@ -20,12 +36,201 @@ function daysFromNow(days: number, hour = 10, minute = 0) {
   return d;
 }
 
+type ConsultationOutcomeValue =
+  | "CONSULTED"
+  | "TREATMENT_ADVISED"
+  | "NO_TREATMENT_REQUIRED"
+  | "DECISION_PENDING"
+  | "FOLLOW_UP_REQUIRED"
+  | "REFERRED"
+  | "OTHER";
+
+type TreatmentStatusValue = "ADVISED" | "DECISION_PENDING" | "SCHEDULED" | "COMPLETED" | "DECLINED" | "LOST";
+type TaskReasonValue = "overdue_callback" | "missed_follow_up" | "no_show" | "high_intent_uncontacted" | "treatment_decision_pending" | "manual_task";
+type JourneyStageValue = "enquiry" | "contacted" | "booked" | "attended" | "consulted" | "treatment_advised" | "scheduled" | "completed" | "lost";
+type AppointmentStatusValue = "scheduled" | "checked_in" | "with_doctor" | "completed" | "no_show" | "cancelled";
+
+interface JourneyConfig {
+  patientIdx: number;
+  journeyType: string;
+  source: SourceChannelDb;
+  campaignKey: "meta" | "google" | "website" | null;
+  stage: JourneyStageValue;
+  contactedOffsetDays: number | null; // null = never contacted
+  createdOffsetDays: number;
+  appt?: { status: AppointmentStatusValue; offsetDays: number; doctor: "meera" | "arjun" };
+  outcome?: { value: ConsultationOutcomeValue; notes?: string };
+  treatment?: { label: string; status: TreatmentStatusValue; estimatedValue: number; decisionOffsetDays?: number };
+  revenueAmount?: number; // written as a revenue event when treatment status is COMPLETED
+  revenueOffsetDays?: number;
+  task?: { reason: TaskReasonValue; dueOffsetDays: number };
+}
+
+// The deliberate marketing story this seed tells:
+//   - "Meta – Fertility Awareness": cheap enquiries, poor treatment conversion (1/8)
+//   - "Google – IVF Search": pricier enquiries, high treatment conversion (3/5) and revenue
+//   - "Website – Landing Page": strong appointment rate, but no-show leakage (2/5)
+//   - Referral / walk-in: no campaign spend, nothing to protect (contrast for Spend At Risk)
+const JOURNEY_CONFIGS: JourneyConfig[] = [
+  // --- Meta group (8 journeys, poor conversion) ---
+  {
+    patientIdx: 0, journeyType: "Fertility", source: "meta", campaignKey: "meta", stage: "consulted",
+    contactedOffsetDays: -5, createdOffsetDays: -6,
+    appt: { status: "completed", offsetDays: -2, doctor: "meera" },
+    outcome: { value: "DECISION_PENDING", notes: "Discussing IVF cycle timing with partner" },
+    treatment: { label: "IVF Cycle 1", status: "DECISION_PENDING", estimatedValue: 300_00 },
+    task: { reason: "treatment_decision_pending", dueOffsetDays: -1 },
+  },
+  {
+    patientIdx: 1, journeyType: "Fertility", source: "meta", campaignKey: "meta", stage: "enquiry",
+    contactedOffsetDays: null, createdOffsetDays: -1,
+    task: { reason: "high_intent_uncontacted", dueOffsetDays: -1 },
+  },
+  {
+    patientIdx: 2, journeyType: "Fertility", source: "meta", campaignKey: "meta", stage: "contacted",
+    contactedOffsetDays: -1, createdOffsetDays: -2,
+    task: { reason: "overdue_callback", dueOffsetDays: -1 },
+  },
+  {
+    patientIdx: 3, journeyType: "Fertility", source: "meta", campaignKey: "meta", stage: "booked",
+    contactedOffsetDays: -2, createdOffsetDays: -3,
+    appt: { status: "scheduled", offsetDays: 1, doctor: "arjun" },
+  },
+  {
+    patientIdx: 4, journeyType: "Fertility", source: "meta", campaignKey: "meta", stage: "consulted",
+    contactedOffsetDays: -4, createdOffsetDays: -5,
+    appt: { status: "completed", offsetDays: -1, doctor: "meera" },
+    outcome: { value: "NO_TREATMENT_REQUIRED" },
+  },
+  {
+    patientIdx: 5, journeyType: "Fertility", source: "meta", campaignKey: "meta", stage: "consulted",
+    contactedOffsetDays: -3, createdOffsetDays: -4,
+    appt: { status: "completed", offsetDays: -3, doctor: "arjun" },
+    outcome: { value: "FOLLOW_UP_REQUIRED" },
+    task: { reason: "missed_follow_up", dueOffsetDays: -2 },
+  },
+  {
+    patientIdx: 6, journeyType: "Fertility", source: "meta", campaignKey: "meta", stage: "treatment_advised",
+    contactedOffsetDays: -6, createdOffsetDays: -7,
+    appt: { status: "completed", offsetDays: -3, doctor: "meera" },
+    outcome: { value: "TREATMENT_ADVISED" },
+    treatment: { label: "IUI Cycle", status: "ADVISED", estimatedValue: 25_000 },
+  },
+  {
+    patientIdx: 7, journeyType: "Fertility", source: "meta", campaignKey: "meta", stage: "completed",
+    contactedOffsetDays: -8, createdOffsetDays: -9,
+    appt: { status: "completed", offsetDays: -6, doctor: "arjun" },
+    outcome: { value: "TREATMENT_ADVISED" },
+    treatment: { label: "IUI Cycle", status: "COMPLETED", estimatedValue: 22_000 },
+    revenueAmount: 22_000, revenueOffsetDays: -1,
+  },
+
+  // --- Google group (5 journeys, expensive but high conversion) ---
+  {
+    patientIdx: 8, journeyType: "Fertility", source: "google", campaignKey: "google", stage: "consulted",
+    contactedOffsetDays: -2, createdOffsetDays: -3,
+    appt: { status: "completed", offsetDays: -2, doctor: "meera" },
+    outcome: { value: "TREATMENT_ADVISED" },
+    treatment: { label: "IVF Cycle 1", status: "DECISION_PENDING", estimatedValue: 60_000 },
+    task: { reason: "treatment_decision_pending", dueOffsetDays: -3 },
+  },
+  {
+    patientIdx: 9, journeyType: "Fertility", source: "google", campaignKey: "google", stage: "treatment_advised",
+    contactedOffsetDays: -4, createdOffsetDays: -5,
+    appt: { status: "completed", offsetDays: -3, doctor: "arjun" },
+    outcome: { value: "TREATMENT_ADVISED" },
+    treatment: { label: "IVF Cycle 1", status: "SCHEDULED", estimatedValue: 70_000, decisionOffsetDays: -1 },
+  },
+  {
+    patientIdx: 10, journeyType: "Fertility", source: "google", campaignKey: "google", stage: "completed",
+    contactedOffsetDays: -11, createdOffsetDays: -12,
+    appt: { status: "completed", offsetDays: -10, doctor: "meera" },
+    outcome: { value: "TREATMENT_ADVISED" },
+    treatment: { label: "IVF Cycle 1", status: "COMPLETED", estimatedValue: 95_000 },
+    revenueAmount: 95_000, revenueOffsetDays: -5,
+  },
+  {
+    patientIdx: 11, journeyType: "Fertility", source: "google", campaignKey: "google", stage: "completed",
+    contactedOffsetDays: -13, createdOffsetDays: -14,
+    appt: { status: "completed", offsetDays: -12, doctor: "arjun" },
+    outcome: { value: "TREATMENT_ADVISED" },
+    treatment: { label: "IVF Cycle 2", status: "COMPLETED", estimatedValue: 110_000 },
+    revenueAmount: 110_000, revenueOffsetDays: -6,
+  },
+  {
+    patientIdx: 12, journeyType: "Fertility", source: "google", campaignKey: "google", stage: "completed",
+    contactedOffsetDays: -9, createdOffsetDays: -10,
+    appt: { status: "completed", offsetDays: -8, doctor: "meera" },
+    outcome: { value: "TREATMENT_ADVISED" },
+    treatment: { label: "IVF Cycle 1", status: "COMPLETED", estimatedValue: 88_000 },
+    revenueAmount: 88_000, revenueOffsetDays: -4,
+  },
+
+  // --- Website group (5 journeys, strong appointment rate, no-show leakage) ---
+  {
+    patientIdx: 13, journeyType: "Paediatrics", source: "website", campaignKey: "website", stage: "booked",
+    contactedOffsetDays: -2, createdOffsetDays: -3,
+    appt: { status: "no_show", offsetDays: -1, doctor: "meera" },
+    task: { reason: "no_show", dueOffsetDays: -1 },
+  },
+  {
+    patientIdx: 14, journeyType: "Paediatrics", source: "website", campaignKey: "website", stage: "booked",
+    contactedOffsetDays: -3, createdOffsetDays: -4,
+    appt: { status: "no_show", offsetDays: -2, doctor: "arjun" },
+    task: { reason: "no_show", dueOffsetDays: -2 },
+  },
+  {
+    patientIdx: 15, journeyType: "Paediatrics", source: "website", campaignKey: "website", stage: "consulted",
+    contactedOffsetDays: -3, createdOffsetDays: -4,
+    appt: { status: "completed", offsetDays: -2, doctor: "meera" },
+    outcome: { value: "CONSULTED" },
+  },
+  {
+    patientIdx: 16, journeyType: "Paediatrics", source: "website", campaignKey: "website", stage: "consulted",
+    contactedOffsetDays: -5, createdOffsetDays: -6,
+    appt: { status: "completed", offsetDays: -4, doctor: "arjun" },
+    outcome: { value: "FOLLOW_UP_REQUIRED" },
+    task: { reason: "missed_follow_up", dueOffsetDays: -3 },
+  },
+  {
+    patientIdx: 17, journeyType: "Paediatrics", source: "website", campaignKey: "website", stage: "attended",
+    contactedOffsetDays: -2, createdOffsetDays: -3,
+    appt: { status: "completed", offsetDays: -1, doctor: "meera" },
+    outcome: { value: "NO_TREATMENT_REQUIRED" },
+  },
+
+  // --- No campaign (referral / walk-in): nothing to protect ---
+  {
+    patientIdx: 18, journeyType: "General OPD", source: "referral", campaignKey: null, stage: "lost",
+    contactedOffsetDays: -10, createdOffsetDays: -14,
+  },
+  {
+    patientIdx: 19, journeyType: "General OPD", source: "walk_in", campaignKey: null, stage: "enquiry",
+    contactedOffsetDays: null, createdOffsetDays: -1,
+    task: { reason: "high_intent_uncontacted", dueOffsetDays: -1 },
+  },
+
+  // Priya Sharma's second, concurrent journey — proves Patient != Journey.
+  {
+    patientIdx: 0, journeyType: "Pregnancy", source: "referral", campaignKey: null, stage: "consulted",
+    contactedOffsetDays: -3, createdOffsetDays: -10,
+    appt: { status: "completed", offsetDays: -3, doctor: "arjun" },
+    outcome: { value: "CONSULTED" },
+  },
+];
+
 async function main() {
   console.log("Clearing existing demo data...");
   await db.delete(sessions);
+  await db.delete(timelineEvents);
+  await db.delete(revenueEvents);
+  await db.delete(treatmentOpportunities);
+  await db.delete(consultationOutcomes);
   await db.delete(tasks);
+  await db.delete(campaignTouchpoints);
   await db.delete(appointments);
   await db.delete(journeys);
+  await db.delete(marketingCampaigns);
   await db.delete(patients);
   await db.delete(users);
   await db.delete(branches);
@@ -54,16 +259,23 @@ async function main() {
     ])
     .returning();
 
+  const [metaCampaign, googleCampaign, websiteCampaign] = await db
+    .insert(marketingCampaigns)
+    .values([
+      { tenantId: tenant.id, source: "meta", name: "Meta – Fertility Awareness", spendAmount: 48_000, startDate: daysFromNow(-30), status: "active" },
+      { tenantId: tenant.id, source: "google", name: "Google – IVF Search", spendAmount: 75_000, startDate: daysFromNow(-30), status: "active" },
+      { tenantId: tenant.id, source: "website", name: "Website – Landing Page", spendAmount: 15_000, startDate: daysFromNow(-30), status: "active" },
+    ])
+    .returning();
+
+  const campaignByKey = { meta: metaCampaign, google: googleCampaign, website: websiteCampaign };
+
   const patientNames = [
     "Priya Sharma", "Vikram Kumar", "Sneha Reddy", "Aditya Verma", "Lakshmi Nair",
     "Rahul Gupta", "Ishita Singh", "Karthik Pillai", "Divya Menon", "Arjun Patel",
     "Neha Joshi", "Suresh Iyer", "Pooja Agarwal", "Manoj Krishnan", "Ananya Desai",
     "Ravi Shankar", "Meenakshi Rao", "Siddharth Bose", "Tara Chawla", "Vishal Malhotra",
   ];
-
-  const sources = ["meta", "google", "website", "whatsapp", "walk_in", "referral"] as const;
-  const journeyTypes = ["Fertility", "Pregnancy", "Paediatrics", "General OPD"];
-  const stages = ["enquiry", "contacted", "booked", "attended", "consulted", "treatment_advised", "scheduled", "completed"] as const;
 
   const patientRows = await db
     .insert(patients)
@@ -78,80 +290,143 @@ async function main() {
     )
     .returning();
 
-  // Priya Sharma (index 0) gets two concurrent journeys, proving Patient != Journey
-  const journeyRows = [];
-  for (let i = 0; i < patientRows.length; i++) {
-    const patient = patientRows[i];
-    const stage = stages[i % stages.length];
-    const source = sources[i % sources.length];
-    const jType = journeyTypes[i % journeyTypes.length];
-    const owner = i % 2 === 0 ? coordinator : frontDesk;
-    journeyRows.push({
-      tenantId: tenant.id,
-      patientId: patient.id,
-      journeyType: jType,
-      stage,
-      source,
-      ownerUserId: owner.id,
-      contactedAt: stage === "enquiry" && i % 4 !== 0 ? null : daysFromNow(-i),
-      createdAt: daysFromNow(-(i + 1)),
+  const doctorByKey = { meera: doctorMeera, arjun: doctorArjun };
+
+  const timelineRows: (typeof timelineEvents.$inferInsert)[] = [];
+
+  for (const config of JOURNEY_CONFIGS) {
+    const patient = patientRows[config.patientIdx];
+    const owner = config.patientIdx % 2 === 0 ? coordinator : frontDesk;
+
+    const [journey] = await db
+      .insert(journeys)
+      .values({
+        tenantId: tenant.id,
+        patientId: patient.id,
+        journeyType: config.journeyType,
+        stage: config.stage,
+        source: config.source,
+        ownerUserId: owner.id,
+        contactedAt: config.contactedOffsetDays === null ? null : daysFromNow(config.contactedOffsetDays),
+        createdAt: daysFromNow(config.createdOffsetDays),
+      })
+      .returning();
+
+    timelineRows.push({
+      tenantId: tenant.id, patientId: patient.id, journeyId: journey.id,
+      actorType: "system", eventType: "journey_created", title: `${config.journeyType} journey opened`,
+      sourceChannel: config.source, occurredAt: daysFromNow(config.createdOffsetDays),
     });
+
+    if (config.campaignKey) {
+      const campaign = campaignByKey[config.campaignKey];
+      await db.insert(campaignTouchpoints).values({
+        tenantId: tenant.id, patientId: patient.id, journeyId: journey.id,
+        campaignId: campaign.id, source: config.source, touchType: "first_touch",
+        occurredAt: daysFromNow(config.createdOffsetDays),
+      });
+      timelineRows.push({
+        tenantId: tenant.id, patientId: patient.id, journeyId: journey.id,
+        actorType: "system", eventType: "source_captured", title: `Acquired via ${campaign.name}`,
+        sourceChannel: config.source, occurredAt: daysFromNow(config.createdOffsetDays),
+      });
+    }
+
+    let appointmentId: string | null = null;
+    if (config.appt) {
+      const doctor = doctorByKey[config.appt.doctor];
+      const branch = config.patientIdx % 2 === 0 ? branchA : branchB;
+      const [appt] = await db
+        .insert(appointments)
+        .values({
+          tenantId: tenant.id, patientId: patient.id, journeyId: journey.id, branchId: branch.id,
+          doctorUserId: doctor.id, status: config.appt.status,
+          scheduledAt: daysFromNow(config.appt.offsetDays, 9 + (config.patientIdx % 8)),
+          reason: "Consultation",
+        })
+        .returning();
+      appointmentId = appt.id;
+      timelineRows.push({
+        tenantId: tenant.id, patientId: patient.id, journeyId: journey.id,
+        actorType: "system", eventType: config.appt.status === "no_show" ? "appointment_no_show" : "appointment_" + config.appt.status,
+        title: config.appt.status === "no_show" ? "Patient did not show up" : `Appointment ${config.appt.status.replace("_", " ")}`,
+        occurredAt: daysFromNow(config.appt.offsetDays, 9 + (config.patientIdx % 8)),
+        relatedEntityType: "appointment", relatedEntityId: appt.id,
+      });
+    }
+
+    let outcomeId: string | null = null;
+    if (config.outcome && appointmentId) {
+      const doctor = doctorByKey[config.appt!.doctor];
+      const [outcome] = await db
+        .insert(consultationOutcomes)
+        .values({
+          tenantId: tenant.id, patientId: patient.id, journeyId: journey.id, appointmentId,
+          outcome: config.outcome.value, recordedBy: doctor.id,
+          recordedAt: daysFromNow(config.appt!.offsetDays, 11),
+          notes: config.outcome.notes,
+        })
+        .returning();
+      outcomeId = outcome.id;
+      timelineRows.push({
+        tenantId: tenant.id, patientId: patient.id, journeyId: journey.id, actorType: "user", actorId: doctor.id,
+        eventType: "consultation_outcome_recorded", title: `Consultation outcome: ${config.outcome.value.replace(/_/g, " ").toLowerCase()}`,
+        occurredAt: daysFromNow(config.appt!.offsetDays, 11), relatedEntityType: "consultation_outcome", relatedEntityId: outcome.id,
+      });
+    }
+
+    let treatmentId: string | null = null;
+    if (config.treatment) {
+      const [treatment] = await db
+        .insert(treatmentOpportunities)
+        .values({
+          tenantId: tenant.id, patientId: patient.id, journeyId: journey.id,
+          consultationOutcomeId: outcomeId,
+          treatmentLabel: config.treatment.label, status: config.treatment.status,
+          estimatedValue: config.treatment.estimatedValue, ownerUserId: owner.id,
+          decisionDate: config.treatment.decisionOffsetDays !== undefined ? daysFromNow(config.treatment.decisionOffsetDays) : null,
+        })
+        .returning();
+      treatmentId = treatment.id;
+      timelineRows.push({
+        tenantId: tenant.id, patientId: patient.id, journeyId: journey.id,
+        actorType: "system", eventType: "treatment_status_changed",
+        title: `Treatment "${config.treatment.label}" — ${config.treatment.status.replace(/_/g, " ").toLowerCase()}`,
+        occurredAt: daysFromNow(config.appt?.offsetDays ?? config.createdOffsetDays, 12),
+        relatedEntityType: "treatment_opportunity", relatedEntityId: treatment.id,
+      });
+    }
+
+    if (config.revenueAmount && treatmentId) {
+      await db.insert(revenueEvents).values({
+        tenantId: tenant.id, patientId: patient.id, journeyId: journey.id, treatmentOpportunityId: treatmentId,
+        amount: config.revenueAmount, type: "treatment_payment",
+        occurredAt: daysFromNow(config.revenueOffsetDays ?? 0),
+      });
+      timelineRows.push({
+        tenantId: tenant.id, patientId: patient.id, journeyId: journey.id,
+        actorType: "system", eventType: "revenue_recorded", title: `Payment received — ₹${config.revenueAmount.toLocaleString("en-IN")}`,
+        occurredAt: daysFromNow(config.revenueOffsetDays ?? 0), relatedEntityType: "revenue_event",
+      });
+    }
+
+    if (config.task) {
+      await db.insert(tasks).values({
+        tenantId: tenant.id, patientId: patient.id, journeyId: journey.id, assignedTo: owner.id,
+        reason: config.task.reason, status: "pending", dueAt: daysFromNow(config.task.dueOffsetDays, 9),
+      });
+    }
   }
-  journeyRows.push({
-    tenantId: tenant.id,
-    patientId: patientRows[0].id,
-    journeyType: "Pregnancy",
-    stage: "consulted" as const,
-    source: "referral" as const,
-    ownerUserId: coordinator.id,
-    contactedAt: daysFromNow(-3),
-    createdAt: daysFromNow(-10),
-  });
 
-  const insertedJourneys = await db.insert(journeys).values(journeyRows).returning();
-
-  const doctors = [doctorMeera, doctorArjun];
-  const appointmentRows = [];
-  for (let i = 0; i < patientRows.length; i++) {
-    const patient = patientRows[i];
-    const journey = insertedJourneys[i];
-    const doctor = doctors[i % 2];
-    const branch = i % 2 === 0 ? branchA : branchB;
-    const dayOffset = i % 5 === 0 ? 0 : i % 5 === 1 ? -1 : i % 3 === 0 ? 1 : 0;
-    const status =
-      dayOffset === -1 ? (i % 4 === 0 ? "no_show" : "completed") : i % 6 === 0 ? "checked_in" : i % 7 === 0 ? "with_doctor" : "scheduled";
-
-    appointmentRows.push({
-      tenantId: tenant.id,
-      patientId: patient.id,
-      journeyId: journey.id,
-      branchId: branch.id,
-      doctorUserId: doctor.id,
-      status: status as typeof appointments.$inferInsert.status,
-      scheduledAt: daysFromNow(dayOffset, 9 + (i % 8)),
-      reason: "Consultation",
-      outcomeRecorded: status === "completed" ? i % 3 !== 0 : false,
-      treatmentRecommended: status === "completed" && i % 3 === 0,
-      revenueAmount: status === "completed" && i % 3 === 0 ? 15000 + i * 500 : 0,
-    });
+  if (timelineRows.length > 0) {
+    await db.insert(timelineEvents).values(timelineRows);
   }
-  await db.insert(appointments).values(appointmentRows);
-
-  const taskReasons = ["overdue_callback", "missed_follow_up", "no_show", "high_intent_uncontacted", "treatment_decision_pending"] as const;
-  const taskRows = patientRows.slice(0, 12).map((patient, i) => ({
-    tenantId: tenant.id,
-    patientId: patient.id,
-    journeyId: insertedJourneys[i].id,
-    assignedTo: i % 2 === 0 ? coordinator.id : frontDesk.id,
-    reason: taskReasons[i % taskReasons.length],
-    status: "pending" as const,
-    dueAt: daysFromNow(i % 4 === 0 ? -1 : 0, 9 + i),
-  }));
-  await db.insert(tasks).values(taskRows);
 
   console.log("Seed complete.");
   console.log(`Tenant: ${tenant.name} (${tenant.id})`);
-  console.log(`Admin login: admin@pulseos.local`);
+  console.log(`Campaigns: Meta ₹48,000 · Google ₹75,000 · Website ₹15,000`);
+  console.log(`Journeys: ${JOURNEY_CONFIGS.length}, Patients: ${patientRows.length}`);
+  console.log(`Admin login: admin@pulseos.local (${admin.role})`);
   console.log(`Doctor login: doctor@pulseos.local`);
   console.log(`Password: value of DEMO_PASSWORD env var`);
 }

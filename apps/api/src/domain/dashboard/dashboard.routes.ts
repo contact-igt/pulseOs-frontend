@@ -3,8 +3,10 @@ import {
   getAttentionQueue,
   getBranchDoctorPerformance,
   getConversionFunnel,
-  getMarketingSources,
+  getExecutiveStrip,
   getPatientFlow,
+  getSourcePerformance,
+  getSpendAtRisk,
   getTeamWorkload,
   getTodayStrip,
 } from "./dashboard.service.js";
@@ -13,6 +15,11 @@ export async function dashboardRoutes(app: FastifyInstance) {
   app.get("/dashboard/today", async (request) => {
     const tenantId = request.sessionUser!.tenantId;
     return getTodayStrip(app.db, tenantId);
+  });
+
+  app.get("/dashboard/executive", async (request) => {
+    const tenantId = request.sessionUser!.tenantId;
+    return getExecutiveStrip(app.db, tenantId);
   });
 
   app.get("/dashboard/conversion", async (request) => {
@@ -30,9 +37,14 @@ export async function dashboardRoutes(app: FastifyInstance) {
     return getAttentionQueue(app.db, tenantId);
   });
 
-  app.get("/dashboard/marketing", async (request) => {
+  app.get("/dashboard/spend-at-risk", async (request) => {
     const tenantId = request.sessionUser!.tenantId;
-    return getMarketingSources(app.db, tenantId);
+    return getSpendAtRisk(app.db, tenantId);
+  });
+
+  app.get("/dashboard/source-performance", async (request) => {
+    const tenantId = request.sessionUser!.tenantId;
+    return getSourcePerformance(app.db, tenantId);
   });
 
   app.get("/dashboard/team", async (request) => {

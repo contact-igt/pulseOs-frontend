@@ -34,6 +34,8 @@ export interface ConversionStage {
   key: ConversionStageKey;
   label: string;
   count: number;
+  /** total attributed campaign spend / count, only computed for stages where it's meaningful; null elsewhere or on zero count */
+  costPerOutcome: number | null;
 }
 
 export type PatientFlowBucket = "waiting" | "checked_in" | "with_doctor" | "consultation_complete" | "follow_up_required";
@@ -59,15 +61,49 @@ export interface AttentionItem {
   ownerName: string | null;
 }
 
-export type SourceChannel = "meta" | "google" | "website" | "whatsapp" | "walk_in" | "referral";
+export type SourceChannel = "meta" | "google" | "website" | "whatsapp" | "walk_in" | "referral" | "organic" | "other";
 
-export interface MarketingSourceRow {
+export interface SourcePerformanceRow {
+  campaignId: string | null;
+  campaignName: string;
   source: SourceChannel;
-  volume: number;
+  spend: number;
+  enquiries: number;
   appointments: number;
   consultations: number;
-  treatmentConversion: number;
+  treatments: number;
   revenue: number;
+  roas: number | null;
+}
+
+export interface ExecutiveStrip {
+  marketingSpend: number;
+  enquiries: number;
+  consultations: number;
+  treatmentsCompleted: number;
+  attributedRevenue: number;
+  roas: number | null;
+  spendAtRisk: number;
+}
+
+export type SpendAtRiskCategoryKey =
+  | "uncontacted"
+  | "overdue_follow_up"
+  | "no_show_recovery"
+  | "treatment_decision_pending"
+  | "post_consultation_follow_up_overdue";
+
+export interface SpendAtRiskCategory {
+  key: SpendAtRiskCategoryKey;
+  label: string;
+  journeyCount: number;
+  allocatedSpend: number;
+  oldestAgeDays: number;
+}
+
+export interface SpendAtRiskSummary {
+  total: number;
+  categories: SpendAtRiskCategory[];
 }
 
 export interface TeamWorkloadRow {

@@ -1,12 +1,28 @@
-import { and, count, eq, gte, lt, sql, sum, isNull } from "drizzle-orm";
+import { and, count, eq, gte, inArray, lt, sql, sum, isNull, isNotNull } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
-import { appointments, journeys, patients, tasks, users } from "../../db/schema.js";
+import {
+  appointments,
+  campaignTouchpoints,
+  consultationOutcomes,
+  journeys,
+  marketingCampaigns,
+  patients,
+  revenueEvents,
+  tasks,
+  treatmentOpportunities,
+  users,
+} from "../../db/schema.js";
+import { allocatedAcquisitionCost, costPer, roas as roasOf } from "../marketing/formulas.js";
 import type {
   AttentionItem,
   BranchDoctorRow,
   ConversionStage,
-  MarketingSourceRow,
+  ExecutiveStrip,
   PatientFlowCount,
+  SourcePerformanceRow,
+  SpendAtRiskCategory,
+  SpendAtRiskCategoryKey,
+  SpendAtRiskSummary,
   TeamWorkloadRow,
   TodayStrip,
 } from "@pulseos/types";
@@ -31,7 +47,7 @@ export async function getTodayStrip(db: Db, tenantId: string): Promise<TodayStri
       db.select({ c: count() }).from(appointments).where(and(eq(appointments.tenantId, tenantId), eq(appointments.status, "checked_in"))),
       db.select({ c: count() }).from(appointments).where(and(eq(appointments.tenantId, tenantId), eq(appointments.status, "no_show"), gte(appointments.scheduledAt, start), lt(appointments.scheduledAt, end))),
       db.select({ c: count() }).from(appointments).where(and(eq(appointments.tenantId, tenantId), eq(appointments.status, "completed"), gte(appointments.scheduledAt, start), lt(appointments.scheduledAt, end))),
-      db.select({ c: count() }).from(appointments).where(and(eq(appointments.tenantId, tenantId), eq(appointments.outcomeRecorded, true), eq(appointments.treatmentRecommended, true))),
+      db.select({ c: count() }).from(treatmentOpportunities).where(and(eq(treatmentOpportunities.tenantId, tenantId), eq(treatmentOpportunities.status, "DECISION_PENDING"))),
     ]);
 
   return {
@@ -46,6 +62,41 @@ export async function getTodayStrip(db: Db, tenantId: string): Promise<TodayStri
   };
 }
 
+/**
+ * Total marketing spend across all of a tenant's campaigns — the denominator
+ * for every cost-per-outcome and ROAS figure on the dashboard.
+ */
+async function getTotalSpend(db: Db, tenantId: string): Promise<number> {
+  const [row] = await db
+    .select({ total: sum(marketingCampaigns.spendAmount) })
+    .from(marketingCampaigns)
+    .where(eq(marketingCampaigns.tenantId, tenantId));
+  return Number(row?.total ?? 0);
+}
+
+export async function getExecutiveStrip(db: Db, tenantId: string): Promise<ExecutiveStrip> {
+  const [spend, [enquiries], [consultations], [treatmentsCompleted], [revenue], spendAtRisk] = await Promise.all([
+    getTotalSpend(db, tenantId),
+    db.select({ c: count() }).from(journeys).where(eq(journeys.tenantId, tenantId)),
+    db.select({ c: count() }).from(consultationOutcomes).where(eq(consultationOutcomes.tenantId, tenantId)),
+    db.select({ c: count() }).from(treatmentOpportunities).where(and(eq(treatmentOpportunities.tenantId, tenantId), eq(treatmentOpportunities.status, "COMPLETED"))),
+    db.select({ total: sum(revenueEvents.amount) }).from(revenueEvents).where(eq(revenueEvents.tenantId, tenantId)),
+    getSpendAtRisk(db, tenantId),
+  ]);
+
+  const attributedRevenue = Number(revenue?.total ?? 0);
+
+  return {
+    marketingSpend: spend,
+    enquiries: enquiries.c,
+    consultations: consultations.c,
+    treatmentsCompleted: treatmentsCompleted.c,
+    attributedRevenue,
+    roas: roasOf(attributedRevenue, spend),
+    spendAtRisk: spendAtRisk.total,
+  };
+}
+
 const CONVERSION_STAGES: { key: ConversionStage["key"]; label: string }[] = [
   { key: "enquiry", label: "Enquiry" },
   { key: "contacted", label: "Contacted" },
@@ -57,6 +108,10 @@ const CONVERSION_STAGES: { key: ConversionStage["key"]; label: string }[] = [
   { key: "completed", label: "Completed" },
 ];
 
+// Stages that get a "cost per outcome" figure — the ones a hospital admin
+// actually reasons about acquisition cost against.
+const COST_TRACKED_STAGES = new Set<ConversionStage["key"]>(["enquiry", "booked", "consulted", "completed"]);
+
 export async function getConversionFunnel(db: Db, tenantId: string): Promise<ConversionStage[]> {
   const rows = await db
     .select({ stage: journeys.stage, c: count() })
@@ -65,6 +120,7 @@ export async function getConversionFunnel(db: Db, tenantId: string): Promise<Con
     .groupBy(journeys.stage);
 
   const counts = new Map(rows.map((r) => [r.stage, r.c]));
+  const totalSpend = await getTotalSpend(db, tenantId);
 
   // A journey's current stage implies it has passed through every earlier stage
   // (lost/declined journeys are excluded from the funnel, not counted at any stage).
@@ -72,7 +128,12 @@ export async function getConversionFunnel(db: Db, tenantId: string): Promise<Con
   const perStageCounts = CONVERSION_STAGES.map((s) => counts.get(s.key) ?? 0);
   return CONVERSION_STAGES.map((s, idx) => {
     const reachedOrPast = perStageCounts.slice(idx).reduce((sum, c) => sum + c, 0);
-    return { key: s.key, label: s.label, count: reachedOrPast };
+    return {
+      key: s.key,
+      label: s.label,
+      count: reachedOrPast,
+      costPerOutcome: COST_TRACKED_STAGES.has(s.key) ? costPer(totalSpend, reachedOrPast) : null,
+    };
   });
 }
 
@@ -140,52 +201,123 @@ export async function getAttentionQueue(db: Db, tenantId: string): Promise<Atten
   }));
 }
 
-export async function getMarketingSources(db: Db, tenantId: string): Promise<MarketingSourceRow[]> {
-  const rows = await db
-    .select({
-      source: journeys.source,
-      volume: count(journeys.id),
-    })
-    .from(journeys)
-    .where(eq(journeys.tenantId, tenantId))
-    .groupBy(journeys.source);
+// Spend-At-Risk categories map 1:1 onto the existing task-reason catalog —
+// each reason IS an operational failure keeping acquisition spend unrealized.
+const SPEND_AT_RISK_CATEGORIES: { key: SpendAtRiskCategoryKey; label: string; taskReason: string }[] = [
+  { key: "uncontacted", label: "Uncontacted", taskReason: "high_intent_uncontacted" },
+  { key: "overdue_follow_up", label: "Overdue follow-up", taskReason: "overdue_callback" },
+  { key: "no_show_recovery", label: "No-show recovery", taskReason: "no_show" },
+  { key: "treatment_decision_pending", label: "Treatment decision pending", taskReason: "treatment_decision_pending" },
+  { key: "post_consultation_follow_up_overdue", label: "Post-consultation follow-up overdue", taskReason: "missed_follow_up" },
+];
 
-  const appointmentsBySource = await db
-    .select({ source: journeys.source, appts: count(appointments.id), revenue: sum(appointments.revenueAmount) })
-    .from(journeys)
-    .leftJoin(appointments, eq(appointments.journeyId, journeys.id))
-    .where(eq(journeys.tenantId, tenantId))
-    .groupBy(journeys.source);
+/**
+ * A journey's allocated acquisition cost = its attributed campaign's average
+ * cost-per-enquiry (campaign spend / campaign enquiry count). Journeys with
+ * no campaign touchpoint (organic/walk-in/referral) allocate 0 — there is no
+ * spend to protect. See north-star addendum §"Spend At Risk" for the formula.
+ */
+async function getCampaignAllocationByJourney(db: Db, tenantId: string): Promise<Map<string, number>> {
+  const campaignEnquiryCounts = await db
+    .select({ campaignId: campaignTouchpoints.campaignId, c: count() })
+    .from(campaignTouchpoints)
+    .where(and(eq(campaignTouchpoints.tenantId, tenantId), isNotNull(campaignTouchpoints.campaignId)))
+    .groupBy(campaignTouchpoints.campaignId);
+  const enquiryCountMap = new Map(campaignEnquiryCounts.map((r) => [r.campaignId as string, r.c]));
 
-  const consultationsBySource = await db
-    .select({ source: journeys.source, consultations: count(appointments.id) })
-    .from(journeys)
-    .leftJoin(appointments, and(eq(appointments.journeyId, journeys.id), eq(appointments.status, "completed")))
-    .where(eq(journeys.tenantId, tenantId))
-    .groupBy(journeys.source);
+  const campaigns = await db.select().from(marketingCampaigns).where(eq(marketingCampaigns.tenantId, tenantId));
+  const allocationByCampaign = new Map<string, number>();
+  for (const c of campaigns) {
+    const alloc = allocatedAcquisitionCost(c.spendAmount, enquiryCountMap.get(c.id) ?? 0);
+    allocationByCampaign.set(c.id, alloc ?? 0);
+  }
 
-  const treatmentBySource = await db
-    .select({ source: journeys.source, treatments: count(appointments.id) })
-    .from(journeys)
-    .leftJoin(appointments, and(eq(appointments.journeyId, journeys.id), eq(appointments.treatmentRecommended, true)))
-    .where(eq(journeys.tenantId, tenantId))
-    .groupBy(journeys.source);
+  const touchpoints = await db
+    .select({ journeyId: campaignTouchpoints.journeyId, campaignId: campaignTouchpoints.campaignId })
+    .from(campaignTouchpoints)
+    .where(and(eq(campaignTouchpoints.tenantId, tenantId), eq(campaignTouchpoints.touchType, "first_touch")));
 
-  const apptMap = new Map(appointmentsBySource.map((r) => [r.source, r]));
-  const consultMap = new Map(consultationsBySource.map((r) => [r.source, r.consultations]));
-  const treatMap = new Map(treatmentBySource.map((r) => [r.source, r.treatments]));
+  const byJourney = new Map<string, number>();
+  for (const tp of touchpoints) {
+    if (tp.campaignId) byJourney.set(tp.journeyId, allocationByCampaign.get(tp.campaignId) ?? 0);
+  }
+  return byJourney;
+}
 
-  return rows.map((r) => {
-    const appt = apptMap.get(r.source);
-    return {
-      source: r.source,
-      volume: r.volume,
-      appointments: appt?.appts ?? 0,
-      consultations: consultMap.get(r.source) ?? 0,
-      treatmentConversion: treatMap.get(r.source) ?? 0,
-      revenue: Number(appt?.revenue ?? 0),
-    };
-  });
+export async function getSpendAtRisk(db: Db, tenantId: string): Promise<SpendAtRiskSummary> {
+  const allocationByJourney = await getCampaignAllocationByJourney(db, tenantId);
+  const now = Date.now();
+
+  const categories: SpendAtRiskCategory[] = [];
+  for (const cat of SPEND_AT_RISK_CATEGORIES) {
+    const rows = await db
+      .select({ journeyId: tasks.journeyId, dueAt: tasks.dueAt })
+      .from(tasks)
+      .where(and(eq(tasks.tenantId, tenantId), eq(tasks.status, "pending"), eq(tasks.reason, cat.taskReason as (typeof tasks.reason.enumValues)[number])));
+
+    let allocatedSpend = 0;
+    let oldestAgeDays = 0;
+    for (const row of rows) {
+      if (row.journeyId) allocatedSpend += allocationByJourney.get(row.journeyId) ?? 0;
+      const ageDays = Math.max(0, Math.floor((now - row.dueAt.getTime()) / 86_400_000));
+      if (ageDays > oldestAgeDays) oldestAgeDays = ageDays;
+    }
+
+    categories.push({ key: cat.key, label: cat.label, journeyCount: rows.length, allocatedSpend, oldestAgeDays });
+  }
+
+  return { total: categories.reduce((sum, c) => sum + c.allocatedSpend, 0), categories };
+}
+
+export async function getSourcePerformance(db: Db, tenantId: string): Promise<SourcePerformanceRow[]> {
+  const campaigns = await db.select().from(marketingCampaigns).where(eq(marketingCampaigns.tenantId, tenantId));
+
+  const rows: SourcePerformanceRow[] = [];
+  for (const campaign of campaigns) {
+    const journeyIdsResult = await db
+      .select({ journeyId: campaignTouchpoints.journeyId })
+      .from(campaignTouchpoints)
+      .where(and(eq(campaignTouchpoints.tenantId, tenantId), eq(campaignTouchpoints.campaignId, campaign.id)));
+    const journeyIds = journeyIdsResult.map((r) => r.journeyId);
+    if (journeyIds.length === 0) {
+      rows.push({
+        campaignId: campaign.id,
+        campaignName: campaign.name,
+        source: campaign.source,
+        spend: campaign.spendAmount,
+        enquiries: 0,
+        appointments: 0,
+        consultations: 0,
+        treatments: 0,
+        revenue: 0,
+        roas: null,
+      });
+      continue;
+    }
+
+    const [[apptCount], [consultCount], [treatCount], [revenueRow]] = await Promise.all([
+      db.select({ c: count() }).from(appointments).where(and(eq(appointments.tenantId, tenantId), inArray(appointments.journeyId, journeyIds))),
+      db.select({ c: count() }).from(consultationOutcomes).where(and(eq(consultationOutcomes.tenantId, tenantId), inArray(consultationOutcomes.journeyId, journeyIds))),
+      db.select({ c: count() }).from(treatmentOpportunities).where(and(eq(treatmentOpportunities.tenantId, tenantId), eq(treatmentOpportunities.status, "COMPLETED"), inArray(treatmentOpportunities.journeyId, journeyIds))),
+      db.select({ total: sum(revenueEvents.amount) }).from(revenueEvents).where(and(eq(revenueEvents.tenantId, tenantId), inArray(revenueEvents.journeyId, journeyIds))),
+    ]);
+
+    const revenue = Number(revenueRow?.total ?? 0);
+    rows.push({
+      campaignId: campaign.id,
+      campaignName: campaign.name,
+      source: campaign.source,
+      spend: campaign.spendAmount,
+      enquiries: journeyIds.length,
+      appointments: apptCount.c,
+      consultations: consultCount.c,
+      treatments: treatCount.c,
+      revenue,
+      roas: roasOf(revenue, campaign.spendAmount),
+    });
+  }
+
+  return rows.sort((a, b) => b.spend - a.spend);
 }
 
 export async function getTeamWorkload(db: Db, tenantId: string): Promise<TeamWorkloadRow[]> {
