@@ -44,4 +44,16 @@ Full diffs were inspected (`git -C <repo> diff -- package.json package-lock.json
 
 ## Worktree isolation policy
 
-Not yet decided — this is Task 2's scope, not Task 1's. No worktree has been created by this task.
+- **Status**: Established by Plan Task 2 (M0)
+
+**Detection performed**: confirmed the current session is not already inside an isolated worktree for either implementation repo — `invictus-chatbot/.git` and `whatnexus-frontend/.git` are both ordinary directories (`file invictus-chatbot/.git` / `file whatnexus-frontend/.git` → `directory`), not `gitdir:`-pointer files, which is what a worktree checkout would show instead.
+
+**Native tooling availability**: Claude Code's native isolation tooling (`EnterWorktree` / `ExitWorktree`) is confirmed available and loadable in this environment. Per its own documentation, it creates a new git worktree inside `.claude/worktrees/` on a new branch, scoped to "the current repository or, in a multi-repo workspace, a repository nested inside it" — directly matching this workspace's shape (the PulseOS workspace repo containing four nested project repos).
+
+**Policy, binding for all future code-touching tasks in this plan**:
+
+1. `invictus-chatbot` and `whatnexus-frontend` are the only two repos this plan modifies with application code (per the approved spec's backend/frontend foundation decision). Every task that edits files inside either of them must first call `EnterWorktree`, scoped individually to that specific repo (cwd/context pinned to `invictus-chatbot` or to `whatnexus-frontend` respectively) — never to the PulseOS workspace root and never to `/Users/sushil`.
+2. `backend` and `frontend` (Lead Panel) remain selective-port *reference* sources only, per the approved spec (§2.3 of the design spec, and Task 3/M0 of the plan) — no implementation task writes into them, so no worktree is needed for them under this plan.
+3. **Fallback, only if native tooling is ever unavailable in a future execution context**: `git -C invictus-chatbot worktree add ../invictus-chatbot-pulseos-work -b pulseos/foundation` and the equivalent `git -C whatnexus-frontend worktree add ../whatnexus-frontend-pulseos-work -b pulseos/foundation`, with all implementation performed inside those worktree directories rather than the original clones. Any such fallback worktree directory must be verified as git-ignored/excluded from the PulseOS workspace repo's tracking before use (this workspace repo's `.gitignore` already excludes `invictus-chatbot/` and `whatnexus-frontend/` themselves; a sibling `../invictus-chatbot-pulseos-work` directory would sit outside the PulseOS workspace repo entirely and requires no additional ignore rule, but must still never be created inside `/Users/sushil` directly — always as a sibling of the existing repo clone).
+4. No worktree of any kind is created by this task (Task 2) — this section records policy only, per the plan's exact Task 2 scope. The first task that actually enters a worktree is the first later task that edits application code inside `invictus-chatbot` or `whatnexus-frontend`.
+5. No destructive git operation (`reset`, `clean`, force-checkout) is ever performed as part of entering or exiting a worktree under this policy.
