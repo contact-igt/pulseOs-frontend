@@ -6,6 +6,8 @@
   - Backend: `invictus-chatbot-pulseos-work/` on branch `pulseos/foundation`, rooted at `0e27a1232adeb4d5738b203bed7b58ccfa915608`
   - Frontend: `whatnexus-frontend-pulseos-work/` on branch `pulseos/foundation`, rooted at `c327d1ca20c2edea6d95ac8e16927a091d2cef6d`
 - **Demo tenant**: `tenant_id: TT001`, `tenant_user_id: TTU001` (see repo-roots.md — "Demo hospital tenant" section)
+- **Backend dev server has no hot-reload**: it's run via `node src/app.js`, not `nodemon`/`start:dev`. Any backend route/controller/service change requires an explicit restart (`lsof -ti:8001 | xargs kill; node src/app.js &`) before it's live — discovered the hard way in Task 10 (a 404 that was actually stale server state, not a real bug).
+- **Codebase convention discovered (Tasks 10)**: list-returning services in this backend wrap their array in a named key (`{leads: [...]}`, `{contacts: [...]}`), never a bare array. Always check the actual service function's `return` statement before assuming a response shape — the frontend audit's "confirmed LIVE" endpoints don't document this.
 
 ## Status legend
 `PENDING` → `IN_PROGRESS` → `DONE` (or `BLOCKED` with reason)
@@ -19,7 +21,7 @@
 | 7 | M2 | DONE | whatnexus-frontend `d94b9b6` (+ infra fixes `db184ab`, backend `38832c4`) | nav relabeled "Lead Pool"→"Journeys", group "Contacts & Leads"→"Patients & Journeys"; requiresWhatsApp disabled on Journeys item. **Discovered & fixed 3 blocking pre-existing defects while verifying**: (1) dynamic-nav empty-catalog fallback bug in groupedSidebar.tsx hid the entire static menu for any tenant with no NavigationItems rows — fixed by gating on the raw API payload; (2) Rules-of-Hooks violation in leadsView.tsx (early return between hooks) crashed the page the moment WhatsApp was actually connected — never previously exercised; (3) seeded a mocked `active` WhatsappAccount row for TT001 (explicitly-allowed mock) since several views gate on live WhatsApp status unrelated to their actual function. Verified visually in-browser: full nav renders, Journeys page loads real data (5 existing rows). |
 | 8 | M3 | DONE | invictus-chatbot `7abaf6e` | primary_contact_id INTEGER, nullable, self-FK, onDelete SET NULL, on Contact; TDD tests pass; test:billing clean; also hardened this + Task 5's test with beforeAll residue-sweep (a failed assertion mid-test skips its own inline cleanup — found and cleaned up real orphaned rows this caused, now visible-in-UI-safe) |
 | 9 | M3 | DONE | invictus-chatbot `4d65da3` | createLeadService extended with optional 4th-arg `{journey_type, journey_label}`, both confirmed real call sites (AuthWhatsapp.controller.js:1014, campaignSendWorker.js:434) left unchanged (pass no 4th arg). Note: plan text referenced a "POST /whatsapp/lead-family route" for the manual regression smoke test — no such route exists (confirmed via leads.routes.js read: only GET/PUT/DELETE on existing leads, no create route at all; leads are only ever auto-created). Regression intent satisfied instead via the exact 3-positional-arg unit test matching both real call sites' call shape. |
-| 10 | M3 | PENDING | | New Journey UI action — plan assumes an existing create-lead endpoint/form to extend; Task 9 confirmed none exists, so this task must also add a minimal manual-create capability, not just a UI field |
+| 10 | M3 | DONE | invictus-chatbot `e6e1e12`; whatnexus-frontend `0a205b7` | Backend: new `POST /whatsapp/lead` (createJourneyController), tenant-scoped IDOR-guarded (proven by test), createLeadService now returns its generated lead_id, journey_type/journey_label added to both list+detail SELECT queries (were missing — a created Journey's type would've been invisible). Frontend: NewJourneyModal (patient picker + journey_type/label/source form) wired to a "New Journey" button; page heading relabeled to "Journeys". **Verified fully end-to-end in-browser**: created real Contact → created real Journey via the modal → confirmed in DB (`journey_type=general_opd, source=other`) → confirmed in UI list. Test data cleaned up after. All 26 backend tests + tsc clean. |
 | 11 | M4 | PENDING | | prototype client-merged Timeline view |
 | 12 | M5 | PENDING | | verify is_ai_silenced handoff |
 | 13 | M6 | PENDING | | verify scheduled follow-up |
@@ -35,7 +37,7 @@
 
 | After Task | Status | Result |
 |---|---|---|
-| 10 | PENDING | |
+| 10 | **CLEAN** | Backend: 26/26 Jest tests pass (6 suites). Frontend: `tsc --noEmit` clean (1 pre-existing unrelated error in templateUtils.test.ts, not touched by us). Lint: 34 pre-existing `any`-type errors across leadsView.tsx/useLeadIntelligenceQuery.tsx/leadIntelligene — confirmed none newly introduced, our additions follow the exact same established `(error: any)` convention. API smoke: leads list 200, contacts list 200, tenant features 200, dynamic-nav 200, create-lead-missing-contact_id 400, unauthenticated 401 — all correct. Tenant isolation: proven by automated test (cross-tenant contact_id → 404) + IDOR guard code review. Git/worktree: both worktrees clean on `pulseos/foundation`, correct commit history; both original clones untouched on `main`; both reference repos (`backend`/`frontend`) unchanged from their original pre-existing dirty state. **Continuing automatically per instruction.** |
 | 15 | PENDING | |
 | 20 | PENDING | (final prototype review) |
 
