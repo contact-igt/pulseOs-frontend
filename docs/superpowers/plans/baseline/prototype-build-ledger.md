@@ -14,9 +14,9 @@
 
 | Task | Module | Status | Commit(s) | Notes |
 |---|---|---|---|---|
-| 5 | M2 | PENDING | | journey_type/journey_label on Lead |
-| 6 | M2 | PENDING | | example journey_type values documented |
-| 7 | M2 | PENDING | | nav relabel Leads→Journeys |
+| 5 | M2 | DONE | invictus-chatbot `de103e5` | journey_type/journey_label STRING columns on Lead; TDD test round-tripped against real local DB; test:billing regression clean; full boot sync clean |
+| 6 | M2 | DONE | (satisfied by Task 4 `0e27a12`, no new commit) | example journey_type log line + grep-confirmed no ENUM/constraint anywhere |
+| 7 | M2 | DONE | whatnexus-frontend `d94b9b6` (+ infra fixes `db184ab`, backend `38832c4`) | nav relabeled "Lead Pool"→"Journeys", group "Contacts & Leads"→"Patients & Journeys"; requiresWhatsApp disabled on Journeys item. **Discovered & fixed 3 blocking pre-existing defects while verifying**: (1) dynamic-nav empty-catalog fallback bug in groupedSidebar.tsx hid the entire static menu for any tenant with no NavigationItems rows — fixed by gating on the raw API payload; (2) Rules-of-Hooks violation in leadsView.tsx (early return between hooks) crashed the page the moment WhatsApp was actually connected — never previously exercised; (3) seeded a mocked `active` WhatsappAccount row for TT001 (explicitly-allowed mock) since several views gate on live WhatsApp status unrelated to their actual function. Verified visually in-browser: full nav renders, Journeys page loads real data (5 existing rows). |
 | 8 | M3 | PENDING | | primary_contact_id on Contact |
 | 9 | M3 | PENDING | | createJourney service extension |
 | 10 | M3 | PENDING | | New Journey UI action |
