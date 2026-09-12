@@ -45,6 +45,13 @@ export const colors = {
     500: "#c14634",
     700: "#8f2f22",
   },
+  chart: {
+    blue: "#3b6fb0",
+    teal: "#2f8f8a",
+    indigo: "#5b5fc7",
+    amber: "#c98a1f",
+    violet: "#8a5fb0",
+  },
 } as const;
 
 export type ColorToken = typeof colors;

@@ -11,6 +11,8 @@
     },
     "lint": {},
     "typecheck": {},
-    "test": {}
+    "test": {
+      "passThroughEnv": ["DATABASE_URL", "DEMO_PASSWORD", "SESSION_SECRET", "WEB_ORIGIN", "PORT"]
+    }
   }
 }

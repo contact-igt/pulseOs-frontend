@@ -34,7 +34,7 @@ export default function JourneysPage() {
     <div className="mx-auto max-w-6xl space-y-4" data-testid="journeys-page">
       <div>
         <h1 className="text-xl font-semibold text-slate-900">Journeys</h1>
-        <p className="text-sm text-neutral-500">The operational surface behind the Command Centre's numbers.</p>
+        <p className="text-sm text-neutral-500">The operational surface behind the Command Centre&apos;s numbers.</p>
       </div>
 
       {summary.data && (

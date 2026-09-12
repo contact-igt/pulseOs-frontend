@@ -1,7 +1,7 @@
-import { and, asc, eq, gte, lt } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
-import { appointments, consultationOutcomes, journeys, patients } from "../../db/schema.js";
-import type { DoctorDashboard, DoctorTodayItem } from "@pulseos/types";
+import { appointments, consultationOutcomes, journeys, patients, treatmentOpportunities } from "../../db/schema.js";
+import type { DoctorDashboard, DoctorRecentPatient, DoctorTodayItem } from "@pulseos/types";
 
 function todayRange() {
   const start = new Date();
@@ -21,6 +21,7 @@ export async function getDoctorDashboard(db: Db, tenantId: string, doctorUserId:
       scheduledAt: appointments.scheduledAt,
       patientName: patients.name,
       journeyType: journeys.journeyType,
+      journeyId: appointments.journeyId,
       reason: appointments.reason,
       hasOutcome: consultationOutcomes.id,
     })
@@ -36,7 +37,7 @@ export async function getDoctorDashboard(db: Db, tenantId: string, doctorUserId:
         lt(appointments.scheduledAt, end),
       ),
     )
-    .orderBy(asc(appointments.scheduledAt));
+    .orderBy(appointments.scheduledAt);
 
   const today: DoctorTodayItem[] = rows.map((r) => ({
     appointmentId: r.id,
@@ -45,10 +46,14 @@ export async function getDoctorDashboard(db: Db, tenantId: string, doctorUserId:
     status: r.status,
   }));
 
-  const waitingCount = rows.filter((r) => r.status === "checked_in").length;
-  const checkedInCount = rows.filter((r) => r.status === "checked_in" || r.status === "with_doctor").length;
+  const waitingNow = rows.filter((r) => r.status === "checked_in" || r.status === "waiting").length;
+  const withMeCount = rows.filter((r) => r.status === "with_doctor").length;
+  const checkedInCount = rows.filter((r) => r.status === "checked_in" || r.status === "waiting" || r.status === "with_doctor" || r.status === "completed").length;
+  const completedCount = rows.filter((r) => r.status === "completed").length;
+  const eligibleForCompletion = rows.filter((r) => r.status !== "cancelled").length;
+  const completionPct = eligibleForCompletion > 0 ? Math.round((completedCount / eligibleForCompletion) * 100) : 0;
 
-  const nextRow = rows.find((r) => r.status === "scheduled" || r.status === "checked_in");
+  const nextRow = rows.find((r) => r.status === "scheduled" || r.status === "confirmed" || r.status === "checked_in" || r.status === "waiting");
   const nextPatient = nextRow
     ? {
         appointmentId: nextRow.id,
@@ -63,12 +68,62 @@ export async function getDoctorDashboard(db: Db, tenantId: string, doctorUserId:
     .filter((r) => r.status === "completed" && !r.hasOutcome)
     .map((r) => ({ appointmentId: r.id, patientName: r.patientName, time: r.scheduledAt.toISOString(), status: r.status }));
 
+  // Treatment Follow-ups: today's journeys with a treatment opportunity still
+  // awaiting the patient's decision or acceptance — real domain state, not a flag.
+  const todayJourneyIds = rows.map((r) => r.journeyId).filter((id): id is string => id !== null);
+  const pendingTreatmentJourneyIds = new Set<string>();
+  if (todayJourneyIds.length > 0) {
+    const openTreatments = await db
+      .select({ journeyId: treatmentOpportunities.journeyId })
+      .from(treatmentOpportunities)
+      .where(and(eq(treatmentOpportunities.tenantId, tenantId), inArray(treatmentOpportunities.journeyId, todayJourneyIds), inArray(treatmentOpportunities.status, ["ADVISED", "DECISION_PENDING"])));
+    for (const t of openTreatments) pendingTreatmentJourneyIds.add(t.journeyId);
+  }
+  const treatmentFollowUps: DoctorTodayItem[] = rows
+    .filter((r) => r.journeyId && pendingTreatmentJourneyIds.has(r.journeyId))
+    .map((r) => ({ appointmentId: r.id, patientName: r.patientName, time: r.scheduledAt.toISOString(), status: r.status }));
+
+  const pastRows = await db
+    .select({
+      id: appointments.id,
+      status: appointments.status,
+      scheduledAt: appointments.scheduledAt,
+      patientName: patients.name,
+      journeyType: journeys.journeyType,
+      hasOutcome: consultationOutcomes.id,
+      outcome: consultationOutcomes.outcome,
+    })
+    .from(appointments)
+    .innerJoin(patients, eq(appointments.patientId, patients.id))
+    .innerJoin(journeys, eq(appointments.journeyId, journeys.id))
+    .leftJoin(consultationOutcomes, eq(consultationOutcomes.appointmentId, appointments.id))
+    .where(and(eq(appointments.tenantId, tenantId), eq(appointments.doctorUserId, doctorUserId), eq(appointments.status, "completed"), lt(appointments.scheduledAt, start)))
+    .orderBy(desc(appointments.scheduledAt))
+    .limit(10);
+
+  // Post-care / Reviews: seen, no treatment required — routine follow-up candidates.
+  const postCare: DoctorTodayItem[] = pastRows
+    .filter((r) => r.outcome === "NO_TREATMENT_REQUIRED")
+    .map((r) => ({ appointmentId: r.id, patientName: r.patientName, time: r.scheduledAt.toISOString(), status: r.status }));
+
+  const recentPatients: DoctorRecentPatient[] = pastRows.map((r) => ({
+    appointmentId: r.id,
+    patientName: r.patientName,
+    journeyType: r.journeyType,
+    time: r.scheduledAt.toISOString(),
+  }));
+
   return {
     todayCount: rows.length,
-    waitingCount,
     checkedInCount,
+    waitingNow,
+    withMeCount,
+    completionPct,
     nextPatient,
     today,
     awaitingOutcome,
+    treatmentFollowUps,
+    postCare,
+    recentPatients,
   };
 }

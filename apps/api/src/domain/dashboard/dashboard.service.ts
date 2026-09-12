@@ -1,7 +1,8 @@
-import { and, count, eq, gte, inArray, lt, sql, sum, isNull, isNotNull } from "drizzle-orm";
+import { and, count, eq, gte, inArray, lt, sql, sum, isNotNull } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import {
   appointments,
+  branches,
   campaignTouchpoints,
   consultationOutcomes,
   journeys,
@@ -15,17 +16,28 @@ import {
 import { allocatedAcquisitionCost, costPer, roas as roasOf } from "../marketing/formulas.js";
 import type {
   AttentionItem,
+  Branch,
   BranchDoctorRow,
   ConversionStage,
   ExecutiveStrip,
+  JourneyHealth,
+  JourneyHealthKey,
+  JourneyPerformancePoint,
+  MarketingSourceRow,
   PatientFlowCount,
   SourcePerformanceRow,
+  SpendAtRisk,
   SpendAtRiskCategory,
   SpendAtRiskCategoryKey,
   SpendAtRiskSummary,
   TeamWorkloadRow,
   TodayStrip,
 } from "@pulseos/types";
+
+export interface DashboardFilters {
+  branchId?: string;
+  journeyType?: string;
+}
 
 function todayRange() {
   const start = new Date();
@@ -35,30 +47,42 @@ function todayRange() {
   return { start, end };
 }
 
-export async function getTodayStrip(db: Db, tenantId: string): Promise<TodayStrip> {
-  const { start, end } = todayRange();
+export async function listBranches(db: Db, tenantId: string): Promise<Branch[]> {
+  const rows = await db.select().from(branches).where(eq(branches.tenantId, tenantId));
+  return rows.map((r) => ({ id: r.id, name: r.name, city: r.city }));
+}
 
-  const [[newEnquiries], [uncontacted], [followUpsDue], [appointmentsToday], [waitingNow], [noShows], [consultationsCompleted], [treatmentPending]] =
-    await Promise.all([
-      db.select({ c: count() }).from(journeys).where(and(eq(journeys.tenantId, tenantId), gte(journeys.createdAt, start), lt(journeys.createdAt, end))),
-      db.select({ c: count() }).from(journeys).where(and(eq(journeys.tenantId, tenantId), eq(journeys.stage, "enquiry"), isNull(journeys.contactedAt))),
-      db.select({ c: count() }).from(tasks).where(and(eq(tasks.tenantId, tenantId), eq(tasks.status, "pending"), lt(tasks.dueAt, end))),
-      db.select({ c: count() }).from(appointments).where(and(eq(appointments.tenantId, tenantId), gte(appointments.scheduledAt, start), lt(appointments.scheduledAt, end))),
-      db.select({ c: count() }).from(appointments).where(and(eq(appointments.tenantId, tenantId), eq(appointments.status, "checked_in"))),
-      db.select({ c: count() }).from(appointments).where(and(eq(appointments.tenantId, tenantId), eq(appointments.status, "no_show"), gte(appointments.scheduledAt, start), lt(appointments.scheduledAt, end))),
-      db.select({ c: count() }).from(appointments).where(and(eq(appointments.tenantId, tenantId), eq(appointments.status, "completed"), gte(appointments.scheduledAt, start), lt(appointments.scheduledAt, end))),
-      db.select({ c: count() }).from(treatmentOpportunities).where(and(eq(treatmentOpportunities.tenantId, tenantId), eq(treatmentOpportunities.status, "DECISION_PENDING"))),
-    ]);
+export async function listJourneyTypes(db: Db, tenantId: string): Promise<string[]> {
+  const rows = await db.selectDistinct({ journeyType: journeys.journeyType }).from(journeys).where(eq(journeys.tenantId, tenantId));
+  return rows.map((r) => r.journeyType).sort();
+}
+
+export async function getTodayStrip(db: Db, tenantId: string, filters: DashboardFilters = {}): Promise<TodayStrip> {
+  const { start, end } = todayRange();
+  const branchClause = filters.branchId ? eq(patients.branchId, filters.branchId) : undefined;
+  const apptBranchClause = filters.branchId ? eq(appointments.branchId, filters.branchId) : undefined;
+  const journeyTypeClause = filters.journeyType ? eq(journeys.journeyType, filters.journeyType) : undefined;
+
+  const [[newEnquiries], [appointmentsToday], [waitingNow], [consultationsCompleted], [treatmentPending], [revenueRow]] = await Promise.all([
+    db
+      .select({ c: count() })
+      .from(journeys)
+      .innerJoin(patients, eq(journeys.patientId, patients.id))
+      .where(and(eq(journeys.tenantId, tenantId), gte(journeys.createdAt, start), lt(journeys.createdAt, end), branchClause, journeyTypeClause)),
+    db.select({ c: count() }).from(appointments).where(and(eq(appointments.tenantId, tenantId), gte(appointments.scheduledAt, start), lt(appointments.scheduledAt, end), apptBranchClause)),
+    db.select({ c: count() }).from(appointments).where(and(eq(appointments.tenantId, tenantId), inArray(appointments.status, ["checked_in", "waiting"]), apptBranchClause)),
+    db.select({ c: count() }).from(appointments).where(and(eq(appointments.tenantId, tenantId), eq(appointments.status, "completed"), gte(appointments.scheduledAt, start), lt(appointments.scheduledAt, end), apptBranchClause)),
+    db.select({ c: count() }).from(treatmentOpportunities).where(and(eq(treatmentOpportunities.tenantId, tenantId), eq(treatmentOpportunities.status, "DECISION_PENDING"))),
+    db.select({ total: sum(revenueEvents.amount) }).from(revenueEvents).where(and(eq(revenueEvents.tenantId, tenantId), gte(revenueEvents.occurredAt, start), lt(revenueEvents.occurredAt, end))),
+  ]);
 
   return {
     newEnquiries: newEnquiries.c,
-    uncontacted: uncontacted.c,
-    followUpsDue: followUpsDue.c,
     appointmentsToday: appointmentsToday.c,
     waitingNow: waitingNow.c,
-    noShows: noShows.c,
     consultationsCompleted: consultationsCompleted.c,
     treatmentDecisionsPending: treatmentPending.c,
+    attributedRevenue: Number(revenueRow?.total ?? 0),
   };
 }
 
@@ -112,68 +136,146 @@ const CONVERSION_STAGES: { key: ConversionStage["key"]; label: string }[] = [
 // actually reasons about acquisition cost against.
 const COST_TRACKED_STAGES = new Set<ConversionStage["key"]>(["enquiry", "booked", "consulted", "completed"]);
 
-export async function getConversionFunnel(db: Db, tenantId: string): Promise<ConversionStage[]> {
+async function getStageReachedCounts(db: Db, tenantId: string, filters: DashboardFilters): Promise<Map<string, number>> {
+  const branchClause = filters.branchId ? eq(patients.branchId, filters.branchId) : undefined;
+  const journeyTypeClause = filters.journeyType ? eq(journeys.journeyType, filters.journeyType) : undefined;
   const rows = await db
     .select({ stage: journeys.stage, c: count() })
     .from(journeys)
-    .where(eq(journeys.tenantId, tenantId))
+    .innerJoin(patients, eq(journeys.patientId, patients.id))
+    .where(and(eq(journeys.tenantId, tenantId), branchClause, journeyTypeClause))
     .groupBy(journeys.stage);
 
   const counts = new Map(rows.map((r) => [r.stage, r.c]));
-  const totalSpend = await getTotalSpend(db, tenantId);
-
-  // A journey's current stage implies it has passed through every earlier stage
-  // (lost/declined journeys are excluded from the funnel, not counted at any stage).
-  // So funnel[i] = number of journeys whose current stage index is >= i.
   const perStageCounts = CONVERSION_STAGES.map((s) => counts.get(s.key) ?? 0);
-  return CONVERSION_STAGES.map((s, idx) => {
-    const reachedOrPast = perStageCounts.slice(idx).reduce((sum, c) => sum + c, 0);
-    return {
-      key: s.key,
-      label: s.label,
-      count: reachedOrPast,
-      costPerOutcome: COST_TRACKED_STAGES.has(s.key) ? costPer(totalSpend, reachedOrPast) : null,
-    };
+  const reached = new Map<string, number>();
+  CONVERSION_STAGES.forEach((s, idx) => {
+    reached.set(s.key, perStageCounts.slice(idx).reduce((sum, c) => sum + c, 0));
+  });
+  return reached;
+}
+
+export async function getConversionFunnel(db: Db, tenantId: string, filters: DashboardFilters = {}): Promise<ConversionStage[]> {
+  const reached = await getStageReachedCounts(db, tenantId, filters);
+  const totalSpend = await getTotalSpend(db, tenantId);
+  return CONVERSION_STAGES.map((s) => {
+    const c = reached.get(s.key) ?? 0;
+    return { key: s.key, label: s.label, count: c, costPerOutcome: COST_TRACKED_STAGES.has(s.key) ? costPer(totalSpend, c) : null };
   });
 }
 
-export async function getPatientFlow(db: Db, tenantId: string): Promise<PatientFlowCount[]> {
-  const statusToBucket: Record<string, PatientFlowCount["bucket"]> = {
-    checked_in: "checked_in",
-    with_doctor: "with_doctor",
-    completed: "consultation_complete",
-  };
+const JOURNEY_HEALTH_STAGES: { key: JourneyHealthKey; label: string }[] = [
+  { key: "contacted", label: "Contacted" },
+  { key: "booked", label: "Appointment Booked" },
+  { key: "attended", label: "Attended" },
+  { key: "consulted", label: "Consulted" },
+  { key: "treatment_advised", label: "Treatment Converted" },
+];
+
+export async function getJourneyHealth(db: Db, tenantId: string, filters: DashboardFilters = {}): Promise<JourneyHealth> {
+  const reached = await getStageReachedCounts(db, tenantId, filters);
+  const totalJourneys = reached.get("enquiry") ?? 0;
+
+  const segments = JOURNEY_HEALTH_STAGES.map((s) => {
+    const c = reached.get(s.key) ?? 0;
+    return { key: s.key, label: s.label, count: c, pct: totalJourneys > 0 ? Math.round((c / totalJourneys) * 100) : 0 };
+  });
+
+  const overallPct = totalJourneys > 0 ? Math.round(((reached.get("treatment_advised") ?? 0) / totalJourneys) * 100) : 0;
+
+  return { segments, totalJourneys, overallPct };
+}
+
+export async function getJourneyPerformanceSeries(
+  db: Db,
+  tenantId: string,
+  days: number,
+  filters: DashboardFilters = {},
+): Promise<JourneyPerformancePoint[]> {
+  const end = new Date();
+  end.setHours(0, 0, 0, 0);
+  end.setDate(end.getDate() + 1);
+  const start = new Date(end);
+  start.setDate(start.getDate() - days);
+
+  const branchClause = filters.branchId ? eq(patients.branchId, filters.branchId) : undefined;
+  const apptBranchClause = filters.branchId ? eq(appointments.branchId, filters.branchId) : undefined;
+  const journeyTypeClause = filters.journeyType ? eq(journeys.journeyType, filters.journeyType) : undefined;
+
+  const enquiryRows = await db
+    .select({ day: sql<string>`date_trunc('day', ${journeys.createdAt})::date`, c: count() })
+    .from(journeys)
+    .innerJoin(patients, eq(journeys.patientId, patients.id))
+    .where(and(eq(journeys.tenantId, tenantId), gte(journeys.createdAt, start), lt(journeys.createdAt, end), branchClause, journeyTypeClause))
+    .groupBy(sql`date_trunc('day', ${journeys.createdAt})::date`);
+
+  const apptRows = await db
+    .select({ day: sql<string>`date_trunc('day', ${appointments.scheduledAt})::date`, c: count() })
+    .from(appointments)
+    .where(and(eq(appointments.tenantId, tenantId), gte(appointments.scheduledAt, start), lt(appointments.scheduledAt, end), apptBranchClause))
+    .groupBy(sql`date_trunc('day', ${appointments.scheduledAt})::date`);
+
+  const consultRows = await db
+    .select({ day: sql<string>`date_trunc('day', ${appointments.scheduledAt})::date`, c: count() })
+    .from(appointments)
+    .where(and(eq(appointments.tenantId, tenantId), eq(appointments.status, "completed"), gte(appointments.scheduledAt, start), lt(appointments.scheduledAt, end), apptBranchClause))
+    .groupBy(sql`date_trunc('day', ${appointments.scheduledAt})::date`);
+
+  const treatmentRows = await db
+    .select({ day: sql<string>`date_trunc('day', ${treatmentOpportunities.createdAt})::date`, c: count() })
+    .from(treatmentOpportunities)
+    .where(and(eq(treatmentOpportunities.tenantId, tenantId), gte(treatmentOpportunities.createdAt, start), lt(treatmentOpportunities.createdAt, end)))
+    .groupBy(sql`date_trunc('day', ${treatmentOpportunities.createdAt})::date`);
+
+  const toMap = (rows: { day: string; c: number }[]) => new Map(rows.map((r) => [new Date(r.day).toISOString().slice(0, 10), r.c]));
+  const enquiryMap = toMap(enquiryRows);
+  const apptMap = toMap(apptRows);
+  const consultMap = toMap(consultRows);
+  const treatmentMap = toMap(treatmentRows);
+
+  const points: JourneyPerformancePoint[] = [];
+  for (let d = new Date(start); d < end; d.setDate(d.getDate() + 1)) {
+    const key = d.toISOString().slice(0, 10);
+    points.push({
+      date: key,
+      enquiries: enquiryMap.get(key) ?? 0,
+      appointments: apptMap.get(key) ?? 0,
+      consultations: consultMap.get(key) ?? 0,
+      treatments: treatmentMap.get(key) ?? 0,
+    });
+  }
+  return points;
+}
+
+export async function getPatientFlow(db: Db, tenantId: string, filters: DashboardFilters = {}): Promise<PatientFlowCount[]> {
+  const apptBranchClause = filters.branchId ? eq(appointments.branchId, filters.branchId) : undefined;
+  const { start, end } = todayRange();
 
   const rows = await db
     .select({ status: appointments.status, c: count() })
     .from(appointments)
-    .where(eq(appointments.tenantId, tenantId))
+    .where(and(eq(appointments.tenantId, tenantId), gte(appointments.scheduledAt, start), lt(appointments.scheduledAt, end), apptBranchClause))
     .groupBy(appointments.status);
 
   const buckets: Record<PatientFlowCount["bucket"], number> = {
-    waiting: 0,
+    confirmed: 0,
     checked_in: 0,
     with_doctor: 0,
-    consultation_complete: 0,
-    follow_up_required: 0,
+    completed: 0,
   };
 
   for (const row of rows) {
-    const bucket = statusToBucket[row.status];
-    if (bucket) buckets[bucket] += row.c;
-    if (row.status === "scheduled") buckets.waiting += row.c;
+    if (row.status === "scheduled" || row.status === "confirmed" || row.status === "requested") buckets.confirmed += row.c;
+    else if (row.status === "checked_in" || row.status === "waiting") buckets.checked_in += row.c;
+    else if (row.status === "with_doctor") buckets.with_doctor += row.c;
+    else if (row.status === "completed") buckets.completed += row.c;
   }
-
-  const [followUp] = await db
-    .select({ c: count() })
-    .from(tasks)
-    .where(and(eq(tasks.tenantId, tenantId), eq(tasks.status, "pending")));
-  buckets.follow_up_required = followUp.c;
 
   return (Object.keys(buckets) as PatientFlowCount["bucket"][]).map((bucket) => ({ bucket, count: buckets[bucket] }));
 }
 
-export async function getAttentionQueue(db: Db, tenantId: string): Promise<AttentionItem[]> {
+export async function getAttentionQueue(db: Db, tenantId: string, filters: DashboardFilters = {}): Promise<AttentionItem[]> {
+  const branchClause = filters.branchId ? eq(patients.branchId, filters.branchId) : undefined;
   const rows = await db
     .select({
       id: tasks.id,
@@ -187,7 +289,7 @@ export async function getAttentionQueue(db: Db, tenantId: string): Promise<Atten
     .innerJoin(patients, eq(tasks.patientId, patients.id))
     .leftJoin(journeys, eq(tasks.journeyId, journeys.id))
     .leftJoin(users, eq(tasks.assignedTo, users.id))
-    .where(and(eq(tasks.tenantId, tenantId), eq(tasks.status, "pending"), sql`${tasks.reason} != 'manual_task'`))
+    .where(and(eq(tasks.tenantId, tenantId), eq(tasks.status, "pending"), sql`${tasks.reason} != 'manual_task'`, branchClause))
     .orderBy(tasks.dueAt)
     .limit(20);
 
@@ -269,6 +371,16 @@ export async function getSpendAtRisk(db: Db, tenantId: string): Promise<SpendAtR
   return { total: categories.reduce((sum, c) => sum + c.allocatedSpend, 0), categories };
 }
 
+/** Same underlying task-reason categories as getSpendAtRisk, reshaped as {reason, count, estimatedValue} for the segmented-bar Spend At Risk visual. */
+export async function getSpendAtRiskByReason(db: Db, tenantId: string): Promise<SpendAtRisk> {
+  const summary = await getSpendAtRisk(db, tenantId);
+  const byReason = summary.categories.map((c) => {
+    const cat = SPEND_AT_RISK_CATEGORIES.find((x) => x.key === c.key)!;
+    return { reason: cat.taskReason as AttentionItem["reason"], count: c.journeyCount, estimatedValue: c.allocatedSpend };
+  });
+  return { totalAtRisk: summary.total, byReason };
+}
+
 export async function getSourcePerformance(db: Db, tenantId: string): Promise<SourcePerformanceRow[]> {
   const campaigns = await db.select().from(marketingCampaigns).where(eq(marketingCampaigns.tenantId, tenantId));
 
@@ -320,7 +432,40 @@ export async function getSourcePerformance(db: Db, tenantId: string): Promise<So
   return rows.sort((a, b) => b.spend - a.spend);
 }
 
-export async function getTeamWorkload(db: Db, tenantId: string): Promise<TeamWorkloadRow[]> {
+/** Simpler, non-campaign-scoped sibling of getSourcePerformance, grouped by raw source channel — feeds the flagship Source Performance table variant. */
+export async function getMarketingSources(db: Db, tenantId: string): Promise<MarketingSourceRow[]> {
+  const rows = await getSourcePerformance(db, tenantId);
+  const bySource = new Map<string, MarketingSourceRow>();
+  for (const r of rows) {
+    const existing = bySource.get(r.source);
+    if (existing) {
+      existing.volume += r.enquiries;
+      existing.appointments += r.appointments;
+      existing.consultations += r.consultations;
+      existing.treatmentConversion += r.treatments;
+      existing.revenue += r.revenue;
+      existing.spend += r.spend;
+    } else {
+      bySource.set(r.source, {
+        source: r.source,
+        volume: r.enquiries,
+        appointments: r.appointments,
+        consultations: r.consultations,
+        treatmentConversion: r.treatments,
+        revenue: r.revenue,
+        spend: r.spend,
+        roas: null,
+      });
+    }
+  }
+  for (const row of bySource.values()) {
+    row.roas = row.spend > 0 ? Number((row.revenue / row.spend).toFixed(2)) : null;
+  }
+  return Array.from(bySource.values());
+}
+
+export async function getTeamWorkload(db: Db, tenantId: string, filters: DashboardFilters = {}): Promise<TeamWorkloadRow[]> {
+  const branchClause = filters.branchId ? eq(users.branchId, filters.branchId) : undefined;
   const rows = await db
     .select({
       userId: users.id,
@@ -330,7 +475,7 @@ export async function getTeamWorkload(db: Db, tenantId: string): Promise<TeamWor
     })
     .from(users)
     .leftJoin(tasks, and(eq(tasks.assignedTo, users.id), eq(tasks.status, "pending")))
-    .where(and(eq(users.tenantId, tenantId), sql`${users.role} IN ('FRONT_DESK', 'PATIENT_COORDINATOR')`))
+    .where(and(eq(users.tenantId, tenantId), sql`${users.role} IN ('FRONT_DESK', 'PATIENT_COORDINATOR')`, branchClause))
     .groupBy(users.id, users.name, users.role);
 
   const now = new Date();
@@ -351,7 +496,8 @@ export async function getTeamWorkload(db: Db, tenantId: string): Promise<TeamWor
   }));
 }
 
-export async function getBranchDoctorPerformance(db: Db, tenantId: string): Promise<BranchDoctorRow[]> {
+export async function getBranchDoctorPerformance(db: Db, tenantId: string, filters: DashboardFilters = {}): Promise<BranchDoctorRow[]> {
+  const branchClause = filters.branchId ? eq(users.branchId, filters.branchId) : undefined;
   const rows = await db
     .select({
       doctorId: users.id,
@@ -360,13 +506,13 @@ export async function getBranchDoctorPerformance(db: Db, tenantId: string): Prom
     })
     .from(users)
     .leftJoin(appointments, eq(appointments.doctorUserId, users.id))
-    .where(and(eq(users.tenantId, tenantId), eq(users.role, "DOCTOR")))
+    .where(and(eq(users.tenantId, tenantId), eq(users.role, "DOCTOR"), branchClause))
     .groupBy(users.id, users.name);
 
   const waitingRows = await db
     .select({ doctorId: appointments.doctorUserId, waiting: count(appointments.id) })
     .from(appointments)
-    .where(and(eq(appointments.tenantId, tenantId), eq(appointments.status, "checked_in")))
+    .where(and(eq(appointments.tenantId, tenantId), inArray(appointments.status, ["checked_in", "waiting"])))
     .groupBy(appointments.doctorUserId);
 
   const consultRows = await db
