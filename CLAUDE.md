@@ -1,7 +1,13 @@
 # PulseOS — Project Rules
 
-Greenfield India-first Patient Engagement CRM / Hospital Operations Command Centre.
-Source of truth: [docs/superpowers/specs/2026-09-12-pulseos-greenfield-foundation-design.md](docs/superpowers/specs/2026-09-12-pulseos-greenfield-foundation-design.md), [docs/superpowers/plans/2026-09-12-pulseos-greenfield-foundation-plan.md](docs/superpowers/plans/2026-09-12-pulseos-greenfield-foundation-plan.md), execution amendment in the same `plans/` directory.
+## Product north star
+
+> **"PulseOS is made for Indian hospitals to cut back your marketing expense."**
+
+PulseOS is a marketing-to-patient-journey intelligence platform, not a generic hospital CRM and not an EMR/HIS. Every screen answers a subset of: where did the patient come from, what happened to them, where did we lose them, what should the hospital do next. CRM/operational features exist because they close the attribution loop from marketing spend to treatment revenue — they are not the product's reason for existing. See [north-star addendum](docs/superpowers/specs/2026-09-12-pulseos-marketing-journey-northstar.md) for the binding detail (dashboard hierarchy, spend-at-risk definition, attribution formulas).
+
+Greenfield India-first Patient Engagement CRM / Hospital Operations Command Centre, built around that north star.
+Source of truth: [docs/superpowers/specs/2026-09-12-pulseos-greenfield-foundation-design.md](docs/superpowers/specs/2026-09-12-pulseos-greenfield-foundation-design.md), [north-star addendum](docs/superpowers/specs/2026-09-12-pulseos-marketing-journey-northstar.md), [docs/superpowers/plans/2026-09-12-pulseos-greenfield-foundation-plan.md](docs/superpowers/plans/2026-09-12-pulseos-greenfield-foundation-plan.md), execution amendment in the same `plans/` directory.
 
 ## Locked decisions
 - `apps/web`/`apps/api` are new — never scaffolded from `whatnexus-frontend`/`invictus-chatbot`/Lead Panel.
@@ -20,7 +26,15 @@ No MUI. No generic admin template. No decorative animation libraries. No microse
 `DESIGN_VARIANCE=5`, `MOTION_INTENSITY=3`, `VISUAL_DENSITY=7`. Tokens live in `packages/design-tokens`. Palette: deep forest green primary, mint accent, warm off-white/neutral surfaces, slate/charcoal type, amber/red reserved for operational warnings only. Avoid glassmorphism, gradients, giant KPI cards, decorative motion, brochure layouts, card-grid overload, emoji icons.
 
 ## Domain ownership
-PulseOS core owns Patient, Journey, Timeline/Interaction, Task/NextAction, Appointment, ConsultationOutcome, TreatmentOpportunity, CampaignTouchpoint/RevenueEvent, CustomField*, Pipeline/PipelineStage, Consent, AuditEvent. External systems are adapters (`WhatsAppProvider`, `TelephonyProvider`, `AdsProvider`, `LLMProvider`, `StorageProvider`, `HISConnector`) — never `if provider === "runo"` inside domain logic.
+PulseOS core owns Patient, Journey, Timeline/TimelineEvent, Task/NextAction, Appointment, MarketingCampaign, CampaignTouchpoint, ConsultationOutcome, TreatmentOpportunity, RevenueEvent, CustomField*, Pipeline/PipelineStage, Consent, AuditEvent. External systems are adapters (`WhatsAppProvider`, `TelephonyProvider`, `AdsProvider`, `LLMProvider`, `StorageProvider`, `HISConnector`) — never `if provider === "runo"` inside domain logic.
+
+## Content wording
+Prefer: Patient, Journey, Consultation, Treatment, Next Action, Spend At Risk, Marketing Spend, Attributed Revenue, Cost per Treatment. Avoid "Lead"/"Opportunity" outside technical/admin contexts. Never call recoverable active journeys "Marketing Waste" — that term is reserved for `CONFIRMED MARKETING LEAKAGE` (definitively lost journeys); active-but-stalled journeys are always "Spend At Risk."
+
+## Skills / process references (condensed — do not re-fetch full contents per task)
+- Superpowers (github.com/obra/superpowers): TDD, systematic debugging, worktree isolation, subagent-driven development, code review discipline. Not installed as a Claude Code plugin in this environment (no marketplace/skill entry available) — its *process* is followed manually: failing-test-first, isolated worktree per feature, one-hypothesis-at-a-time debugging, independent verification before claiming done.
+- Ponytail (github.com/DietrichGebert/ponytail): minimal-code/YAGNI discipline — already reflected in "no shared package until ≥2 consumers" above.
+- Emil Kowalski skills, Taste skill, Anthropic frontend-design, Vercel agent-skills: UI motion/taste/React reference — reflected in the Design system section below (functional-only transitions, restrained palette, no decorative charts).
 
 ## Process
 TDD: failing test → minimal implementation → green → verify → commit. No production code without a failing test first (visual-only CSS/tokens use browser verification instead). Systematic debugging on unexpected failures — reproduce, read the full error, trace the diff, one hypothesis at a time; after 3 failed attempts, stop and reconsider the approach rather than keep patching. No completion claim without fresh evidence (tests, typecheck, lint, build, browser check all run just before claiming done).
