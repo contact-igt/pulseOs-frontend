@@ -1,8 +1,11 @@
 import type { FastifyInstance } from "fastify";
+import { requirePermission } from "../auth/permission.middleware.js";
 import { getPatient360, listPatients } from "./patient.service.js";
 import { getPatientTimeline } from "../timeline/timeline.service.js";
 
 export async function patientRoutes(app: FastifyInstance) {
+  app.addHook("preHandler", requirePermission("VIEW_PATIENTS"));
+
   app.get("/patients", async (request) => {
     const tenantId = request.sessionUser!.tenantId;
     const query = request.query as Record<string, string | undefined>;
@@ -11,6 +14,7 @@ export async function patientRoutes(app: FastifyInstance) {
       branchId: query.branchId,
       source: query.source,
       stage: query.stage,
+      ownerId: query.ownerId,
     });
   });
 

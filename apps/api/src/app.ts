@@ -8,6 +8,7 @@ import { doctorDashboardRoutes } from "./domain/dashboard/doctor.routes.js";
 import { patientRoutes } from "./domain/patient/patient.routes.js";
 import { journeyRoutes } from "./domain/journey/journey.routes.js";
 import { outcomeRoutes } from "./domain/consultation/outcome.routes.js";
+import { lookupRoutes } from "./domain/lookup/lookup.routes.js";
 
 export async function buildApp() {
   const app = Fastify({ logger: true });
@@ -50,6 +51,7 @@ export async function buildApp() {
     await protectedApp.register(patientRoutes);
     await protectedApp.register(journeyRoutes);
     await protectedApp.register(outcomeRoutes);
+    await protectedApp.register(lookupRoutes);
   });
 
   app.get("/health", async () => ({ ok: true }));

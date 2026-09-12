@@ -203,7 +203,7 @@ export async function getAttentionQueue(db: Db, tenantId: string): Promise<Atten
 
 // Spend-At-Risk categories map 1:1 onto the existing task-reason catalog —
 // each reason IS an operational failure keeping acquisition spend unrealized.
-const SPEND_AT_RISK_CATEGORIES: { key: SpendAtRiskCategoryKey; label: string; taskReason: string }[] = [
+export const SPEND_AT_RISK_CATEGORIES: { key: SpendAtRiskCategoryKey; label: string; taskReason: string }[] = [
   { key: "uncontacted", label: "Uncontacted", taskReason: "high_intent_uncontacted" },
   { key: "overdue_follow_up", label: "Overdue follow-up", taskReason: "overdue_callback" },
   { key: "no_show_recovery", label: "No-show recovery", taskReason: "no_show" },

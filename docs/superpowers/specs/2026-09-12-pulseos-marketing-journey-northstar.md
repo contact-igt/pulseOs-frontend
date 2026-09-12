@@ -1,18 +1,24 @@
 # PulseOS Marketing → Patient Journey North Star (Addendum)
 
 - **Status**: Binding addendum to [2026-09-12-pulseos-greenfield-foundation-design.md](2026-09-12-pulseos-greenfield-foundation-design.md). Supersedes any prior dashboard/page decision that would make PulseOS read as a generic hospital CRM.
-- **Date**: 2026-09-12
+- **Date**: 2026-09-12, revised 2026-09-12 (Hospital Operations Checkpoint) — canonical tagline widened; see note below.
 - **Scope**: product purpose, dashboard hierarchy, attribution definitions. Does not change the locked architecture decisions (greenfield `apps/web`/`apps/api`, dedicated `Journey` entity) from the base spec.
 
-## Canonical tagline
+## Canonical tagline (revised)
 
-> **"PulseOS is made for Indian hospitals to cut back your marketing expense."**
+> **"PulseOS is the Patient Engagement and Revenue Intelligence Operating System for Indian hospitals — connecting every enquiry, conversation, appointment, consultation, treatment and follow-up into one continuous patient journey."**
+
+Supporting value proposition:
+
+> **"Know where every patient came from, what happened next, what needs attention, and what revenue was generated."**
+
+**Revision note**: the original tagline ("PulseOS is made for Indian hospitals to cut back your marketing expense") was too narrow — it framed marketing efficiency as the entire product rather than one major benefit of it. Marketing attribution, Spend At Risk, and ROAS reporting are **not weakened or removed** by this revision — they remain a first-class layer (§"The four core questions" and the Admin Command Centre's Business/Growth section, below), just no longer the sole reason PulseOS exists. The product is the full operational loop — enquiry → patient → journey → follow-up → appointment → check-in/waiting → consultation → treatment decision → treatment → post-care → next action — with source/cost/conversion/revenue as one continuous thread running through it, not a separate analytics product bolted on top.
 
 ## Purpose
 
-PulseOS exists to reduce wasted hospital marketing spend by connecting marketing expenditure to the complete patient journey — not to be patient management software in the abstract. CRM and operational workflows (Patients, Journeys, Timeline, Tasks) exist because they let PulseOS understand what happened *after* marketing generated the patient, closing the loop from spend to revenue.
+PulseOS exists to give a hospital one continuous, role-aware operating picture of every patient's journey — from first enquiry through follow-up, appointment, consultation, treatment, and post-care — while keeping source, acquisition cost, conversion, and revenue visible throughout. CRM and operational workflows (Patients, Journeys, Timeline, Tasks, Appointments, Treatment, Inbox) are the product; marketing attribution is the layer that explains where the demand behind that operational work came from and what it's worth.
 
-PulseOS is **not** primarily "patient management software." It is a **marketing-to-patient-journey intelligence platform for Indian hospitals**. It is not a conventional sales CRM and not a full HIS/EMR.
+PulseOS is **not** primarily "patient management software" in a generic sense, and it is **not only** a marketing analytics dashboard. It is a **patient engagement and revenue intelligence operating system for Indian hospitals** — real daily-use screens for reception, coordinators, and doctors, with marketing/revenue context layered throughout rather than concentrated in one dashboard. It is not a conventional sales CRM and not a full HIS/EMR.
 
 ## The four core questions
 
@@ -29,12 +35,23 @@ Every dashboard and flagship screen answers a subset of:
 Marketing Spend → Patient → Journey → Appointment → Consultation → Treatment → Revenue
 ```
 
+## The operational loop (widened scope, Hospital Operations Checkpoint)
+
+The product's actual daily-use surface is this full loop, with source/cost/conversion/revenue as a continuous thread running through every stage rather than a separate dashboard:
+
+```
+Enquiry → Patient → Journey → Follow-up → Appointment → Check-in/Waiting →
+Consultation → Treatment Decision → Treatment → Post-care → Next Action
+```
+
+Every stage is a real screen someone uses daily (Patients, Journeys, Tasks/My Work, Appointments/Front Desk, Doctor consultation outcomes, Treatments, Inbox) — not a report about the stage. Marketing attribution answers "where did this demand come from and what is it worth," layered onto that operational spine, not a parallel product.
+
 ## Role value (who contributes what to the same goal)
 
-- **Hospital Admin**: Spend → acquisition → conversion → treatment → revenue → waste/leakage, at a glance.
-- **Front Desk**: prevents acquisition spend from being wasted through slow first contact, missed calls/appointments, unrecovered no-shows.
-- **Patient Coordinator / Counsellor**: recovers pending treatment decisions, callbacks, follow-ups, high-value opportunities, at-risk journeys.
-- **Doctor**: does not see marketing data. Closes the attribution loop by recording operational consultation/treatment outcomes quickly — this is what turns "we spent money and got an enquiry" into "we spent money and got a completed treatment."
+- **Hospital Admin**: sees both business/growth (spend → acquisition → conversion → treatment → revenue → ROAS → spend-at-risk) and operations (today's appointments, waiting load, no-shows, overdue follow-ups, tasks due, treatment decisions pending, post-care overdue) in one Command Centre.
+- **Front Desk**: owns the daily arrivals/check-in/waiting/no-show-recovery loop — the operational surface that protects acquisition spend from being wasted through slow first contact, missed appointments, unrecovered no-shows.
+- **Patient Coordinator / Counsellor**: owns "My Work" — recovers pending treatment decisions, callbacks, follow-ups, high-value opportunities, at-risk journeys, and drives post-care next actions to completion.
+- **Doctor**: does not see marketing/revenue data by default. Owns the consultation → outcome → treatment-decision moment — closing the loop that turns "we spent money and got an enquiry" into "we spent money and got a completed treatment," and turns "we saw the patient" into a scheduled next action.
 
 ## Attribution MVP (explicit, transparent — not multi-touch ML)
 
@@ -73,14 +90,20 @@ Two distinct concepts — never conflated:
 
 ## Dashboard hierarchy (Admin Command Centre)
 
-In priority order, top to bottom:
+The Command Centre now balances two equal halves — **Business/Growth** and **Operations** — rather than being marketing-first:
 
-1. **Top executive strip**: Marketing Spend, Enquiries/Acquired Journeys, Consultations, Completed Treatments, Attributed Revenue, ROAS, Spend At Risk — compact, not seven giant cards.
-2. **Journey funnel** (flagship): Enquiry → Contacted → Appointment Booked → Attended → Consulted → Treatment Advised → Treatment Scheduled → Treatment Completed, with count/conversion/drop-off and, where meaningful, cost-per-stage-outcome. Biggest drop-off highlighted. Stage click drills into filtered Journeys.
-3. **Spend At Risk** (signature panel): categories (Uncontacted, Overdue follow-up, No-show recovery, Treatment decision pending, Post-consultation follow-up overdue) each showing journey count + allocated spend + severity/age, plus a total. Category click drills into filtered Journeys.
-4. **Source/Campaign performance**: table of Spend, Enquiries, Appointments, Consultations, Treatments, Revenue, ROAS per source/campaign, sortable — deliberately exposes cases like "cheap enquiries but poor treatment conversion" without implying low CPL alone is good.
-5. **Action queue**: uncontacted high-intent, overdue callbacks, no-shows needing recovery, treatment decisions pending, overdue post-care — same operational data as before, now framed as what protects the spend above it.
-6. **Secondary context** (Team, Branch, Doctor, Patient Flow): still useful, kept below the fold relative to items 1–5.
+**Business / Growth**
+1. **Executive strip**: Marketing Spend, Enquiries/Acquired Journeys, Consultations, Completed Treatments, Attributed Revenue, ROAS, Spend At Risk — compact, not seven giant cards.
+2. **Journey funnel** (flagship): Enquiry → Contacted → Appointment Booked → Attended → Consulted → Treatment Advised → Treatment Scheduled → Treatment Completed, with count/conversion/drop-off and cost-per-stage-outcome. Biggest drop-off highlighted. Stage click drills into filtered Journeys.
+3. **Spend At Risk** (signature panel): categories (Uncontacted, Overdue follow-up, No-show recovery, Treatment decision pending, Post-consultation follow-up overdue) each showing journey count + allocated spend + severity/age, plus a total. Category click drills into filtered Journeys, actually filtered.
+4. **Source/Campaign performance**: sortable table of Spend, Enquiries, Appointments, Consultations, Treatments, Revenue, ROAS per source/campaign — deliberately exposes cases like "cheap enquiries but poor treatment conversion."
+
+**Operations**
+5. **Today strip**: appointments today, waiting now, no-shows, overdue follow-ups, tasks due, treatment decisions pending, post-care overdue.
+6. **Patient flow**: waiting / checked-in / with doctor / consultation complete / follow-up required.
+7. **Action queue**: uncontacted high-intent, overdue callbacks, no-shows needing recovery, treatment decisions pending, overdue post-care — connects insight → patient/journey → action.
+
+**Team** (workload, overdue-by-person) stays secondary, below both halves. Every card drills into the matching working queue (Journeys, Tasks, or Appointments) — not a static report.
 
 ## Doctor Command Centre (unchanged purpose, reaffirmed)
 

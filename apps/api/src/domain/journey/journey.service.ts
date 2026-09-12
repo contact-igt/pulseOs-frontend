@@ -13,8 +13,8 @@ import {
   users,
 } from "../../db/schema.js";
 import { allocatedAcquisitionCost } from "../marketing/formulas.js";
-import type { JourneyListRow, JourneysSummary } from "@pulseos/types";
-import { getSpendAtRisk } from "../dashboard/dashboard.service.js";
+import type { JourneyListRow, JourneysSummary, SpendAtRiskCategoryKey } from "@pulseos/types";
+import { getSpendAtRisk, SPEND_AT_RISK_CATEGORIES } from "../dashboard/dashboard.service.js";
 
 export interface JourneyFilters {
   source?: string;
@@ -23,6 +23,7 @@ export interface JourneyFilters {
   stage?: string;
   ownerId?: string;
   doctorId?: string;
+  atRisk?: SpendAtRiskCategoryKey;
 }
 
 export async function listJourneys(db: Db, tenantId: string, filters: JourneyFilters): Promise<JourneyListRow[]> {
@@ -48,6 +49,7 @@ export async function listJourneys(db: Db, tenantId: string, filters: JourneyFil
         filters.source ? eq(journeys.source, filters.source as (typeof journeys.source.enumValues)[number]) : undefined,
         filters.stage ? eq(journeys.stage, filters.stage as (typeof journeys.stage.enumValues)[number]) : undefined,
         filters.ownerId ? eq(journeys.ownerUserId, filters.ownerId) : undefined,
+        filters.branchId ? eq(patients.branchId, filters.branchId) : undefined,
       ),
     );
 
@@ -71,17 +73,19 @@ export async function listJourneys(db: Db, tenantId: string, filters: JourneyFil
   }
 
   const doctorRows = await db
-    .select({ journeyId: appointments.journeyId, doctorName: users.name, scheduledAt: appointments.scheduledAt })
+    .select({ journeyId: appointments.journeyId, doctorId: appointments.doctorUserId, doctorName: users.name, scheduledAt: appointments.scheduledAt })
     .from(appointments)
     .leftJoin(users, eq(appointments.doctorUserId, users.id))
     .where(eq(appointments.tenantId, tenantId));
   const doctorByJourney = new Map<string, string | null>();
+  const doctorIdByJourney = new Map<string, string>();
   const latestApptByJourney = new Map<string, Date>();
   for (const d of doctorRows) {
     const existing = latestApptByJourney.get(d.journeyId);
     if (!existing || d.scheduledAt > existing) {
       latestApptByJourney.set(d.journeyId, d.scheduledAt);
       doctorByJourney.set(d.journeyId, d.doctorName);
+      doctorIdByJourney.set(d.journeyId, d.doctorId);
     }
   }
 
@@ -116,6 +120,20 @@ export async function listJourneys(db: Db, tenantId: string, filters: JourneyFil
     if (!existing || t.occurredAt > existing) lastActivityByJourney.set(t.journeyId, t.occurredAt);
   }
 
+  let atRiskJourneyIds: Set<string> | null = null;
+  if (filters.atRisk) {
+    const category = SPEND_AT_RISK_CATEGORIES.find((c) => c.key === filters.atRisk);
+    if (category) {
+      const atRiskRows = await db
+        .select({ journeyId: tasks.journeyId })
+        .from(tasks)
+        .where(and(eq(tasks.tenantId, tenantId), eq(tasks.status, "pending"), eq(tasks.reason, category.taskReason as (typeof tasks.reason.enumValues)[number])));
+      atRiskJourneyIds = new Set(atRiskRows.map((r) => r.journeyId).filter((id): id is string => id !== null));
+    } else {
+      atRiskJourneyIds = new Set();
+    }
+  }
+
   const withCampaign = rows.map((r) => {
     const campaignId = campaignByJourney.get(r.id) ?? null;
     const campaign = campaignId ? campaignById.get(campaignId) : undefined;
@@ -137,10 +155,14 @@ export async function listJourneys(db: Db, tenantId: string, filters: JourneyFil
       acquisitionCost,
       treatmentValue: treatmentValueByJourney.get(r.id) ?? 0,
     };
-    return { row, campaignId };
+    return { row, campaignId, journeyId: r.id, doctorId: doctorIdByJourney.get(r.id) ?? null };
   });
 
-  return withCampaign.filter((x) => !filters.campaignId || x.campaignId === filters.campaignId).map((x) => x.row);
+  return withCampaign
+    .filter((x) => !filters.campaignId || x.campaignId === filters.campaignId)
+    .filter((x) => !filters.doctorId || x.doctorId === filters.doctorId)
+    .filter((x) => !atRiskJourneyIds || atRiskJourneyIds.has(x.journeyId))
+    .map((x) => x.row);
 }
 
 export async function getJourneysSummary(db: Db, tenantId: string): Promise<JourneysSummary> {

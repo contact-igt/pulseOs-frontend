@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { requirePermission } from "../auth/permission.middleware.js";
 import { recordConsultationOutcome } from "./outcome.service.js";
 
 const outcomeBody = z.object({
@@ -10,11 +11,8 @@ const outcomeBody = z.object({
 });
 
 export async function outcomeRoutes(app: FastifyInstance) {
-  app.post("/appointments/:id/outcome", async (request, reply) => {
+  app.post("/appointments/:id/outcome", { preHandler: requirePermission("RECORD_CONSULTATION_OUTCOME") }, async (request, reply) => {
     const user = request.sessionUser!;
-    if (user.role !== "DOCTOR") {
-      return reply.status(403).send({ error: "doctor_role_required" });
-    }
 
     const parsed = outcomeBody.safeParse(request.body);
     if (!parsed.success) {

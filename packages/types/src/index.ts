@@ -9,6 +9,58 @@ export interface SessionUser {
   branchId: string | null;
 }
 
+// ---------------------------------------------------------------------------
+// Permissions — the single source of truth for what each role may do.
+// Enforced server-side (Fastify preHandler); the UI uses the same map only to
+// avoid showing dead navigation, never as the actual authorization boundary.
+// ---------------------------------------------------------------------------
+
+export type Permission =
+  | "VIEW_ADMIN_COMMAND_CENTRE"
+  | "VIEW_DOCTOR_COMMAND_CENTRE"
+  | "VIEW_PATIENTS"
+  | "EDIT_PATIENTS"
+  | "VIEW_JOURNEYS"
+  | "MANAGE_JOURNEYS"
+  | "VIEW_APPOINTMENTS"
+  | "MANAGE_APPOINTMENTS"
+  | "RECORD_CONSULTATION_OUTCOME"
+  | "VIEW_TREATMENT"
+  | "MANAGE_TREATMENT"
+  | "VIEW_REVENUE"
+  | "VIEW_MARKETING"
+  | "VIEW_INBOX"
+  | "MANAGE_TASKS";
+
+export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
+  SUPER_ADMIN: [
+    "VIEW_ADMIN_COMMAND_CENTRE", "VIEW_PATIENTS", "EDIT_PATIENTS", "VIEW_JOURNEYS", "MANAGE_JOURNEYS",
+    "VIEW_APPOINTMENTS", "MANAGE_APPOINTMENTS", "RECORD_CONSULTATION_OUTCOME", "VIEW_TREATMENT", "MANAGE_TREATMENT",
+    "VIEW_REVENUE", "VIEW_MARKETING", "VIEW_INBOX", "MANAGE_TASKS",
+  ],
+  HOSPITAL_ADMIN: [
+    "VIEW_ADMIN_COMMAND_CENTRE", "VIEW_PATIENTS", "EDIT_PATIENTS", "VIEW_JOURNEYS", "MANAGE_JOURNEYS",
+    "VIEW_APPOINTMENTS", "MANAGE_APPOINTMENTS", "VIEW_TREATMENT", "MANAGE_TREATMENT",
+    "VIEW_REVENUE", "VIEW_MARKETING", "VIEW_INBOX", "MANAGE_TASKS",
+  ],
+  FRONT_DESK: [
+    "VIEW_PATIENTS", "EDIT_PATIENTS", "VIEW_JOURNEYS", "VIEW_APPOINTMENTS", "MANAGE_APPOINTMENTS",
+    "VIEW_INBOX", "MANAGE_TASKS",
+  ],
+  PATIENT_COORDINATOR: [
+    "VIEW_PATIENTS", "EDIT_PATIENTS", "VIEW_JOURNEYS", "MANAGE_JOURNEYS", "VIEW_APPOINTMENTS", "MANAGE_APPOINTMENTS",
+    "VIEW_TREATMENT", "MANAGE_TREATMENT", "VIEW_REVENUE", "VIEW_INBOX", "MANAGE_TASKS",
+  ],
+  DOCTOR: [
+    "VIEW_DOCTOR_COMMAND_CENTRE", "VIEW_PATIENTS", "VIEW_JOURNEYS", "VIEW_APPOINTMENTS",
+    "RECORD_CONSULTATION_OUTCOME", "VIEW_TREATMENT",
+  ],
+};
+
+export function hasPermission(role: Role, permission: Permission): boolean {
+  return ROLE_PERMISSIONS[role].includes(permission);
+}
+
 export interface TodayStrip {
   newEnquiries: number;
   uncontacted: number;

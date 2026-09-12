@@ -2,9 +2,10 @@
 
 ## Product north star
 
-> **"PulseOS is made for Indian hospitals to cut back your marketing expense."**
+> **"PulseOS is the Patient Engagement and Revenue Intelligence Operating System for Indian hospitals — connecting every enquiry, conversation, appointment, consultation, treatment and follow-up into one continuous patient journey."**
+> Supporting line: **"Know where every patient came from, what happened next, what needs attention, and what revenue was generated."**
 
-PulseOS is a marketing-to-patient-journey intelligence platform, not a generic hospital CRM and not an EMR/HIS. Every screen answers a subset of: where did the patient come from, what happened to them, where did we lose them, what should the hospital do next. CRM/operational features exist because they close the attribution loop from marketing spend to treatment revenue — they are not the product's reason for existing. See [north-star addendum](docs/superpowers/specs/2026-09-12-pulseos-marketing-journey-northstar.md) for the binding detail (dashboard hierarchy, spend-at-risk definition, attribution formulas).
+PulseOS is the full daily operational loop (enquiry → patient → journey → follow-up → appointment → check-in/waiting → consultation → treatment decision → treatment → post-care → next action) with source/cost/conversion/revenue as a continuous thread through it — not a generic hospital CRM, not an EMR/HIS, and not only a marketing analytics dashboard. Marketing attribution (Spend At Risk, ROAS, source performance) is a first-class layer, not the sole product purpose — see [north-star addendum](docs/superpowers/specs/2026-09-12-pulseos-marketing-journey-northstar.md) for the binding detail (operational loop, dashboard hierarchy, spend-at-risk definition, attribution formulas).
 
 Greenfield India-first Patient Engagement CRM / Hospital Operations Command Centre, built around that north star.
 Source of truth: [docs/superpowers/specs/2026-09-12-pulseos-greenfield-foundation-design.md](docs/superpowers/specs/2026-09-12-pulseos-greenfield-foundation-design.md), [north-star addendum](docs/superpowers/specs/2026-09-12-pulseos-marketing-journey-northstar.md), [docs/superpowers/plans/2026-09-12-pulseos-greenfield-foundation-plan.md](docs/superpowers/plans/2026-09-12-pulseos-greenfield-foundation-plan.md), execution amendment in the same `plans/` directory.

@@ -21,6 +21,7 @@ export interface PatientListFilters {
   branchId?: string;
   source?: string;
   stage?: string;
+  ownerId?: string;
 }
 
 export async function listPatients(db: Db, tenantId: string, filters: PatientListFilters): Promise<PatientListRow[]> {
@@ -49,6 +50,7 @@ export async function listPatients(db: Db, tenantId: string, filters: PatientLis
       journeyType: journeys.journeyType,
       stage: journeys.stage,
       source: journeys.source,
+      ownerUserId: journeys.ownerUserId,
       ownerName: users.name,
       createdAt: journeys.createdAt,
     })
@@ -115,15 +117,19 @@ export async function listPatients(db: Db, tenantId: string, filters: PatientLis
       lastInteractionAt: lastInteraction ? lastInteraction.toISOString() : null,
       nextActionDueAt: nextAction ? nextAction.toISOString() : null,
       ownerName: current?.ownerName ?? null,
+      ownerUserId: current?.ownerUserId ?? null,
       appointmentStatus: latestAppt?.status ?? null,
     };
   });
 
-  return rows.filter((r) => {
-    if (filters.source && r.source !== filters.source) return false;
-    if (filters.stage && r.currentStage !== filters.stage) return false;
-    return true;
-  });
+  return rows
+    .filter((r) => {
+      if (filters.source && r.source !== filters.source) return false;
+      if (filters.stage && r.currentStage !== filters.stage) return false;
+      if (filters.ownerId && r.ownerUserId !== filters.ownerId) return false;
+      return true;
+    })
+    .map(({ ownerUserId: _ownerUserId, ...rest }) => rest);
 }
 
 export async function getPatient360(db: Db, tenantId: string, patientId: string): Promise<Patient360 | null> {

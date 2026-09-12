@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { requirePermission } from "../auth/permission.middleware.js";
 import {
   getAttentionQueue,
   getBranchDoctorPerformance,
@@ -12,6 +13,8 @@ import {
 } from "./dashboard.service.js";
 
 export async function dashboardRoutes(app: FastifyInstance) {
+  app.addHook("preHandler", requirePermission("VIEW_ADMIN_COMMAND_CENTRE"));
+
   app.get("/dashboard/today", async (request) => {
     const tenantId = request.sessionUser!.tenantId;
     return getTodayStrip(app.db, tenantId);
