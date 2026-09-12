@@ -183,11 +183,22 @@ export interface DoctorNextPatient {
   reason: string | null;
 }
 
+export type AppointmentStatus =
+  | "requested"
+  | "scheduled" // DB-level synonym for BOOKED
+  | "confirmed"
+  | "checked_in"
+  | "waiting"
+  | "with_doctor"
+  | "completed"
+  | "no_show"
+  | "cancelled";
+
 export interface DoctorTodayItem {
   appointmentId: string;
   patientName: string;
   time: string;
-  status: "scheduled" | "checked_in" | "with_doctor" | "completed" | "no_show" | "cancelled";
+  status: AppointmentStatus;
 }
 
 export interface DoctorDashboard {
@@ -290,4 +301,154 @@ export interface JourneysSummary {
   treatmentDecisionsPending: number;
   revenueOpportunity: number;
   spendAtRisk: number;
+}
+
+// ---------------------------------------------------------------------------
+// Tasks / Follow-ups / My Work (Group L)
+// ---------------------------------------------------------------------------
+
+export type TaskType = "CALLBACK" | "FOLLOW_UP" | "APPOINTMENT_CONFIRMATION" | "NO_SHOW_RECOVERY" | "TREATMENT_DECISION" | "POST_CARE" | "RECALL" | "OTHER";
+export type TaskPriority = "normal" | "high";
+export type TaskStatus = "pending" | "in_progress" | "completed" | "cancelled";
+export type TaskView = "today" | "overdue" | "upcoming" | "completed";
+
+export interface TaskRow {
+  id: string;
+  patientId: string;
+  patientName: string;
+  journeyId: string | null;
+  journeyType: string | null;
+  assignedTo: string | null;
+  assignedToName: string | null;
+  type: TaskType;
+  priority: TaskPriority;
+  status: TaskStatus;
+  notes: string | null;
+  dueAt: string;
+  completedAt: string | null;
+  createdAt: string;
+}
+
+export interface CreateTaskInput {
+  patientId: string;
+  journeyId?: string;
+  assignedTo?: string;
+  type: TaskType;
+  priority?: TaskPriority;
+  notes?: string;
+  dueAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// Appointments / Front Desk (Group M)
+// ---------------------------------------------------------------------------
+
+export interface AppointmentRow {
+  id: string;
+  patientId: string;
+  patientName: string;
+  journeyId: string;
+  branchName: string | null;
+  doctorId: string;
+  doctorName: string | null;
+  status: AppointmentStatus;
+  scheduledAt: string;
+  reason: string | null;
+}
+
+export type AppointmentAction = "confirm" | "check_in" | "mark_waiting" | "send_to_doctor" | "mark_no_show" | "cancel";
+
+export interface FrontDeskDashboard {
+  today: AppointmentRow[];
+  arrivals: AppointmentRow[];
+  waitingQueue: AppointmentRow[];
+  noShows: AppointmentRow[];
+  pendingConfirmations: AppointmentRow[];
+}
+
+// ---------------------------------------------------------------------------
+// Treatment (Group N)
+// ---------------------------------------------------------------------------
+
+export type TreatmentStatus = "ADVISED" | "DECISION_PENDING" | "ACCEPTED" | "SCHEDULED" | "COMPLETED" | "DECLINED" | "CANCELLED" | "LOST";
+
+export interface TreatmentRow {
+  id: string;
+  patientId: string;
+  patientName: string;
+  journeyId: string;
+  doctorName: string | null;
+  treatmentLabel: string;
+  estimatedValue: number;
+  status: TreatmentStatus;
+  ownerName: string | null;
+  nextActionDueAt: string | null;
+  lastContactAt: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Inbox (Group P)
+// ---------------------------------------------------------------------------
+
+export type ConversationChannel = "WHATSAPP" | "CALL" | "SMS" | "EMAIL" | "INTERNAL";
+export type OwnershipState = "AI_ACTIVE" | "HUMAN_REQUIRED" | "HUMAN_ASSIGNED" | "HUMAN_ACTIVE" | "AI_RESUME_PENDING" | "CLOSED";
+
+export interface ConversationRow {
+  id: string;
+  patientId: string;
+  patientName: string;
+  channel: ConversationChannel;
+  lastMessage: string | null;
+  lastMessageAt: string;
+  unreadCount: number;
+  ownerName: string | null;
+  ownershipState: OwnershipState;
+}
+
+export interface MessageRow {
+  id: string;
+  senderType: "patient" | "staff" | "ai" | "system";
+  senderName: string | null;
+  body: string;
+  sentAt: string;
+}
+
+export interface ConversationDetail {
+  conversation: ConversationRow;
+  messages: MessageRow[];
+  patientContext: {
+    patientId: string;
+    journeyType: string | null;
+    stage: JourneyStage | null;
+    ownerName: string | null;
+    appointmentTime: string | null;
+    lastInteractionAt: string | null;
+    nextActionDueAt: string | null;
+  } | null;
+}
+
+// ---------------------------------------------------------------------------
+// Lookups (filter dropdown data)
+// ---------------------------------------------------------------------------
+
+export interface LookupOption {
+  id: string;
+  name: string;
+}
+
+export interface Lookups {
+  branches: LookupOption[];
+  doctors: LookupOption[];
+  owners: LookupOption[];
+}
+
+// ---------------------------------------------------------------------------
+// Coordinator "My Work" dashboard
+// ---------------------------------------------------------------------------
+
+export interface CoordinatorDashboard {
+  treatmentDecisionsPending: TreatmentRow[];
+  overdueTasks: TaskRow[];
+  todayTasks: TaskRow[];
+  postCareDue: TaskRow[];
 }

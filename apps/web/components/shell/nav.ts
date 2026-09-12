@@ -12,7 +12,7 @@ const FULL_NAV: NavItem[] = [
   { label: "Journeys", href: "/journeys", implemented: true },
   { label: "Inbox", href: "/inbox", implemented: false },
   { label: "Appointments", href: "/appointments", implemented: false },
-  { label: "Follow-ups / Tasks", href: "/follow-ups", implemented: false },
+  { label: "My Work", href: "/my-work", implemented: true },
   { label: "Treatment", href: "/treatment", implemented: false },
   { label: "Campaigns / Sources", href: "/campaigns", implemented: false },
   { label: "Analytics", href: "/analytics", implemented: false },
@@ -25,7 +25,7 @@ const DOCTOR_NAV: NavItem[] = [
   { label: "Command Centre", href: "/doctor-home", implemented: true },
   { label: "Appointments", href: "/appointments", implemented: false },
   { label: "Patients", href: "/patients", implemented: true },
-  { label: "Follow-ups", href: "/follow-ups", implemented: false },
+  { label: "My Work", href: "/my-work", implemented: true },
 ];
 
 export function navForRole(role: Role): NavItem[] {

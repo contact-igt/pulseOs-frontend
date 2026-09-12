@@ -47,6 +47,25 @@ type ConsultationOutcomeValue =
 
 type TreatmentStatusValue = "ADVISED" | "DECISION_PENDING" | "SCHEDULED" | "COMPLETED" | "DECLINED" | "LOST";
 type TaskReasonValue = "overdue_callback" | "missed_follow_up" | "no_show" | "high_intent_uncontacted" | "treatment_decision_pending" | "manual_task";
+type TaskTypeValue = "CALLBACK" | "FOLLOW_UP" | "APPOINTMENT_CONFIRMATION" | "NO_SHOW_RECOVERY" | "TREATMENT_DECISION" | "POST_CARE" | "RECALL" | "OTHER";
+
+const TASK_TYPE_BY_REASON: Record<TaskReasonValue, TaskTypeValue> = {
+  overdue_callback: "CALLBACK",
+  missed_follow_up: "FOLLOW_UP",
+  no_show: "NO_SHOW_RECOVERY",
+  high_intent_uncontacted: "CALLBACK",
+  treatment_decision_pending: "TREATMENT_DECISION",
+  manual_task: "OTHER",
+};
+
+const TASK_PRIORITY_BY_REASON: Record<TaskReasonValue, "normal" | "high"> = {
+  overdue_callback: "normal",
+  missed_follow_up: "normal",
+  no_show: "high",
+  high_intent_uncontacted: "high",
+  treatment_decision_pending: "high",
+  manual_task: "normal",
+};
 type JourneyStageValue = "enquiry" | "contacted" | "booked" | "attended" | "consulted" | "treatment_advised" | "scheduled" | "completed" | "lost";
 type AppointmentStatusValue = "scheduled" | "checked_in" | "with_doctor" | "completed" | "no_show" | "cancelled";
 
@@ -423,9 +442,31 @@ async function main() {
       await db.insert(tasks).values({
         tenantId: tenant.id, patientId: patient.id, journeyId: journey.id, assignedTo: owner.id,
         reason: config.task.reason, status: "pending", dueAt: daysFromNow(config.task.dueOffsetDays, 9),
+        type: TASK_TYPE_BY_REASON[config.task.reason], priority: TASK_PRIORITY_BY_REASON[config.task.reason],
+        createdBy: admin.id,
       });
     }
   }
+
+  // A few standalone tasks spanning today/upcoming/completed so every My Work view has real rows.
+  await db.insert(tasks).values([
+    {
+      tenantId: tenant.id, patientId: patientRows[2].id,
+      assignedTo: coordinator.id, reason: "manual_task", type: "APPOINTMENT_CONFIRMATION", priority: "normal",
+      notes: "Confirm tomorrow's 11am slot with patient", status: "pending", dueAt: daysFromNow(0, 15), createdBy: admin.id,
+    },
+    {
+      tenantId: tenant.id, patientId: patientRows[3].id,
+      assignedTo: frontDesk.id, reason: "manual_task", type: "RECALL", priority: "normal",
+      status: "pending", dueAt: daysFromNow(4, 10), createdBy: admin.id,
+    },
+    {
+      tenantId: tenant.id, patientId: patientRows[4].id,
+      assignedTo: coordinator.id, reason: "manual_task", type: "POST_CARE", priority: "normal",
+      notes: "Post-op check-in call", status: "completed", dueAt: daysFromNow(-2, 10),
+      completedAt: daysFromNow(-2, 14), completedBy: coordinator.id, createdBy: admin.id,
+    },
+  ]);
 
   if (timelineRows.length > 0) {
     await db.insert(timelineEvents).values(timelineRows);

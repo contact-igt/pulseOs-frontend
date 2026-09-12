@@ -76,9 +76,22 @@ export const journeys = pgTable("journeys", {
 }));
 
 export const taskStatusEnum = pgEnum("task_status", ["pending", "in_progress", "completed", "cancelled"]);
+
+// `reason` is the operational-failure bucket used only for Spend-At-Risk
+// categorization (dashboard.service.ts SPEND_AT_RISK_CATEGORIES) — it answers
+// "what acquisition spend is this task protecting," not "what kind of work is
+// this." `type` (below) is the hospital-operational work category shown on
+// Tasks/My Work and answers "what does the assignee actually need to do."
+// The two taxonomies serve different screens and are kept independent.
 export const taskReasonEnum = pgEnum("task_reason", [
   "overdue_callback", "missed_follow_up", "no_show", "high_intent_uncontacted", "treatment_decision_pending", "manual_task",
 ]);
+
+export const taskTypeEnum = pgEnum("task_type", [
+  "CALLBACK", "FOLLOW_UP", "APPOINTMENT_CONFIRMATION", "NO_SHOW_RECOVERY", "TREATMENT_DECISION", "POST_CARE", "RECALL", "OTHER",
+]);
+
+export const taskPriorityEnum = pgEnum("task_priority", ["normal", "high"]);
 
 export const tasks = pgTable("tasks", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -87,15 +100,25 @@ export const tasks = pgTable("tasks", {
   journeyId: uuid("journey_id").references(() => journeys.id),
   assignedTo: uuid("assigned_to").references(() => users.id),
   reason: taskReasonEnum("reason").notNull().default("manual_task"),
+  type: taskTypeEnum("type").notNull().default("OTHER"),
+  priority: taskPriorityEnum("priority").notNull().default("normal"),
   status: taskStatusEnum("status").notNull().default("pending"),
+  notes: text("notes"),
   dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
+  createdBy: uuid("created_by").references(() => users.id),
+  completedBy: uuid("completed_by").references(() => users.id),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   tenantIdx: index("tasks_tenant_idx").on(t.tenantId),
+  assignedIdx: index("tasks_assigned_idx").on(t.assignedTo),
 }));
 
+// "scheduled" is the DB-level synonym for the operational state BOOKED
+// (kept as the original enum value to avoid a risky ALTER TYPE RENAME VALUE
+// migration on live data — display layers show it as "Booked").
 export const appointmentStatusEnum = pgEnum("appointment_status", [
-  "scheduled", "checked_in", "with_doctor", "completed", "no_show", "cancelled",
+  "requested", "scheduled", "confirmed", "checked_in", "waiting", "with_doctor", "completed", "no_show", "cancelled",
 ]);
 
 export const appointments = pgTable("appointments", {
@@ -177,7 +200,7 @@ export const consultationOutcomes = pgTable("consultation_outcomes", {
 }));
 
 export const treatmentStatusEnum = pgEnum("treatment_status", [
-  "ADVISED", "DECISION_PENDING", "SCHEDULED", "COMPLETED", "DECLINED", "LOST",
+  "ADVISED", "DECISION_PENDING", "ACCEPTED", "SCHEDULED", "COMPLETED", "DECLINED", "CANCELLED", "LOST",
 ]);
 
 export const treatmentOpportunities = pgTable("treatment_opportunities", {
@@ -191,6 +214,7 @@ export const treatmentOpportunities = pgTable("treatment_opportunities", {
   estimatedValue: integer("estimated_value").notNull().default(0),
   ownerUserId: uuid("owner_user_id").references(() => users.id),
   decisionDate: timestamp("decision_date", { withTimezone: true }),
+  plannedDate: timestamp("planned_date", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
@@ -239,4 +263,44 @@ export const timelineEvents = pgTable("timeline_events", {
   patientIdx: index("timeline_events_patient_idx").on(t.patientId),
   journeyIdx: index("timeline_events_journey_idx").on(t.journeyId),
   occurredIdx: index("timeline_events_occurred_idx").on(t.occurredAt),
+}));
+
+// ---------------------------------------------------------------------------
+// Inbox — PulseOS-native conversation shell (Group P). Demo/persisted data
+// only in this checkpoint; no live channel provider is wired yet.
+// ---------------------------------------------------------------------------
+
+export const conversationChannelEnum = pgEnum("conversation_channel", ["WHATSAPP", "CALL", "SMS", "EMAIL", "INTERNAL"]);
+export const ownershipStateEnum = pgEnum("ownership_state", [
+  "AI_ACTIVE", "HUMAN_REQUIRED", "HUMAN_ASSIGNED", "HUMAN_ACTIVE", "AI_RESUME_PENDING", "CLOSED",
+]);
+
+export const conversations = pgTable("conversations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  patientId: uuid("patient_id").notNull().references(() => patients.id),
+  journeyId: uuid("journey_id").references(() => journeys.id),
+  channel: conversationChannelEnum("channel").notNull().default("WHATSAPP"),
+  ownershipState: ownershipStateEnum("ownership_state").notNull().default("AI_ACTIVE"),
+  assignedTo: uuid("assigned_to").references(() => users.id),
+  lastMessageAt: timestamp("last_message_at", { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  tenantIdx: index("conversations_tenant_idx").on(t.tenantId),
+  patientIdx: index("conversations_patient_idx").on(t.patientId),
+}));
+
+export const messageSenderEnum = pgEnum("message_sender", ["patient", "staff", "ai", "system"]);
+
+export const messages = pgTable("messages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  conversationId: uuid("conversation_id").notNull().references(() => conversations.id),
+  senderType: messageSenderEnum("sender_type").notNull(),
+  senderUserId: uuid("sender_user_id").references(() => users.id),
+  body: text("body").notNull(),
+  sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+  readAt: timestamp("read_at", { withTimezone: true }),
+}, (t) => ({
+  conversationIdx: index("messages_conversation_idx").on(t.conversationId),
 }));

@@ -3,16 +3,20 @@ import type {
   BranchDoctorRow,
   ConsultationOutcomeValue,
   ConversionStage,
+  CreateTaskInput,
   DoctorDashboard,
   ExecutiveStrip,
   JourneyListRow,
   JourneysSummary,
+  Lookups,
   Patient360,
   PatientFlowCount,
   PatientListRow,
   SessionUser,
   SourcePerformanceRow,
   SpendAtRiskSummary,
+  TaskRow,
+  TaskView,
   TeamWorkloadRow,
   TodayStrip,
 } from "@pulseos/types";
@@ -94,6 +98,14 @@ export const api = {
   journeysSummary: () => request<JourneysSummary>("/journeys/summary"),
   recordOutcome: (appointmentId: string, input: { outcome: ConsultationOutcomeValue; notes?: string; treatmentLabel?: string; estimatedValue?: number }) =>
     request<{ ok: true }>(`/appointments/${appointmentId}/outcome`, { method: "POST", body: JSON.stringify(input) }),
+  lookups: () => request<Lookups>("/lookups"),
+  tasks: (filters: { view?: TaskView; assignedTo?: string; patientId?: string } = {}) =>
+    request<TaskRow[]>(`/tasks${toQuery({ ...filters })}`),
+  createTask: (input: CreateTaskInput) => request<TaskRow>("/tasks", { method: "POST", body: JSON.stringify(input) }),
+  addTaskNote: (id: string, notes: string) => request<TaskRow>(`/tasks/${id}/note`, { method: "PATCH", body: JSON.stringify({ notes }) }),
+  rescheduleTask: (id: string, dueAt: string) => request<TaskRow>(`/tasks/${id}/reschedule`, { method: "PATCH", body: JSON.stringify({ dueAt }) }),
+  reassignTask: (id: string, assignedTo: string) => request<TaskRow>(`/tasks/${id}/reassign`, { method: "PATCH", body: JSON.stringify({ assignedTo }) }),
+  completeTask: (id: string) => request<TaskRow>(`/tasks/${id}/complete`, { method: "PATCH", body: JSON.stringify({}) }),
 };
 
 export { ApiError };

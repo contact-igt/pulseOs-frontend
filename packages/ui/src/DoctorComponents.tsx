@@ -6,8 +6,11 @@ function fmtTime(iso: string) {
 }
 
 const STATUS_TONE: Record<DoctorTodayItem["status"], "neutral" | "warning" | "danger" | "primary"> = {
+  requested: "neutral",
   scheduled: "neutral",
+  confirmed: "neutral",
   checked_in: "warning",
+  waiting: "warning",
   with_doctor: "primary",
   completed: "neutral",
   no_show: "danger",
