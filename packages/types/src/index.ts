@@ -7,17 +7,45 @@ export interface SessionUser {
   email: string;
   role: Role;
   branchId: string | null;
+  branchName: string | null;
+}
+
+export interface Branch {
+  id: string;
+  name: string;
+  city: string;
 }
 
 export interface TodayStrip {
   newEnquiries: number;
-  uncontacted: number;
-  followUpsDue: number;
   appointmentsToday: number;
   waitingNow: number;
-  noShows: number;
   consultationsCompleted: number;
   treatmentDecisionsPending: number;
+  attributedRevenue: number;
+}
+
+export type JourneyHealthKey = "contacted" | "booked" | "attended" | "consulted" | "treatment_advised";
+
+export interface JourneyHealthSegment {
+  key: JourneyHealthKey;
+  label: string;
+  count: number;
+  pct: number;
+}
+
+export interface JourneyHealth {
+  segments: JourneyHealthSegment[];
+  totalJourneys: number;
+  overallPct: number;
+}
+
+export interface JourneyPerformancePoint {
+  date: string;
+  enquiries: number;
+  appointments: number;
+  consultations: number;
+  treatments: number;
 }
 
 export type ConversionStageKey =
@@ -36,7 +64,7 @@ export interface ConversionStage {
   count: number;
 }
 
-export type PatientFlowBucket = "waiting" | "checked_in" | "with_doctor" | "consultation_complete" | "follow_up_required";
+export type PatientFlowBucket = "confirmed" | "checked_in" | "with_doctor" | "completed";
 
 export interface PatientFlowCount {
   bucket: PatientFlowBucket;
@@ -68,6 +96,19 @@ export interface MarketingSourceRow {
   consultations: number;
   treatmentConversion: number;
   revenue: number;
+  spend: number;
+  roas: number | null;
+}
+
+export interface SpendAtRiskReasonRow {
+  reason: AttentionReason;
+  count: number;
+  estimatedValue: number;
+}
+
+export interface SpendAtRisk {
+  totalAtRisk: number;
+  byReason: SpendAtRiskReasonRow[];
 }
 
 export interface TeamWorkloadRow {
@@ -102,11 +143,23 @@ export interface DoctorTodayItem {
   status: "scheduled" | "checked_in" | "with_doctor" | "completed" | "no_show" | "cancelled";
 }
 
+export interface DoctorRecentPatient {
+  appointmentId: string;
+  patientName: string;
+  journeyType: string;
+  time: string;
+}
+
 export interface DoctorDashboard {
   todayCount: number;
-  waitingCount: number;
   checkedInCount: number;
+  waitingNow: number;
+  withMeCount: number;
+  completionPct: number;
   nextPatient: DoctorNextPatient | null;
   today: DoctorTodayItem[];
   awaitingOutcome: DoctorTodayItem[];
+  treatmentFollowUps: DoctorTodayItem[];
+  postCare: DoctorTodayItem[];
+  recentPatients: DoctorRecentPatient[];
 }

@@ -16,7 +16,7 @@ export function AttentionQueue({ items, onItemClick }: { items: AttentionItem[];
       {items.length === 0 ? (
         <EmptyState message="Nothing needs attention right now" />
       ) : (
-        <ul className="divide-y divide-neutral-100">
+        <ul className="max-h-80 divide-y divide-neutral-100 overflow-y-auto">
           {items.map((item) => {
             const overdue = new Date(item.dueAt).getTime() < Date.now();
             return (

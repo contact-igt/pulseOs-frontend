@@ -16,7 +16,8 @@
   "dependencies": {
     "@pulseos/design-tokens": "workspace:*",
     "@pulseos/types": "workspace:*",
-    "lucide-react": "^1.45.0"
+    "lucide-react": "^1.45.0",
+    "recharts": "^3.10.0"
   },
   "devDependencies": {
     "@testing-library/react": "^16.2.0",

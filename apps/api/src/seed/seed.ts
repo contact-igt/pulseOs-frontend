@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { db, queryClient } from "../db/client.js";
-import { appointments, branches, journeys, patients, sessions, tasks, tenants, users } from "../db/schema.js";
+import { appointments, branches, journeys, patients, sessions, sourceSpend, tasks, tenants, users } from "../db/schema.js";
 import { hashPassword } from "../domain/auth/auth.service.js";
 
 function requireDemoPassword(): string {
@@ -28,6 +28,7 @@ async function main() {
   await db.delete(journeys);
   await db.delete(patients);
   await db.delete(users);
+  await db.delete(sourceSpend);
   await db.delete(branches);
   await db.delete(tenants);
 
@@ -43,7 +44,7 @@ async function main() {
 
   const passwordHash = await hashPassword(DEMO_PASSWORD);
 
-  const [admin, doctorMeera, doctorArjun, frontDesk, coordinator] = await db
+  const [, doctorMeera, doctorArjun, frontDesk, coordinator] = await db
     .insert(users)
     .values([
       { tenantId: tenant.id, branchId: branchA.id, name: "Ananya Rao", email: "admin@pulseos.local", passwordHash, role: "HOSPITAL_ADMIN" },
@@ -108,6 +109,30 @@ async function main() {
     createdAt: daysFromNow(-10),
   });
 
+  // A couple of enquiries created today, so "today"-scoped KPIs have real same-day activity.
+  journeyRows.push(
+    {
+      tenantId: tenant.id,
+      patientId: patientRows[3].id,
+      journeyType: "Fertility",
+      stage: "enquiry" as const,
+      source: "google" as const,
+      ownerUserId: frontDesk.id,
+      contactedAt: null,
+      createdAt: daysFromNow(0, 8, 30),
+    },
+    {
+      tenantId: tenant.id,
+      patientId: patientRows[7].id,
+      journeyType: "General OPD",
+      stage: "contacted" as const,
+      source: "whatsapp" as const,
+      ownerUserId: coordinator.id,
+      contactedAt: daysFromNow(0, 9, 0),
+      createdAt: daysFromNow(0, 8, 0),
+    },
+  );
+
   const insertedJourneys = await db.insert(journeys).values(journeyRows).returning();
 
   const doctors = [doctorMeera, doctorArjun];
@@ -135,7 +160,22 @@ async function main() {
       revenueAmount: status === "completed" && i % 3 === 0 ? 15000 + i * 500 : 0,
     });
   }
-  await db.insert(appointments).values(appointmentRows);
+  // A few consultations completed earlier today, with revenue, so today-scoped
+  // KPIs (consultations, attributed revenue) reflect real same-day activity.
+  const completedTodayRows = [2, 5, 9, 12].map((i, idx) => ({
+    tenantId: tenant.id,
+    patientId: patientRows[i].id,
+    journeyId: insertedJourneys[i].id,
+    branchId: i % 2 === 0 ? branchA.id : branchB.id,
+    doctorUserId: doctors[i % 2].id,
+    status: "completed" as const,
+    scheduledAt: daysFromNow(0, 8 + idx),
+    reason: "Consultation",
+    outcomeRecorded: idx === 0 || idx === 2,
+    treatmentRecommended: idx === 0 || idx === 2,
+    revenueAmount: idx === 0 ? 18000 : idx === 2 ? 22000 : 0,
+  }));
+  await db.insert(appointments).values([...appointmentRows, ...completedTodayRows]);
 
   const taskReasons = ["overdue_callback", "missed_follow_up", "no_show", "high_intent_uncontacted", "treatment_decision_pending"] as const;
   const taskRows = patientRows.slice(0, 12).map((patient, i) => ({
@@ -148,6 +188,15 @@ async function main() {
     dueAt: daysFromNow(i % 4 === 0 ? -1 : 0, 9 + i),
   }));
   await db.insert(tasks).values(taskRows);
+
+  await db.insert(sourceSpend).values([
+    { tenantId: tenant.id, source: "meta", spendAmount: 185000 },
+    { tenantId: tenant.id, source: "google", spendAmount: 220000 },
+    { tenantId: tenant.id, source: "website", spendAmount: 40000 },
+    { tenantId: tenant.id, source: "whatsapp", spendAmount: 15000 },
+    { tenantId: tenant.id, source: "walk_in", spendAmount: 0 },
+    { tenantId: tenant.id, source: "referral", spendAmount: 0 },
+  ]);
 
   console.log("Seed complete.");
   console.log(`Tenant: ${tenant.name} (${tenant.id})`);

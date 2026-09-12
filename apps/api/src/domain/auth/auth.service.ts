@@ -1,7 +1,7 @@
 import { hash, verify } from "@node-rs/argon2";
 import { eq } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
-import { users, sessions, tenants } from "../../db/schema.js";
+import { users, sessions, tenants, branches } from "../../db/schema.js";
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 12;
 
@@ -26,6 +26,7 @@ export async function loginWithPassword(db: Db, email: string, password: string)
     .returning();
 
   const [tenant] = await db.select().from(tenants).where(eq(tenants.id, user.tenantId)).limit(1);
+  const branch = user.branchId ? (await db.select().from(branches).where(eq(branches.id, user.branchId)).limit(1))[0] : undefined;
 
   return {
     ok: true as const,
@@ -36,6 +37,7 @@ export async function loginWithPassword(db: Db, email: string, password: string)
       tenantId: user.tenantId,
       tenantName: tenant?.name ?? "",
       branchId: user.branchId,
+      branchName: branch?.name ?? null,
       name: user.name,
       email: user.email,
       role: user.role,
@@ -45,9 +47,10 @@ export async function loginWithPassword(db: Db, email: string, password: string)
 
 export async function resolveSession(db: Db, sessionId: string) {
   const [row] = await db
-    .select({ session: sessions, user: users })
+    .select({ session: sessions, user: users, branch: branches })
     .from(sessions)
     .innerJoin(users, eq(sessions.userId, users.id))
+    .leftJoin(branches, eq(users.branchId, branches.id))
     .where(eq(sessions.id, sessionId))
     .limit(1);
 
@@ -58,6 +61,7 @@ export async function resolveSession(db: Db, sessionId: string) {
     id: row.user.id,
     tenantId: row.user.tenantId,
     branchId: row.user.branchId,
+    branchName: row.branch?.name ?? null,
     name: row.user.name,
     email: row.user.email,
     role: row.user.role,

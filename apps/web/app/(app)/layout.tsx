@@ -1,14 +1,20 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { api } from "@pulseos/api-client";
 import { Sidebar } from "../../components/shell/Sidebar";
 import { TopBar } from "../../components/shell/TopBar";
 
+const PAGE_META: Record<string, { title: string; subtitle: string }> = {
+  "/command-centre": { title: "Command Centre", subtitle: "Hospital engagement operation at a glance" },
+  "/doctor-home": { title: "Command Centre", subtitle: "Your patients and schedule for today" },
+};
+
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { data, isLoading, isError } = useQuery({ queryKey: ["session"], queryFn: api.session, retry: false });
 
   useEffect(() => {
@@ -21,12 +27,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (!data) return null;
 
+  const meta = PAGE_META[pathname] ?? { title: "PulseOS", subtitle: undefined };
+
   return (
     <div className="flex">
-      <Sidebar role={data.user.role} />
-      <div className="flex min-h-screen flex-1 flex-col">
-        <TopBar user={data.user} />
-        <main className="flex-1 bg-neutral-50 p-6">{children}</main>
+      <Sidebar user={data.user} />
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
+        <TopBar user={data.user} title={meta.title} subtitle={meta.subtitle} />
+        <main className="flex-1 overflow-x-hidden bg-neutral-50 p-6">{children}</main>
       </div>
     </div>
   );

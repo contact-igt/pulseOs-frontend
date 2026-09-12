@@ -8,7 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src --ext .ts",
+    "lint": "eslint src",
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/db/migrate.ts",
@@ -28,8 +28,10 @@
   "devDependencies": {
     "@types/node": "22.20.2",
     "drizzle-kit": "0.31.10",
+    "eslint": "^9.39.5",
     "tsx": "4.23.13",
     "typescript": "5.9.3",
+    "typescript-eslint": "^8.70.0",
     "vitest": "3.2.4"
   }
 }

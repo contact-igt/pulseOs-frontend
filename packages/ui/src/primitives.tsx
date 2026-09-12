@@ -1,7 +1,11 @@
-import type { ReactNode } from "react";
+import type { ComponentPropsWithoutRef, ReactNode } from "react";
 
-export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`rounded-lg border border-neutral-200 bg-white ${className}`}>{children}</div>;
+export function Card({ children, className = "", ...rest }: { children: ReactNode; className?: string } & ComponentPropsWithoutRef<"div">) {
+  return (
+    <div className={`rounded-lg border border-neutral-200 bg-white ${className}`} {...rest}>
+      {children}
+    </div>
+  );
 }
 
 export function SectionHeading({ title, subtitle }: { title: string; subtitle?: string }) {
@@ -28,8 +32,8 @@ export function ErrorState({ message }: { message: string }) {
 export function Badge({ tone = "neutral", children }: { tone?: "neutral" | "warning" | "danger" | "primary"; children: ReactNode }) {
   const tones: Record<string, string> = {
     neutral: "bg-neutral-100 text-neutral-700",
-    warning: "bg-amber-100 text-amber-800",
-    danger: "bg-red-100 text-red-800",
+    warning: "bg-warning-100 text-warning-700",
+    danger: "bg-danger-100 text-danger-700",
     primary: "bg-primary-100 text-primary-700",
   };
   return <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${tones[tone]}`}>{children}</span>;

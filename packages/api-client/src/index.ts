@@ -1,11 +1,15 @@
 import type {
   AttentionItem,
+  Branch,
   BranchDoctorRow,
   ConversionStage,
   DoctorDashboard,
+  JourneyHealth,
+  JourneyPerformancePoint,
   MarketingSourceRow,
   PatientFlowCount,
   SessionUser,
+  SpendAtRisk,
   TeamWorkloadRow,
   TodayStrip,
 } from "@pulseos/types";
@@ -33,18 +37,35 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+function qs(params: object) {
+  const entries = (Object.entries(params) as [string, string | undefined][]).filter(([, v]) => v !== undefined && v !== "");
+  if (entries.length === 0) return "";
+  return `?${new URLSearchParams(entries as [string, string][]).toString()}`;
+}
+
+export interface DashboardQuery {
+  branchId?: string;
+  journeyType?: string;
+}
+
 export const api = {
   login: (email: string, password: string) =>
     request<{ user: SessionUser }>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   logout: () => request<{ ok: true }>("/auth/logout", { method: "POST" }),
   session: () => request<{ user: SessionUser }>("/auth/session"),
-  today: () => request<TodayStrip>("/dashboard/today"),
-  conversion: () => request<ConversionStage[]>("/dashboard/conversion"),
-  patientFlow: () => request<PatientFlowCount[]>("/dashboard/patient-flow"),
-  attention: () => request<AttentionItem[]>("/dashboard/attention"),
+  branches: () => request<Branch[]>("/branches"),
+  journeyTypes: () => request<string[]>("/journey-types"),
+  today: (f: DashboardQuery = {}) => request<TodayStrip>(`/dashboard/today${qs(f)}`),
+  conversion: (f: DashboardQuery = {}) => request<ConversionStage[]>(`/dashboard/conversion${qs(f)}`),
+  journeyHealth: (f: DashboardQuery = {}) => request<JourneyHealth>(`/dashboard/journey-health${qs(f)}`),
+  journeyPerformance: (days: number, f: DashboardQuery = {}) =>
+    request<JourneyPerformancePoint[]>(`/dashboard/journey-performance${qs({ ...f, days: String(days) })}`),
+  patientFlow: (f: DashboardQuery = {}) => request<PatientFlowCount[]>(`/dashboard/patient-flow${qs(f)}`),
+  attention: (f: DashboardQuery = {}) => request<AttentionItem[]>(`/dashboard/attention${qs(f)}`),
+  spendAtRisk: (f: DashboardQuery = {}) => request<SpendAtRisk>(`/dashboard/spend-at-risk${qs(f)}`),
   marketing: () => request<MarketingSourceRow[]>("/dashboard/marketing"),
-  team: () => request<TeamWorkloadRow[]>("/dashboard/team"),
-  branchDoctor: () => request<BranchDoctorRow[]>("/dashboard/branch-doctor"),
+  team: (f: DashboardQuery = {}) => request<TeamWorkloadRow[]>(`/dashboard/team${qs(f)}`),
+  branchDoctor: (f: DashboardQuery = {}) => request<BranchDoctorRow[]>(`/dashboard/branch-doctor${qs(f)}`),
   doctorDashboard: () => request<DoctorDashboard>("/dashboard/doctor"),
 };
 

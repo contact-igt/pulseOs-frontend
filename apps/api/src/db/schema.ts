@@ -115,3 +115,14 @@ export const appointments = pgTable("appointments", {
   tenantIdx: index("appointments_tenant_idx").on(t.tenantId),
   doctorIdx: index("appointments_doctor_idx").on(t.doctorUserId),
 }));
+
+export const sourceSpend = pgTable("source_spend", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  source: sourceEnum("source").notNull(),
+  spendAmount: integer("spend_amount").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  tenantIdx: index("source_spend_tenant_idx").on(t.tenantId),
+  tenantSourceUnique: uniqueIndex("source_spend_tenant_source_unique").on(t.tenantId, t.source),
+}));

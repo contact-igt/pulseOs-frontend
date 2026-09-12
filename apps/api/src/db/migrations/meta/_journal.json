@@ -8,6 +8,13 @@
       "when": 1789212087756,
       "tag": "0000_complex_grim_reaper",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789218770901,
+      "tag": "0001_high_rictor",
+      "breakpoints": true
     }
   ]
 }

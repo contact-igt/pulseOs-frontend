@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Bell, ChevronDown, LogOut, Search } from "lucide-react";
 import type { SessionUser } from "@pulseos/types";
 import { api } from "@pulseos/api-client";
 
@@ -12,29 +14,80 @@ const ROLE_LABEL: Record<string, string> = {
   DOCTOR: "Doctor",
 };
 
-export function TopBar({ user }: { user: SessionUser }) {
+export function TopBar({ user, title, subtitle }: { user: SessionUser; title: string; subtitle?: string }) {
   const router = useRouter();
-  const today = new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+  const [query, setQuery] = useState("");
+  const [profileOpen, setProfileOpen] = useState(false);
 
   async function logout() {
     await api.logout();
     router.push("/login");
   }
 
+  function submitSearch(e: React.FormEvent) {
+    e.preventDefault();
+    if (query.trim()) router.push(`/patients?q=${encodeURIComponent(query.trim())}`);
+  }
+
   return (
-    <header className="flex h-14 items-center justify-between border-b border-neutral-200 bg-white px-6">
-      <span className="text-sm text-neutral-500">{today}</span>
+    <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-neutral-200 bg-white px-6">
+      <div className="min-w-0">
+        <h1 className="truncate text-base font-semibold text-slate-900">{title}</h1>
+        {subtitle && <p className="truncate text-xs text-neutral-500">{subtitle}</p>}
+      </div>
+
       <div className="flex items-center gap-3">
-        <span className="text-sm text-slate-900">{user.name}</span>
-        <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600">{ROLE_LABEL[user.role]}</span>
+        <form onSubmit={submitSearch} className="hidden sm:block">
+          <div className="flex items-center gap-1.5 rounded border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 focus-within:border-primary-300">
+            <Search size={14} className="text-neutral-400" />
+            <input
+              type="text"
+              placeholder="Search patients…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="w-40 bg-transparent text-xs text-slate-900 outline-none placeholder:text-neutral-400 lg:w-56"
+              data-testid="global-patient-search"
+            />
+          </div>
+        </form>
+
         <button
           type="button"
-          onClick={logout}
-          className="rounded px-2 py-1 text-xs text-neutral-500 transition hover:bg-neutral-100 hover:text-slate-900"
-          data-testid="logout-button"
+          className="relative rounded p-1.5 text-neutral-500 transition hover:bg-neutral-100 hover:text-slate-900"
+          title="Notifications"
+          data-testid="notifications-button"
         >
-          Log out
+          <Bell size={17} />
         </button>
+
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setProfileOpen((v) => !v)}
+            className="flex items-center gap-1.5 rounded px-1.5 py-1 text-left transition hover:bg-neutral-100"
+            data-testid="profile-menu-trigger"
+          >
+            <span className="text-sm text-slate-900">{user.name}</span>
+            <ChevronDown size={14} className="text-neutral-400" />
+          </button>
+          {profileOpen && (
+            <div className="absolute right-0 top-full z-10 mt-1 w-52 rounded border border-neutral-200 bg-white py-1 shadow-sm">
+              <div className="border-b border-neutral-100 px-3 py-2">
+                <p className="text-xs font-medium text-slate-900">{ROLE_LABEL[user.role]}</p>
+                {user.branchName && <p className="text-xs text-neutral-500">{user.branchName}</p>}
+              </div>
+              <button
+                type="button"
+                onClick={logout}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-600 transition hover:bg-neutral-100 hover:text-slate-900"
+                data-testid="logout-button"
+              >
+                <LogOut size={13} />
+                Log out
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );
