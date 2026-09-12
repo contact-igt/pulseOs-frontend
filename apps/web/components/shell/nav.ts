@@ -30,7 +30,8 @@ const FULL_NAV: NavGroup[] = [
   {
     label: "Operations",
     items: [
-      { label: "Appointments", href: "/appointments", icon: "CalendarCheck", implemented: false },
+      { label: "Front Desk", href: "/front-desk", icon: "CalendarCheck", implemented: true },
+      { label: "Appointments", href: "/appointments", icon: "CalendarCheck", implemented: true },
       { label: "Treatments", href: "/treatment", icon: "Stethoscope", implemented: false },
       { label: "Inbox", href: "/inbox", icon: "Inbox", implemented: false },
     ],

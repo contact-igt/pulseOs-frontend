@@ -1,7 +1,11 @@
 import type {
+  AppointmentAction,
+  AppointmentRow,
+  AppointmentStatus,
   AttentionItem,
   Branch,
   BranchDoctorRow,
+  FrontDeskDashboard,
   ConsultationOutcomeValue,
   ConversionStage,
   CreateTaskInput,
@@ -126,6 +130,14 @@ export const api = {
   rescheduleTask: (id: string, dueAt: string) => request<TaskRow>(`/tasks/${id}/reschedule`, { method: "PATCH", body: JSON.stringify({ dueAt }) }),
   reassignTask: (id: string, assignedTo: string) => request<TaskRow>(`/tasks/${id}/reassign`, { method: "PATCH", body: JSON.stringify({ assignedTo }) }),
   completeTask: (id: string) => request<TaskRow>(`/tasks/${id}/complete`, { method: "PATCH", body: JSON.stringify({}) }),
+  appointments: (filters: { branchId?: string; doctorId?: string; status?: AppointmentStatus; date?: string; search?: string } = {}) =>
+    request<AppointmentRow[]>(`/appointments${toQuery({ ...filters })}`),
+  frontDesk: (branchId?: string) => request<FrontDeskDashboard>(`/front-desk${toQuery({ branchId })}`),
+  appointmentAction: (id: string, action: AppointmentAction) =>
+    request<{ ok: true; status: AppointmentStatus }>(`/appointments/${id}/action`, { method: "PATCH", body: JSON.stringify({ action }) }),
+  completeAppointment: (id: string) => request<{ ok: true }>(`/appointments/${id}/complete`, { method: "PATCH", body: JSON.stringify({}) }),
+  rescheduleAppointment: (id: string, scheduledAt: string) =>
+    request<{ ok: true }>(`/appointments/${id}/reschedule`, { method: "PATCH", body: JSON.stringify({ scheduledAt }) }),
 };
 
 export { ApiError };

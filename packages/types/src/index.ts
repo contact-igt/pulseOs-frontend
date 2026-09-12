@@ -118,7 +118,7 @@ export interface ConversionStage {
   costPerOutcome: number | null;
 }
 
-export type PatientFlowBucket = "confirmed" | "checked_in" | "with_doctor" | "completed";
+export type PatientFlowBucket = "confirmed" | "checked_in" | "waiting" | "with_doctor" | "completed";
 
 export interface PatientFlowCount {
   bucket: PatientFlowBucket;

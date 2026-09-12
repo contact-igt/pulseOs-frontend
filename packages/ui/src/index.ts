@@ -7,6 +7,7 @@ export * from "./JourneyHealthRadial";
 export * from "./JourneyPerformanceChart";
 export * from "./PatientFlowBoard";
 export * from "./AttentionQueue";
+export * from "./AppointmentList";
 export * from "./SpendAtRiskPanel";
 export * from "./SourcePerformanceTable";
 export * from "./TeamPanel";

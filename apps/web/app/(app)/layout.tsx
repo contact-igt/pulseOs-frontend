@@ -13,6 +13,8 @@ const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   "/my-work": { title: "My Work", subtitle: "Tasks, callbacks and follow-ups assigned to you" },
   "/journeys": { title: "Journeys", subtitle: "The operational surface behind the Command Centre's numbers" },
   "/patients": { title: "Patients", subtitle: "Every patient across every journey" },
+  "/front-desk": { title: "Front Desk", subtitle: "Today's arrivals, waiting queue and confirmations" },
+  "/appointments": { title: "Appointments", subtitle: "Every appointment, every state" },
 };
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {

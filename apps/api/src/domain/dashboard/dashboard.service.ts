@@ -260,13 +260,15 @@ export async function getPatientFlow(db: Db, tenantId: string, filters: Dashboar
   const buckets: Record<PatientFlowCount["bucket"], number> = {
     confirmed: 0,
     checked_in: 0,
+    waiting: 0,
     with_doctor: 0,
     completed: 0,
   };
 
   for (const row of rows) {
     if (row.status === "scheduled" || row.status === "confirmed" || row.status === "requested") buckets.confirmed += row.c;
-    else if (row.status === "checked_in" || row.status === "waiting") buckets.checked_in += row.c;
+    else if (row.status === "checked_in") buckets.checked_in += row.c;
+    else if (row.status === "waiting") buckets.waiting += row.c;
     else if (row.status === "with_doctor") buckets.with_doctor += row.c;
     else if (row.status === "completed") buckets.completed += row.c;
   }
