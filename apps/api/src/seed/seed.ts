@@ -3,7 +3,11 @@ import { db, queryClient } from "../db/client.js";
 import {
   appointments,
   branches,
+  calls,
   campaignTouchpoints,
+  connectorEvents,
+  connectors,
+  connectorSecrets,
   consultationOutcomes,
   conversations,
   journeys,
@@ -20,6 +24,7 @@ import {
   type SourceChannelDb,
 } from "../db/schema.js";
 import { hashPassword } from "../domain/auth/auth.service.js";
+import { encryptSecret } from "../domain/security/encryption.js";
 
 function requireDemoPassword(): string {
   const value = process.env.DEMO_PASSWORD;
@@ -316,6 +321,8 @@ const JOURNEY_CONFIGS: JourneyConfig[] = [
 async function main() {
   console.log("Clearing existing demo data...");
   await db.delete(sessions);
+  await db.delete(calls);
+  await db.delete(connectorEvents);
   await db.delete(messages);
   await db.delete(conversations);
   await db.delete(timelineEvents);
@@ -330,6 +337,8 @@ async function main() {
   await db.delete(patients);
   await db.delete(users);
   await db.delete(branches);
+  await db.delete(connectorSecrets);
+  await db.delete(connectors);
   await db.delete(tenants);
 
   const [tenant] = await db.insert(tenants).values({ name: "PulseOS Demo Hospital" }).returning();
@@ -341,6 +350,60 @@ async function main() {
       { tenantId: tenant.id, name: "Whitefield Centre", city: "Bengaluru" },
     ])
     .returning();
+
+  // Connectors: WhatsApp and Runo are seeded CONNECTED against this local
+  // system's own fixture webhook harness (Group T/V) — genuinely configured
+  // and genuinely usable end-to-end locally, but never claimed as a live
+  // connection to Meta/Runo's real infrastructure. Superfone/Exotel are
+  // listed for visibility only, honestly NOT_CONFIGURED (no fake status).
+  const [whatsappConnector] = await db
+    .insert(connectors)
+    .values({
+      tenantId: tenant.id,
+      type: "MESSAGING",
+      provider: "whatsapp_meta_cloud",
+      status: "CONNECTED",
+      displayName: "WhatsApp (Meta Cloud API)",
+      capabilities: ["SEND_MESSAGE", "RECEIVE_MESSAGE", "RECEIVE_STATUS"],
+      configuration: { mode: "fixture", phoneNumberId: "FIXTURE_PHONE_NUMBER_ID", businessAccountId: "FIXTURE_WABA_ID" },
+    })
+    .returning();
+  await db.insert(connectorSecrets).values({
+    connectorId: whatsappConnector.id,
+    encryptedPayload: encryptSecret({
+      accessToken: "FIXTURE_TEST_ACCESS_TOKEN",
+      appSecret: "FIXTURE_TEST_APP_SECRET",
+      webhookVerifyToken: "pulseos-fixture-verify-token",
+    }),
+  });
+
+  const [runoConnector] = await db
+    .insert(connectors)
+    .values({
+      tenantId: tenant.id,
+      type: "TELEPHONY",
+      provider: "runo",
+      status: "CONNECTED",
+      displayName: "Runo",
+      capabilities: ["RECEIVE_CALL_EVENT", "RECEIVE_RECORDING"],
+      configuration: { mode: "fixture" },
+    })
+    .returning();
+  await db.insert(connectorSecrets).values({
+    connectorId: runoConnector.id,
+    encryptedPayload: encryptSecret({ webhookSharedSecret: "pulseos-fixture-runo-secret" }),
+  });
+
+  await db.insert(connectors).values([
+    {
+      tenantId: tenant.id, type: "TELEPHONY", provider: "superfone", status: "NOT_CONFIGURED",
+      displayName: "Superfone", capabilities: ["INITIATE_CALL", "RECEIVE_CALL_EVENT"], configuration: null,
+    },
+    {
+      tenantId: tenant.id, type: "TELEPHONY", provider: "exotel", status: "NOT_CONFIGURED",
+      displayName: "Exotel", capabilities: ["INITIATE_CALL", "RECEIVE_CALL_EVENT", "RECEIVE_RECORDING"], configuration: null,
+    },
+  ]);
 
   const passwordHash = await hashPassword(DEMO_PASSWORD);
 
@@ -565,6 +628,7 @@ async function main() {
 
   console.log("Seed complete.");
   console.log(`Conversations: ${CONVERSATION_CONFIGS.length}`);
+  console.log("Connectors: WhatsApp (fixture, connected), Runo (fixture, connected), Superfone/Exotel (not configured)");
   console.log(`Tenant: ${tenant.name} (${tenant.id})`);
   console.log(`Campaigns: Meta ₹48,000 · Google ₹75,000 · Website ₹15,000`);
   console.log(`Journeys: ${JOURNEY_CONFIGS.length}, Patients: ${patientRows.length}`);

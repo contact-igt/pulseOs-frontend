@@ -285,12 +285,21 @@ export const conversations = pgTable("conversations", {
   assignedTo: uuid("assigned_to").references(() => users.id),
   lastMessageAt: timestamp("last_message_at", { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  // Which live connector this thread belongs to (Group T). Null for demo-seed
+  // conversations that never touched a real provider.
+  connectorId: uuid("connector_id").references(() => connectors.id),
+  // The provider's own thread/account identity (e.g. WhatsApp wa_id), used to
+  // resolve an inbound webhook back to this conversation without re-deriving
+  // it from the patient's phone number every time.
+  externalThreadId: text("external_thread_id"),
 }, (t) => ({
   tenantIdx: index("conversations_tenant_idx").on(t.tenantId),
   patientIdx: index("conversations_patient_idx").on(t.patientId),
+  externalThreadUnique: uniqueIndex("conversations_connector_external_thread_unique").on(t.connectorId, t.externalThreadId),
 }));
 
 export const messageSenderEnum = pgEnum("message_sender", ["patient", "staff", "ai", "system"]);
+export const messageDeliveryStatusEnum = pgEnum("message_delivery_status", ["queued", "sent", "delivered", "read", "failed"]);
 
 export const messages = pgTable("messages", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -301,6 +310,111 @@ export const messages = pgTable("messages", {
   body: text("body").notNull(),
   sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
   readAt: timestamp("read_at", { withTimezone: true }),
+  // Live-transport metadata (Group T). Null for staff-composed/system/demo-seed
+  // messages that never touched a real provider.
+  connectorId: uuid("connector_id").references(() => connectors.id),
+  providerMessageId: text("provider_message_id"),
+  deliveryStatus: messageDeliveryStatusEnum("delivery_status"),
 }, (t) => ({
   conversationIdx: index("messages_conversation_idx").on(t.conversationId),
+  providerMessageUnique: uniqueIndex("messages_connector_provider_message_unique").on(t.connectorId, t.providerMessageId),
+}));
+
+// ---------------------------------------------------------------------------
+// Connectors — provider-neutral adapter configuration (Group R). PulseOS core
+// (Patient/Journey/Conversation/Timeline/Task) never depends on a specific
+// provider; a Connector is the configured instance an adapter reads to talk to
+// one. Secrets never live on this row — see connectorSecrets below.
+// ---------------------------------------------------------------------------
+
+export const connectorTypeEnum = pgEnum("connector_type", ["MESSAGING", "TELEPHONY", "ADS", "EMAIL", "STORAGE", "HIS"]);
+export const connectorStatusEnum = pgEnum("connector_status", ["NOT_CONFIGURED", "CONNECTING", "CONNECTED", "DEGRADED", "ERROR", "DISABLED"]);
+export const connectorCapabilityEnum = pgEnum("connector_capability", [
+  "SEND_MESSAGE", "RECEIVE_MESSAGE", "RECEIVE_STATUS",
+  "INITIATE_CALL", "RECEIVE_CALL_EVENT", "FETCH_RECORDING", "RECEIVE_RECORDING", "RECEIVE_TRANSCRIPT",
+]);
+
+export const connectors = pgTable("connectors", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  type: connectorTypeEnum("type").notNull(),
+  // Adapter-registry key (e.g. "whatsapp_meta_cloud", "runo") — never branched on
+  // in domain logic, only used to look up the adapter implementation.
+  provider: text("provider").notNull(),
+  status: connectorStatusEnum("status").notNull().default("NOT_CONFIGURED"),
+  displayName: text("display_name").notNull(),
+  capabilities: connectorCapabilityEnum("capabilities").array().notNull(),
+  // Non-secret configuration only (phone_number_id, webhook path, account id...).
+  configuration: jsonb("configuration"),
+  lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
+  lastEventAt: timestamp("last_event_at", { withTimezone: true }),
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  tenantIdx: index("connectors_tenant_idx").on(t.tenantId),
+  tenantProviderUnique: uniqueIndex("connectors_tenant_provider_unique").on(t.tenantId, t.provider),
+}));
+
+// One encrypted blob per connector holding every secret field the adapter
+// needs (access token, app secret, webhook verify token...). Decrypted only in
+// memory at the point of use — never logged, never returned to the client.
+export const connectorSecrets = pgTable("connector_secrets", {
+  connectorId: uuid("connector_id").primaryKey().references(() => connectors.id),
+  encryptedPayload: text("encrypted_payload").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const connectorEventDirectionEnum = pgEnum("connector_event_direction", ["inbound", "outbound"]);
+export const connectorEventStatusEnum = pgEnum("connector_event_status", ["received", "processed", "failed", "duplicate"]);
+
+// Idempotency + dead-letter visibility for every webhook/event a connector
+// ingests or sends. The unique (connectorId, externalEventId) index is the
+// actual idempotency guard — a duplicate insert is caught and recorded as
+// "duplicate" rather than reprocessed.
+export const connectorEvents = pgTable("connector_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  connectorId: uuid("connector_id").notNull().references(() => connectors.id),
+  externalEventId: text("external_event_id").notNull(),
+  direction: connectorEventDirectionEnum("direction").notNull(),
+  status: connectorEventStatusEnum("status").notNull().default("received"),
+  error: text("error"),
+  payload: jsonb("payload"),
+  receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+  processedAt: timestamp("processed_at", { withTimezone: true }),
+}, (t) => ({
+  connectorIdx: index("connector_events_connector_idx").on(t.connectorId),
+  idempotencyUnique: uniqueIndex("connector_events_connector_external_unique").on(t.connectorId, t.externalEventId),
+}));
+
+// ---------------------------------------------------------------------------
+// Telephony — provider-neutral call/interaction record (Group V/W).
+// ---------------------------------------------------------------------------
+
+export const callDirectionEnum = pgEnum("call_direction", ["inbound", "outbound"]);
+export const callStatusEnum = pgEnum("call_status", ["completed", "missed", "no_answer", "busy", "failed"]);
+
+export const calls = pgTable("calls", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  connectorId: uuid("connector_id").notNull().references(() => connectors.id),
+  patientId: uuid("patient_id").references(() => patients.id),
+  journeyId: uuid("journey_id").references(() => journeys.id),
+  externalCallId: text("external_call_id").notNull(),
+  direction: callDirectionEnum("direction").notNull(),
+  phone: text("phone").notNull(),
+  status: callStatusEnum("status").notNull(),
+  durationSeconds: integer("duration_seconds"),
+  recordingUrl: text("recording_url"),
+  disposition: text("disposition"),
+  agentName: text("agent_name"),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  endedAt: timestamp("ended_at", { withTimezone: true }),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  tenantIdx: index("calls_tenant_idx").on(t.tenantId),
+  patientIdx: index("calls_patient_idx").on(t.patientId),
+  idempotencyUnique: uniqueIndex("calls_connector_external_unique").on(t.connectorId, t.externalCallId),
 }));

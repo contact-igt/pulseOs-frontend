@@ -13,6 +13,7 @@ import { taskRoutes } from "./domain/task/task.routes.js";
 import { appointmentRoutes } from "./domain/appointment/appointment.routes.js";
 import { treatmentRoutes } from "./domain/treatment/treatment.routes.js";
 import { conversationRoutes } from "./domain/conversation/conversation.routes.js";
+import { connectorRoutes } from "./domain/connector/connector.routes.js";
 
 export async function buildApp() {
   const app = Fastify({ logger: true });
@@ -60,6 +61,7 @@ export async function buildApp() {
     await protectedApp.register(appointmentRoutes);
     await protectedApp.register(treatmentRoutes);
     await protectedApp.register(conversationRoutes);
+    await protectedApp.register(connectorRoutes);
   });
 
   app.get("/health", async () => ({ ok: true }));

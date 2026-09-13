@@ -1,0 +1,59 @@
+import type { ConnectorCapability } from "@pulseos/types";
+
+export interface InboundMessageEvent {
+  externalEventId: string;
+  externalThreadId: string;
+  fromPhone: string;
+  body: string;
+  occurredAt: Date;
+}
+
+export interface MessageStatusEvent {
+  externalEventId: string;
+  providerMessageId: string;
+  status: "sent" | "delivered" | "read" | "failed";
+  occurredAt: Date;
+}
+
+export interface ParsedWhatsAppWebhook {
+  messages: InboundMessageEvent[];
+  statuses: MessageStatusEvent[];
+}
+
+// A Messaging adapter never appears by provider name inside domain logic — the
+// registry (registry.ts) is the only place that knows "whatsapp_meta_cloud"
+// maps to this shape. Patient/Journey/Conversation/Timeline code only ever
+// calls through this interface.
+export interface MessagingProviderAdapter {
+  capabilities: ConnectorCapability[];
+  verifyWebhookChallenge(query: Record<string, string>, secrets: Record<string, unknown>): string | null;
+  verifyWebhookSignature(rawBody: string, signatureHeader: string | undefined, secrets: Record<string, unknown>): boolean;
+  parseWebhookPayload(payload: unknown): ParsedWhatsAppWebhook;
+  sendMessage(
+    config: Record<string, unknown>,
+    secrets: Record<string, unknown>,
+    to: string,
+    body: string,
+  ): Promise<{ providerMessageId: string }>;
+}
+
+export interface InboundCallEvent {
+  externalEventId: string;
+  externalCallId: string;
+  phone: string;
+  direction: "inbound" | "outbound";
+  status: "completed" | "missed" | "no_answer" | "busy" | "failed";
+  durationSeconds: number | null;
+  recordingUrl: string | null;
+  disposition: string | null;
+  agentName: string | null;
+  startedAt: Date | null;
+  endedAt: Date | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface TelephonyProviderAdapter {
+  capabilities: ConnectorCapability[];
+  verifyWebhook(payload: unknown, headers: Record<string, string | undefined>, secrets: Record<string, unknown>): boolean;
+  parseWebhookPayload(payload: unknown): InboundCallEvent[];
+}

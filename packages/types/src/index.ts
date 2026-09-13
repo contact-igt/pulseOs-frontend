@@ -38,18 +38,22 @@ export type Permission =
   | "VIEW_MARKETING"
   | "VIEW_INBOX"
   | "MANAGE_INBOX"
-  | "MANAGE_TASKS";
+  | "MANAGE_TASKS"
+  | "VIEW_INTEGRATIONS"
+  | "MANAGE_INTEGRATIONS";
 
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   SUPER_ADMIN: [
     "VIEW_ADMIN_COMMAND_CENTRE", "VIEW_PATIENTS", "EDIT_PATIENTS", "VIEW_JOURNEYS", "MANAGE_JOURNEYS",
     "VIEW_APPOINTMENTS", "MANAGE_APPOINTMENTS", "RECORD_CONSULTATION_OUTCOME", "VIEW_TREATMENT", "MANAGE_TREATMENT",
     "VIEW_REVENUE", "VIEW_MARKETING", "VIEW_INBOX", "MANAGE_INBOX", "MANAGE_TASKS",
+    "VIEW_INTEGRATIONS", "MANAGE_INTEGRATIONS",
   ],
   HOSPITAL_ADMIN: [
     "VIEW_ADMIN_COMMAND_CENTRE", "VIEW_PATIENTS", "EDIT_PATIENTS", "VIEW_JOURNEYS", "MANAGE_JOURNEYS",
     "VIEW_APPOINTMENTS", "MANAGE_APPOINTMENTS", "VIEW_TREATMENT", "MANAGE_TREATMENT",
     "VIEW_REVENUE", "VIEW_MARKETING", "VIEW_INBOX", "MANAGE_INBOX", "MANAGE_TASKS",
+    "VIEW_INTEGRATIONS", "MANAGE_INTEGRATIONS",
   ],
   FRONT_DESK: [
     "VIEW_PATIENTS", "EDIT_PATIENTS", "VIEW_JOURNEYS", "VIEW_APPOINTMENTS", "MANAGE_APPOINTMENTS",
@@ -521,4 +525,48 @@ export interface CoordinatorDashboard {
   overdueTasks: TaskRow[];
   todayTasks: TaskRow[];
   postCareDue: TaskRow[];
+}
+
+// ---------------------------------------------------------------------------
+// Connectors (Group R) — provider-neutral integration configuration.
+// ---------------------------------------------------------------------------
+
+export type ConnectorType = "MESSAGING" | "TELEPHONY" | "ADS" | "EMAIL" | "STORAGE" | "HIS";
+export type ConnectorStatus = "NOT_CONFIGURED" | "CONNECTING" | "CONNECTED" | "DEGRADED" | "ERROR" | "DISABLED";
+export type ConnectorCapability =
+  | "SEND_MESSAGE"
+  | "RECEIVE_MESSAGE"
+  | "RECEIVE_STATUS"
+  | "INITIATE_CALL"
+  | "RECEIVE_CALL_EVENT"
+  | "FETCH_RECORDING"
+  | "RECEIVE_RECORDING"
+  | "RECEIVE_TRANSCRIPT";
+
+export interface ConnectorRow {
+  id: string;
+  type: ConnectorType;
+  provider: string;
+  displayName: string;
+  status: ConnectorStatus;
+  capabilities: ConnectorCapability[];
+  hasSecrets: boolean;
+  lastSyncAt: string | null;
+  lastEventAt: string | null;
+  lastError: string | null;
+}
+
+export interface ConnectorEventRow {
+  id: string;
+  externalEventId: string;
+  direction: "inbound" | "outbound";
+  status: "received" | "processed" | "failed" | "duplicate";
+  error: string | null;
+  receivedAt: string;
+}
+
+export interface ConnectorDetail {
+  connector: ConnectorRow;
+  configuration: Record<string, unknown> | null;
+  recentEvents: ConnectorEventRow[];
 }
