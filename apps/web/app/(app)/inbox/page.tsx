@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
 import { useRouter } from "next/navigation";
 import { Badge, EmptyState, ErrorState, SectionHeading, Skeleton } from "@pulseos/ui";
+import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import type { ConversationChannel, OwnershipState } from "@pulseos/types";
 import { CalendarPlus, ListPlus, Mail, MessageCircle, MessageSquareText, Phone, User, Users as UsersIcon } from "lucide-react";
 
@@ -54,6 +55,7 @@ function relativeTime(iso: string) {
 export default function InboxPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const quickCreate = useQuickCreate();
   const [channel, setChannel] = useState<ConversationChannel | "">("");
   const [ownershipState, setOwnershipState] = useState<OwnershipState | "">("");
   const [search, setSearch] = useState("");
@@ -311,8 +313,24 @@ export default function InboxPage() {
           <div className="mt-4 border-t border-neutral-100 pt-3">
             <SectionHeading title="Quick Actions" />
             <div className="space-y-1">
-              <QuickActionButton icon={CalendarPlus} label="Book Appointment" onClick={() => router.push("/appointments")} />
-              <QuickActionButton icon={ListPlus} label="Create Task" onClick={() => router.push("/my-work")} />
+              <QuickActionButton
+                icon={CalendarPlus}
+                label="Book Appointment"
+                onClick={() =>
+                  quickCreate.openNewAppointment({
+                    patient: { id: detail.data!.patientContext!.patientId, name: selectedConversation!.patientName, phone: "" },
+                  })
+                }
+              />
+              <QuickActionButton
+                icon={ListPlus}
+                label="Create Task"
+                onClick={() =>
+                  quickCreate.openAddTask({
+                    patient: { id: detail.data!.patientContext!.patientId, name: selectedConversation!.patientName, phone: "" },
+                  })
+                }
+              />
               <QuickActionButton
                 icon={User}
                 label="View Full Profile"

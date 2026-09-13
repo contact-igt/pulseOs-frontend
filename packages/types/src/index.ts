@@ -40,28 +40,30 @@ export type Permission =
   | "MANAGE_INBOX"
   | "MANAGE_TASKS"
   | "VIEW_INTEGRATIONS"
-  | "MANAGE_INTEGRATIONS";
+  | "MANAGE_INTEGRATIONS"
+  | "MANAGE_LEADS"
+  | "MANAGE_SPECIALTIES";
 
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   SUPER_ADMIN: [
     "VIEW_ADMIN_COMMAND_CENTRE", "VIEW_PATIENTS", "EDIT_PATIENTS", "VIEW_JOURNEYS", "MANAGE_JOURNEYS",
     "VIEW_APPOINTMENTS", "MANAGE_APPOINTMENTS", "RECORD_CONSULTATION_OUTCOME", "VIEW_TREATMENT", "MANAGE_TREATMENT",
     "VIEW_REVENUE", "VIEW_MARKETING", "VIEW_INBOX", "MANAGE_INBOX", "MANAGE_TASKS",
-    "VIEW_INTEGRATIONS", "MANAGE_INTEGRATIONS",
+    "VIEW_INTEGRATIONS", "MANAGE_INTEGRATIONS", "MANAGE_LEADS", "MANAGE_SPECIALTIES",
   ],
   HOSPITAL_ADMIN: [
     "VIEW_ADMIN_COMMAND_CENTRE", "VIEW_PATIENTS", "EDIT_PATIENTS", "VIEW_JOURNEYS", "MANAGE_JOURNEYS",
     "VIEW_APPOINTMENTS", "MANAGE_APPOINTMENTS", "VIEW_TREATMENT", "MANAGE_TREATMENT",
     "VIEW_REVENUE", "VIEW_MARKETING", "VIEW_INBOX", "MANAGE_INBOX", "MANAGE_TASKS",
-    "VIEW_INTEGRATIONS", "MANAGE_INTEGRATIONS",
+    "VIEW_INTEGRATIONS", "MANAGE_INTEGRATIONS", "MANAGE_LEADS", "MANAGE_SPECIALTIES",
   ],
   FRONT_DESK: [
     "VIEW_PATIENTS", "EDIT_PATIENTS", "VIEW_JOURNEYS", "VIEW_APPOINTMENTS", "MANAGE_APPOINTMENTS",
-    "VIEW_INBOX", "MANAGE_INBOX", "MANAGE_TASKS",
+    "VIEW_INBOX", "MANAGE_INBOX", "MANAGE_TASKS", "MANAGE_LEADS",
   ],
   PATIENT_COORDINATOR: [
     "VIEW_PATIENTS", "EDIT_PATIENTS", "VIEW_JOURNEYS", "MANAGE_JOURNEYS", "VIEW_APPOINTMENTS", "MANAGE_APPOINTMENTS",
-    "VIEW_TREATMENT", "MANAGE_TREATMENT", "VIEW_REVENUE", "VIEW_INBOX", "MANAGE_INBOX", "MANAGE_TASKS",
+    "VIEW_TREATMENT", "MANAGE_TREATMENT", "VIEW_REVENUE", "VIEW_INBOX", "MANAGE_INBOX", "MANAGE_TASKS", "MANAGE_LEADS",
   ],
   DOCTOR: [
     "VIEW_DOCTOR_COMMAND_CENTRE", "VIEW_PATIENTS", "VIEW_JOURNEYS", "VIEW_APPOINTMENTS",
@@ -146,7 +148,7 @@ export interface AttentionItem {
   ownerName: string | null;
 }
 
-export type SourceChannel = "meta" | "google" | "website" | "whatsapp" | "walk_in" | "referral" | "organic" | "other";
+export type SourceChannel = "meta" | "google" | "website" | "whatsapp" | "phone" | "walk_in" | "referral" | "organic" | "other";
 
 export interface SourcePerformanceRow {
   campaignId: string | null;
@@ -431,6 +433,28 @@ export interface AppointmentRow {
 
 export type AppointmentAction = "confirm" | "check_in" | "mark_waiting" | "send_to_doctor" | "mark_no_show" | "cancel";
 
+export interface CreatePatientInput {
+  name: string;
+  phone: string;
+  email?: string;
+  preferredLanguage?: string;
+  branchId: string;
+}
+
+export interface CreatePatientResult {
+  patientId: string;
+  isNewPatient: boolean;
+}
+
+export interface CreateAppointmentInput {
+  patientId: string;
+  journeyId: string;
+  branchId: string;
+  doctorId: string;
+  scheduledAt: string;
+  reason?: string;
+}
+
 export interface FrontDeskDashboard {
   today: AppointmentRow[];
   arrivals: AppointmentRow[];
@@ -510,10 +534,17 @@ export interface LookupOption {
   name: string;
 }
 
+export interface CampaignOption {
+  id: string;
+  name: string;
+  source: SourceChannel;
+}
+
 export interface Lookups {
   branches: LookupOption[];
   doctors: LookupOption[];
   owners: LookupOption[];
+  campaigns: CampaignOption[];
 }
 
 // ---------------------------------------------------------------------------
@@ -569,4 +600,170 @@ export interface ConnectorDetail {
   connector: ConnectorRow;
   configuration: Record<string, unknown> | null;
   recentEvents: ConnectorEventRow[];
+}
+
+// ---------------------------------------------------------------------------
+// Specialty templates + custom fields (CRM-7/8) — per-tenant configuration
+// of specialty enquiry fields, rendered in the Add Lead drawer.
+// ---------------------------------------------------------------------------
+
+export type CustomFieldType = "TEXT" | "NUMBER" | "DATE" | "BOOLEAN" | "SELECT" | "MULTI_SELECT" | "PHONE";
+
+export interface CustomFieldDefinitionVm {
+  id: string;
+  specialtyKey: string;
+  key: string;
+  label: string;
+  fieldType: CustomFieldType;
+  options: string[] | null;
+  required: boolean;
+  sortOrder: number;
+  archived: boolean;
+}
+
+export interface SpecialtyTemplateVm {
+  key: string;
+  displayName: string;
+  defaultJourneyType: string;
+  enabled: boolean;
+  sortOrder: number;
+  fieldCount: number;
+}
+
+export interface SpecialtyDetailVm extends SpecialtyTemplateVm {
+  fields: CustomFieldDefinitionVm[];
+}
+
+export interface UpdateSpecialtyInput {
+  displayName?: string;
+  enabled?: boolean;
+}
+
+export interface CreateCustomFieldInput {
+  key: string;
+  label: string;
+  fieldType: CustomFieldType;
+  options?: string[];
+  required?: boolean;
+}
+
+export interface UpdateCustomFieldInput {
+  label?: string;
+  required?: boolean;
+  archived?: boolean;
+  sortOrder?: number;
+  options?: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Leads (CRM-2/3/4) — Lead is a VIEW over Patient + Journey, not a separate
+// identity model. Creating a Lead resolves-or-creates a Patient, then always
+// creates a new Journey representing the enquiry.
+// ---------------------------------------------------------------------------
+
+export type LeadStatus = "new" | "uncontacted" | "follow_up_due" | "appointment_booked" | "no_response" | "converted" | "lost";
+
+export interface LeadRow {
+  id: string; // journey id
+  patientId: string;
+  patientName: string;
+  phone: string;
+  specialtyKey: string | null;
+  specialtyLabel: string | null;
+  source: SourceChannel;
+  campaignName: string | null;
+  stage: JourneyStage;
+  leadStatus: LeadStatus;
+  ownerName: string | null;
+  priority: TaskPriority;
+  lastInteractionAt: string | null;
+  nextActionDueAt: string | null;
+  createdAt: string;
+}
+
+export interface LeadsSummary {
+  newToday: number;
+  uncontacted: number;
+  followUpsDue: number;
+  appointmentsBooked: number;
+  noResponse: number;
+  converted: number;
+}
+
+export interface LeadPhoneLookupResult {
+  patient: { id: string; name: string; phone: string; activeJourneyCount: number } | null;
+}
+
+export interface CreateLeadFollowUp {
+  type: TaskType;
+  dueAt: string;
+  assignedTo?: string;
+}
+
+export interface CreateLeadInput {
+  patientId?: string;
+  name: string;
+  phone: string;
+  email?: string;
+  preferredLanguage?: string;
+  specialtyKey: string;
+  branchId: string;
+  doctorId?: string;
+  source: SourceChannel;
+  campaignId?: string;
+  journeyType: string;
+  ownerId?: string;
+  priority?: TaskPriority;
+  notes?: string;
+  customFieldValues?: Record<string, unknown>;
+  followUp?: CreateLeadFollowUp | null;
+}
+
+export interface CreateLeadResult {
+  patientId: string;
+  journeyId: string;
+  isNewPatient: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Campaigns / Sources + Marketing Efficiency (CRM-9/10)
+// ---------------------------------------------------------------------------
+
+export interface CampaignPerformanceRow {
+  campaignId: string | null;
+  campaignName: string;
+  source: SourceChannel;
+  specialtyKey: string | null;
+  specialtyLabel: string | null;
+  spend: number;
+  leads: number;
+  appointments: number;
+  consultations: number;
+  treatmentAdvised: number;
+  treatmentCompleted: number;
+  revenue: number;
+  cpl: number | null;
+  costPerAppointment: number | null;
+  costPerTreatment: number | null;
+  roas: number | null;
+}
+
+export interface MarketingEfficiencySummary {
+  spend: number;
+  leads: number;
+  appointments: number;
+  consultations: number;
+  treatments: number;
+  revenue: number;
+  roas: number | null;
+  cpl: number | null;
+  costPerAppointment: number | null;
+  costPerTreatment: number | null;
+}
+
+export interface CampaignFilters {
+  branchId?: string;
+  specialtyKey?: string;
+  source?: SourceChannel;
+  campaignId?: string;
 }

@@ -1,7 +1,7 @@
 import { and, asc, eq, gte, lt } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { appointments, branches, patients, timelineEvents, users } from "../../db/schema.js";
-import type { AppointmentAction, AppointmentRow, AppointmentStatus, FrontDeskDashboard } from "@pulseos/types";
+import type { AppointmentAction, AppointmentRow, AppointmentStatus, CreateAppointmentInput, FrontDeskDashboard } from "@pulseos/types";
 
 function todayRange() {
   const start = new Date();
@@ -77,6 +77,54 @@ async function selectAppointments(db: Db, tenantId: string, filters: Appointment
 export async function listAppointments(db: Db, tenantId: string, filters: AppointmentFilters): Promise<AppointmentRow[]> {
   const rows = await selectAppointments(db, tenantId, filters);
   return rows.map(toRow);
+}
+
+export async function createAppointment(db: Db, tenantId: string, actorId: string, input: CreateAppointmentInput): Promise<AppointmentRow> {
+  const [row] = await db
+    .insert(appointments)
+    .values({
+      tenantId,
+      patientId: input.patientId,
+      journeyId: input.journeyId,
+      branchId: input.branchId,
+      doctorUserId: input.doctorId,
+      scheduledAt: new Date(input.scheduledAt),
+      reason: input.reason ?? null,
+      status: "scheduled",
+    })
+    .returning();
+
+  await db.insert(timelineEvents).values({
+    tenantId,
+    patientId: input.patientId,
+    journeyId: input.journeyId,
+    actorType: "user",
+    actorId,
+    eventType: "appointment_created",
+    title: `Appointment booked for ${new Date(input.scheduledAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`,
+  });
+
+  const [full] = await db
+    .select({
+      id: appointments.id,
+      patientId: appointments.patientId,
+      patientName: patients.name,
+      journeyId: appointments.journeyId,
+      branchName: branches.name,
+      doctorId: appointments.doctorUserId,
+      doctorName: users.name,
+      status: appointments.status,
+      scheduledAt: appointments.scheduledAt,
+      reason: appointments.reason,
+    })
+    .from(appointments)
+    .innerJoin(patients, eq(appointments.patientId, patients.id))
+    .innerJoin(branches, eq(appointments.branchId, branches.id))
+    .innerJoin(users, eq(appointments.doctorUserId, users.id))
+    .where(eq(appointments.id, row.id))
+    .limit(1);
+
+  return toRow(full);
 }
 
 export async function getFrontDeskDashboard(db: Db, tenantId: string, branchId?: string): Promise<FrontDeskDashboard> {

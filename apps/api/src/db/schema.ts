@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, integer, jsonb, pgEnum, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, pgEnum, index, uniqueIndex } from "drizzle-orm/pg-core";
 
 export const roleEnum = pgEnum("role", ["SUPER_ADMIN", "HOSPITAL_ADMIN", "FRONT_DESK", "PATIENT_COORDINATOR", "DOCTOR"]);
 
@@ -41,7 +41,7 @@ export const sessions = pgTable("sessions", {
   userIdx: index("sessions_user_idx").on(t.userId),
 }));
 
-export const sourceEnum = pgEnum("source_channel", ["meta", "google", "website", "whatsapp", "walk_in", "referral", "organic", "other"]);
+export const sourceEnum = pgEnum("source_channel", ["meta", "google", "website", "whatsapp", "phone", "walk_in", "referral", "organic", "other"]);
 export type SourceChannelDb = (typeof sourceEnum.enumValues)[number];
 
 export const patients = pgTable("patients", {
@@ -50,6 +50,7 @@ export const patients = pgTable("patients", {
   branchId: uuid("branch_id").references(() => branches.id),
   name: text("name").notNull(),
   phone: text("phone").notNull(),
+  email: text("email"),
   preferredLanguage: text("preferred_language").notNull().default("English"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
@@ -60,14 +61,23 @@ export const journeyStageEnum = pgEnum("journey_stage", [
   "enquiry", "contacted", "booked", "attended", "consulted", "treatment_advised", "scheduled", "completed", "lost",
 ]);
 
+// Declared here (ahead of its original home just above `tasks`) so `journeys`
+// below can reuse the same enum for lead priority instead of duplicating it.
+export const taskPriorityEnum = pgEnum("task_priority", ["normal", "high"]);
+
 export const journeys = pgTable("journeys", {
   id: uuid("id").primaryKey().defaultRandom(),
   tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
   patientId: uuid("patient_id").notNull().references(() => patients.id),
   journeyType: text("journey_type").notNull(),
+  // Free-text key into specialty_templates.key, not a hard FK — a template
+  // may be archived without invalidating historical journeys that used it.
+  specialtyKey: text("specialty_key"),
   stage: journeyStageEnum("stage").notNull().default("enquiry"),
   source: sourceEnum("source").notNull(),
   ownerUserId: uuid("owner_user_id").references(() => users.id),
+  priority: taskPriorityEnum("priority").notNull().default("normal"),
+  notes: text("notes"),
   contactedAt: timestamp("contacted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
@@ -90,8 +100,6 @@ export const taskReasonEnum = pgEnum("task_reason", [
 export const taskTypeEnum = pgEnum("task_type", [
   "CALLBACK", "FOLLOW_UP", "APPOINTMENT_CONFIRMATION", "NO_SHOW_RECOVERY", "TREATMENT_DECISION", "POST_CARE", "RECALL", "OTHER",
 ]);
-
-export const taskPriorityEnum = pgEnum("task_priority", ["normal", "high"]);
 
 export const tasks = pgTable("tasks", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -417,4 +425,58 @@ export const calls = pgTable("calls", {
   tenantIdx: index("calls_tenant_idx").on(t.tenantId),
   patientIdx: index("calls_patient_idx").on(t.patientId),
   idempotencyUnique: uniqueIndex("calls_connector_external_unique").on(t.connectorId, t.externalCallId),
+}));
+
+// ---------------------------------------------------------------------------
+// Specialty templates + custom fields — lets a tenant configure per-specialty
+// enquiry fields (e.g. Gynecology's EDD, Ophthalmology's Laterality) without
+// forking the product or hard-coding columns onto `patients`/`journeys`.
+// `specialtyTemplates` rows are never hard-deleted (only toggled `enabled` or
+// a field `archived`) so historical journeys/values referencing a key by
+// plain text (not a FK — see `journeys.specialtyKey` above) stay valid.
+// ---------------------------------------------------------------------------
+
+export const customFieldTypeEnum = pgEnum("custom_field_type", ["TEXT", "NUMBER", "DATE", "BOOLEAN", "SELECT", "MULTI_SELECT", "PHONE"]);
+
+export const specialtyTemplates = pgTable("specialty_templates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  key: text("key").notNull(),
+  displayName: text("display_name").notNull(),
+  defaultJourneyType: text("default_journey_type").notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  tenantIdx: index("specialty_templates_tenant_idx").on(t.tenantId),
+  tenantKeyUnique: uniqueIndex("specialty_templates_tenant_key_unique").on(t.tenantId, t.key),
+}));
+
+export const customFieldDefinitions = pgTable("custom_field_definitions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  specialtyKey: text("specialty_key").notNull(),
+  key: text("key").notNull(),
+  label: text("label").notNull(),
+  fieldType: customFieldTypeEnum("field_type").notNull(),
+  options: jsonb("options"),
+  required: boolean("required").notNull().default(false),
+  sortOrder: integer("sort_order").notNull().default(0),
+  archived: boolean("archived").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  tenantIdx: index("custom_field_definitions_tenant_idx").on(t.tenantId),
+  specialtyIdx: index("custom_field_definitions_specialty_idx").on(t.tenantId, t.specialtyKey),
+}));
+
+export const customFieldValues = pgTable("custom_field_values", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  journeyId: uuid("journey_id").notNull().references(() => journeys.id),
+  fieldDefinitionId: uuid("field_definition_id").notNull().references(() => customFieldDefinitions.id),
+  value: jsonb("value").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  journeyIdx: index("custom_field_values_journey_idx").on(t.journeyId),
+  journeyFieldUnique: uniqueIndex("custom_field_values_journey_field_unique").on(t.journeyId, t.fieldDefinitionId),
 }));

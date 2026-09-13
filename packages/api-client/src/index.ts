@@ -5,6 +5,8 @@ import type {
   AttentionItem,
   Branch,
   BranchDoctorRow,
+  CampaignFilters,
+  CampaignPerformanceRow,
   FrontDeskDashboard,
   ConnectorDetail,
   ConnectorRow,
@@ -13,14 +15,26 @@ import type {
   ConversationDetail,
   ConversationRow,
   ConversionStage,
+  CreateAppointmentInput,
+  CreateCustomFieldInput,
+  CreateLeadInput,
+  CreateLeadResult,
+  CreatePatientInput,
+  CreatePatientResult,
   CreateTaskInput,
+  CustomFieldDefinitionVm,
   DoctorDashboard,
   ExecutiveStrip,
   JourneyHealth,
   JourneyListRow,
   JourneyPerformancePoint,
   JourneysSummary,
+  LeadPhoneLookupResult,
+  LeadRow,
+  LeadStatus,
+  LeadsSummary,
   Lookups,
+  MarketingEfficiencySummary,
   MarketingSourceRow,
   OwnershipState,
   Patient360,
@@ -28,6 +42,8 @@ import type {
   PatientListRow,
   SessionUser,
   SourcePerformanceRow,
+  SpecialtyDetailVm,
+  SpecialtyTemplateVm,
   SpendAtRisk,
   SpendAtRiskSummary,
   TaskRow,
@@ -36,6 +52,8 @@ import type {
   TodayStrip,
   TreatmentRow,
   TreatmentStatus,
+  UpdateCustomFieldInput,
+  UpdateSpecialtyInput,
 } from "@pulseos/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
@@ -124,6 +142,7 @@ export const api = {
   branchDoctor: (f: DashboardQuery = {}) => request<BranchDoctorRow[]>(`/dashboard/branch-doctor${qs(f)}`),
   doctorDashboard: () => request<DoctorDashboard>("/dashboard/doctor"),
   patients: (filters: PatientListFilters = {}) => request<PatientListRow[]>(`/patients${toQuery({ ...filters })}`),
+  createPatient: (input: CreatePatientInput) => request<CreatePatientResult>("/patients", { method: "POST", body: JSON.stringify(input) }),
   patient360: (id: string) => request<Patient360>(`/patients/${id}/360`),
   patientTimeline: (id: string, journeyId?: string) => request<TimelineEventVm[]>(`/patients/${id}/timeline${toQuery({ journeyId })}`),
   journeys: (filters: JourneyFilters = {}) => request<JourneyListRow[]>(`/journeys${toQuery({ ...filters })}`),
@@ -163,6 +182,26 @@ export const api = {
   connector: (id: string) => request<ConnectorDetail>(`/connectors/${id}`),
   updateConnector: (id: string, input: { displayName?: string; configuration?: Record<string, unknown>; secrets?: Record<string, unknown> }) =>
     request<{ ok: true }>(`/connectors/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
+  createAppointment: (input: CreateAppointmentInput) => request<AppointmentRow>("/appointments", { method: "POST", body: JSON.stringify(input) }),
+
+  // Leads (CRM-2/3/4)
+  leads: (filters: { status?: LeadStatus; specialtyKey?: string; source?: string } = {}) => request<LeadRow[]>(`/leads${toQuery({ ...filters })}`),
+  leadsSummary: () => request<LeadsSummary>("/leads/summary"),
+  leadPhoneLookup: (phone: string) => request<LeadPhoneLookupResult>("/leads/lookup", { method: "POST", body: JSON.stringify({ phone }) }),
+  createLead: (input: CreateLeadInput) => request<CreateLeadResult>("/leads", { method: "POST", body: JSON.stringify(input) }),
+
+  // Specialties & custom fields (CRM-7/8)
+  specialties: (includeDisabled = false) => request<SpecialtyTemplateVm[]>(`/specialties${toQuery({ includeDisabled: includeDisabled ? "true" : undefined })}`),
+  specialtyFields: (key: string) => request<CustomFieldDefinitionVm[]>(`/specialties/${key}/fields`),
+  specialtyDetail: (key: string) => request<SpecialtyDetailVm>(`/specialties/${key}`),
+  updateSpecialty: (key: string, input: UpdateSpecialtyInput) => request<SpecialtyDetailVm>(`/specialties/${key}`, { method: "PATCH", body: JSON.stringify(input) }),
+  createCustomField: (key: string, input: CreateCustomFieldInput) => request<CustomFieldDefinitionVm>(`/specialties/${key}/fields`, { method: "POST", body: JSON.stringify(input) }),
+  updateCustomField: (fieldId: string, input: UpdateCustomFieldInput) => request<{ ok: true }>(`/specialties/fields/${fieldId}`, { method: "PATCH", body: JSON.stringify(input) }),
+
+  // Campaigns / marketing efficiency (CRM-9/10)
+  campaignPerformance: (filters: CampaignFilters = {}) => request<CampaignPerformanceRow[]>(`/campaigns/performance${toQuery({ ...filters })}`),
+  marketingEfficiency: (filters: CampaignFilters = {}) => request<MarketingEfficiencySummary>(`/campaigns/marketing-efficiency${toQuery({ ...filters })}`),
+  campaignSpendAtRisk: () => request<SpendAtRisk>("/campaigns/spend-at-risk"),
 };
 
 export { ApiError };

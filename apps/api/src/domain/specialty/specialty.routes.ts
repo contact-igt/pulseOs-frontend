@@ -1,0 +1,94 @@
+import type { FastifyInstance } from "fastify";
+import { z } from "zod";
+import { requirePermission } from "../auth/permission.middleware.js";
+import {
+  createCustomField,
+  getSpecialtyDetail,
+  listActiveFields,
+  listSpecialties,
+  updateCustomField,
+  updateSpecialty,
+} from "./specialty.service.js";
+
+const REASON_STATUS: Record<string, number> = {
+  specialty_not_found: 404,
+  field_not_found: 404,
+};
+
+const updateSpecialtyBody = z.object({
+  displayName: z.string().min(1).optional(),
+  enabled: z.boolean().optional(),
+});
+
+const createFieldBody = z.object({
+  key: z.string().min(1),
+  label: z.string().min(1),
+  fieldType: z.enum(["TEXT", "NUMBER", "DATE", "BOOLEAN", "SELECT", "MULTI_SELECT", "PHONE"]),
+  options: z.array(z.string()).optional(),
+  required: z.boolean().optional(),
+});
+
+const updateFieldBody = z.object({
+  label: z.string().min(1).optional(),
+  required: z.boolean().optional(),
+  archived: z.boolean().optional(),
+  sortOrder: z.number().int().optional(),
+  options: z.array(z.string()).optional(),
+});
+
+export async function specialtyRoutes(app: FastifyInstance) {
+  // Every authenticated role may READ specialties/fields (needed to render Add Lead).
+  app.get("/specialties", async (request) => {
+    const tenantId = request.sessionUser!.tenantId;
+    const query = request.query as { includeDisabled?: string };
+    return listSpecialties(app.db, tenantId, query.includeDisabled === "true");
+  });
+
+  app.get("/specialties/:key/fields", async (request) => {
+    const tenantId = request.sessionUser!.tenantId;
+    const { key } = request.params as { key: string };
+    return listActiveFields(app.db, tenantId, key);
+  });
+
+  // Configuration changes are HOSPITAL_ADMIN/SUPER_ADMIN only.
+  app.get("/specialties/:key", { preHandler: requirePermission("MANAGE_SPECIALTIES") }, async (request, reply) => {
+    const tenantId = request.sessionUser!.tenantId;
+    const { key } = request.params as { key: string };
+    const result = await getSpecialtyDetail(app.db, tenantId, key);
+    if (!result) return reply.status(404).send({ error: "specialty_not_found" });
+    return result;
+  });
+
+  app.patch("/specialties/:key", { preHandler: requirePermission("MANAGE_SPECIALTIES") }, async (request, reply) => {
+    const tenantId = request.sessionUser!.tenantId;
+    const { key } = request.params as { key: string };
+    const parsed = updateSpecialtyBody.safeParse(request.body);
+    if (!parsed.success) return reply.status(400).send({ error: "invalid_request" });
+
+    const result = await updateSpecialty(app.db, tenantId, key, parsed.data);
+    if (!result.ok) return reply.status(REASON_STATUS[result.reason] ?? 400).send({ error: result.reason });
+    return getSpecialtyDetail(app.db, tenantId, key);
+  });
+
+  app.post("/specialties/:key/fields", { preHandler: requirePermission("MANAGE_SPECIALTIES") }, async (request, reply) => {
+    const tenantId = request.sessionUser!.tenantId;
+    const { key } = request.params as { key: string };
+    const parsed = createFieldBody.safeParse(request.body);
+    if (!parsed.success) return reply.status(400).send({ error: "invalid_request" });
+
+    const result = await createCustomField(app.db, tenantId, key, parsed.data);
+    if (!result.ok) return reply.status(REASON_STATUS[result.reason] ?? 400).send({ error: result.reason });
+    return reply.status(201).send(result.field);
+  });
+
+  app.patch("/specialties/fields/:fieldId", { preHandler: requirePermission("MANAGE_SPECIALTIES") }, async (request, reply) => {
+    const tenantId = request.sessionUser!.tenantId;
+    const { fieldId } = request.params as { fieldId: string };
+    const parsed = updateFieldBody.safeParse(request.body);
+    if (!parsed.success) return reply.status(400).send({ error: "invalid_request" });
+
+    const result = await updateCustomField(app.db, tenantId, fieldId, parsed.data);
+    if (!result.ok) return reply.status(REASON_STATUS[result.reason] ?? 400).send({ error: result.reason });
+    return reply.send({ ok: true });
+  });
+}

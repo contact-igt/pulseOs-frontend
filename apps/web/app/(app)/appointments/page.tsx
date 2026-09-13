@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
 import { AppointmentDrawer, AppointmentList, ErrorState, Skeleton } from "@pulseos/ui";
+import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import type { AppointmentAction, AppointmentRow } from "@pulseos/types";
 
 type ViewTab = "today" | "upcoming" | "no_show" | "completed";
@@ -25,6 +26,7 @@ function todayIso() {
 
 export default function AppointmentsPage() {
   const queryClient = useQueryClient();
+  const quickCreate = useQuickCreate();
   const [tab, setTab] = useState<ViewTab>("today");
   const [branchId, setBranchId] = useState("");
   const [doctorId, setDoctorId] = useState("");
@@ -85,6 +87,17 @@ export default function AppointmentsPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-4" data-testid="appointments-page">
+      <div className="flex items-center justify-end">
+        <button
+          type="button"
+          onClick={() => quickCreate.openNewAppointment()}
+          className="rounded-lg bg-primary-600 px-3.5 py-2 text-sm font-medium text-white transition hover:bg-primary-700"
+          data-testid="new-appointment-button"
+        >
+          + New Appointment
+        </button>
+      </div>
+
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-neutral-200 bg-white p-2">
         <div className="flex gap-0.5 rounded border border-neutral-200 p-0.5">
           {TABS.map((t) => (

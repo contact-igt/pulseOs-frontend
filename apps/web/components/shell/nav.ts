@@ -21,6 +21,10 @@ const FULL_NAV: NavGroup[] = [
     ],
   },
   {
+    label: "Acquisition",
+    items: [{ label: "Leads", href: "/leads", icon: "UserPlus", implemented: true }],
+  },
+  {
     label: "Patients",
     items: [
       { label: "Patients", href: "/patients", icon: "Users", implemented: true },
@@ -39,7 +43,7 @@ const FULL_NAV: NavGroup[] = [
   {
     label: "Growth",
     items: [
-      { label: "Campaigns / Sources", href: "/campaigns", icon: "Megaphone", implemented: false },
+      { label: "Campaigns / Sources", href: "/campaigns", icon: "Megaphone", implemented: true },
       { label: "Analytics", href: "/analytics", icon: "BarChart3", implemented: false },
     ],
   },
@@ -48,7 +52,7 @@ const FULL_NAV: NavGroup[] = [
     items: [
       { label: "Team", href: "/team", icon: "UsersRound", implemented: false },
       { label: "Integrations", href: "/integrations", icon: "Plug", implemented: true },
-      { label: "Settings", href: "/settings", icon: "Settings", implemented: false },
+      { label: "Settings", href: "/settings", icon: "Settings", implemented: true },
     ],
   },
 ];

@@ -1,13 +1,24 @@
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
 import type { AppointmentAction, AppointmentStatus } from "@pulseos/types";
 import { requirePermission } from "../auth/permission.middleware.js";
 import {
   applyAppointmentAction,
   completeAppointment,
+  createAppointment,
   getFrontDeskDashboard,
   listAppointments,
   rescheduleAppointment,
 } from "./appointment.service.js";
+
+const createAppointmentBody = z.object({
+  patientId: z.string().uuid(),
+  journeyId: z.string().uuid(),
+  branchId: z.string().uuid(),
+  doctorId: z.string().uuid(),
+  scheduledAt: z.string(),
+  reason: z.string().optional(),
+});
 
 const REASON_STATUS: Record<string, number> = {
   appointment_not_found: 404,
@@ -32,6 +43,16 @@ export async function appointmentRoutes(app: FastifyInstance) {
 
   await app.register(async (manageApp) => {
     manageApp.addHook("preHandler", requirePermission("MANAGE_APPOINTMENTS"));
+
+    manageApp.post("/appointments", async (request, reply) => {
+      const tenantId = request.sessionUser!.tenantId;
+      const actorId = request.sessionUser!.id;
+      const parsed = createAppointmentBody.safeParse(request.body);
+      if (!parsed.success) return reply.status(400).send({ error: "invalid_request" });
+
+      const row = await createAppointment(app.db, tenantId, actorId, parsed.data);
+      return reply.status(201).send(row);
+    });
 
     manageApp.patch("/appointments/:id/action", async (request, reply) => {
       const tenantId = request.sessionUser!.tenantId;

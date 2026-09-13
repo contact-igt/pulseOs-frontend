@@ -60,7 +60,7 @@ export default function JourneysPage() {
         </select>
         <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)} className="rounded border border-neutral-300 px-2 py-1 text-xs">
           <option value="">All sources</option>
-          {["meta", "google", "website", "whatsapp", "walk_in", "referral", "organic", "other"].map((s) => (
+          {["meta", "google", "website", "whatsapp", "phone", "walk_in", "referral", "organic", "other"].map((s) => (
             <option key={s} value={s}>{s}</option>
           ))}
         </select>

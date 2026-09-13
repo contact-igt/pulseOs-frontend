@@ -33,7 +33,9 @@ describe.skipIf(!DEMO_PASSWORD)("marketing → patient journey dashboard (integr
     const res = await app.inject({ method: "GET", url: "/dashboard/executive", cookies: { pulseos_session: cookie } });
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body.marketingSpend).toBe(48_000 + 75_000 + 15_000);
+    // Includes the seeded "Meta – Cataract Awareness" campaign (₹18,000, deliberately
+    // low-converting — see seed.ts) added to demonstrate Campaigns-page budget leakage.
+    expect(body.marketingSpend).toBe(48_000 + 75_000 + 15_000 + 18_000);
     expect(body.attributedRevenue).toBe(22_000 + 95_000 + 110_000 + 88_000);
     expect(body.treatmentsCompleted).toBe(4);
     expect(body.roas).toBeCloseTo(body.attributedRevenue / body.marketingSpend, 5);
@@ -55,7 +57,7 @@ describe.skipIf(!DEMO_PASSWORD)("marketing → patient journey dashboard (integr
   it("Meta campaign shows cheap acquisition but poor treatment conversion vs. Google", async () => {
     const res = await app.inject({ method: "GET", url: "/dashboard/source-performance", cookies: { pulseos_session: cookie } });
     const rows = res.json() as { campaignName: string; spend: number; enquiries: number; treatments: number; roas: number | null }[];
-    const meta = rows.find((r) => r.campaignName.startsWith("Meta"))!;
+    const meta = rows.find((r) => r.campaignName === "Meta – Fertility Awareness")!;
     const google = rows.find((r) => r.campaignName.startsWith("Google"))!;
     expect(meta.spend / meta.enquiries).toBeLessThan(google.spend / google.enquiries);
     expect(meta.roas!).toBeLessThan(google.roas!);

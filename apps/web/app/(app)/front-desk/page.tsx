@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
 import { AppointmentDrawer, AppointmentList, ErrorState, MetricStrip, PatientFlowBoard, Skeleton } from "@pulseos/ui";
+import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import type { AppointmentAction, AppointmentRow, PatientFlowCount } from "@pulseos/types";
 
 function buildFlow(today: AppointmentRow[]): PatientFlowCount[] {
@@ -20,6 +21,7 @@ function buildFlow(today: AppointmentRow[]): PatientFlowCount[] {
 
 export default function FrontDeskPage() {
   const queryClient = useQueryClient();
+  const quickCreate = useQuickCreate();
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<AppointmentRow | null>(null);
 
@@ -86,6 +88,24 @@ export default function FrontDeskPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-5" data-testid="front-desk-page">
+      <div className="flex items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => quickCreate.openAddLead({ source: "walk_in" })}
+          className="rounded-lg border border-primary-200 px-3.5 py-2 text-sm font-medium text-primary-700 transition hover:bg-primary-50"
+          data-testid="front-desk-add-lead-button"
+        >
+          + Add Lead
+        </button>
+        <button
+          type="button"
+          onClick={() => quickCreate.openNewAppointment()}
+          className="rounded-lg bg-primary-600 px-3.5 py-2 text-sm font-medium text-white transition hover:bg-primary-700"
+        >
+          + New Appointment
+        </button>
+      </div>
+
       <MetricStrip
         testId="front-desk-kpi-strip"
         cells={kpis.map((k) => ({ key: k.label, label: k.label, value: k.value }))}

@@ -134,4 +134,49 @@ describe.skipIf(!DEMO_PASSWORD)("appointments / front desk (integration)", () =>
     expect(eventTypes).toContain("appointment_no_show");
     expect(eventTypes).toContain("appointment_rescheduled");
   });
+
+  it("Add Appointment: creates a real appointment for an existing patient/journey and it shows up in the list + timeline", async () => {
+    const lookups = await app.inject({ method: "GET", url: "/lookups", cookies: { pulseos_session: frontDeskCookie } });
+    const { branches, doctors } = lookups.json() as { branches: { id: string }[]; doctors: { id: string }[] };
+
+    const lead = await app.inject({
+      method: "POST",
+      url: "/leads",
+      cookies: { pulseos_session: frontDeskCookie },
+      payload: { name: "New Appointment Flow", phone: `9${Math.floor(100000000 + Math.random() * 899999999)}`, specialtyKey: "GENERAL_OPD", branchId: branches[0].id, source: "walk_in", journeyType: "General Consultation" },
+    });
+    const { patientId, journeyId } = lead.json() as { patientId: string; journeyId: string };
+
+    const scheduledAt = new Date(Date.now() + 2 * 86400000).toISOString();
+    const create = await app.inject({
+      method: "POST",
+      url: "/appointments",
+      cookies: { pulseos_session: frontDeskCookie },
+      payload: { patientId, journeyId, branchId: branches[0].id, doctorId: doctors[0].id, scheduledAt, reason: "New patient consultation" },
+    });
+    expect(create.statusCode).toBe(201);
+    const created = create.json() as AppointmentRow;
+    expect(created.status).toBe("scheduled");
+    expect(created.patientId).toBe(patientId);
+
+    const list = await app.inject({ method: "GET", url: "/appointments", cookies: { pulseos_session: frontDeskCookie } });
+    expect((list.json() as AppointmentRow[]).some((a) => a.id === created.id)).toBe(true);
+
+    const timeline = await app.inject({ method: "GET", url: `/patients/${patientId}/timeline`, cookies: { pulseos_session: frontDeskCookie } });
+    const eventTypes = (timeline.json() as { eventType: string }[]).map((e) => e.eventType);
+    expect(eventTypes).toContain("appointment_created");
+  });
+
+  it("Add Appointment requires MANAGE_APPOINTMENTS, not just VIEW_APPOINTMENTS (Doctor is view-only)", async () => {
+    const lookups = await app.inject({ method: "GET", url: "/lookups", cookies: { pulseos_session: doctorCookie } });
+    const { branches, doctors } = lookups.json() as { branches: { id: string }[]; doctors: { id: string }[] };
+    const res = await app.inject({
+      method: "POST",
+      url: "/appointments",
+      cookies: { pulseos_session: doctorCookie },
+      payload: { patientId: "00000000-0000-0000-0000-000000000000", journeyId: "00000000-0000-0000-0000-000000000000", branchId: branches[0].id, doctorId: doctors[0].id, scheduledAt: new Date().toISOString() },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().requiredPermission).toBe("MANAGE_APPOINTMENTS");
+  });
 });

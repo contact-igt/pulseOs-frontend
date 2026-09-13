@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@pulseos/api-client";
 import { Badge, Card, EmptyState, ErrorState, Skeleton } from "@pulseos/ui";
+import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import type { JourneyStage } from "@pulseos/types";
 
 const STAGE_TONE: Partial<Record<JourneyStage, "neutral" | "warning" | "danger" | "primary">> = {
@@ -27,6 +28,7 @@ function fmtDate(iso: string | null) {
 export default function PatientsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const quickCreate = useQuickCreate();
   const [search, setSearch] = useState("");
 
   const stageFilter = searchParams.get("filter") ?? undefined;
@@ -38,9 +40,19 @@ export default function PatientsPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-4" data-testid="patients-page">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900">Patients</h1>
-        <p className="text-sm text-neutral-500">Find and understand people, not leads.</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-slate-900">Patients</h1>
+          <p className="text-sm text-neutral-500">Find and understand people, not leads.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => quickCreate.openAddPatient()}
+          className="shrink-0 rounded-lg bg-primary-600 px-3.5 py-2 text-sm font-medium text-white transition hover:bg-primary-700"
+          data-testid="add-patient-button"
+        >
+          + Add Patient
+        </button>
       </div>
 
       <div className="flex items-center gap-2">
@@ -58,7 +70,16 @@ export default function PatientsPage() {
       <Card className="overflow-x-auto p-0">
         {isLoading && <div className="space-y-2 p-4">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-8" />)}</div>}
         {isError && <div className="p-4"><ErrorState message="Could not load patients." /></div>}
-        {data && data.length === 0 && <div className="p-4"><EmptyState message="No patients match this search." /></div>}
+        {data && data.length === 0 && (
+          <div className="p-8">
+            <EmptyState message="No patients found." />
+            <div className="mt-3 flex justify-center">
+              <button type="button" onClick={() => quickCreate.openAddPatient()} className="text-xs font-medium text-primary-600 hover:underline">
+                + Add Patient
+              </button>
+            </div>
+          </div>
+        )}
         {data && data.length > 0 && (
           <table className="w-full min-w-[820px] text-left text-xs">
             <thead className="border-b border-neutral-100 text-neutral-500">

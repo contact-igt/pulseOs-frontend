@@ -14,7 +14,46 @@ import {
   users,
 } from "../../db/schema.js";
 import { allocatedAcquisitionCost } from "../marketing/formulas.js";
-import type { JourneyCardVm, Patient360, PatientListRow } from "@pulseos/types";
+import { normalizePhone } from "./phone.js";
+import type { CreatePatientInput, CreatePatientResult, JourneyCardVm, Patient360, PatientListRow } from "@pulseos/types";
+
+/**
+ * Identity-first creation — no Journey, no source/specialty context. For
+ * importing/registering an existing hospital patient directly, as distinct
+ * from Add Lead (acquisition-first, always creates a Journey). Resolves by
+ * phone the same way Add Lead does: never creates a duplicate identity.
+ */
+export async function createPatient(db: Db, tenantId: string, actorId: string, input: CreatePatientInput): Promise<CreatePatientResult> {
+  const phone = normalizePhone(input.phone);
+
+  const [existing] = await db.select({ id: patients.id }).from(patients).where(and(eq(patients.tenantId, tenantId), eq(patients.phone, phone))).limit(1);
+  if (existing) {
+    return { patientId: existing.id, isNewPatient: false };
+  }
+
+  const [created] = await db
+    .insert(patients)
+    .values({
+      tenantId,
+      name: input.name,
+      phone,
+      email: input.email ?? null,
+      preferredLanguage: input.preferredLanguage ?? "English",
+      branchId: input.branchId,
+    })
+    .returning();
+
+  await db.insert(timelineEvents).values({
+    tenantId,
+    patientId: created.id,
+    actorType: "user",
+    actorId,
+    eventType: "patient_created",
+    title: "Patient created",
+  });
+
+  return { patientId: created.id, isNewPatient: true };
+}
 
 export interface PatientListFilters {
   search?: string;

@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { api } from "@pulseos/api-client";
 import { Sidebar } from "../../components/shell/Sidebar";
 import { TopBar } from "../../components/shell/TopBar";
+import { QuickCreateProvider } from "../../components/shell/QuickCreateProvider";
 
 const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   "/command-centre": { title: "Command Centre", subtitle: "Hospital engagement operation at a glance" },
@@ -17,6 +18,9 @@ const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   "/treatments": { title: "Treatments", subtitle: "Operational conversion tracking, not an EMR" },
   "/inbox": { title: "Inbox", subtitle: "Every patient conversation, one queue" },
   "/integrations": { title: "Integrations", subtitle: "Connected providers and their health" },
+  "/leads": { title: "Leads", subtitle: "Track every enquiry from source to appointment" },
+  "/campaigns": { title: "Campaigns / Sources", subtitle: "Where spend turns into treatment revenue" },
+  "/settings": { title: "Settings", subtitle: "Specialties, custom fields and hospital configuration" },
 };
 
 function greeting() {
@@ -62,12 +66,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         (pathname.startsWith("/patients/") ? { title: "Patient 360", subtitle: "Full journey context for one patient" } : { title: "PulseOS", subtitle: undefined }));
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar user={data.user} open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <TopBar user={data.user} title={meta.title} subtitle={meta.subtitle} onMenuClick={() => setMobileNavOpen((v) => !v)} />
-        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-neutral-50 p-4 sm:p-6">{children}</main>
+    <QuickCreateProvider role={data.user.role}>
+      <div className="flex h-screen overflow-hidden">
+        <Sidebar user={data.user} open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <TopBar user={data.user} title={meta.title} subtitle={meta.subtitle} onMenuClick={() => setMobileNavOpen((v) => !v)} />
+          <main className="flex-1 overflow-x-hidden overflow-y-auto bg-neutral-50 p-4 sm:p-6">{children}</main>
+        </div>
       </div>
-    </div>
+    </QuickCreateProvider>
   );
 }

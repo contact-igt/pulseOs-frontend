@@ -1,0 +1,150 @@
+"use client";
+
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@pulseos/api-client";
+import { Card, EmptyState, ErrorState, MetricStrip, SectionHeading, Skeleton, SpendAtRisk, formatInr, formatMoneyOrDash, formatRoas } from "@pulseos/ui";
+import type { CampaignFilters, SourceChannel } from "@pulseos/types";
+
+const SOURCE_OPTIONS: SourceChannel[] = ["meta", "google", "website", "whatsapp", "phone", "walk_in", "referral", "organic", "other"];
+
+export default function CampaignsPage() {
+  const [filters, setFilters] = useState<CampaignFilters>({});
+
+  const specialties = useQuery({ queryKey: ["specialties"], queryFn: () => api.specialties() });
+  const lookups = useQuery({ queryKey: ["lookups"], queryFn: api.lookups });
+  const efficiency = useQuery({ queryKey: ["marketing-efficiency", filters], queryFn: () => api.marketingEfficiency(filters) });
+  const performance = useQuery({ queryKey: ["campaign-performance", filters], queryFn: () => api.campaignPerformance(filters) });
+  const spendAtRisk = useQuery({ queryKey: ["campaign-spend-at-risk"], queryFn: api.campaignSpendAtRisk });
+
+  return (
+    <div className="mx-auto max-w-7xl space-y-5" data-testid="campaigns-page">
+      <div>
+        <h1 className="text-xl font-semibold text-slate-900">Campaigns / Sources</h1>
+        <p className="text-sm text-neutral-500">Where spend turns into treatment revenue.</p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-neutral-200 bg-white p-2" data-testid="campaigns-filter-bar">
+        <select
+          value={filters.branchId ?? ""}
+          onChange={(e) => setFilters((f) => ({ ...f, branchId: e.target.value || undefined }))}
+          className="rounded border border-neutral-200 bg-white px-2 py-1 text-xs text-slate-700"
+        >
+          <option value="">All branches</option>
+          {lookups.data?.branches.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name}
+            </option>
+          ))}
+        </select>
+        <select
+          value={filters.specialtyKey ?? ""}
+          onChange={(e) => setFilters((f) => ({ ...f, specialtyKey: e.target.value || undefined }))}
+          className="rounded border border-neutral-200 bg-white px-2 py-1 text-xs text-slate-700"
+          data-testid="campaigns-specialty-filter"
+        >
+          <option value="">All specialties</option>
+          {specialties.data?.map((s) => (
+            <option key={s.key} value={s.key}>
+              {s.displayName}
+            </option>
+          ))}
+        </select>
+        <select
+          value={filters.source ?? ""}
+          onChange={(e) => setFilters((f) => ({ ...f, source: (e.target.value as SourceChannel) || undefined }))}
+          className="rounded border border-neutral-200 bg-white px-2 py-1 text-xs text-slate-700"
+        >
+          <option value="">All sources</option>
+          {SOURCE_OPTIONS.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+        {(filters.branchId || filters.specialtyKey || filters.source) && (
+          <button type="button" onClick={() => setFilters({})} className="text-xs text-neutral-400 hover:text-slate-900">
+            Clear filters
+          </button>
+        )}
+      </div>
+
+      <section>
+        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">Marketing Efficiency</h2>
+        {efficiency.isLoading && <div className="grid grid-cols-3 gap-2 lg:grid-cols-6">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-16" />)}</div>}
+        {efficiency.isError && <ErrorState message="Could not load marketing efficiency." />}
+        {efficiency.data && (
+          <MetricStrip
+            testId="marketing-efficiency-strip"
+            cells={[
+              { key: "spend", label: "Marketing Spend", value: formatInr(efficiency.data.spend) },
+              { key: "leads", label: "Leads", value: efficiency.data.leads },
+              { key: "appointments", label: "Appointments", value: efficiency.data.appointments },
+              { key: "consultations", label: "Consultations", value: efficiency.data.consultations },
+              { key: "treatments", label: "Treatments", value: efficiency.data.treatments },
+              { key: "revenue", label: "Attributed Revenue", value: formatInr(efficiency.data.revenue) },
+              { key: "roas", label: "ROAS", value: formatRoas(efficiency.data.roas) },
+              { key: "cpl", label: "Cost / Lead", value: formatMoneyOrDash(efficiency.data.cpl) },
+              { key: "cpa", label: "Cost / Appointment", value: formatMoneyOrDash(efficiency.data.costPerAppointment) },
+              { key: "cpt", label: "Cost / Treatment", value: formatMoneyOrDash(efficiency.data.costPerTreatment) },
+            ]}
+          />
+        )}
+      </section>
+
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.9fr_1fr]">
+        <Card className="overflow-x-auto p-4">
+          <SectionHeading title="Campaign / Source Performance" subtitle={performance.data ? `${performance.data.length} campaigns` : undefined} />
+          {performance.isLoading && <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-8" />)}</div>}
+          {performance.isError && <ErrorState message="Could not load campaign performance." />}
+          {performance.data && performance.data.length === 0 && <EmptyState message="No campaigns match these filters." />}
+          {performance.data && performance.data.length > 0 && (
+            <table className="w-full min-w-[860px] text-left text-xs">
+              <thead className="border-b border-neutral-100 text-neutral-500">
+                <tr>
+                  <th className="py-2 pr-2 font-medium">Source</th>
+                  <th className="py-2 pr-2 font-medium">Campaign</th>
+                  <th className="py-2 pr-2 text-right font-medium">Spend</th>
+                  <th className="py-2 pr-2 text-right font-medium">Leads</th>
+                  <th className="py-2 pr-2 text-right font-medium">Appts</th>
+                  <th className="py-2 pr-2 text-right font-medium">Consults</th>
+                  <th className="py-2 pr-2 text-right font-medium">Tx Advised</th>
+                  <th className="py-2 pr-2 text-right font-medium">Tx Completed</th>
+                  <th className="py-2 pr-2 text-right font-medium">Revenue</th>
+                  <th className="py-2 pr-2 text-right font-medium">CPL</th>
+                  <th className="py-2 pr-2 text-right font-medium">Cost/Appt</th>
+                  <th className="py-2 pr-2 text-right font-medium">Cost/Tx</th>
+                  <th className="py-2 text-right font-medium">ROAS</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral-100">
+                {performance.data.map((row) => (
+                  <tr key={row.campaignId ?? row.campaignName} className="hover:bg-neutral-50" data-testid={`campaign-row-${row.campaignId ?? row.campaignName}`}>
+                    <td className="py-1.5 pr-2 text-neutral-600">{row.source}</td>
+                    <td className="py-1.5 pr-2 text-slate-900">
+                      {row.campaignName}
+                      {row.specialtyLabel && <span className="block text-[11px] text-neutral-400">{row.specialtyLabel}</span>}
+                    </td>
+                    <td className="py-1.5 pr-2 text-right tabular-nums">{formatInr(row.spend)}</td>
+                    <td className="py-1.5 pr-2 text-right tabular-nums">{row.leads}</td>
+                    <td className="py-1.5 pr-2 text-right tabular-nums">{row.appointments}</td>
+                    <td className="py-1.5 pr-2 text-right tabular-nums">{row.consultations}</td>
+                    <td className="py-1.5 pr-2 text-right tabular-nums">{row.treatmentAdvised}</td>
+                    <td className="py-1.5 pr-2 text-right tabular-nums">{row.treatmentCompleted}</td>
+                    <td className="py-1.5 pr-2 text-right tabular-nums">{formatInr(row.revenue)}</td>
+                    <td className="py-1.5 pr-2 text-right tabular-nums">{formatMoneyOrDash(row.cpl)}</td>
+                    <td className="py-1.5 pr-2 text-right tabular-nums">{formatMoneyOrDash(row.costPerAppointment)}</td>
+                    <td className="py-1.5 pr-2 text-right tabular-nums">{formatMoneyOrDash(row.costPerTreatment)}</td>
+                    <td className="py-1.5 text-right tabular-nums font-medium">{formatRoas(row.roas)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Card>
+
+        {spendAtRisk.isLoading ? <Skeleton className="h-64" /> : spendAtRisk.isError ? <ErrorState message="Could not load spend at risk." /> : spendAtRisk.data && <SpendAtRisk data={spendAtRisk.data} />}
+      </div>
+    </div>
+  );
+}

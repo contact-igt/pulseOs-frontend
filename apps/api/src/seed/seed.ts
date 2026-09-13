@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { eq } from "drizzle-orm";
 import { db, queryClient } from "../db/client.js";
 import {
   appointments,
@@ -10,12 +11,15 @@ import {
   connectorSecrets,
   consultationOutcomes,
   conversations,
+  customFieldDefinitions,
+  customFieldValues,
   journeys,
   marketingCampaigns,
   messages,
   patients,
   revenueEvents,
   sessions,
+  specialtyTemplates,
   tasks,
   tenants,
   timelineEvents,
@@ -25,6 +29,8 @@ import {
 } from "../db/schema.js";
 import { hashPassword } from "../domain/auth/auth.service.js";
 import { encryptSecret } from "../domain/security/encryption.js";
+import { ensureDefaultSpecialties } from "../domain/specialty/specialty.service.js";
+import { createLead } from "../domain/lead/lead.service.js";
 
 function requireDemoPassword(): string {
   const value = process.env.DEMO_PASSWORD;
@@ -332,6 +338,7 @@ async function main() {
   await db.delete(tasks);
   await db.delete(campaignTouchpoints);
   await db.delete(appointments);
+  await db.delete(customFieldValues);
   await db.delete(journeys);
   await db.delete(marketingCampaigns);
   await db.delete(patients);
@@ -339,9 +346,13 @@ async function main() {
   await db.delete(branches);
   await db.delete(connectorSecrets);
   await db.delete(connectors);
+  await db.delete(customFieldDefinitions);
+  await db.delete(specialtyTemplates);
   await db.delete(tenants);
 
   const [tenant] = await db.insert(tenants).values({ name: "PulseOS Demo Hospital" }).returning();
+
+  await ensureDefaultSpecialties(db, tenant.id);
 
   const [branchA, branchB] = await db
     .insert(branches)
@@ -418,16 +429,19 @@ async function main() {
     ])
     .returning();
 
-  const [metaCampaign, googleCampaign, websiteCampaign] = await db
+  const [metaCampaign, googleCampaign, websiteCampaign, metaCataractCampaign] = await db
     .insert(marketingCampaigns)
     .values([
       { tenantId: tenant.id, source: "meta", name: "Meta – Fertility Awareness", spendAmount: 48_000, startDate: daysFromNow(-30), status: "active" },
       { tenantId: tenant.id, source: "google", name: "Google – IVF Search", spendAmount: 75_000, startDate: daysFromNow(-30), status: "active" },
       { tenantId: tenant.id, source: "website", name: "Website – Landing Page", spendAmount: 15_000, startDate: daysFromNow(-30), status: "active" },
+      // Deliberately weak performer: real spend, real leads, poor follow-through —
+      // demonstrates the Campaigns page's budget-leakage insight with genuine data.
+      { tenantId: tenant.id, source: "meta", name: "Meta – Cataract Awareness", spendAmount: 18_000, startDate: daysFromNow(-20), status: "active" },
     ])
     .returning();
 
-  const campaignByKey = { meta: metaCampaign, google: googleCampaign, website: websiteCampaign };
+  const campaignByKey = { meta: metaCampaign, google: googleCampaign, website: websiteCampaign, metaCataract: metaCataractCampaign };
 
   const patientNames = [
     "Priya Sharma", "Vikram Kumar", "Sneha Reddy", "Aditya Verma", "Lakshmi Nair",
@@ -625,6 +639,52 @@ async function main() {
   if (timelineRows.length > 0) {
     await db.insert(timelineEvents).values(timelineRows);
   }
+
+  // Demo Leads — created through the real createLead() domain function (not
+  // hand-inserted rows) so this seed also exercises that code path end to
+  // end. A couple get their journeys.contactedAt back-dated directly after
+  // creation (no other part of the app sets it yet — see lead.service.ts)
+  // purely so the Leads page's Follow-up Due / No Response buckets have
+  // realistic demo rows to show.
+  const leadResults = await Promise.all([
+    createLead(db, tenant.id, admin.id, {
+      name: "Anjali Verma", phone: "9811122001", specialtyKey: "GYNECOLOGY", branchId: branchA.id,
+      doctorId: doctorMeera.id, source: "meta", campaignId: metaCampaign.id, journeyType: "Pregnancy Care",
+      ownerId: coordinator.id, priority: "high", customFieldValues: { pregnancy_status: true, gestational_week: 24 },
+      followUp: { type: "CALLBACK", dueAt: daysFromNow(2, 11).toISOString(), assignedTo: coordinator.id },
+    }),
+    createLead(db, tenant.id, admin.id, {
+      name: "Kiran Rao", phone: "9811122002", specialtyKey: "FERTILITY", branchId: branchA.id,
+      source: "google", campaignId: googleCampaign.id, journeyType: "Fertility",
+      ownerId: coordinator.id, customFieldValues: { ivf_interest: true, treatment_stage: "Evaluation" },
+    }),
+    createLead(db, tenant.id, admin.id, {
+      name: "Faisal Ahmed", phone: "9811122003", specialtyKey: "OPHTHALMOLOGY", branchId: branchB.id,
+      source: "meta", campaignId: metaCataractCampaign.id, journeyType: "Eye Care",
+      ownerId: frontDesk.id, customFieldValues: { eye_concern: "Blurred vision", cataract_interest: true },
+    }),
+    createLead(db, tenant.id, admin.id, {
+      name: "Sunita Patil", phone: "9811122004", specialtyKey: "OPHTHALMOLOGY", branchId: branchB.id,
+      source: "meta", campaignId: metaCataractCampaign.id, journeyType: "Eye Care",
+      ownerId: frontDesk.id, customFieldValues: { eye_concern: "Cataract follow-up", cataract_interest: true },
+    }),
+    createLead(db, tenant.id, admin.id, {
+      name: "Ramesh Iyer", phone: "9811122005", specialtyKey: "PAEDIATRICS", branchId: branchA.id,
+      doctorId: doctorMeera.id, source: "website", campaignId: websiteCampaign.id, journeyType: "Paediatrics",
+      ownerId: coordinator.id, customFieldValues: { child_age: 6, concern: "Recurring fever" },
+      followUp: { type: "FOLLOW_UP", dueAt: daysFromNow(1, 10).toISOString(), assignedTo: coordinator.id },
+    }),
+    createLead(db, tenant.id, admin.id, {
+      name: "Geeta Nambiar", phone: "9811122006", specialtyKey: "GENERAL_OPD", branchId: branchA.id,
+      source: "walk_in", journeyType: "General Consultation", ownerId: frontDesk.id, notes: "Walk-in, no prior contact.",
+    }),
+  ]);
+
+  // Back-date contact on two journeys (no follow-up task on either) so the
+  // Leads page's No Response bucket has realistic rows — Anjali/Ramesh above
+  // already exercise the "new lead + first follow-up task" path instead.
+  await db.update(journeys).set({ contactedAt: daysFromNow(-3, 10) }).where(eq(journeys.id, leadResults[2].journeyId)); // Faisal
+  await db.update(journeys).set({ contactedAt: daysFromNow(-1, 9) }).where(eq(journeys.id, leadResults[3].journeyId)); // Sunita
 
   console.log("Seed complete.");
   console.log(`Conversations: ${CONVERSATION_CONFIGS.length}`);

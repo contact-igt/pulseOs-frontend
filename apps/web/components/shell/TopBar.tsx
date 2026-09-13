@@ -3,8 +3,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bell, ChevronDown, LogOut, Menu, Search } from "lucide-react";
+import { QuickCreateMenu, type QuickCreateItem } from "@pulseos/ui";
 import type { SessionUser } from "@pulseos/types";
 import { api } from "@pulseos/api-client";
+import { useQuickCreate } from "./QuickCreateProvider";
 
 const ROLE_LABEL: Record<string, string> = {
   SUPER_ADMIN: "Super Admin",
@@ -28,6 +30,14 @@ export function TopBar({
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [profileOpen, setProfileOpen] = useState(false);
+  const quickCreate = useQuickCreate();
+
+  const quickCreateItems: QuickCreateItem[] = [
+    user.role !== "DOCTOR" && { key: "lead", label: "Add Lead", onClick: () => quickCreate.openAddLead() },
+    user.role !== "DOCTOR" && { key: "appointment", label: "Add Appointment", onClick: () => quickCreate.openNewAppointment() },
+    user.role !== "DOCTOR" && { key: "task", label: "Add Task", onClick: () => quickCreate.openAddTask() },
+    user.role !== "DOCTOR" && { key: "patient", label: "Add Patient", onClick: () => quickCreate.openAddPatient() },
+  ].filter((x): x is QuickCreateItem => !!x);
 
   async function logout() {
     await api.logout();
@@ -71,6 +81,8 @@ export function TopBar({
             />
           </div>
         </form>
+
+        <QuickCreateMenu items={quickCreateItems} />
 
         <button
           type="button"

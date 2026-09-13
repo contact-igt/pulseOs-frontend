@@ -13,6 +13,7 @@ import {
   Plug,
   Settings,
   Stethoscope,
+  UserPlus,
   Users,
   UsersRound,
   type LucideIcon,
@@ -33,6 +34,7 @@ const ICONS: Record<string, LucideIcon> = {
   UsersRound,
   Plug,
   Settings,
+  UserPlus,
 };
 
 const ROLE_LABEL: Record<string, string> = {

@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { api } from "@pulseos/api-client";
 import { Badge, Card, EmptyState, ErrorState, Skeleton } from "@pulseos/ui";
+import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import type { TaskRow, TaskStatus, TaskType, TaskView } from "@pulseos/types";
 
 const TABS: { key: TaskView | "mine"; label: string }[] = [
@@ -44,6 +45,7 @@ function isOverdue(task: TaskRow) {
 export default function MyWorkPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const quickCreate = useQuickCreate();
   const [tab, setTab] = useState<(typeof TABS)[number]["key"]>("mine");
   const [noteDraft, setNoteDraft] = useState<Record<string, string>>({});
 
@@ -85,9 +87,19 @@ export default function MyWorkPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-4" data-testid="my-work-page">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900">My Work</h1>
-        <p className="text-sm text-neutral-500">Tasks, callbacks and follow-ups assigned to you.</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-slate-900">My Work</h1>
+          <p className="text-sm text-neutral-500">Tasks, callbacks and follow-ups assigned to you.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => quickCreate.openAddTask()}
+          className="shrink-0 rounded-lg bg-primary-600 px-3.5 py-2 text-sm font-medium text-white transition hover:bg-primary-700"
+          data-testid="add-task-button"
+        >
+          + Add Task
+        </button>
       </div>
 
       <div className="flex flex-wrap gap-1 rounded border border-neutral-200 bg-white p-1" role="tablist">
@@ -109,7 +121,16 @@ export default function MyWorkPage() {
       <Card className="p-0">
         {(tasks.isLoading || session.isLoading) && <div className="space-y-2 p-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-14" />)}</div>}
         {tasks.isError && <div className="p-4"><ErrorState message="Could not load tasks." /></div>}
-        {tasks.data && tasks.data.length === 0 && <div className="p-4"><EmptyState message="Nothing here. No next action scheduled." /></div>}
+        {tasks.data && tasks.data.length === 0 && (
+          <div className="p-8">
+            <EmptyState message="You're all caught up." />
+            <div className="mt-3 flex justify-center">
+              <button type="button" onClick={() => quickCreate.openAddTask()} className="text-xs font-medium text-primary-600 hover:underline">
+                + Add Task
+              </button>
+            </div>
+          </div>
+        )}
         {tasks.data && tasks.data.length > 0 && (
           <ul className="divide-y divide-neutral-100" data-testid="my-work-task-list">
             {tasks.data.map((task) => {
