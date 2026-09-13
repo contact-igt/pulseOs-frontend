@@ -451,6 +451,7 @@ export interface TreatmentRow {
   ownerName: string | null;
   nextActionDueAt: string | null;
   lastContactAt: string | null;
+  plannedDate: string | null;
 }
 
 // ---------------------------------------------------------------------------

@@ -28,6 +28,8 @@ import type {
   TaskView,
   TeamWorkloadRow,
   TodayStrip,
+  TreatmentRow,
+  TreatmentStatus,
 } from "@pulseos/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
@@ -138,6 +140,9 @@ export const api = {
   completeAppointment: (id: string) => request<{ ok: true }>(`/appointments/${id}/complete`, { method: "PATCH", body: JSON.stringify({}) }),
   rescheduleAppointment: (id: string, scheduledAt: string) =>
     request<{ ok: true }>(`/appointments/${id}/reschedule`, { method: "PATCH", body: JSON.stringify({ scheduledAt }) }),
+  treatments: (filters: { status?: TreatmentStatus; ownerId?: string } = {}) => request<TreatmentRow[]>(`/treatments${toQuery({ ...filters })}`),
+  updateTreatmentStatus: (id: string, status: TreatmentStatus, plannedDate?: string) =>
+    request<{ ok: true }>(`/treatments/${id}/status`, { method: "PATCH", body: JSON.stringify({ status, plannedDate }) }),
 };
 
 export { ApiError };
