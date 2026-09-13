@@ -96,6 +96,12 @@ export default function InboxPage() {
     refreshAfterAction();
   }
 
+  async function handleClose() {
+    if (!effectiveSelectedId) return;
+    await api.closeConversation(effectiveSelectedId);
+    refreshAfterAction();
+  }
+
   async function handleAssign() {
     if (!effectiveSelectedId || !assignTarget) return;
     await api.assignConversation(effectiveSelectedId, assignTarget);
@@ -198,9 +204,14 @@ export default function InboxPage() {
                     Claim
                   </button>
                 )}
-                {selectedConversation.ownershipState !== "CLOSED" && selectedConversation.ownershipState !== "AI_ACTIVE" && (
+                {selectedConversation.ownershipState !== "CLOSED" && selectedConversation.ownershipState !== "AI_ACTIVE" && selectedConversation.ownershipState !== "AI_RESUME_PENDING" && (
                   <button type="button" onClick={handleReturnToAi} data-testid="return-to-ai" className="rounded border border-neutral-200 px-2 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100">
                     Return to AI
+                  </button>
+                )}
+                {selectedConversation.ownershipState !== "CLOSED" && (
+                  <button type="button" onClick={handleClose} data-testid="close-conversation" className="rounded border border-neutral-200 px-2 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100">
+                    Close
                   </button>
                 )}
                 {selectedConversation.ownershipState !== "CLOSED" && (

@@ -1,6 +1,8 @@
 import { and, asc, desc, eq, gte, inArray, or } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { appointments, conversations, journeys, messages, patients, tasks, timelineEvents, users } from "../../db/schema.js";
+import { getConnectorById, getConnectorSecrets, touchConnectorError, touchConnectorSuccess } from "../connector/connector.service.js";
+import { getMessagingAdapter } from "../connector/registry.js";
 import type { ConversationChannel, ConversationDetail, ConversationRow, OwnershipState } from "@pulseos/types";
 
 export interface ConversationFilters {
@@ -184,21 +186,40 @@ export async function assignConversation(
   await db.update(conversations).set({ ownershipState: "HUMAN_ASSIGNED", assignedTo }).where(eq(conversations.id, conversationId));
   await db.insert(timelineEvents).values({
     tenantId, patientId: existing.patientId, journeyId: existing.journeyId,
-    actorType: "user", actorId, eventType: "conversation_claimed",
+    actorType: "user", actorId, eventType: "conversation_assigned",
     title: assignee ? `Conversation assigned to ${assignee.name}` : "Conversation assigned",
   });
   return { ok: true };
 }
 
+// No AI runtime exists yet in this checkpoint. "Return to AI" must never
+// pretend the AI has actually resumed — it hands the conversation into
+// AI_RESUME_PENDING, a real, honest queued-for-AI state. The eventual agent
+// runtime checkpoint is what actually resolves AI_RESUME_PENDING -> AI_ACTIVE;
+// until then a human can always reclaim it (see claimConversation, which
+// accepts any non-CLOSED state).
 export async function returnConversationToAi(db: Db, tenantId: string, conversationId: string, actorId: string): Promise<{ ok: true } | { ok: false; reason: string }> {
   const existing = await findConversation(db, tenantId, conversationId);
   if (!existing) return { ok: false, reason: "conversation_not_found" };
   if (existing.ownershipState === "CLOSED") return { ok: false, reason: "conversation_closed" };
 
-  await db.update(conversations).set({ ownershipState: "AI_ACTIVE", assignedTo: null }).where(eq(conversations.id, conversationId));
+  await db.update(conversations).set({ ownershipState: "AI_RESUME_PENDING", assignedTo: null }).where(eq(conversations.id, conversationId));
   await db.insert(timelineEvents).values({
     tenantId, patientId: existing.patientId, journeyId: existing.journeyId,
-    actorType: "user", actorId, eventType: "conversation_returned_to_ai", title: "Returned conversation to AI",
+    actorType: "user", actorId, eventType: "conversation_returned_to_ai", title: "Returned to AI (pending resume)",
+  });
+  return { ok: true };
+}
+
+export async function closeConversation(db: Db, tenantId: string, conversationId: string, actorId: string): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const existing = await findConversation(db, tenantId, conversationId);
+  if (!existing) return { ok: false, reason: "conversation_not_found" };
+  if (existing.ownershipState === "CLOSED") return { ok: false, reason: "conversation_closed" };
+
+  await db.update(conversations).set({ ownershipState: "CLOSED" }).where(eq(conversations.id, conversationId));
+  await db.insert(timelineEvents).values({
+    tenantId, patientId: existing.patientId, journeyId: existing.journeyId,
+    actorType: "user", actorId, eventType: "conversation_closed", title: "Conversation closed",
   });
   return { ok: true };
 }
@@ -208,7 +229,44 @@ export async function sendMessage(db: Db, tenantId: string, conversationId: stri
   if (!existing) return { ok: false, reason: "conversation_not_found" };
 
   const now = new Date();
-  await db.insert(messages).values({ tenantId, conversationId, senderType: "staff", senderUserId: actorId, body, sentAt: now });
+
+  // Route through the live provider when this conversation is connector-
+  // backed (Group T). Demo-seed conversations have no connectorId and stay
+  // purely local, as before.
+  let providerMessageId: string | null = null;
+  let deliveryStatus: "sent" | "failed" | null = null;
+  if (existing.connectorId) {
+    const connector = await getConnectorById(db, existing.connectorId);
+    const adapter = connector ? getMessagingAdapter(connector.provider) : null;
+    if (connector && adapter) {
+      const [patient] = await db.select({ phone: patients.phone }).from(patients).where(eq(patients.id, existing.patientId)).limit(1);
+      const to = existing.externalThreadId ?? patient?.phone;
+      const secrets = to ? await getConnectorSecrets(db, connector.id) : null;
+      if (to && secrets) {
+        try {
+          const sent = await adapter.sendMessage((connector.configuration as Record<string, unknown>) ?? {}, secrets, to, body);
+          providerMessageId = sent.providerMessageId;
+          deliveryStatus = "sent";
+          await touchConnectorSuccess(db, connector.id);
+        } catch (err) {
+          deliveryStatus = "failed";
+          await touchConnectorError(db, connector.id, (err as Error).message);
+        }
+      }
+    }
+  }
+
+  await db.insert(messages).values({
+    tenantId,
+    conversationId,
+    senderType: "staff",
+    senderUserId: actorId,
+    body,
+    sentAt: now,
+    connectorId: existing.connectorId,
+    providerMessageId,
+    deliveryStatus,
+  });
   await db.update(conversations).set({ lastMessageAt: now }).where(eq(conversations.id, conversationId));
   return { ok: true };
 }

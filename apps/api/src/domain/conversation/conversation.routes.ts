@@ -4,6 +4,7 @@ import { requirePermission } from "../auth/permission.middleware.js";
 import {
   assignConversation,
   claimConversation,
+  closeConversation,
   getConversationDetail,
   listConversations,
   returnConversationToAi,
@@ -66,6 +67,15 @@ export async function conversationRoutes(app: FastifyInstance) {
     const actorId = request.sessionUser!.id;
     const { id } = request.params as { id: string };
     const result = await returnConversationToAi(app.db, tenantId, id, actorId);
+    if (!result.ok) return reply.status(REASON_STATUS[result.reason] ?? 400).send({ error: result.reason });
+    return result;
+  });
+
+  app.patch("/conversations/:id/close", { preHandler: requirePermission("MANAGE_INBOX") }, async (request, reply) => {
+    const tenantId = request.sessionUser!.tenantId;
+    const actorId = request.sessionUser!.id;
+    const { id } = request.params as { id: string };
+    const result = await closeConversation(app.db, tenantId, id, actorId);
     if (!result.ok) return reply.status(REASON_STATUS[result.reason] ?? 400).send({ error: result.reason });
     return result;
   });

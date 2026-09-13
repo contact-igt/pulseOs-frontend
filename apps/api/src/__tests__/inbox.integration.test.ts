@@ -77,19 +77,59 @@ describe.skipIf(!DEMO_PASSWORD)("inbox / conversations (integration)", () => {
     });
     expect(send.statusCode).toBe(200);
 
+    // "Return to AI" must NEVER pretend an AI runtime actually resumed the
+    // conversation — no such runtime exists yet in this checkpoint. It hands
+    // off to a real, honest AI_RESUME_PENDING state, not back to AI_ACTIVE.
     const returnToAi = await app.inject({ method: "PATCH", url: `/conversations/${target.id}/return-to-ai`, cookies: { pulseos_session: coordinatorCookie } });
     expect(returnToAi.statusCode).toBe(200);
 
     const afterReturn = await app.inject({ method: "GET", url: `/conversations/${target.id}`, cookies: { pulseos_session: coordinatorCookie } });
     const finalDetail = afterReturn.json();
-    expect(finalDetail.conversation.ownershipState).toBe("AI_ACTIVE");
+    expect(finalDetail.conversation.ownershipState).toBe("AI_RESUME_PENDING");
     expect(finalDetail.conversation.ownerName).toBeNull();
     expect(finalDetail.messages.some((m: { body: string }) => m.body.includes("here's the update"))).toBe(true);
+
+    // A human can always reclaim a conversation out of AI_RESUME_PENDING.
+    const reclaim = await app.inject({ method: "PATCH", url: `/conversations/${target.id}/claim`, cookies: { pulseos_session: coordinatorCookie } });
+    expect(reclaim.statusCode).toBe(200);
+
+    const close = await app.inject({ method: "PATCH", url: `/conversations/${target.id}/close`, cookies: { pulseos_session: coordinatorCookie } });
+    expect(close.statusCode).toBe(200);
+    const afterClose = await app.inject({ method: "GET", url: `/conversations/${target.id}`, cookies: { pulseos_session: coordinatorCookie } });
+    expect(afterClose.json().conversation.ownershipState).toBe("CLOSED");
+
+    // A closed conversation rejects further ownership transitions (409).
+    const claimAfterClose = await app.inject({ method: "PATCH", url: `/conversations/${target.id}/claim`, cookies: { pulseos_session: coordinatorCookie } });
+    expect(claimAfterClose.statusCode).toBe(409);
 
     const timeline = await app.inject({ method: "GET", url: `/patients/${target.patientId}/timeline`, cookies: { pulseos_session: coordinatorCookie } });
     const eventTypes = (timeline.json() as { eventType: string }[]).map((e) => e.eventType);
     expect(eventTypes).toContain("conversation_claimed");
     expect(eventTypes).toContain("conversation_returned_to_ai");
+    expect(eventTypes).toContain("conversation_closed");
+  });
+
+  it("assigning a conversation writes a distinct conversation_assigned Timeline event (not conversation_claimed)", async () => {
+    const list = await app.inject({ method: "GET", url: "/conversations?ownershipState=HUMAN_REQUIRED", cookies: { pulseos_session: coordinatorCookie } });
+    const rows = list.json() as ConversationRow[];
+    expect(rows.length).toBeGreaterThan(0);
+    const target = rows[0];
+
+    const lookups = await app.inject({ method: "GET", url: "/lookups", cookies: { pulseos_session: coordinatorCookie } });
+    const owner = lookups.json().owners[0];
+
+    const assign = await app.inject({
+      method: "PATCH", url: `/conversations/${target.id}/assign`, cookies: { pulseos_session: coordinatorCookie },
+      payload: { assignedTo: owner.id },
+    });
+    expect(assign.statusCode).toBe(200);
+
+    const detail = await app.inject({ method: "GET", url: `/conversations/${target.id}`, cookies: { pulseos_session: coordinatorCookie } });
+    expect(detail.json().conversation.ownershipState).toBe("HUMAN_ASSIGNED");
+
+    const timeline = await app.inject({ method: "GET", url: `/patients/${target.patientId}/timeline`, cookies: { pulseos_session: coordinatorCookie } });
+    const eventTypes = (timeline.json() as { eventType: string }[]).map((e) => e.eventType);
+    expect(eventTypes).toContain("conversation_assigned");
   });
 
   it("rejects claiming a conversation that does not exist", async () => {

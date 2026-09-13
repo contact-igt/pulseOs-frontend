@@ -4,6 +4,7 @@ export interface InboundMessageEvent {
   externalEventId: string;
   externalThreadId: string;
   fromPhone: string;
+  fromName: string | null;
   body: string;
   occurredAt: Date;
 }

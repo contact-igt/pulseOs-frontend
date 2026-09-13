@@ -23,6 +23,8 @@ const CATEGORY_BY_EVENT_TYPE: Record<string, "communication" | "appointments" | 
   task_created: "tasks",
   task_completed: "tasks",
   conversation_claimed: "communication",
+  conversation_assigned: "communication",
+  conversation_closed: "communication",
   conversation_returned_to_ai: "communication",
 };
 

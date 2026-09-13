@@ -14,6 +14,7 @@ import { appointmentRoutes } from "./domain/appointment/appointment.routes.js";
 import { treatmentRoutes } from "./domain/treatment/treatment.routes.js";
 import { conversationRoutes } from "./domain/conversation/conversation.routes.js";
 import { connectorRoutes } from "./domain/connector/connector.routes.js";
+import { webhookRoutes } from "./domain/connector/webhook.routes.js";
 
 export async function buildApp() {
   const app = Fastify({ logger: true });
@@ -49,6 +50,7 @@ export async function buildApp() {
   }
 
   await app.register(authRoutes);
+  await app.register(webhookRoutes);
   await app.register(async (protectedApp) => {
     protectedApp.addHook("preHandler", (request, reply, done) => requireAuth(request, reply, done));
     await protectedApp.register(dashboardRoutes);
