@@ -5,8 +5,10 @@ import {
   branches,
   campaignTouchpoints,
   consultationOutcomes,
+  conversations,
   journeys,
   marketingCampaigns,
+  messages,
   patients,
   revenueEvents,
   sessions,
@@ -35,6 +37,70 @@ function daysFromNow(days: number, hour = 10, minute = 0) {
   d.setHours(hour, minute, 0, 0);
   return d;
 }
+
+function minutesAgo(mins: number) {
+  return new Date(Date.now() - mins * 60_000);
+}
+
+type ConversationChannelValue = "WHATSAPP" | "CALL" | "SMS" | "EMAIL" | "INTERNAL";
+type OwnershipStateValue = "AI_ACTIVE" | "HUMAN_REQUIRED" | "HUMAN_ASSIGNED" | "HUMAN_ACTIVE" | "AI_RESUME_PENDING" | "CLOSED";
+
+interface ConversationConfig {
+  patientIdx: number;
+  channel: ConversationChannelValue;
+  ownershipState: OwnershipStateValue;
+  assignedTo: "coordinator" | "frontDesk" | null;
+  messages: { sender: "patient" | "staff" | "ai" | "system"; body: string; minutesAgoSent: number; unread?: boolean }[];
+}
+
+// Inbox demo data: covers every channel and every ownership state at least
+// once, with two HUMAN_REQUIRED conversations so the triage queue reads as
+// a real backlog rather than a single example.
+const CONVERSATION_CONFIGS: ConversationConfig[] = [
+  {
+    patientIdx: 0, channel: "WHATSAPP", ownershipState: "HUMAN_REQUIRED", assignedTo: null,
+    messages: [
+      { sender: "ai", body: "Hi Priya! Just checking in — have you and your partner decided on IVF Cycle 1 timing yet?", minutesAgoSent: 90 },
+      { sender: "patient", body: "We're still deciding, but I have a question about the payment plan the AI couldn't answer.", minutesAgoSent: 20, unread: true },
+    ],
+  },
+  {
+    patientIdx: 12, channel: "WHATSAPP", ownershipState: "HUMAN_REQUIRED", assignedTo: null,
+    messages: [
+      { sender: "ai", body: "Hope your recovery from IVF Cycle 1 is going well. Any discomfort to report?", minutesAgoSent: 200 },
+      { sender: "patient", body: "I've had some bleeding since yesterday — is that normal? I'd like to speak to someone.", minutesAgoSent: 15, unread: true },
+    ],
+  },
+  {
+    patientIdx: 1, channel: "WHATSAPP", ownershipState: "AI_ACTIVE", assignedTo: null,
+    messages: [
+      { sender: "patient", body: "What documents do I need to bring for my consultation?", minutesAgoSent: 60 },
+      { sender: "ai", body: "Please bring a valid photo ID and any previous test reports you have.", minutesAgoSent: 58 },
+    ],
+  },
+  {
+    patientIdx: 6, channel: "CALL", ownershipState: "HUMAN_ASSIGNED", assignedTo: "coordinator",
+    messages: [{ sender: "system", body: "Missed call from patient — flagged for follow-up.", minutesAgoSent: 300 }],
+  },
+  {
+    patientIdx: 8, channel: "SMS", ownershipState: "HUMAN_ACTIVE", assignedTo: "coordinator",
+    messages: [
+      { sender: "patient", body: "Can we move the IVF review call to Friday?", minutesAgoSent: 45 },
+      { sender: "staff", body: "Yes, I've noted Friday — I'll confirm the exact time shortly.", minutesAgoSent: 30 },
+    ],
+  },
+  {
+    patientIdx: 7, channel: "EMAIL", ownershipState: "AI_RESUME_PENDING", assignedTo: "frontDesk",
+    messages: [
+      { sender: "patient", body: "Thank you for clarifying the billing breakdown for my IUI cycle.", minutesAgoSent: 500 },
+      { sender: "staff", body: "You're welcome! Handing you back to our assistant for anything else.", minutesAgoSent: 480 },
+    ],
+  },
+  {
+    patientIdx: 10, channel: "INTERNAL", ownershipState: "CLOSED", assignedTo: "coordinator",
+    messages: [{ sender: "staff", body: "Payment for IVF Cycle 1 confirmed and reconciled — closing this thread.", minutesAgoSent: 1440 }],
+  },
+];
 
 type ConsultationOutcomeValue =
   | "CONSULTED"
@@ -250,6 +316,8 @@ const JOURNEY_CONFIGS: JourneyConfig[] = [
 async function main() {
   console.log("Clearing existing demo data...");
   await db.delete(sessions);
+  await db.delete(messages);
+  await db.delete(conversations);
   await db.delete(timelineEvents);
   await db.delete(revenueEvents);
   await db.delete(treatmentOpportunities);
@@ -468,11 +536,35 @@ async function main() {
     },
   ]);
 
+  for (const config of CONVERSATION_CONFIGS) {
+    const patient = patientRows[config.patientIdx];
+    const assignedTo = config.assignedTo === "coordinator" ? coordinator.id : config.assignedTo === "frontDesk" ? frontDesk.id : null;
+    const lastMessageAt = minutesAgo(Math.min(...config.messages.map((m) => m.minutesAgoSent)));
+
+    const [conversation] = await db
+      .insert(conversations)
+      .values({ tenantId: tenant.id, patientId: patient.id, channel: config.channel, ownershipState: config.ownershipState, assignedTo, lastMessageAt })
+      .returning();
+
+    await db.insert(messages).values(
+      config.messages.map((m) => ({
+        tenantId: tenant.id,
+        conversationId: conversation.id,
+        senderType: m.sender,
+        senderUserId: m.sender === "staff" ? assignedTo : null,
+        body: m.body,
+        sentAt: minutesAgo(m.minutesAgoSent),
+        readAt: m.sender === "patient" && m.unread ? null : minutesAgo(m.minutesAgoSent),
+      })),
+    );
+  }
+
   if (timelineRows.length > 0) {
     await db.insert(timelineEvents).values(timelineRows);
   }
 
   console.log("Seed complete.");
+  console.log(`Conversations: ${CONVERSATION_CONFIGS.length}`);
   console.log(`Tenant: ${tenant.name} (${tenant.id})`);
   console.log(`Campaigns: Meta ₹48,000 · Google ₹75,000 · Website ₹15,000`);
   console.log(`Journeys: ${JOURNEY_CONFIGS.length}, Patients: ${patientRows.length}`);

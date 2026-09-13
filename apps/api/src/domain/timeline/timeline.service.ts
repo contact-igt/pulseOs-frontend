@@ -22,6 +22,8 @@ const CATEGORY_BY_EVENT_TYPE: Record<string, "communication" | "appointments" | 
   revenue_recorded: "clinical",
   task_created: "tasks",
   task_completed: "tasks",
+  conversation_claimed: "communication",
+  conversation_returned_to_ai: "communication",
 };
 
 export interface TimelineEventVm {

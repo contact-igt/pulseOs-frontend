@@ -7,6 +7,9 @@ import type {
   BranchDoctorRow,
   FrontDeskDashboard,
   ConsultationOutcomeValue,
+  ConversationChannel,
+  ConversationDetail,
+  ConversationRow,
   ConversionStage,
   CreateTaskInput,
   DoctorDashboard,
@@ -17,6 +20,7 @@ import type {
   JourneysSummary,
   Lookups,
   MarketingSourceRow,
+  OwnershipState,
   Patient360,
   PatientFlowCount,
   PatientListRow,
@@ -143,6 +147,15 @@ export const api = {
   treatments: (filters: { status?: TreatmentStatus; ownerId?: string } = {}) => request<TreatmentRow[]>(`/treatments${toQuery({ ...filters })}`),
   updateTreatmentStatus: (id: string, status: TreatmentStatus, plannedDate?: string) =>
     request<{ ok: true }>(`/treatments/${id}/status`, { method: "PATCH", body: JSON.stringify({ status, plannedDate }) }),
+  conversations: (filters: { channel?: ConversationChannel; ownershipState?: OwnershipState; search?: string } = {}) =>
+    request<ConversationRow[]>(`/conversations${toQuery({ ...filters })}`),
+  conversation: (id: string) => request<ConversationDetail>(`/conversations/${id}`),
+  sendConversationMessage: (id: string, body: string) =>
+    request<{ ok: true }>(`/conversations/${id}/messages`, { method: "POST", body: JSON.stringify({ body }) }),
+  claimConversation: (id: string) => request<{ ok: true }>(`/conversations/${id}/claim`, { method: "PATCH", body: JSON.stringify({}) }),
+  assignConversation: (id: string, assignedTo: string) =>
+    request<{ ok: true }>(`/conversations/${id}/assign`, { method: "PATCH", body: JSON.stringify({ assignedTo }) }),
+  returnConversationToAi: (id: string) => request<{ ok: true }>(`/conversations/${id}/return-to-ai`, { method: "PATCH", body: JSON.stringify({}) }),
 };
 
 export { ApiError };
