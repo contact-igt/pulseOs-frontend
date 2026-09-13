@@ -61,8 +61,8 @@ test.describe("Final review screenshots", () => {
     await expect(page.getByTestId("my-work-page")).toBeVisible();
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "03-coordinator-my-work.png"), fullPage: true });
 
-    await page.goto("/treatment");
-    await expect(page.getByTestId("treatment-page")).toBeVisible();
+    await page.goto("/treatments");
+    await expect(page.getByTestId("treatments-page")).toBeVisible();
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "09-treatments.png"), fullPage: true });
 
     await page.goto("/inbox");

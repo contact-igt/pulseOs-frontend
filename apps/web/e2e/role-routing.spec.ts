@@ -35,4 +35,11 @@ test.describe("Role home routing", () => {
     await expect(page).toHaveURL(/\/doctor-home/);
     await expect(page.getByTestId("doctor-home")).toBeVisible();
   });
+
+  test("the old /treatment URL redirects to the canonical /treatments route", async ({ page }) => {
+    await login(page, "coordinator@pulseos.local");
+    await page.goto("/treatment");
+    await expect(page).toHaveURL(/\/treatments$/);
+    await expect(page.getByTestId("treatments-page")).toBeVisible();
+  });
 });

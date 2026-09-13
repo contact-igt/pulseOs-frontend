@@ -17,7 +17,7 @@ async function overflowX(page: import("@playwright/test").Page) {
 const PAGES_BY_ROLE: { email: string; paths: string[] }[] = [
   { email: "admin@pulseos.local", paths: ["/command-centre", "/patients", "/journeys"] },
   { email: "frontdesk@pulseos.local", paths: ["/front-desk", "/appointments"] },
-  { email: "coordinator@pulseos.local", paths: ["/my-work", "/treatment", "/inbox"] },
+  { email: "coordinator@pulseos.local", paths: ["/my-work", "/treatments", "/inbox"] },
   { email: "doctor@pulseos.local", paths: ["/doctor-home"] },
 ];
 
