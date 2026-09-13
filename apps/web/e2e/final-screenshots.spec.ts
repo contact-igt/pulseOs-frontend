@@ -1,0 +1,76 @@
+import { test, expect } from "@playwright/test";
+import path from "path";
+
+const DEMO_PASSWORD = process.env.DEMO_PASSWORD ?? "";
+const ARTIFACTS_DIR = path.resolve(__dirname, "../../../review-artifacts");
+
+async function login(page: import("@playwright/test").Page, email: string) {
+  await page.goto("/login");
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill(DEMO_PASSWORD);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.waitForURL(/command-centre|front-desk|my-work|doctor-home/);
+}
+
+test.describe("Final review screenshots", () => {
+  test.skip(!DEMO_PASSWORD, "DEMO_PASSWORD must be set to run this suite");
+
+  test("captures the 12 required desktop + tablet screenshots", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+
+    await login(page, "admin@pulseos.local");
+    await expect(page.getByTestId("command-centre")).toBeVisible();
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "01-admin-command-centre.png"), fullPage: true });
+
+    await page.goto("/patients?search=Priya");
+    await page.getByText("Priya Sharma").first().click();
+    await expect(page.getByTestId("patient-360")).toBeVisible();
+    const patient360Url = page.url();
+
+    await page.goto("/patients");
+    await expect(page.getByTestId("patients-page")).toBeVisible();
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "05-patients.png"), fullPage: true });
+
+    await page.goto(patient360Url);
+    await expect(page.getByTestId("patient-360")).toBeVisible();
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "06-patient-360.png"), fullPage: true });
+
+    await page.goto("/journeys");
+    await expect(page.getByTestId("journeys-page")).toBeVisible();
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "07-journeys.png"), fullPage: true });
+
+    await page.setViewportSize({ width: 768, height: 1024 });
+    await page.goto("/command-centre");
+    await expect(page.getByTestId("command-centre")).toBeVisible();
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "11-admin-command-centre-tablet.png"), fullPage: true });
+
+    await page.goto(patient360Url);
+    await expect(page.getByTestId("patient-360")).toBeVisible();
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "12-patient-360-tablet.png"), fullPage: true });
+    await page.setViewportSize({ width: 1440, height: 900 });
+
+    await login(page, "frontdesk@pulseos.local");
+    await expect(page.getByTestId("front-desk-page")).toBeVisible();
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "02-front-desk.png"), fullPage: true });
+
+    await page.goto("/appointments");
+    await expect(page.getByTestId("appointments-page")).toBeVisible();
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "08-appointments.png"), fullPage: true });
+
+    await login(page, "coordinator@pulseos.local");
+    await expect(page.getByTestId("my-work-page")).toBeVisible();
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "03-coordinator-my-work.png"), fullPage: true });
+
+    await page.goto("/treatment");
+    await expect(page.getByTestId("treatment-page")).toBeVisible();
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "09-treatments.png"), fullPage: true });
+
+    await page.goto("/inbox");
+    await expect(page.getByTestId("inbox-page")).toBeVisible();
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "10-inbox.png"), fullPage: true });
+
+    await login(page, "doctor@pulseos.local");
+    await expect(page.getByTestId("doctor-home")).toBeVisible();
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "04-doctor-home.png"), fullPage: true });
+  });
+});
