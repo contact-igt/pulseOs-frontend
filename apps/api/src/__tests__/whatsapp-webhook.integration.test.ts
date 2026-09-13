@@ -1,7 +1,9 @@
 import { createHmac } from "node:crypto";
+import { eq } from "drizzle-orm";
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { buildApp } from "../app.js";
-import { queryClient } from "../db/client.js";
+import { db, queryClient } from "../db/client.js";
+import { connectors } from "../db/schema.js";
 import type { FastifyInstance } from "fastify";
 import type { ConnectorRow, ConversationRow } from "@pulseos/types";
 
@@ -197,6 +199,43 @@ describe.skipIf(!DEMO_PASSWORD)("WhatsApp webhook (integration, fixture mode)", 
       payload: rawBody,
       headers: { "content-type": "application/json", "x-hub-signature-256": sign(rawBody) },
     });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it("a DISABLED connector safely no-ops (200, nothing processed) instead of erroring", async () => {
+    await db.update(connectors).set({ status: "DISABLED" }).where(eq(connectors.id, connectorId));
+    try {
+      const payload = metaMessagePayload({ wamid: `wamid.DISABLED_${Date.now()}`, from: "919000000099", body: "should not be processed" });
+      const rawBody = JSON.stringify(payload);
+      const res = await app.inject({
+        method: "POST",
+        url: `/webhooks/whatsapp/${connectorId}`,
+        payload: rawBody,
+        headers: { "content-type": "application/json", "x-hub-signature-256": sign(rawBody) },
+      });
+      expect(res.statusCode).toBe(200);
+
+      const conversations = await app.inject({ method: "GET", url: "/conversations?channel=WHATSAPP", cookies: { pulseos_session: adminCookie } });
+      expect((conversations.json() as ConversationRow[]).some((c) => c.lastMessage === "should not be processed")).toBe(false);
+    } finally {
+      await db.update(connectors).set({ status: "CONNECTED" }).where(eq(connectors.id, connectorId));
+    }
+  });
+
+  it("posting to a connector id whose provider isn't a messaging adapter (type mismatch) safely no-ops", async () => {
+    const list = await app.inject({ method: "GET", url: "/connectors", cookies: { pulseos_session: adminCookie } });
+    const runoConnector = (list.json() as ConnectorRow[]).find((c) => c.provider === "runo");
+    expect(runoConnector).toBeTruthy();
+
+    const payload = metaMessagePayload({ wamid: `wamid.MISMATCH_${Date.now()}`, from: "919000000098", body: "wrong endpoint" });
+    const rawBody = JSON.stringify(payload);
+    const res = await app.inject({
+      method: "POST",
+      url: `/webhooks/whatsapp/${runoConnector!.id}`,
+      payload: rawBody,
+      headers: { "content-type": "application/json", "x-hub-signature-256": sign(rawBody) },
+    });
+    // No messaging adapter for "runo" — a safe no-op, not a crash or a 500.
     expect(res.statusCode).toBe(200);
   });
 });
