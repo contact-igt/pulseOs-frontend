@@ -144,5 +144,30 @@ export async function updateTreatmentStatus(
     }
   }
 
+  if (nextStatus === "COMPLETED") {
+    const [journey] = await db.select().from(journeys).where(eq(journeys.id, existing.journeyId)).limit(1);
+    const assignedTo = existing.ownerUserId ?? journey?.ownerUserId ?? null;
+
+    const postCareDueAt = new Date();
+    postCareDueAt.setDate(postCareDueAt.getDate() + 1);
+    const reviewDueAt = new Date();
+    reviewDueAt.setDate(reviewDueAt.getDate() + 7);
+
+    await db.insert(tasks).values([
+      {
+        tenantId, patientId: existing.patientId, journeyId: existing.journeyId,
+        assignedTo, reason: "manual_task", type: "POST_CARE", priority: "normal",
+        status: "pending", dueAt: postCareDueAt, createdBy: actorId,
+        notes: `Post-care call — check on patient after "${existing.treatmentLabel}"`,
+      },
+      {
+        tenantId, patientId: existing.patientId, journeyId: existing.journeyId,
+        assignedTo, reason: "manual_task", type: "RECALL", priority: "normal",
+        status: "pending", dueAt: reviewDueAt, createdBy: actorId,
+        notes: `Schedule review appointment for "${existing.treatmentLabel}"`,
+      },
+    ]);
+  }
+
   return { ok: true };
 }
