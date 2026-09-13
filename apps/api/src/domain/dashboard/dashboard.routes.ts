@@ -1,13 +1,17 @@
 import type { FastifyInstance } from "fastify";
+import { requirePermission } from "../auth/permission.middleware.js";
 import {
   getAttentionQueue,
   getBranchDoctorPerformance,
   getConversionFunnel,
+  getExecutiveStrip,
   getJourneyHealth,
   getJourneyPerformanceSeries,
   getMarketingSources,
   getPatientFlow,
+  getSourcePerformance,
   getSpendAtRisk,
+  getSpendAtRiskByReason,
   getTeamWorkload,
   getTodayStrip,
   listBranches,
@@ -23,6 +27,8 @@ function dashboardFilters(request: { query: unknown }) {
 }
 
 export async function dashboardRoutes(app: FastifyInstance) {
+  app.addHook("preHandler", requirePermission("VIEW_ADMIN_COMMAND_CENTRE"));
+
   app.get("/branches", async (request) => {
     const tenantId = request.sessionUser!.tenantId;
     return listBranches(app.db, tenantId);
@@ -36,6 +42,11 @@ export async function dashboardRoutes(app: FastifyInstance) {
   app.get("/dashboard/today", async (request) => {
     const tenantId = request.sessionUser!.tenantId;
     return getTodayStrip(app.db, tenantId, dashboardFilters(request));
+  });
+
+  app.get("/dashboard/executive", async (request) => {
+    const tenantId = request.sessionUser!.tenantId;
+    return getExecutiveStrip(app.db, tenantId);
   });
 
   app.get("/dashboard/conversion", async (request) => {
@@ -67,7 +78,17 @@ export async function dashboardRoutes(app: FastifyInstance) {
 
   app.get("/dashboard/spend-at-risk", async (request) => {
     const tenantId = request.sessionUser!.tenantId;
-    return getSpendAtRisk(app.db, tenantId, dashboardFilters(request));
+    return getSpendAtRisk(app.db, tenantId);
+  });
+
+  app.get("/dashboard/spend-at-risk-by-reason", async (request) => {
+    const tenantId = request.sessionUser!.tenantId;
+    return getSpendAtRiskByReason(app.db, tenantId);
+  });
+
+  app.get("/dashboard/source-performance", async (request) => {
+    const tenantId = request.sessionUser!.tenantId;
+    return getSourcePerformance(app.db, tenantId);
   });
 
   app.get("/dashboard/marketing", async (request) => {

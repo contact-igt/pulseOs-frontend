@@ -1,0 +1,175 @@
+import { and, eq, gte, lt, or } from "drizzle-orm";
+import type { Db } from "../../db/client.js";
+import { journeys, patients, tasks, timelineEvents, users } from "../../db/schema.js";
+import type { CreateTaskInput, TaskRow, TaskView } from "@pulseos/types";
+
+function todayRange() {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  return { start, end };
+}
+
+function toRow(r: {
+  id: string; patientId: string; patientName: string; journeyId: string | null; journeyType: string | null;
+  assignedTo: string | null; assignedToName: string | null; type: TaskRow["type"]; priority: TaskRow["priority"];
+  status: TaskRow["status"]; notes: string | null; dueAt: Date; completedAt: Date | null; createdAt: Date;
+}): TaskRow {
+  return {
+    id: r.id, patientId: r.patientId, patientName: r.patientName, journeyId: r.journeyId, journeyType: r.journeyType,
+    assignedTo: r.assignedTo, assignedToName: r.assignedToName, type: r.type, priority: r.priority, status: r.status,
+    notes: r.notes, dueAt: r.dueAt.toISOString(), completedAt: r.completedAt ? r.completedAt.toISOString() : null,
+    createdAt: r.createdAt.toISOString(),
+  };
+}
+
+export interface TaskFilters {
+  view?: TaskView;
+  assignedTo?: string;
+  patientId?: string;
+}
+
+export async function listTasks(db: Db, tenantId: string, filters: TaskFilters): Promise<TaskRow[]> {
+  const { start, end } = todayRange();
+  const now = new Date();
+
+  const viewCondition =
+    filters.view === "today"
+      ? and(eq(tasks.status, "pending"), gte(tasks.dueAt, start), lt(tasks.dueAt, end))
+      : filters.view === "overdue"
+        ? and(eq(tasks.status, "pending"), lt(tasks.dueAt, now))
+        : filters.view === "upcoming"
+          ? and(or(eq(tasks.status, "pending"), eq(tasks.status, "in_progress")), gte(tasks.dueAt, end))
+          : filters.view === "completed"
+            ? eq(tasks.status, "completed")
+            : undefined;
+
+  const rows = await db
+    .select({
+      id: tasks.id, patientId: tasks.patientId, patientName: patients.name,
+      journeyId: tasks.journeyId, journeyType: journeys.journeyType,
+      assignedTo: tasks.assignedTo, assignedToName: users.name,
+      type: tasks.type, priority: tasks.priority, status: tasks.status, notes: tasks.notes,
+      dueAt: tasks.dueAt, completedAt: tasks.completedAt, createdAt: tasks.createdAt,
+    })
+    .from(tasks)
+    .innerJoin(patients, eq(tasks.patientId, patients.id))
+    .leftJoin(journeys, eq(tasks.journeyId, journeys.id))
+    .leftJoin(users, eq(tasks.assignedTo, users.id))
+    .where(
+      and(
+        eq(tasks.tenantId, tenantId),
+        viewCondition,
+        filters.assignedTo ? eq(tasks.assignedTo, filters.assignedTo) : undefined,
+        filters.patientId ? eq(tasks.patientId, filters.patientId) : undefined,
+      ),
+    )
+    .orderBy(tasks.dueAt);
+
+  return rows.map(toRow);
+}
+
+export async function createTask(db: Db, tenantId: string, createdBy: string, input: CreateTaskInput): Promise<TaskRow> {
+  const [row] = await db
+    .insert(tasks)
+    .values({
+      tenantId,
+      patientId: input.patientId,
+      journeyId: input.journeyId ?? null,
+      assignedTo: input.assignedTo ?? null,
+      type: input.type,
+      priority: input.priority ?? "normal",
+      notes: input.notes ?? null,
+      dueAt: new Date(input.dueAt),
+      createdBy,
+    })
+    .returning();
+
+  await db.insert(timelineEvents).values({
+    tenantId, patientId: input.patientId, journeyId: input.journeyId ?? null,
+    actorType: "user", actorId: createdBy, eventType: "task_created",
+    title: `Task created: ${input.type.replace(/_/g, " ").toLowerCase()}`,
+  });
+
+  const [patient] = await db.select({ name: patients.name }).from(patients).where(eq(patients.id, row.patientId)).limit(1);
+  return toRow({ ...row, patientName: patient?.name ?? "", journeyType: null, assignedToName: null });
+}
+
+export async function completeTask(db: Db, tenantId: string, taskId: string, completedBy: string): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const [existing] = await db.select().from(tasks).where(and(eq(tasks.tenantId, tenantId), eq(tasks.id, taskId))).limit(1);
+  if (!existing) return { ok: false, reason: "task_not_found" };
+  if (existing.status === "completed") return { ok: false, reason: "already_completed" };
+
+  await db.update(tasks).set({ status: "completed", completedBy, completedAt: new Date() }).where(eq(tasks.id, taskId));
+  await db.insert(timelineEvents).values({
+    tenantId, patientId: existing.patientId, journeyId: existing.journeyId,
+    actorType: "user", actorId: completedBy, eventType: "task_completed",
+    title: `Task completed: ${existing.type.replace(/_/g, " ").toLowerCase()}`,
+  });
+  return { ok: true };
+}
+
+export async function rescheduleTask(db: Db, tenantId: string, taskId: string, actorId: string, newDueAt: string): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const [existing] = await db.select().from(tasks).where(and(eq(tasks.tenantId, tenantId), eq(tasks.id, taskId))).limit(1);
+  if (!existing) return { ok: false, reason: "task_not_found" };
+
+  await db.update(tasks).set({ dueAt: new Date(newDueAt) }).where(eq(tasks.id, taskId));
+  await db.insert(timelineEvents).values({
+    tenantId, patientId: existing.patientId, journeyId: existing.journeyId,
+    actorType: "user", actorId, eventType: "task_rescheduled",
+    title: `Task rescheduled to ${new Date(newDueAt).toLocaleDateString("en-IN")}`,
+  });
+  return { ok: true };
+}
+
+export async function getTaskById(db: Db, tenantId: string, taskId: string): Promise<TaskRow | null> {
+  const [row] = await db
+    .select({
+      id: tasks.id, patientId: tasks.patientId, patientName: patients.name,
+      journeyId: tasks.journeyId, journeyType: journeys.journeyType,
+      assignedTo: tasks.assignedTo, assignedToName: users.name,
+      type: tasks.type, priority: tasks.priority, status: tasks.status, notes: tasks.notes,
+      dueAt: tasks.dueAt, completedAt: tasks.completedAt, createdAt: tasks.createdAt,
+    })
+    .from(tasks)
+    .innerJoin(patients, eq(tasks.patientId, patients.id))
+    .leftJoin(journeys, eq(tasks.journeyId, journeys.id))
+    .leftJoin(users, eq(tasks.assignedTo, users.id))
+    .where(and(eq(tasks.tenantId, tenantId), eq(tasks.id, taskId)))
+    .limit(1);
+
+  return row ? toRow(row) : null;
+}
+
+export async function addTaskNote(db: Db, tenantId: string, taskId: string, notes: string): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const [existing] = await db.select().from(tasks).where(and(eq(tasks.tenantId, tenantId), eq(tasks.id, taskId))).limit(1);
+  if (!existing) return { ok: false, reason: "task_not_found" };
+
+  await db.update(tasks).set({ notes }).where(eq(tasks.id, taskId));
+  return { ok: true };
+}
+
+export async function reassignTask(db: Db, tenantId: string, taskId: string, actorId: string, newAssigneeId: string): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const [existing] = await db.select().from(tasks).where(and(eq(tasks.tenantId, tenantId), eq(tasks.id, taskId))).limit(1);
+  if (!existing) return { ok: false, reason: "task_not_found" };
+
+  await db.update(tasks).set({ assignedTo: newAssigneeId }).where(eq(tasks.id, taskId));
+  await db.insert(timelineEvents).values({
+    tenantId, patientId: existing.patientId, journeyId: existing.journeyId,
+    actorType: "user", actorId, eventType: "task_reassigned",
+    title: "Task reassigned",
+  });
+  return { ok: true };
+}
+
+/** A Journey's Next Action = the nearest-due open task on it, or null if none scheduled. */
+export async function getNextActionForJourney(db: Db, journeyId: string) {
+  const [row] = await db
+    .select({ dueAt: tasks.dueAt, type: tasks.type })
+    .from(tasks)
+    .where(and(eq(tasks.journeyId, journeyId), or(eq(tasks.status, "pending"), eq(tasks.status, "in_progress"))))
+    .orderBy(tasks.dueAt)
+    .limit(1);
+  return row ?? null;
+}

@@ -1,0 +1,137 @@
+import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { buildApp } from "../app.js";
+import { queryClient } from "../db/client.js";
+import type { FastifyInstance } from "fastify";
+import type { AppointmentRow } from "@pulseos/types";
+
+const DEMO_PASSWORD = process.env.DEMO_PASSWORD;
+
+async function loginAs(app: FastifyInstance, email: string): Promise<string> {
+  const res = await app.inject({ method: "POST", url: "/auth/login", payload: { email, password: DEMO_PASSWORD } });
+  return res.cookies.find((c) => c.name === "pulseos_session")!.value;
+}
+
+describe.skipIf(!DEMO_PASSWORD)("appointments / front desk (integration)", () => {
+  let app: FastifyInstance;
+  let frontDeskCookie: string;
+  let doctorCookie: string;
+  let anyAppointmentId: string;
+
+  beforeAll(async () => {
+    app = await buildApp();
+    await app.ready();
+    frontDeskCookie = await loginAs(app, "frontdesk@pulseos.local");
+    doctorCookie = await loginAs(app, "doctor@pulseos.local");
+
+    const res = await app.inject({ method: "GET", url: "/appointments", cookies: { pulseos_session: frontDeskCookie } });
+    const rows = res.json() as AppointmentRow[];
+    anyAppointmentId = rows[0].id;
+  });
+
+  afterAll(async () => {
+    await app.close();
+    await queryClient.end();
+  });
+
+  async function findOpenAppointments(count: number): Promise<AppointmentRow[]> {
+    const list = await app.inject({ method: "GET", url: "/appointments", cookies: { pulseos_session: frontDeskCookie } });
+    const open = (list.json() as AppointmentRow[]).filter((a) => a.status !== "completed" && a.status !== "cancelled" && a.status !== "with_doctor");
+    expect(open.length).toBeGreaterThanOrEqual(count);
+    return open.slice(0, count);
+  }
+
+  it("rejects an unauthenticated request with 401", async () => {
+    const res = await app.inject({ method: "GET", url: "/appointments" });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it("front desk can view appointments and the front-desk dashboard", async () => {
+    const [list, dashboard] = await Promise.all([
+      app.inject({ method: "GET", url: "/appointments", cookies: { pulseos_session: frontDeskCookie } }),
+      app.inject({ method: "GET", url: "/front-desk", cookies: { pulseos_session: frontDeskCookie } }),
+    ]);
+    expect(list.statusCode).toBe(200);
+    expect(dashboard.statusCode).toBe(200);
+    const body = dashboard.json();
+    for (const key of ["today", "arrivals", "waitingQueue", "noShows", "pendingConfirmations"]) {
+      expect(Array.isArray(body[key])).toBe(true);
+    }
+  });
+
+  it("doctor cannot manage (transition) an appointment — VIEW_APPOINTMENTS does not imply MANAGE_APPOINTMENTS", async () => {
+    const res = await app.inject({
+      method: "PATCH",
+      url: `/appointments/${anyAppointmentId}/action`,
+      cookies: { pulseos_session: doctorCookie },
+      payload: { action: "confirm" },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().requiredPermission).toBe("MANAGE_APPOINTMENTS");
+  });
+
+  it("full front-desk transition lifecycle writes Timeline events at each step, ending in a real WAITING state", async () => {
+    const [scheduled] = await findOpenAppointments(1);
+
+    const confirm = await app.inject({
+      method: "PATCH", url: `/appointments/${scheduled.id}/action`, cookies: { pulseos_session: frontDeskCookie }, payload: { action: "confirm" },
+    });
+    expect(confirm.statusCode).toBe(200);
+    expect(confirm.json().status).toBe("confirmed");
+
+    const checkIn = await app.inject({
+      method: "PATCH", url: `/appointments/${scheduled.id}/action`, cookies: { pulseos_session: frontDeskCookie }, payload: { action: "check_in" },
+    });
+    expect(checkIn.json().status).toBe("checked_in");
+
+    const waiting = await app.inject({
+      method: "PATCH", url: `/appointments/${scheduled.id}/action`, cookies: { pulseos_session: frontDeskCookie }, payload: { action: "mark_waiting" },
+    });
+    expect(waiting.statusCode).toBe(200);
+    expect(waiting.json().status).toBe("waiting");
+
+    const sendToDoctor = await app.inject({
+      method: "PATCH", url: `/appointments/${scheduled.id}/action`, cookies: { pulseos_session: frontDeskCookie }, payload: { action: "send_to_doctor" },
+    });
+    expect(sendToDoctor.json().status).toBe("with_doctor");
+
+    const complete = await app.inject({
+      method: "PATCH", url: `/appointments/${scheduled.id}/complete`, cookies: { pulseos_session: frontDeskCookie },
+    });
+    expect(complete.statusCode).toBe(200);
+
+    const timeline = await app.inject({ method: "GET", url: `/patients/${scheduled.patientId}/timeline`, cookies: { pulseos_session: frontDeskCookie } });
+    const eventTypes = (timeline.json() as { eventType: string }[]).map((e) => e.eventType);
+    expect(eventTypes).toContain("appointment_confirmed");
+    expect(eventTypes).toContain("appointment_checked_in");
+    expect(eventTypes).toContain("appointment_waiting");
+    expect(eventTypes).toContain("appointment_with_doctor");
+    expect(eventTypes).toContain("appointment_completed");
+  });
+
+  it("cannot complete an appointment that isn't currently with the doctor", async () => {
+    const [target] = await findOpenAppointments(1);
+    const res = await app.inject({ method: "PATCH", url: `/appointments/${target.id}/complete`, cookies: { pulseos_session: frontDeskCookie } });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toBe("not_with_doctor");
+  });
+
+  it("marking a no-show then rescheduling recovers it back to scheduled, both writing Timeline events", async () => {
+    const [target] = await findOpenAppointments(1);
+
+    const noShow = await app.inject({
+      method: "PATCH", url: `/appointments/${target.id}/action`, cookies: { pulseos_session: frontDeskCookie }, payload: { action: "mark_no_show" },
+    });
+    expect(noShow.json().status).toBe("no_show");
+
+    const newTime = new Date(Date.now() + 7 * 86400000).toISOString();
+    const reschedule = await app.inject({
+      method: "PATCH", url: `/appointments/${target.id}/reschedule`, cookies: { pulseos_session: frontDeskCookie }, payload: { scheduledAt: newTime },
+    });
+    expect(reschedule.statusCode).toBe(200);
+
+    const timeline = await app.inject({ method: "GET", url: `/patients/${target.patientId}/timeline`, cookies: { pulseos_session: frontDeskCookie } });
+    const eventTypes = (timeline.json() as { eventType: string }[]).map((e) => e.eventType);
+    expect(eventTypes).toContain("appointment_no_show");
+    expect(eventTypes).toContain("appointment_rescheduled");
+  });
+});

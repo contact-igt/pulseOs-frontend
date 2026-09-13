@@ -4,13 +4,15 @@ import { Card, SectionHeading } from "./primitives";
 const LABELS: Record<PatientFlowCount["bucket"], string> = {
   confirmed: "Confirmed",
   checked_in: "Checked In",
+  waiting: "Waiting",
   with_doctor: "With Doctor",
   completed: "Completed",
 };
 
 const COLORS: Record<PatientFlowCount["bucket"], string> = {
   confirmed: "var(--color-neutral-300)",
-  checked_in: "var(--color-chart-amber)",
+  checked_in: "var(--color-chart-indigo)",
+  waiting: "var(--color-chart-amber)",
   with_doctor: "var(--color-chart-blue)",
   completed: "var(--color-primary-500)",
 };

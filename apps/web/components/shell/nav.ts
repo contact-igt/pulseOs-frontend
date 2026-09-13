@@ -17,22 +17,23 @@ const FULL_NAV: NavGroup[] = [
     label: "Main",
     items: [
       { label: "Command Centre", href: "/command-centre", icon: "LayoutDashboard", implemented: true },
-      { label: "My Work", href: "/my-work", icon: "ListChecks", implemented: false },
+      { label: "My Work", href: "/my-work", icon: "ListChecks", implemented: true },
     ],
   },
   {
     label: "Patients",
     items: [
-      { label: "Patients", href: "/patients", icon: "Users", implemented: false },
-      { label: "Journeys", href: "/journeys", icon: "GitBranch", implemented: false },
+      { label: "Patients", href: "/patients", icon: "Users", implemented: true },
+      { label: "Journeys", href: "/journeys", icon: "GitBranch", implemented: true },
     ],
   },
   {
     label: "Operations",
     items: [
-      { label: "Appointments", href: "/appointments", icon: "CalendarCheck", implemented: false },
-      { label: "Treatments", href: "/treatment", icon: "Stethoscope", implemented: false },
-      { label: "Inbox", href: "/inbox", icon: "Inbox", implemented: false },
+      { label: "Front Desk", href: "/front-desk", icon: "CalendarCheck", implemented: true },
+      { label: "Appointments", href: "/appointments", icon: "CalendarCheck", implemented: true },
+      { label: "Treatments", href: "/treatment", icon: "Stethoscope", implemented: true },
+      { label: "Inbox", href: "/inbox", icon: "Inbox", implemented: true },
     ],
   },
   {
@@ -61,12 +62,12 @@ const DOCTOR_NAV: NavGroup[] = [
     label: "Patients",
     items: [
       { label: "Appointments", href: "/appointments", icon: "CalendarCheck", implemented: false },
-      { label: "Patients", href: "/patients", icon: "Users", implemented: false },
+      { label: "Patients", href: "/patients", icon: "Users", implemented: true },
     ],
   },
   {
     label: "Operations",
-    items: [{ label: "Follow-ups", href: "/follow-ups", icon: "ListChecks", implemented: false }],
+    items: [{ label: "My Work", href: "/my-work", icon: "ListChecks", implemented: true }],
   },
 ];
 

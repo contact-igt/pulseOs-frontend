@@ -32,4 +32,28 @@ All test-first discipline, independent verification, and commit boundaries from 
 First visual checkpoint = end of Group 7.
 
 ---
+
+## Amendment 2 (2026-09-12): Marketing → Patient Journey Checkpoint
+
+Product purpose refined per [north-star addendum](../specs/2026-09-12-pulseos-marketing-journey-northstar.md) — binding, supersedes any prior dashboard-as-generic-CRM framing. Base architecture (greenfield apps, dedicated `Journey` entity) unchanged.
+
+Work for this checkpoint happens on an isolated worktree/branch (`worktree-marketing-journey-checkpoint`), not directly on `main`, per the process-gap fix from the first checkpoint's report.
+
+New execution groups A–I (superseding the "next: M4" position from the first checkpoint's report):
+
+| Group | Content |
+|---|---|
+| A | Process hardening — worktree isolation, ESLint config, Playwright config, this doc update |
+| B | Marketing/attribution domain — `MarketingCampaign`, `CampaignTouchpoint`, `TimelineEvent`, `ConsultationOutcome`, `TreatmentOpportunity`, `RevenueEvent` tables + migration |
+| C | Deterministic demo dataset extension + attribution formula service + formula tests |
+| D | Admin Command Centre V2 — spend/funnel/spend-at-risk/source-performance |
+| E | Patients + Patient 360 |
+| F | Journeys + dashboard drill-down |
+| G | Unified Timeline (persisted, displayed) |
+| H | Doctor outcome workflow + attribution feedback loop |
+| I | E2E + visual/content/accessibility polish + full checkpoint review |
+
+Stops after Group I for Brain review, per instruction — M4.2 onward (Patients beyond what Group E covers, full M5–M16) resumes after that review.
+
+---
 🤖 Generated with [Claude Code](https://claude.com/claude-code)

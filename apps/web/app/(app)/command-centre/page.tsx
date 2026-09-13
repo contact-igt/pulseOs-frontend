@@ -10,9 +10,9 @@ import {
   JourneyHealthRadial,
   JourneyPerformanceChart,
   KpiStripSection,
-  MarketingPanel,
   PatientFlowBoard,
   Skeleton,
+  SourcePerformanceTable,
   SpendAtRisk,
   TeamPanel,
 } from "@pulseos/ui";
@@ -43,8 +43,8 @@ export default function CommandCentrePage() {
   });
   const patientFlow = useQuery({ queryKey: ["dashboard", "patient-flow", filters], queryFn: () => api.patientFlow(filters) });
   const attention = useQuery({ queryKey: ["dashboard", "attention", filters], queryFn: () => api.attention(filters) });
-  const spendAtRisk = useQuery({ queryKey: ["dashboard", "spend-at-risk", filters], queryFn: () => api.spendAtRisk(filters) });
-  const marketing = useQuery({ queryKey: ["dashboard", "marketing"], queryFn: () => api.marketing() });
+  const spendAtRisk = useQuery({ queryKey: ["dashboard", "spend-at-risk-by-reason"], queryFn: () => api.spendAtRiskByReason() });
+  const sourcePerformance = useQuery({ queryKey: ["dashboard", "source-performance"], queryFn: () => api.sourcePerformance() });
   const team = useQuery({ queryKey: ["dashboard", "team", filters], queryFn: () => api.team(filters) });
   const branchDoctor = useQuery({ queryKey: ["dashboard", "branch-doctor", filters], queryFn: () => api.branchDoctor(filters) });
 
@@ -129,8 +129,8 @@ export default function CommandCentrePage() {
       </div>
 
       <div>
-        {marketing.isLoading ? <Skeleton className="h-56" /> : marketing.isError ? <ErrorState message="Could not load source performance." /> : marketing.data && (
-          <MarketingPanel rows={marketing.data} onSourceClick={(source) => router.push(`/journeys?source=${source}`)} />
+        {sourcePerformance.isLoading ? <Skeleton className="h-56" /> : sourcePerformance.isError ? <ErrorState message="Could not load source performance." /> : sourcePerformance.data && (
+          <SourcePerformanceTable rows={sourcePerformance.data} onRowClick={(row) => router.push(`/journeys?campaignId=${row.campaignId ?? ""}`)} />
         )}
       </div>
 

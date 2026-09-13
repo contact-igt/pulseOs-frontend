@@ -9,8 +9,8 @@ const ROLE_HOME: Record<string, string> = {
   DOCTOR: "/doctor-home",
   HOSPITAL_ADMIN: "/command-centre",
   SUPER_ADMIN: "/command-centre",
-  FRONT_DESK: "/command-centre",
-  PATIENT_COORDINATOR: "/command-centre",
+  FRONT_DESK: "/front-desk",
+  PATIENT_COORDINATOR: "/my-work",
 };
 
 export default function LoginPage() {

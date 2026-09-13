@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, boolean, integer, pgEnum, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, jsonb, pgEnum, index, uniqueIndex } from "drizzle-orm/pg-core";
 
 export const roleEnum = pgEnum("role", ["SUPER_ADMIN", "HOSPITAL_ADMIN", "FRONT_DESK", "PATIENT_COORDINATOR", "DOCTOR"]);
 
@@ -41,7 +41,8 @@ export const sessions = pgTable("sessions", {
   userIdx: index("sessions_user_idx").on(t.userId),
 }));
 
-export const sourceEnum = pgEnum("source_channel", ["meta", "google", "website", "whatsapp", "walk_in", "referral"]);
+export const sourceEnum = pgEnum("source_channel", ["meta", "google", "website", "whatsapp", "walk_in", "referral", "organic", "other"]);
+export type SourceChannelDb = (typeof sourceEnum.enumValues)[number];
 
 export const patients = pgTable("patients", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -75,9 +76,22 @@ export const journeys = pgTable("journeys", {
 }));
 
 export const taskStatusEnum = pgEnum("task_status", ["pending", "in_progress", "completed", "cancelled"]);
+
+// `reason` is the operational-failure bucket used only for Spend-At-Risk
+// categorization (dashboard.service.ts SPEND_AT_RISK_CATEGORIES) — it answers
+// "what acquisition spend is this task protecting," not "what kind of work is
+// this." `type` (below) is the hospital-operational work category shown on
+// Tasks/My Work and answers "what does the assignee actually need to do."
+// The two taxonomies serve different screens and are kept independent.
 export const taskReasonEnum = pgEnum("task_reason", [
   "overdue_callback", "missed_follow_up", "no_show", "high_intent_uncontacted", "treatment_decision_pending", "manual_task",
 ]);
+
+export const taskTypeEnum = pgEnum("task_type", [
+  "CALLBACK", "FOLLOW_UP", "APPOINTMENT_CONFIRMATION", "NO_SHOW_RECOVERY", "TREATMENT_DECISION", "POST_CARE", "RECALL", "OTHER",
+]);
+
+export const taskPriorityEnum = pgEnum("task_priority", ["normal", "high"]);
 
 export const tasks = pgTable("tasks", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -86,15 +100,25 @@ export const tasks = pgTable("tasks", {
   journeyId: uuid("journey_id").references(() => journeys.id),
   assignedTo: uuid("assigned_to").references(() => users.id),
   reason: taskReasonEnum("reason").notNull().default("manual_task"),
+  type: taskTypeEnum("type").notNull().default("OTHER"),
+  priority: taskPriorityEnum("priority").notNull().default("normal"),
   status: taskStatusEnum("status").notNull().default("pending"),
+  notes: text("notes"),
   dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
+  createdBy: uuid("created_by").references(() => users.id),
+  completedBy: uuid("completed_by").references(() => users.id),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   tenantIdx: index("tasks_tenant_idx").on(t.tenantId),
+  assignedIdx: index("tasks_assigned_idx").on(t.assignedTo),
 }));
 
+// "scheduled" is the DB-level synonym for the operational state BOOKED
+// (kept as the original enum value to avoid a risky ALTER TYPE RENAME VALUE
+// migration on live data — display layers show it as "Booked").
 export const appointmentStatusEnum = pgEnum("appointment_status", [
-  "scheduled", "checked_in", "with_doctor", "completed", "no_show", "cancelled",
+  "requested", "scheduled", "confirmed", "checked_in", "waiting", "with_doctor", "completed", "no_show", "cancelled",
 ]);
 
 export const appointments = pgTable("appointments", {
@@ -107,22 +131,176 @@ export const appointments = pgTable("appointments", {
   status: appointmentStatusEnum("status").notNull().default("scheduled"),
   scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
   reason: text("reason"),
-  outcomeRecorded: boolean("outcome_recorded").notNull().default(false),
-  treatmentRecommended: boolean("treatment_recommended").notNull().default(false),
-  revenueAmount: integer("revenue_amount").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   tenantIdx: index("appointments_tenant_idx").on(t.tenantId),
   doctorIdx: index("appointments_doctor_idx").on(t.doctorUserId),
 }));
 
-export const sourceSpend = pgTable("source_spend", {
+// ---------------------------------------------------------------------------
+// Marketing → Patient Journey attribution domain
+// ---------------------------------------------------------------------------
+
+export const campaignStatusEnum = pgEnum("campaign_status", ["active", "paused", "ended"]);
+
+export const marketingCampaigns = pgTable("marketing_campaigns", {
   id: uuid("id").primaryKey().defaultRandom(),
   tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
   source: sourceEnum("source").notNull(),
+  name: text("name").notNull(),
+  externalCampaignId: text("external_campaign_id"),
   spendAmount: integer("spend_amount").notNull().default(0),
+  currency: text("currency").notNull().default("INR"),
+  startDate: timestamp("start_date", { withTimezone: true }).notNull(),
+  endDate: timestamp("end_date", { withTimezone: true }),
+  status: campaignStatusEnum("status").notNull().default("active"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
-  tenantIdx: index("source_spend_tenant_idx").on(t.tenantId),
-  tenantSourceUnique: uniqueIndex("source_spend_tenant_source_unique").on(t.tenantId, t.source),
+  tenantIdx: index("marketing_campaigns_tenant_idx").on(t.tenantId),
+}));
+
+// MVP attribution: one touchpoint per journey. `touchType` is modeled as
+// first_touch | last_touch to leave room for genuine multi-touch capture
+// later (see north-star addendum); today first and last touch coincide.
+export const touchTypeEnum = pgEnum("touch_type", ["first_touch", "last_touch"]);
+
+export const campaignTouchpoints = pgTable("campaign_touchpoints", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  patientId: uuid("patient_id").notNull().references(() => patients.id),
+  journeyId: uuid("journey_id").notNull().references(() => journeys.id),
+  campaignId: uuid("campaign_id").references(() => marketingCampaigns.id),
+  source: sourceEnum("source").notNull(),
+  touchType: touchTypeEnum("touch_type").notNull().default("first_touch"),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+  metadata: jsonb("metadata"),
+}, (t) => ({
+  tenantIdx: index("campaign_touchpoints_tenant_idx").on(t.tenantId),
+  journeyIdx: index("campaign_touchpoints_journey_idx").on(t.journeyId),
+  campaignIdx: index("campaign_touchpoints_campaign_idx").on(t.campaignId),
+}));
+
+export const consultationOutcomeEnum = pgEnum("consultation_outcome_type", [
+  "CONSULTED", "TREATMENT_ADVISED", "NO_TREATMENT_REQUIRED", "DECISION_PENDING", "FOLLOW_UP_REQUIRED", "REFERRED", "OTHER",
+]);
+
+export const consultationOutcomes = pgTable("consultation_outcomes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  patientId: uuid("patient_id").notNull().references(() => patients.id),
+  journeyId: uuid("journey_id").notNull().references(() => journeys.id),
+  appointmentId: uuid("appointment_id").notNull().references(() => appointments.id),
+  outcome: consultationOutcomeEnum("outcome").notNull(),
+  recordedBy: uuid("recorded_by").notNull().references(() => users.id),
+  recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
+  notes: text("notes"),
+}, (t) => ({
+  tenantIdx: index("consultation_outcomes_tenant_idx").on(t.tenantId),
+  appointmentUnique: uniqueIndex("consultation_outcomes_appointment_unique").on(t.appointmentId),
+}));
+
+export const treatmentStatusEnum = pgEnum("treatment_status", [
+  "ADVISED", "DECISION_PENDING", "ACCEPTED", "SCHEDULED", "COMPLETED", "DECLINED", "CANCELLED", "LOST",
+]);
+
+export const treatmentOpportunities = pgTable("treatment_opportunities", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  patientId: uuid("patient_id").notNull().references(() => patients.id),
+  journeyId: uuid("journey_id").notNull().references(() => journeys.id),
+  consultationOutcomeId: uuid("consultation_outcome_id").references(() => consultationOutcomes.id),
+  treatmentLabel: text("treatment_label").notNull(),
+  status: treatmentStatusEnum("status").notNull().default("ADVISED"),
+  estimatedValue: integer("estimated_value").notNull().default(0),
+  ownerUserId: uuid("owner_user_id").references(() => users.id),
+  decisionDate: timestamp("decision_date", { withTimezone: true }),
+  plannedDate: timestamp("planned_date", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  tenantIdx: index("treatment_opportunities_tenant_idx").on(t.tenantId),
+  journeyIdx: index("treatment_opportunities_journey_idx").on(t.journeyId),
+}));
+
+export const revenueEventTypeEnum = pgEnum("revenue_event_type", ["consultation_fee", "treatment_payment", "other"]);
+
+export const revenueEvents = pgTable("revenue_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  patientId: uuid("patient_id").notNull().references(() => patients.id),
+  journeyId: uuid("journey_id").notNull().references(() => journeys.id),
+  treatmentOpportunityId: uuid("treatment_opportunity_id").references(() => treatmentOpportunities.id),
+  amount: integer("amount").notNull(),
+  currency: text("currency").notNull().default("INR"),
+  type: revenueEventTypeEnum("type").notNull().default("treatment_payment"),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+  sourceSystem: text("source_system").notNull().default("manual"),
+}, (t) => ({
+  tenantIdx: index("revenue_events_tenant_idx").on(t.tenantId),
+  journeyIdx: index("revenue_events_journey_idx").on(t.journeyId),
+}));
+
+export const actorTypeEnum = pgEnum("actor_type", ["system", "ai", "user"]);
+
+export const timelineEvents = pgTable("timeline_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  patientId: uuid("patient_id").notNull().references(() => patients.id),
+  journeyId: uuid("journey_id").references(() => journeys.id),
+  actorType: actorTypeEnum("actor_type").notNull().default("system"),
+  actorId: uuid("actor_id"),
+  eventType: text("event_type").notNull(),
+  sourceChannel: text("source_channel"),
+  title: text("title").notNull(),
+  description: text("description"),
+  relatedEntityType: text("related_entity_type"),
+  relatedEntityId: uuid("related_entity_id"),
+  metadata: jsonb("metadata"),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  tenantIdx: index("timeline_events_tenant_idx").on(t.tenantId),
+  patientIdx: index("timeline_events_patient_idx").on(t.patientId),
+  journeyIdx: index("timeline_events_journey_idx").on(t.journeyId),
+  occurredIdx: index("timeline_events_occurred_idx").on(t.occurredAt),
+}));
+
+// ---------------------------------------------------------------------------
+// Inbox — PulseOS-native conversation shell (Group P). Demo/persisted data
+// only in this checkpoint; no live channel provider is wired yet.
+// ---------------------------------------------------------------------------
+
+export const conversationChannelEnum = pgEnum("conversation_channel", ["WHATSAPP", "CALL", "SMS", "EMAIL", "INTERNAL"]);
+export const ownershipStateEnum = pgEnum("ownership_state", [
+  "AI_ACTIVE", "HUMAN_REQUIRED", "HUMAN_ASSIGNED", "HUMAN_ACTIVE", "AI_RESUME_PENDING", "CLOSED",
+]);
+
+export const conversations = pgTable("conversations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  patientId: uuid("patient_id").notNull().references(() => patients.id),
+  journeyId: uuid("journey_id").references(() => journeys.id),
+  channel: conversationChannelEnum("channel").notNull().default("WHATSAPP"),
+  ownershipState: ownershipStateEnum("ownership_state").notNull().default("AI_ACTIVE"),
+  assignedTo: uuid("assigned_to").references(() => users.id),
+  lastMessageAt: timestamp("last_message_at", { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  tenantIdx: index("conversations_tenant_idx").on(t.tenantId),
+  patientIdx: index("conversations_patient_idx").on(t.patientId),
+}));
+
+export const messageSenderEnum = pgEnum("message_sender", ["patient", "staff", "ai", "system"]);
+
+export const messages = pgTable("messages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  conversationId: uuid("conversation_id").notNull().references(() => conversations.id),
+  senderType: messageSenderEnum("sender_type").notNull(),
+  senderUserId: uuid("sender_user_id").references(() => users.id),
+  body: text("body").notNull(),
+  sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+  readAt: timestamp("read_at", { withTimezone: true }),
+}, (t) => ({
+  conversationIdx: index("messages_conversation_idx").on(t.conversationId),
 }));

@@ -1,17 +1,39 @@
 import type {
+  AppointmentAction,
+  AppointmentRow,
+  AppointmentStatus,
   AttentionItem,
   Branch,
   BranchDoctorRow,
+  FrontDeskDashboard,
+  ConsultationOutcomeValue,
+  ConversationChannel,
+  ConversationDetail,
+  ConversationRow,
   ConversionStage,
+  CreateTaskInput,
   DoctorDashboard,
+  ExecutiveStrip,
   JourneyHealth,
+  JourneyListRow,
   JourneyPerformancePoint,
+  JourneysSummary,
+  Lookups,
   MarketingSourceRow,
+  OwnershipState,
+  Patient360,
   PatientFlowCount,
+  PatientListRow,
   SessionUser,
+  SourcePerformanceRow,
   SpendAtRisk,
+  SpendAtRiskSummary,
+  TaskRow,
+  TaskView,
   TeamWorkloadRow,
   TodayStrip,
+  TreatmentRow,
+  TreatmentStatus,
 } from "@pulseos/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
@@ -37,11 +59,40 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-function qs(params: object) {
-  const entries = (Object.entries(params) as [string, string | undefined][]).filter(([, v]) => v !== undefined && v !== "");
-  if (entries.length === 0) return "";
-  return `?${new URLSearchParams(entries as [string, string][]).toString()}`;
+export interface TimelineEventVm {
+  id: string;
+  eventType: string;
+  title: string;
+  description: string | null;
+  sourceChannel: string | null;
+  occurredAt: string;
+  category: "communication" | "appointments" | "clinical" | "tasks" | "other";
 }
+
+export interface PatientListFilters {
+  search?: string;
+  branchId?: string;
+  source?: string;
+  stage?: string;
+}
+
+export interface JourneyFilters {
+  source?: string;
+  campaignId?: string;
+  branchId?: string;
+  stage?: string;
+  ownerId?: string;
+  doctorId?: string;
+}
+
+function toQuery(params: object): string {
+  const entries = (Object.entries(params) as [string, string | undefined | null][]).filter(([, v]) => v !== undefined && v !== null && v !== "");
+  if (entries.length === 0) return "";
+  return "?" + new URLSearchParams(entries as [string, string][]).toString();
+}
+
+/** Same as toQuery, kept under the flagship checkpoint's original name for its own call sites below. */
+const qs = toQuery;
 
 export interface DashboardQuery {
   branchId?: string;
@@ -56,17 +107,55 @@ export const api = {
   branches: () => request<Branch[]>("/branches"),
   journeyTypes: () => request<string[]>("/journey-types"),
   today: (f: DashboardQuery = {}) => request<TodayStrip>(`/dashboard/today${qs(f)}`),
+  executive: () => request<ExecutiveStrip>("/dashboard/executive"),
   conversion: (f: DashboardQuery = {}) => request<ConversionStage[]>(`/dashboard/conversion${qs(f)}`),
   journeyHealth: (f: DashboardQuery = {}) => request<JourneyHealth>(`/dashboard/journey-health${qs(f)}`),
   journeyPerformance: (days: number, f: DashboardQuery = {}) =>
     request<JourneyPerformancePoint[]>(`/dashboard/journey-performance${qs({ ...f, days: String(days) })}`),
   patientFlow: (f: DashboardQuery = {}) => request<PatientFlowCount[]>(`/dashboard/patient-flow${qs(f)}`),
   attention: (f: DashboardQuery = {}) => request<AttentionItem[]>(`/dashboard/attention${qs(f)}`),
-  spendAtRisk: (f: DashboardQuery = {}) => request<SpendAtRisk>(`/dashboard/spend-at-risk${qs(f)}`),
+  spendAtRisk: () => request<SpendAtRiskSummary>("/dashboard/spend-at-risk"),
+  spendAtRiskByReason: () => request<SpendAtRisk>("/dashboard/spend-at-risk-by-reason"),
+  sourcePerformance: () => request<SourcePerformanceRow[]>("/dashboard/source-performance"),
   marketing: () => request<MarketingSourceRow[]>("/dashboard/marketing"),
   team: (f: DashboardQuery = {}) => request<TeamWorkloadRow[]>(`/dashboard/team${qs(f)}`),
   branchDoctor: (f: DashboardQuery = {}) => request<BranchDoctorRow[]>(`/dashboard/branch-doctor${qs(f)}`),
   doctorDashboard: () => request<DoctorDashboard>("/dashboard/doctor"),
+  patients: (filters: PatientListFilters = {}) => request<PatientListRow[]>(`/patients${toQuery({ ...filters })}`),
+  patient360: (id: string) => request<Patient360>(`/patients/${id}/360`),
+  patientTimeline: (id: string, journeyId?: string) => request<TimelineEventVm[]>(`/patients/${id}/timeline${toQuery({ journeyId })}`),
+  journeys: (filters: JourneyFilters = {}) => request<JourneyListRow[]>(`/journeys${toQuery({ ...filters })}`),
+  journeysSummary: () => request<JourneysSummary>("/journeys/summary"),
+  recordOutcome: (appointmentId: string, input: { outcome: ConsultationOutcomeValue; notes?: string; treatmentLabel?: string; estimatedValue?: number }) =>
+    request<{ ok: true }>(`/appointments/${appointmentId}/outcome`, { method: "POST", body: JSON.stringify(input) }),
+  lookups: () => request<Lookups>("/lookups"),
+  tasks: (filters: { view?: TaskView; assignedTo?: string; patientId?: string } = {}) =>
+    request<TaskRow[]>(`/tasks${toQuery({ ...filters })}`),
+  createTask: (input: CreateTaskInput) => request<TaskRow>("/tasks", { method: "POST", body: JSON.stringify(input) }),
+  addTaskNote: (id: string, notes: string) => request<TaskRow>(`/tasks/${id}/note`, { method: "PATCH", body: JSON.stringify({ notes }) }),
+  rescheduleTask: (id: string, dueAt: string) => request<TaskRow>(`/tasks/${id}/reschedule`, { method: "PATCH", body: JSON.stringify({ dueAt }) }),
+  reassignTask: (id: string, assignedTo: string) => request<TaskRow>(`/tasks/${id}/reassign`, { method: "PATCH", body: JSON.stringify({ assignedTo }) }),
+  completeTask: (id: string) => request<TaskRow>(`/tasks/${id}/complete`, { method: "PATCH", body: JSON.stringify({}) }),
+  appointments: (filters: { branchId?: string; doctorId?: string; status?: AppointmentStatus; date?: string; search?: string } = {}) =>
+    request<AppointmentRow[]>(`/appointments${toQuery({ ...filters })}`),
+  frontDesk: (branchId?: string) => request<FrontDeskDashboard>(`/front-desk${toQuery({ branchId })}`),
+  appointmentAction: (id: string, action: AppointmentAction) =>
+    request<{ ok: true; status: AppointmentStatus }>(`/appointments/${id}/action`, { method: "PATCH", body: JSON.stringify({ action }) }),
+  completeAppointment: (id: string) => request<{ ok: true }>(`/appointments/${id}/complete`, { method: "PATCH", body: JSON.stringify({}) }),
+  rescheduleAppointment: (id: string, scheduledAt: string) =>
+    request<{ ok: true }>(`/appointments/${id}/reschedule`, { method: "PATCH", body: JSON.stringify({ scheduledAt }) }),
+  treatments: (filters: { status?: TreatmentStatus; ownerId?: string } = {}) => request<TreatmentRow[]>(`/treatments${toQuery({ ...filters })}`),
+  updateTreatmentStatus: (id: string, status: TreatmentStatus, plannedDate?: string) =>
+    request<{ ok: true }>(`/treatments/${id}/status`, { method: "PATCH", body: JSON.stringify({ status, plannedDate }) }),
+  conversations: (filters: { channel?: ConversationChannel; ownershipState?: OwnershipState; search?: string } = {}) =>
+    request<ConversationRow[]>(`/conversations${toQuery({ ...filters })}`),
+  conversation: (id: string) => request<ConversationDetail>(`/conversations/${id}`),
+  sendConversationMessage: (id: string, body: string) =>
+    request<{ ok: true }>(`/conversations/${id}/messages`, { method: "POST", body: JSON.stringify({ body }) }),
+  claimConversation: (id: string) => request<{ ok: true }>(`/conversations/${id}/claim`, { method: "PATCH", body: JSON.stringify({}) }),
+  assignConversation: (id: string, assignedTo: string) =>
+    request<{ ok: true }>(`/conversations/${id}/assign`, { method: "PATCH", body: JSON.stringify({ assignedTo }) }),
+  returnConversationToAi: (id: string) => request<{ ok: true }>(`/conversations/${id}/return-to-ai`, { method: "PATCH", body: JSON.stringify({}) }),
 };
 
 export { ApiError };

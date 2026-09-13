@@ -1,6 +1,6 @@
-import { and, desc, eq, gte, lt } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
-import { appointments, journeys, patients } from "../../db/schema.js";
+import { appointments, consultationOutcomes, journeys, patients, treatmentOpportunities } from "../../db/schema.js";
 import type { DoctorDashboard, DoctorRecentPatient, DoctorTodayItem } from "@pulseos/types";
 
 function todayRange() {
@@ -21,13 +21,14 @@ export async function getDoctorDashboard(db: Db, tenantId: string, doctorUserId:
       scheduledAt: appointments.scheduledAt,
       patientName: patients.name,
       journeyType: journeys.journeyType,
+      journeyId: appointments.journeyId,
       reason: appointments.reason,
-      outcomeRecorded: appointments.outcomeRecorded,
-      treatmentRecommended: appointments.treatmentRecommended,
+      hasOutcome: consultationOutcomes.id,
     })
     .from(appointments)
     .innerJoin(patients, eq(appointments.patientId, patients.id))
     .innerJoin(journeys, eq(appointments.journeyId, journeys.id))
+    .leftJoin(consultationOutcomes, eq(consultationOutcomes.appointmentId, appointments.id))
     .where(
       and(
         eq(appointments.tenantId, tenantId),
@@ -45,14 +46,14 @@ export async function getDoctorDashboard(db: Db, tenantId: string, doctorUserId:
     status: r.status,
   }));
 
-  const waitingNow = rows.filter((r) => r.status === "checked_in").length;
+  const waitingNow = rows.filter((r) => r.status === "checked_in" || r.status === "waiting").length;
   const withMeCount = rows.filter((r) => r.status === "with_doctor").length;
-  const checkedInCount = rows.filter((r) => r.status === "checked_in" || r.status === "with_doctor" || r.status === "completed").length;
+  const checkedInCount = rows.filter((r) => r.status === "checked_in" || r.status === "waiting" || r.status === "with_doctor" || r.status === "completed").length;
   const completedCount = rows.filter((r) => r.status === "completed").length;
   const eligibleForCompletion = rows.filter((r) => r.status !== "cancelled").length;
   const completionPct = eligibleForCompletion > 0 ? Math.round((completedCount / eligibleForCompletion) * 100) : 0;
 
-  const nextRow = rows.find((r) => r.status === "scheduled" || r.status === "checked_in");
+  const nextRow = rows.find((r) => r.status === "scheduled" || r.status === "confirmed" || r.status === "checked_in" || r.status === "waiting");
   const nextPatient = nextRow
     ? {
         appointmentId: nextRow.id,
@@ -64,11 +65,22 @@ export async function getDoctorDashboard(db: Db, tenantId: string, doctorUserId:
     : null;
 
   const awaitingOutcome: DoctorTodayItem[] = rows
-    .filter((r) => r.status === "completed" && !r.outcomeRecorded)
+    .filter((r) => r.status === "completed" && !r.hasOutcome)
     .map((r) => ({ appointmentId: r.id, patientName: r.patientName, time: r.scheduledAt.toISOString(), status: r.status }));
 
+  // Treatment Follow-ups: today's journeys with a treatment opportunity still
+  // awaiting the patient's decision or acceptance — real domain state, not a flag.
+  const todayJourneyIds = rows.map((r) => r.journeyId).filter((id): id is string => id !== null);
+  const pendingTreatmentJourneyIds = new Set<string>();
+  if (todayJourneyIds.length > 0) {
+    const openTreatments = await db
+      .select({ journeyId: treatmentOpportunities.journeyId })
+      .from(treatmentOpportunities)
+      .where(and(eq(treatmentOpportunities.tenantId, tenantId), inArray(treatmentOpportunities.journeyId, todayJourneyIds), inArray(treatmentOpportunities.status, ["ADVISED", "DECISION_PENDING"])));
+    for (const t of openTreatments) pendingTreatmentJourneyIds.add(t.journeyId);
+  }
   const treatmentFollowUps: DoctorTodayItem[] = rows
-    .filter((r) => r.treatmentRecommended)
+    .filter((r) => r.journeyId && pendingTreatmentJourneyIds.has(r.journeyId))
     .map((r) => ({ appointmentId: r.id, patientName: r.patientName, time: r.scheduledAt.toISOString(), status: r.status }));
 
   const pastRows = await db
@@ -78,18 +90,20 @@ export async function getDoctorDashboard(db: Db, tenantId: string, doctorUserId:
       scheduledAt: appointments.scheduledAt,
       patientName: patients.name,
       journeyType: journeys.journeyType,
-      outcomeRecorded: appointments.outcomeRecorded,
-      treatmentRecommended: appointments.treatmentRecommended,
+      hasOutcome: consultationOutcomes.id,
+      outcome: consultationOutcomes.outcome,
     })
     .from(appointments)
     .innerJoin(patients, eq(appointments.patientId, patients.id))
     .innerJoin(journeys, eq(appointments.journeyId, journeys.id))
+    .leftJoin(consultationOutcomes, eq(consultationOutcomes.appointmentId, appointments.id))
     .where(and(eq(appointments.tenantId, tenantId), eq(appointments.doctorUserId, doctorUserId), eq(appointments.status, "completed"), lt(appointments.scheduledAt, start)))
     .orderBy(desc(appointments.scheduledAt))
     .limit(10);
 
+  // Post-care / Reviews: seen, no treatment required — routine follow-up candidates.
   const postCare: DoctorTodayItem[] = pastRows
-    .filter((r) => r.outcomeRecorded && !r.treatmentRecommended)
+    .filter((r) => r.outcome === "NO_TREATMENT_REQUIRED")
     .map((r) => ({ appointmentId: r.id, patientName: r.patientName, time: r.scheduledAt.toISOString(), status: r.status }));
 
   const recentPatients: DoctorRecentPatient[] = pastRows.map((r) => ({

@@ -10,6 +10,13 @@ import { TopBar } from "../../components/shell/TopBar";
 const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   "/command-centre": { title: "Command Centre", subtitle: "Hospital engagement operation at a glance" },
   "/doctor-home": { title: "Command Centre", subtitle: "Your patients and schedule for today" },
+  "/my-work": { title: "My Work", subtitle: "Tasks, callbacks and follow-ups assigned to you" },
+  "/journeys": { title: "Journeys", subtitle: "The operational surface behind the Command Centre's numbers" },
+  "/patients": { title: "Patients", subtitle: "Every patient across every journey" },
+  "/front-desk": { title: "Front Desk", subtitle: "Today's arrivals, waiting queue and confirmations" },
+  "/appointments": { title: "Appointments", subtitle: "Every appointment, every state" },
+  "/treatment": { title: "Treatments", subtitle: "Operational conversion tracking, not an EMR" },
+  "/inbox": { title: "Inbox", subtitle: "Every patient conversation, one queue" },
 };
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -30,11 +37,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const meta = PAGE_META[pathname] ?? { title: "PulseOS", subtitle: undefined };
 
   return (
-    <div className="flex">
+    <div className="flex h-screen overflow-hidden">
       <Sidebar user={data.user} />
-      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col">
         <TopBar user={data.user} title={meta.title} subtitle={meta.subtitle} />
-        <main className="flex-1 overflow-x-hidden bg-neutral-50 p-6">{children}</main>
+        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-neutral-50 p-6">{children}</main>
       </div>
     </div>
   );
