@@ -324,6 +324,7 @@ export interface JourneyCardVm {
   doctorName: string | null;
   treatmentStatus: string | null;
   treatmentLabel: string | null;
+  lastInteractionAt: string | null;
 }
 
 export interface Patient360 {

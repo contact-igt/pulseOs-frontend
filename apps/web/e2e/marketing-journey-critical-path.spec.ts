@@ -15,17 +15,17 @@ test.describe("Marketing → Patient Journey critical path", () => {
   test("admin login shows the Command Centre with real spend and revenue", async ({ page }) => {
     await login(page, "admin@pulseos.local");
     await expect(page).toHaveURL(/\/command-centre/);
-    await expect(page.getByText("Marketing Spend")).toBeVisible();
+    await expect(page.getByText("Attributed revenue")).toBeVisible();
     await expect(page.getByText("Spend At Risk").first()).toBeVisible();
-    await expect(page.getByText("Journey Funnel")).toBeVisible();
+    await expect(page.getByText("Patient Journey Performance")).toBeVisible();
     await expect(page.getByText("Source / Campaign Performance")).toBeVisible();
   });
 
-  test("clicking a Spend At Risk category drills into filtered Journeys", async ({ page }) => {
+  test("clicking a Spend At Risk category drills into filtered Patients", async ({ page }) => {
     await login(page, "admin@pulseos.local");
-    await page.getByText("Uncontacted").first().click();
-    await expect(page).toHaveURL(/\/journeys\?atRisk=uncontacted/);
-    await expect(page.getByTestId("journeys-page")).toBeVisible();
+    await page.getByTestId("spend-risk-high_intent_uncontacted").click();
+    await expect(page).toHaveURL(/\/patients\?filter=high_intent_uncontacted/);
+    await expect(page.getByTestId("patients-page")).toBeVisible();
   });
 
   test("opening a journey reaches Patient 360 with acquisition context and multiple journeys", async ({ page }) => {

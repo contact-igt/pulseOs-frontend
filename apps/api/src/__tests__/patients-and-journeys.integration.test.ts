@@ -39,6 +39,15 @@ describe.skipIf(!DEMO_PASSWORD)("patients and journeys (integration)", () => {
     expect(body.journeys.length).toBeGreaterThanOrEqual(2);
     const types = body.journeys.map((j: { journeyType: string }) => j.journeyType);
     expect(new Set(types).size).toBeGreaterThanOrEqual(2); // Fertility + Pregnancy, distinct
+
+    // Patient 360's card fields prioritize operational state (owner, doctor, next
+    // appointment, treatment status, last interaction) over acquisition data.
+    for (const journey of body.journeys as Record<string, unknown>[]) {
+      expect(journey).toHaveProperty("lastInteractionAt");
+      expect(typeof journey.lastInteractionAt === "string" || journey.lastInteractionAt === null).toBe(true);
+    }
+    const fertilityJourney = (body.journeys as { journeyType: string; lastInteractionAt: string | null }[]).find((j) => j.journeyType === "Fertility");
+    expect(fertilityJourney?.lastInteractionAt).toBeTruthy();
   });
 
   it("Patient 360 returns 404 for a patient id that does not exist in this tenant", async () => {

@@ -25,15 +25,18 @@ function JourneyCard({ journey, active, onClick }: { journey: JourneyCardVm; act
         <Badge tone={journey.stage === "lost" ? "danger" : "primary"}>{journey.stage.replace(/_/g, " ")}</Badge>
       </div>
       <dl className="mt-2 space-y-0.5 text-xs text-neutral-500">
-        <div className="flex justify-between"><dt>Source</dt><dd>{journey.source}</dd></div>
         <div className="flex justify-between"><dt>Owner</dt><dd>{journey.ownerName ?? "—"}</dd></div>
+        <div className="flex justify-between"><dt>Doctor</dt><dd>{journey.doctorName ?? "—"}</dd></div>
+        <div className="flex justify-between"><dt>Last interaction</dt><dd>{fmtDate(journey.lastInteractionAt)}</dd></div>
         <div className="flex justify-between"><dt>Next action</dt><dd>{fmtDate(journey.nextActionDueAt)}</dd></div>
-        {journey.appointmentTime && (
-          <div className="flex justify-between"><dt>Appointment</dt><dd>{fmtDate(journey.appointmentTime)} · {journey.appointmentStatus}</dd></div>
-        )}
-        {journey.treatmentLabel && (
-          <div className="flex justify-between"><dt>Treatment</dt><dd>{journey.treatmentLabel} · {journey.treatmentStatus}</dd></div>
-        )}
+        <div className="flex justify-between">
+          <dt>Next appointment</dt>
+          <dd>{journey.appointmentTime ? `${fmtDate(journey.appointmentTime)} · ${journey.appointmentStatus}` : "—"}</dd>
+        </div>
+        <div className="flex justify-between">
+          <dt>Treatment status</dt>
+          <dd>{journey.treatmentLabel ? `${journey.treatmentLabel} · ${journey.treatmentStatus}` : "—"}</dd>
+        </div>
       </dl>
     </button>
   );
@@ -71,41 +74,10 @@ export default function Patient360Page() {
   return (
     <div className="mx-auto max-w-5xl space-y-6" data-testid="patient-360">
       <Card className="p-5">
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-slate-900">{patient.name}</h1>
-            <p className="mt-0.5 text-sm text-neutral-500">
-              {patient.phone} · {patient.preferredLanguage} · {patient.branchName ?? "No branch"}
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-4 grid grid-cols-2 gap-4 border-t border-neutral-100 pt-4 sm:grid-cols-4">
-          <div>
-            <span className="block text-[11px] uppercase tracking-wide text-neutral-400">Source</span>
-            <span className="text-sm text-slate-900">{acquisition.source ?? "—"}</span>
-          </div>
-          <div>
-            <span className="block text-[11px] uppercase tracking-wide text-neutral-400">Campaign</span>
-            <span className="text-sm text-slate-900">{acquisition.campaignName ?? "Organic / No campaign"}</span>
-          </div>
-          <div>
-            <span className="block text-[11px] uppercase tracking-wide text-neutral-400">First touch</span>
-            <span className="text-sm text-slate-900">{fmtDate(acquisition.firstTouchAt)}</span>
-          </div>
-          <div>
-            <span className="block text-[11px] uppercase tracking-wide text-neutral-400">Acquisition cost</span>
-            <span className="text-sm text-slate-900">{formatMoneyOrDash(acquisition.allocatedAcquisitionCost)}</span>
-          </div>
-          <div>
-            <span className="block text-[11px] uppercase tracking-wide text-neutral-400">Est. treatment value</span>
-            <span className="text-sm text-slate-900">{formatInr(acquisition.estimatedTreatmentValue)}</span>
-          </div>
-          <div>
-            <span className="block text-[11px] uppercase tracking-wide text-neutral-400">Attributed revenue</span>
-            <span className="text-sm font-medium text-primary-700">{formatInr(acquisition.attributedRevenue)}</span>
-          </div>
-        </div>
+        <h1 className="text-xl font-semibold text-slate-900">{patient.name}</h1>
+        <p className="mt-0.5 text-sm text-neutral-500">
+          {patient.phone} · {patient.preferredLanguage} · {patient.branchName ?? "No branch"}
+        </p>
       </Card>
 
       <div>
@@ -143,6 +115,36 @@ export default function Patient360Page() {
       ) : (
         timeline.data && <Timeline events={timeline.data} />
       )}
+
+      <div className="rounded-lg border border-neutral-100 bg-neutral-50 p-4">
+        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-400">Acquisition &amp; revenue</h2>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+          <div>
+            <span className="block text-[11px] uppercase tracking-wide text-neutral-400">Source</span>
+            <span className="text-sm text-slate-700">{acquisition.source ?? "—"}</span>
+          </div>
+          <div>
+            <span className="block text-[11px] uppercase tracking-wide text-neutral-400">Campaign</span>
+            <span className="text-sm text-slate-700">{acquisition.campaignName ?? "Organic / No campaign"}</span>
+          </div>
+          <div>
+            <span className="block text-[11px] uppercase tracking-wide text-neutral-400">First touch</span>
+            <span className="text-sm text-slate-700">{fmtDate(acquisition.firstTouchAt)}</span>
+          </div>
+          <div>
+            <span className="block text-[11px] uppercase tracking-wide text-neutral-400">Acquisition cost</span>
+            <span className="text-sm text-slate-700">{formatMoneyOrDash(acquisition.allocatedAcquisitionCost)}</span>
+          </div>
+          <div>
+            <span className="block text-[11px] uppercase tracking-wide text-neutral-400">Est. treatment value</span>
+            <span className="text-sm text-slate-700">{formatInr(acquisition.estimatedTreatmentValue)}</span>
+          </div>
+          <div>
+            <span className="block text-[11px] uppercase tracking-wide text-neutral-400">Attributed revenue</span>
+            <span className="text-sm font-medium text-slate-700">{formatInr(acquisition.attributedRevenue)}</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

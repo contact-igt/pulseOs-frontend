@@ -175,6 +175,13 @@ export async function getPatient360(db: Db, tenantId: string, patientId: string)
       .orderBy(desc(treatmentOpportunities.createdAt))
       .limit(1);
 
+    const [lastEvent] = await db
+      .select({ occurredAt: timelineEvents.occurredAt })
+      .from(timelineEvents)
+      .where(eq(timelineEvents.journeyId, j.id))
+      .orderBy(desc(timelineEvents.occurredAt))
+      .limit(1);
+
     journeyCards.push({
       id: j.id,
       journeyType: j.journeyType,
@@ -187,6 +194,7 @@ export async function getPatient360(db: Db, tenantId: string, patientId: string)
       doctorName: appt?.doctorName ?? null,
       treatmentStatus: treatment?.status ?? null,
       treatmentLabel: treatment?.label ?? null,
+      lastInteractionAt: lastEvent ? lastEvent.occurredAt.toISOString() : null,
     });
   }
 
