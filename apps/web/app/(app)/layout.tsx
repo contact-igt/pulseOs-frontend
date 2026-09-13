@@ -17,6 +17,7 @@ const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   "/appointments": { title: "Appointments", subtitle: "Every appointment, every state" },
   "/treatment": { title: "Treatments", subtitle: "Operational conversion tracking, not an EMR" },
   "/inbox": { title: "Inbox", subtitle: "Every patient conversation, one queue" },
+  "/integrations": { title: "Integrations", subtitle: "Connected providers and their health" },
 };
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
