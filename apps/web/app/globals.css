@@ -3,37 +3,37 @@
 @source "../../../packages/ui/src/**/*.{ts,tsx}";
 
 @theme {
-  --color-primary-50: #eef5f1;
-  --color-primary-100: #d4e6db;
-  --color-primary-200: #a9cdb8;
-  --color-primary-300: #7cb293;
-  --color-primary-400: #549a76;
-  --color-primary-500: #2f6b4e;
-  --color-primary-600: #1f4f39;
-  --color-primary-700: #173d2c;
-  --color-primary-800: #102b1f;
-  --color-primary-900: #0a1c14;
+  --color-primary-50: #eef4fc;
+  --color-primary-100: #d9e8f9;
+  --color-primary-200: #b3d1f3;
+  --color-primary-300: #7fb2ea;
+  --color-primary-400: #4a8fdc;
+  --color-primary-500: #2569c7;
+  --color-primary-600: #1a52a3;
+  --color-primary-700: #163f7d;
+  --color-primary-800: #142f5c;
+  --color-primary-900: #0f2140;
 
-  --color-accent-100: #dff5ec;
-  --color-accent-300: #a6e4cc;
-  --color-accent-500: #5fcba0;
-  --color-accent-700: #2f8f6c;
+  --color-accent-100: #d7f5f2;
+  --color-accent-300: #8fe3da;
+  --color-accent-500: #2bb8ab;
+  --color-accent-700: #1c8a80;
 
   --color-neutral-0: #ffffff;
-  --color-neutral-50: #faf9f6;
-  --color-neutral-100: #f2f1ec;
-  --color-neutral-200: #e4e2da;
-  --color-neutral-300: #cdcac0;
-  --color-neutral-400: #a8a49a;
-  --color-neutral-500: #7d7a72;
-  --color-neutral-600: #5b584f;
-  --color-neutral-700: #403d36;
-  --color-neutral-800: #2a2823;
-  --color-neutral-900: #181712;
+  --color-neutral-50: #f6f8fb;
+  --color-neutral-100: #eef2f7;
+  --color-neutral-200: #dde5ee;
+  --color-neutral-300: #c3d0dd;
+  --color-neutral-400: #97a8ba;
+  --color-neutral-500: #71829d;
+  --color-neutral-600: #52627a;
+  --color-neutral-700: #3a4759;
+  --color-neutral-800: #26303f;
+  --color-neutral-900: #161d29;
 
-  --color-slate-500: #5a6472;
-  --color-slate-700: #33394a;
-  --color-slate-900: #1a1e29;
+  --color-slate-500: #52627a;
+  --color-slate-700: #2c3648;
+  --color-slate-900: #131a26;
 
   --color-warning-100: #fdf1d8;
   --color-warning-500: #c98a1f;
@@ -43,8 +43,8 @@
   --color-danger-500: #c14634;
   --color-danger-700: #8f2f22;
 
-  --color-chart-blue: #3b6fb0;
-  --color-chart-teal: #2f8f8a;
+  --color-chart-blue: #2569c7;
+  --color-chart-teal: #2bb8ab;
   --color-chart-indigo: #5b5fc7;
   --color-chart-amber: #c98a1f;
   --color-chart-violet: #8a5fb0;

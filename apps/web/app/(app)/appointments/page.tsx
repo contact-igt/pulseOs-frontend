@@ -2,9 +2,8 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
 import { api } from "@pulseos/api-client";
-import { AppointmentList, ErrorState, Skeleton } from "@pulseos/ui";
+import { AppointmentDrawer, AppointmentList, ErrorState, Skeleton } from "@pulseos/ui";
 import type { AppointmentAction, AppointmentRow } from "@pulseos/types";
 
 type ViewTab = "today" | "upcoming" | "no_show" | "completed";
@@ -25,12 +24,18 @@ function todayIso() {
 }
 
 export default function AppointmentsPage() {
-  const router = useRouter();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<ViewTab>("today");
   const [branchId, setBranchId] = useState("");
   const [doctorId, setDoctorId] = useState("");
   const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<AppointmentRow | null>(null);
+
+  const timeline = useQuery({
+    queryKey: ["timeline", selected?.patientId, selected?.journeyId],
+    queryFn: () => api.patientTimeline(selected!.patientId, selected!.journeyId),
+    enabled: !!selected,
+  });
 
   const lookups = useQuery({ queryKey: ["lookups"], queryFn: api.lookups });
 
@@ -50,16 +55,25 @@ export default function AppointmentsPage() {
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: ["appointments"] });
+    queryClient.invalidateQueries({ queryKey: ["timeline"] });
   }
 
   async function handleAction(row: AppointmentRow, action: AppointmentAction) {
     await api.appointmentAction(row.id, action);
     invalidate();
+    setSelected(null);
   }
 
   async function handleComplete(row: AppointmentRow) {
     await api.completeAppointment(row.id);
     invalidate();
+    setSelected(null);
+  }
+
+  async function handleReschedule(row: AppointmentRow, newIso: string) {
+    await api.rescheduleAppointment(row.id, newIso);
+    invalidate();
+    setSelected(null);
   }
 
   const rows = appointments.data ?? [];
@@ -119,10 +133,19 @@ export default function AppointmentsPage() {
           rows={searched}
           onAction={handleAction}
           onComplete={handleComplete}
-          onRowClick={(row) => router.push(`/patients/${row.patientId}`)}
+          onRowClick={(row) => setSelected(row)}
           emptyMessage="No appointments match these filters."
         />
       )}
+
+      <AppointmentDrawer
+        appointment={selected}
+        recentEvents={timeline.data}
+        onClose={() => setSelected(null)}
+        onAction={handleAction}
+        onComplete={handleComplete}
+        onReschedule={handleReschedule}
+      />
     </div>
   );
 }

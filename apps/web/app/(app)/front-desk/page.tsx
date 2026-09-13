@@ -2,9 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
 import { api } from "@pulseos/api-client";
-import { AppointmentList, Card, ErrorState, PatientFlowBoard, Skeleton } from "@pulseos/ui";
+import { AppointmentDrawer, AppointmentList, Card, ErrorState, PatientFlowBoard, Skeleton } from "@pulseos/ui";
 import type { AppointmentAction, AppointmentRow, PatientFlowCount } from "@pulseos/types";
 
 function buildFlow(today: AppointmentRow[]): PatientFlowCount[] {
@@ -20,24 +19,38 @@ function buildFlow(today: AppointmentRow[]): PatientFlowCount[] {
 }
 
 export default function FrontDeskPage() {
-  const router = useRouter();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<AppointmentRow | null>(null);
 
   const dashboard = useQuery({ queryKey: ["front-desk"], queryFn: () => api.frontDesk() });
+  const timeline = useQuery({
+    queryKey: ["timeline", selected?.patientId, selected?.journeyId],
+    queryFn: () => api.patientTimeline(selected!.patientId, selected!.journeyId),
+    enabled: !!selected,
+  });
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: ["front-desk"] });
+    queryClient.invalidateQueries({ queryKey: ["timeline"] });
   }
 
   async function handleAction(row: AppointmentRow, action: AppointmentAction) {
     await api.appointmentAction(row.id, action);
     invalidate();
+    setSelected(null);
   }
 
   async function handleComplete(row: AppointmentRow) {
     await api.completeAppointment(row.id);
     invalidate();
+    setSelected(null);
+  }
+
+  async function handleReschedule(row: AppointmentRow, newIso: string) {
+    await api.rescheduleAppointment(row.id, newIso);
+    invalidate();
+    setSelected(null);
   }
 
   const today = useMemo(() => dashboard.data?.today ?? [], [dashboard.data]);
@@ -100,7 +113,7 @@ export default function FrontDeskPage() {
         rows={filteredToday}
         onAction={handleAction}
         onComplete={handleComplete}
-        onRowClick={(row) => router.push(`/patients/${row.patientId}`)}
+        onRowClick={(row) => setSelected(row)}
         emptyMessage="No appointments today."
       />
 
@@ -110,6 +123,7 @@ export default function FrontDeskPage() {
           rows={dashboard.data.waitingQueue}
           onAction={handleAction}
           onComplete={handleComplete}
+          onRowClick={(row) => setSelected(row)}
           showDoctor={false}
           emptyMessage="No one waiting."
         />
@@ -117,6 +131,7 @@ export default function FrontDeskPage() {
           title="Pending Confirmations"
           rows={dashboard.data.pendingConfirmations}
           onAction={handleAction}
+          onRowClick={(row) => setSelected(row)}
           showDoctor={false}
           emptyMessage="Nothing pending confirmation."
         />
@@ -124,10 +139,20 @@ export default function FrontDeskPage() {
           title="No-show Recovery"
           rows={dashboard.data.noShows}
           onAction={handleAction}
+          onRowClick={(row) => setSelected(row)}
           showDoctor={false}
           emptyMessage="No no-shows today."
         />
       </div>
+
+      <AppointmentDrawer
+        appointment={selected}
+        recentEvents={timeline.data}
+        onClose={() => setSelected(null)}
+        onAction={handleAction}
+        onComplete={handleComplete}
+        onReschedule={handleReschedule}
+      />
     </div>
   );
 }

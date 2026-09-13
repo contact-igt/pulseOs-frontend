@@ -35,7 +35,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (!data) return null;
 
-  const meta = PAGE_META[pathname] ?? { title: "PulseOS", subtitle: undefined };
+  const meta =
+    PAGE_META[pathname] ?? (pathname.startsWith("/patients/") ? { title: "Patient 360", subtitle: "Full journey context for one patient" } : { title: "PulseOS", subtitle: undefined });
 
   return (
     <div className="flex h-screen overflow-hidden">

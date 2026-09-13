@@ -18,7 +18,7 @@ function JourneyCard({ journey, active, onClick }: { journey: JourneyCardVm; act
     <button
       type="button"
       onClick={onClick}
-      className={`w-full rounded-lg border p-3 text-left transition ${active ? "border-primary-500 bg-primary-50" : "border-neutral-200 hover:border-primary-300"}`}
+      className={`w-full rounded-xl border p-3 text-left transition ${active ? "border-primary-500 bg-primary-50" : "border-neutral-200 bg-white hover:border-primary-300"}`}
     >
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium text-slate-900">{journey.journeyType}</span>
@@ -46,10 +46,10 @@ export default function Patient360Page() {
   const params = useParams<{ patientId: string }>();
   const patientId = params.patientId;
   const [selectedJourneyId, setSelectedJourneyId] = useState<string | null>(null);
+  const [showAllJourneys, setShowAllJourneys] = useState(true);
 
   const patient360 = useQuery({ queryKey: ["patient360", patientId], queryFn: () => api.patient360(patientId) });
   const currentJourneyId = selectedJourneyId ?? patient360.data?.journeys[0]?.id;
-  const [showAllJourneys, setShowAllJourneys] = useState(true);
   const timeline = useQuery({
     queryKey: ["timeline", patientId, showAllJourneys ? "all" : currentJourneyId],
     queryFn: () => api.patientTimeline(patientId, showAllJourneys ? undefined : currentJourneyId),
@@ -58,9 +58,12 @@ export default function Patient360Page() {
 
   if (patient360.isLoading) {
     return (
-      <div className="mx-auto max-w-5xl space-y-4">
-        <Skeleton className="h-24" />
-        <Skeleton className="h-64" />
+      <div className="mx-auto max-w-6xl space-y-5">
+        <Skeleton className="h-20" />
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.4fr_1fr]">
+          <Skeleton className="h-96" />
+          <Skeleton className="h-96" />
+        </div>
       </div>
     );
   }
@@ -72,17 +75,43 @@ export default function Patient360Page() {
   const { patient, journeys, acquisition } = patient360.data;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6" data-testid="patient-360">
+    <div className="mx-auto max-w-6xl space-y-5" data-testid="patient-360">
+      {/* Header / patient context */}
       <Card className="p-5">
-        <h1 className="text-xl font-semibold text-slate-900">{patient.name}</h1>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h1 className="text-xl font-semibold text-slate-900">{patient.name}</h1>
+          <span className="text-xs text-neutral-400">{journeys.length} active journey{journeys.length === 1 ? "" : "s"}</span>
+        </div>
         <p className="mt-0.5 text-sm text-neutral-500">
           {patient.phone} · {patient.preferredLanguage} · {patient.branchName ?? "No branch"}
         </p>
       </Card>
 
-      <div>
-        <h2 className="mb-2 text-sm font-semibold text-slate-900">Journeys ({journeys.length})</h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {/* Main area: Timeline dominant (left), Journey/Next-Action context (right) */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.4fr_1fr]">
+        <div className="space-y-3 lg:order-1">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowAllJourneys(true)}
+              className={`rounded px-2 py-1 text-xs ${showAllJourneys ? "bg-primary-100 text-primary-700" : "text-neutral-500 hover:bg-neutral-100"}`}
+            >
+              All journeys
+            </button>
+            {!showAllJourneys && <span className="text-xs text-neutral-400">Showing timeline for the selected journey only</span>}
+          </div>
+
+          {timeline.isLoading ? (
+            <Skeleton className="h-96" />
+          ) : timeline.isError ? (
+            <ErrorState message="Could not load the timeline." />
+          ) : (
+            timeline.data && <Timeline events={timeline.data} />
+          )}
+        </div>
+
+        <div className="space-y-3 lg:order-2">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-400">Journeys ({journeys.length})</h2>
           {journeys.map((j) => (
             <JourneyCard
               key={j.id}
@@ -97,26 +126,8 @@ export default function Patient360Page() {
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => setShowAllJourneys(true)}
-          className={`rounded px-2 py-1 text-xs ${showAllJourneys ? "bg-primary-100 text-primary-700" : "text-neutral-500 hover:bg-neutral-100"}`}
-        >
-          All journeys
-        </button>
-        {!showAllJourneys && <span className="text-xs text-neutral-400">Showing timeline for the selected journey only</span>}
-      </div>
-
-      {timeline.isLoading ? (
-        <Skeleton className="h-64" />
-      ) : timeline.isError ? (
-        <ErrorState message="Could not load the timeline." />
-      ) : (
-        timeline.data && <Timeline events={timeline.data} />
-      )}
-
-      <div className="rounded-lg border border-neutral-100 bg-neutral-50 p-4">
+      {/* Acquisition / revenue: subordinate, below the operational section */}
+      <div className="rounded-xl border border-neutral-100 bg-neutral-50 p-4">
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-400">Acquisition &amp; revenue</h2>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
           <div>

@@ -8,6 +8,7 @@ export * from "./JourneyPerformanceChart";
 export * from "./PatientFlowBoard";
 export * from "./AttentionQueue";
 export * from "./AppointmentList";
+export * from "./AppointmentDrawer";
 export * from "./SpendAtRiskPanel";
 export * from "./SourcePerformanceTable";
 export * from "./TeamPanel";
