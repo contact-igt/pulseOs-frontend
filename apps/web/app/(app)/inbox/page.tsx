@@ -3,9 +3,10 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
+import { useRouter } from "next/navigation";
 import { Badge, EmptyState, ErrorState, SectionHeading, Skeleton } from "@pulseos/ui";
 import type { ConversationChannel, OwnershipState } from "@pulseos/types";
-import { Mail, MessageCircle, MessageSquareText, Phone, Users as UsersIcon } from "lucide-react";
+import { CalendarPlus, ListPlus, Mail, MessageCircle, MessageSquareText, Phone, User, Users as UsersIcon } from "lucide-react";
 
 const CHANNEL_ICON: Record<ConversationChannel, typeof Mail> = {
   WHATSAPP: MessageCircle,
@@ -51,6 +52,7 @@ function relativeTime(iso: string) {
 }
 
 export default function InboxPage() {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [channel, setChannel] = useState<ConversationChannel | "">("");
   const [ownershipState, setOwnershipState] = useState<OwnershipState | "">("");
@@ -304,6 +306,21 @@ export default function InboxPage() {
             <Row label="Last interaction" value={detail.data.patientContext.lastInteractionAt ? relativeTime(detail.data.patientContext.lastInteractionAt) : null} />
           </dl>
         )}
+
+        {detail.data?.patientContext && (
+          <div className="mt-4 border-t border-neutral-100 pt-3">
+            <SectionHeading title="Quick Actions" />
+            <div className="space-y-1">
+              <QuickActionButton icon={CalendarPlus} label="Book Appointment" onClick={() => router.push("/appointments")} />
+              <QuickActionButton icon={ListPlus} label="Create Task" onClick={() => router.push("/my-work")} />
+              <QuickActionButton
+                icon={User}
+                label="View Full Profile"
+                onClick={() => router.push(`/patients/${detail.data!.patientContext!.patientId}`)}
+              />
+            </div>
+          </div>
+        )}
       </aside>
     </div>
   );
@@ -315,5 +332,18 @@ function Row({ label, value }: { label: string; value: string | null | undefined
       <dt className="text-neutral-500">{label}</dt>
       <dd className="text-right font-medium text-slate-800">{value ?? "—"}</dd>
     </div>
+  );
+}
+
+function QuickActionButton({ icon: Icon, label, onClick }: { icon: typeof User; label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-neutral-600 transition hover:bg-neutral-50 hover:text-slate-900"
+    >
+      <Icon size={14} className="text-neutral-400" />
+      {label}
+    </button>
   );
 }

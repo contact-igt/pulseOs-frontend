@@ -9,7 +9,6 @@ import { TopBar } from "../../components/shell/TopBar";
 
 const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   "/command-centre": { title: "Command Centre", subtitle: "Hospital engagement operation at a glance" },
-  "/doctor-home": { title: "Command Centre", subtitle: "Your patients and schedule for today" },
   "/my-work": { title: "My Work", subtitle: "Tasks, callbacks and follow-ups assigned to you" },
   "/journeys": { title: "Journeys", subtitle: "The operational surface behind the Command Centre's numbers" },
   "/patients": { title: "Patients", subtitle: "Every patient across every journey" },
@@ -19,6 +18,18 @@ const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   "/inbox": { title: "Inbox", subtitle: "Every patient conversation, one queue" },
   "/integrations": { title: "Integrations", subtitle: "Connected providers and their health" },
 };
+
+function greeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
+function doctorGreetingName(name: string) {
+  const parts = name.split(" ");
+  return parts[0] === "Dr." ? `${parts[0]} ${parts[1]}` : parts[0];
+}
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -45,7 +56,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (!data) return null;
 
   const meta =
-    PAGE_META[pathname] ?? (pathname.startsWith("/patients/") ? { title: "Patient 360", subtitle: "Full journey context for one patient" } : { title: "PulseOS", subtitle: undefined });
+    pathname === "/doctor-home"
+      ? { title: `${greeting()}, ${doctorGreetingName(data.user.name)}`, subtitle: "Here's your schedule for today" }
+      : (PAGE_META[pathname] ??
+        (pathname.startsWith("/patients/") ? { title: "Patient 360", subtitle: "Full journey context for one patient" } : { title: "PulseOS", subtitle: undefined }));
 
   return (
     <div className="flex h-screen overflow-hidden">

@@ -13,6 +13,15 @@ function fmtDate(iso: string | null) {
   return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
+function initials(name: string) {
+  return name
+    .split(" ")
+    .map((p) => p[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
 function JourneyCard({ journey, active, onClick }: { journey: JourneyCardVm; active: boolean; onClick: () => void }) {
   return (
     <button
@@ -78,13 +87,20 @@ export default function Patient360Page() {
     <div className="mx-auto max-w-6xl space-y-5" data-testid="patient-360">
       {/* Header / patient context */}
       <Card className="p-5">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h1 className="text-xl font-semibold text-slate-900">{patient.name}</h1>
-          <span className="text-xs text-neutral-400">{journeys.length} active journey{journeys.length === 1 ? "" : "s"}</span>
+        <div className="flex items-start gap-3">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary-100 text-sm font-semibold text-primary-700">
+            {initials(patient.name)}
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h1 className="text-xl font-semibold text-slate-900">{patient.name}</h1>
+              <span className="text-xs text-neutral-400">{journeys.length} active journey{journeys.length === 1 ? "" : "s"}</span>
+            </div>
+            <p className="mt-0.5 text-sm text-neutral-500">
+              {patient.phone} · {patient.preferredLanguage} · {patient.branchName ?? "No branch"}
+            </p>
+          </div>
         </div>
-        <p className="mt-0.5 text-sm text-neutral-500">
-          {patient.phone} · {patient.preferredLanguage} · {patient.branchName ?? "No branch"}
-        </p>
       </Card>
 
       {/* Main area: Timeline dominant (left), Journey/Next-Action context (right) */}

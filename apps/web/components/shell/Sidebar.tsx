@@ -60,7 +60,7 @@ export function Sidebar({ user, open = false, onClose }: { user: SessionUser; op
     <>
       {open && (
         <div
-          className="fixed inset-0 z-30 bg-slate-900/40 lg:hidden"
+          className="fixed inset-y-0 left-60 right-0 z-30 bg-slate-900/40 lg:hidden"
           onClick={onClose}
           data-testid="sidebar-backdrop"
         />

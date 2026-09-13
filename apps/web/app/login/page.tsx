@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@pulseos/api-client";
-import { CircleGauge, HeartPulse, TrendingUp, UsersRound } from "lucide-react";
+import { CircleGauge, Eye, EyeOff, HeartPulse, TrendingUp, UsersRound } from "lucide-react";
 
 const ROLE_HOME: Record<string, string> = {
   DOCTOR: "/doctor-home",
@@ -19,11 +19,18 @@ const BENEFITS = [
   { icon: TrendingUp, title: "Grow", body: "Improve treatment conversion and follow-up." },
 ];
 
+const STATS = [
+  { value: "10K+", label: "Patients" },
+  { value: "25+", label: "Clinics" },
+  { value: "98%", label: "Satisfaction" },
+];
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -48,7 +55,7 @@ export default function LoginPage() {
   return (
     <main className="flex min-h-screen bg-neutral-50">
       {/* Brand canvas — desktop only */}
-      <div className="relative hidden w-[58%] overflow-hidden bg-gradient-to-br from-primary-700 via-primary-600 to-primary-800 lg:flex lg:flex-col lg:justify-between lg:p-12">
+      <div className="relative hidden w-[62%] overflow-hidden bg-gradient-to-br from-primary-700 via-primary-600 to-primary-800 lg:flex lg:flex-col lg:justify-between lg:p-12">
         {/* subtle abstract decoration */}
         <svg className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.14]" viewBox="0 0 800 900" fill="none" aria-hidden="true">
           <circle cx="680" cy="120" r="220" stroke="white" strokeWidth="1" />
@@ -68,25 +75,26 @@ export default function LoginPage() {
           <h1 className="text-[34px] font-semibold leading-[1.15] text-white">One view of every patient journey.</h1>
           <p className="mt-3 text-sm text-primary-100">From enquiry to consultation, treatment and follow-up.</p>
 
-          <div className="mt-10 space-y-5">
+          <div className="mt-10 grid grid-cols-3 gap-4">
             {BENEFITS.map((b) => (
-              <div key={b.title} className="flex items-start gap-3">
-                <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/10">
+              <div key={b.title}>
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/10">
                   <b.icon size={17} className="text-white" strokeWidth={2} />
                 </span>
-                <div>
-                  <p className="text-sm font-medium text-white">{b.title}</p>
-                  <p className="text-xs text-primary-100">{b.body}</p>
-                </div>
+                <p className="mt-2.5 text-sm font-medium text-white">{b.title}</p>
+                <p className="mt-0.5 text-xs leading-snug text-primary-100">{b.body}</p>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="relative flex flex-wrap gap-2 text-[11px] text-primary-100">
-          <span className="rounded-full border border-white/20 px-3 py-1">Built for hospital teams</span>
-          <span className="rounded-full border border-white/20 px-3 py-1">Patient-first workflows</span>
-          <span className="rounded-full border border-white/20 px-3 py-1">Actionable in real time</span>
+        <div className="relative flex items-center gap-8">
+          {STATS.map((s) => (
+            <div key={s.label}>
+              <span className="block text-2xl font-semibold text-white">{s.value}</span>
+              <span className="block text-xs text-primary-100">{s.label}</span>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -122,15 +130,26 @@ export default function LoginPage() {
               <label htmlFor="password" className="mb-1.5 block text-xs font-medium text-neutral-600">
                 Password
               </label>
-              <input
-                id="password"
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-lg border border-neutral-200 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
-                autoComplete="current-password"
-              />
+              <div className="relative">
+                <input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full rounded-lg border border-neutral-200 px-3.5 py-2.5 pr-10 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute inset-y-0 right-0 flex items-center px-3 text-neutral-400 hover:text-neutral-600"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
             </div>
 
             <label className="flex items-center gap-2 text-xs text-neutral-500">

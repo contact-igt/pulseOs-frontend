@@ -124,7 +124,7 @@ export default function CommandCentrePage() {
           <AttentionQueue items={attention.data} onItemClick={(item) => router.push(`/patients/${item.id}`)} />
         )}
         {patientFlow.isLoading ? <Skeleton className="h-64" /> : patientFlow.isError ? <ErrorState message="Could not load patient flow." /> : patientFlow.data && (
-          <PatientFlowBoard data={patientFlow.data} onBucketClick={(bucket) => router.push(`/appointments?flow=${bucket}`)} />
+          <PatientFlowBoard data={patientFlow.data} onBucketClick={(bucket) => router.push(`/appointments?flow=${bucket}`)} compact />
         )}
         {sourcePerformance.isLoading ? <Skeleton className="h-64" /> : sourcePerformance.isError ? <ErrorState message="Could not load source performance." /> : sourcePerformance.data && (
           <SourcePerformanceTable rows={sourcePerformance.data} onRowClick={(row) => router.push(`/journeys?campaignId=${row.campaignId ?? ""}`)} compact />

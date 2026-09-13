@@ -7,7 +7,7 @@ const ARTIFACTS_DIR = path.resolve(__dirname, "../../../review-artifacts");
 async function login(page: import("@playwright/test").Page, email: string) {
   await page.goto("/login");
   await page.getByLabel("Email").fill(email);
-  await page.getByLabel("Password").fill(DEMO_PASSWORD);
+  await page.getByLabel("Password", { exact: true }).fill(DEMO_PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL(/command-centre|doctor-home/);
 }

@@ -70,22 +70,25 @@ export function DoctorFlowRadial({ dashboard }: { dashboard: DoctorDashboard }) 
   );
 }
 
-export function NextPatientCard({ dashboard }: { dashboard: DoctorDashboard }) {
-  const next = dashboard.nextPatient;
+export function DoctorQuickStats({ dashboard }: { dashboard: DoctorDashboard }) {
+  const cells = [
+    { key: "awaiting_outcome", label: "Awaiting Outcome", value: dashboard.awaitingOutcome.length },
+    { key: "treatment_follow_ups", label: "Treatment Follow-ups", value: dashboard.treatmentFollowUps.length },
+    { key: "post_care", label: "Post-care Reviews", value: dashboard.postCare.length },
+  ];
   return (
-    <Card className="p-5">
-      <SectionHeading title="Next patient" />
-      {!next ? (
-        <EmptyState message="No patient waiting right now" />
-      ) : (
-        <div>
-          <p className="text-lg font-semibold text-slate-900">{next.patientName}</p>
-          <p className="mt-1 text-sm text-neutral-500">
-            {next.journeyType} · {fmtTime(next.appointmentTime)}
-          </p>
-          {next.reason && <p className="mt-2 text-sm text-neutral-600">{next.reason}</p>}
-        </div>
-      )}
+    <Card className="p-0">
+      <div className="px-4 pt-3.5">
+        <SectionHeading title="Quick Stats" />
+      </div>
+      <div className="grid grid-cols-3 divide-x divide-neutral-100">
+        {cells.map((cell) => (
+          <div key={cell.key} className="px-3 py-3 text-center">
+            <span className="block text-xl font-semibold tabular-nums text-slate-900">{cell.value}</span>
+            <span className="mt-0.5 block text-[11px] leading-tight text-neutral-500">{cell.label}</span>
+          </div>
+        ))}
+      </div>
     </Card>
   );
 }
@@ -109,6 +112,11 @@ export function DoctorTodayList({ items, title, highlightId }: { items: DoctorTo
                 <span className="flex min-w-0 items-center gap-2">
                   {isNext && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary-500" />}
                   <span className={`truncate text-sm ${isNext ? "font-medium text-primary-700" : "text-slate-900"}`}>{item.patientName}</span>
+                  {isNext && (
+                    <span className="shrink-0 rounded-full bg-primary-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+                      Next
+                    </span>
+                  )}
                 </span>
                 <span className="flex shrink-0 items-center gap-2">
                   <span className="text-xs tabular-nums text-neutral-500">{fmtTime(item.time)}</span>

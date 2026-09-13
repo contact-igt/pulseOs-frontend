@@ -6,9 +6,9 @@ import {
   AwaitingOutcomeList,
   DoctorFlowRadial,
   DoctorKpiStrip,
+  DoctorQuickStats,
   DoctorTodayList,
   ErrorState,
-  NextPatientCard,
   RecentPatientsList,
   Skeleton,
 } from "@pulseos/ui";
@@ -42,7 +42,7 @@ export default function DoctorHomePage() {
         <DoctorTodayList items={data.today} title="Today's Patient Queue" highlightId={data.nextPatient?.appointmentId} />
         <div className="space-y-5">
           <DoctorFlowRadial dashboard={data} />
-          <NextPatientCard dashboard={data} />
+          <DoctorQuickStats dashboard={data} />
         </div>
       </div>
 

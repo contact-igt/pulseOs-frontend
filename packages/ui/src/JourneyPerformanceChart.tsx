@@ -1,6 +1,6 @@
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { JourneyPerformancePoint } from "@pulseos/types";
-import { Card, SectionHeading } from "./primitives";
+import { Card } from "./primitives";
 
 const SERIES: { key: keyof JourneyPerformancePoint; label: string; color: string }[] = [
   { key: "enquiries", label: "Enquiries", color: "var(--color-chart-blue)" },
@@ -24,8 +24,11 @@ export function JourneyPerformanceChart({
 }) {
   return (
     <Card className="p-4">
-      <div className="mb-3 flex items-baseline justify-between">
-        <SectionHeading title="Patient Journey Performance" subtitle="Enquiries → appointments → consultations → treatments" />
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold tracking-wide text-slate-900">Patient Journey Performance</h2>
+          <p className="mt-0.5 text-xs text-neutral-500">Enquiries → appointments → consultations → treatments</p>
+        </div>
         {onWindowChange && (
           <div className="flex shrink-0 gap-0.5 rounded border border-neutral-200 p-0.5" role="group" aria-label="Trend window">
             {[7, 30, 90].map((d) => (
