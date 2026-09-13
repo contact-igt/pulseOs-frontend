@@ -25,7 +25,11 @@ test.describe("No horizontal overflow", () => {
   test.skip(!DEMO_PASSWORD, "DEMO_PASSWORD must be set to run this suite");
 
   for (const { email, paths } of PAGES_BY_ROLE) {
-    for (const viewport of [{ label: "desktop", width: 1440, height: 900 }, { label: "tablet", width: 768, height: 1024 }]) {
+    for (const viewport of [
+      { label: "desktop", width: 1440, height: 900 },
+      { label: "tablet", width: 768, height: 1024 },
+      { label: "mobile", width: 390, height: 844 },
+    ]) {
       test(`${paths.join(", ")} (${email.split("@")[0]}) at ${viewport.label}`, async ({ page }) => {
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
         await login(page, email);
@@ -41,4 +45,19 @@ test.describe("No horizontal overflow", () => {
       });
     }
   }
+
+  test("mobile: sidebar is off-canvas by default and opens via the hamburger button", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await login(page, "admin@pulseos.local");
+
+    const sidebar = page.getByTestId("sidebar");
+    await expect(sidebar).not.toBeInViewport();
+
+    await page.getByTestId("mobile-menu-button").click();
+    await expect(sidebar).toBeInViewport();
+    await expect(page.getByTestId("sidebar-backdrop")).toBeVisible();
+
+    await page.getByTestId("sidebar-backdrop").click();
+    await expect(sidebar).not.toBeInViewport();
+  });
 });

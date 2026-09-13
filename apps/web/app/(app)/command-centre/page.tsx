@@ -119,18 +119,15 @@ export default function CommandCentrePage() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         {attention.isLoading ? <Skeleton className="h-64" /> : attention.isError ? <ErrorState message="Could not load attention queue." /> : attention.data && (
           <AttentionQueue items={attention.data} onItemClick={(item) => router.push(`/patients/${item.id}`)} />
         )}
-        {patientFlow.isLoading ? <Skeleton className="h-40" /> : patientFlow.isError ? <ErrorState message="Could not load patient flow." /> : patientFlow.data && (
+        {patientFlow.isLoading ? <Skeleton className="h-64" /> : patientFlow.isError ? <ErrorState message="Could not load patient flow." /> : patientFlow.data && (
           <PatientFlowBoard data={patientFlow.data} onBucketClick={(bucket) => router.push(`/appointments?flow=${bucket}`)} />
         )}
-      </div>
-
-      <div>
-        {sourcePerformance.isLoading ? <Skeleton className="h-56" /> : sourcePerformance.isError ? <ErrorState message="Could not load source performance." /> : sourcePerformance.data && (
-          <SourcePerformanceTable rows={sourcePerformance.data} onRowClick={(row) => router.push(`/journeys?campaignId=${row.campaignId ?? ""}`)} />
+        {sourcePerformance.isLoading ? <Skeleton className="h-64" /> : sourcePerformance.isError ? <ErrorState message="Could not load source performance." /> : sourcePerformance.data && (
+          <SourcePerformanceTable rows={sourcePerformance.data} onRowClick={(row) => router.push(`/journeys?campaignId=${row.campaignId ?? ""}`)} compact />
         )}
       </div>
 

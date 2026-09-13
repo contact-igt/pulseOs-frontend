@@ -52,12 +52,25 @@ function initials(name: string) {
     .toUpperCase();
 }
 
-export function Sidebar({ user }: { user: SessionUser }) {
+export function Sidebar({ user, open = false, onClose }: { user: SessionUser; open?: boolean; onClose?: () => void }) {
   const pathname = usePathname();
   const groups = navForRole(user.role);
 
   return (
-    <nav className="flex h-screen w-60 shrink-0 flex-col border-r border-neutral-200 bg-white">
+    <>
+      {open && (
+        <div
+          className="fixed inset-0 z-30 bg-slate-900/40 lg:hidden"
+          onClick={onClose}
+          data-testid="sidebar-backdrop"
+        />
+      )}
+      <nav
+        className={`fixed inset-y-0 left-0 z-40 flex h-screen w-60 shrink-0 flex-col border-r border-neutral-200 bg-white transition-transform duration-200 lg:static lg:translate-x-0 ${
+          open ? "translate-x-0" : "-translate-x-full"
+        }`}
+        data-testid="sidebar"
+      >
       <div className="flex h-14 items-center border-b border-neutral-200 px-4">
         <span className="text-base font-semibold tracking-tight text-primary-700">PulseOS</span>
       </div>
@@ -75,6 +88,7 @@ export function Sidebar({ user }: { user: SessionUser }) {
                     {item.implemented ? (
                       <Link
                         href={item.href}
+                        onClick={onClose}
                         className={`flex items-center gap-2.5 rounded px-2 py-1.5 text-sm transition ${
                           active ? "bg-primary-50 font-medium text-primary-700" : "text-neutral-600 hover:bg-neutral-100"
                         }`}
@@ -113,6 +127,7 @@ export function Sidebar({ user }: { user: SessionUser }) {
           </span>
         </span>
       </div>
-    </nav>
+      </nav>
+    </>
   );
 }

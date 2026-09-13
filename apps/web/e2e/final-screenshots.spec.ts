@@ -15,8 +15,12 @@ async function login(page: import("@playwright/test").Page, email: string) {
 test.describe("Final review screenshots", () => {
   test.skip(!DEMO_PASSWORD, "DEMO_PASSWORD must be set to run this suite");
 
-  test("captures the 12 required desktop + tablet screenshots", async ({ page }) => {
+  test("captures the required desktop + tablet screenshots", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
+
+    await page.goto("/login");
+    await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "00-login-desktop.png"), fullPage: true });
 
     await login(page, "admin@pulseos.local");
     await expect(page.getByTestId("command-centre")).toBeVisible();
@@ -72,5 +76,35 @@ test.describe("Final review screenshots", () => {
     await login(page, "doctor@pulseos.local");
     await expect(page.getByTestId("doctor-home")).toBeVisible();
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "04-doctor-home.png"), fullPage: true });
+
+    await login(page, "admin@pulseos.local");
+    await page.goto("/integrations");
+    await expect(page.getByTestId("integrations-page")).toBeVisible();
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "13-integrations.png"), fullPage: true });
+
+    // 1280 desktop: Admin must retain the primary 8/4 analytics row, not collapse early.
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/command-centre");
+    await expect(page.getByTestId("command-centre")).toBeVisible();
+    // Both analytics cards must be visible in the same viewport without vertical stacking.
+    await expect(page.getByText("Patient Journey Performance")).toBeVisible();
+    await expect(page.getByText("Journey Health")).toBeVisible();
+    const overflowX1280 = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflowX1280).toBeLessThanOrEqual(0);
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "14-admin-command-centre-1280.png"), fullPage: true });
+
+    // 1024 desktop breakpoint.
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "15-admin-command-centre-1024.png"), fullPage: true });
+
+    // Mobile 390x844.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/command-centre");
+    await expect(page.getByTestId("command-centre")).toBeVisible();
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "16-admin-command-centre-mobile.png"), fullPage: true });
+
+    await page.goto(patient360Url);
+    await expect(page.getByTestId("patient-360")).toBeVisible();
+    await page.screenshot({ path: path.join(ARTIFACTS_DIR, "17-patient-360-mobile.png"), fullPage: true });
   });
 });

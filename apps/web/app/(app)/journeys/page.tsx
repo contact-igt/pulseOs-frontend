@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@pulseos/api-client";
-import { Badge, Card, EmptyState, ErrorState, Skeleton, formatInr, formatMoneyOrDash } from "@pulseos/ui";
+import { Badge, Card, EmptyState, ErrorState, MetricStrip, Skeleton, formatInr, formatMoneyOrDash } from "@pulseos/ui";
 import type { JourneyStage } from "@pulseos/types";
 
 const STAGE_TONE: Partial<Record<JourneyStage, "neutral" | "warning" | "danger" | "primary">> = {
@@ -38,21 +38,17 @@ export default function JourneysPage() {
       </div>
 
       {summary.data && (
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-          {[
-            { label: "Active", value: summary.data.activeJourneys },
-            { label: "Appointments pending", value: summary.data.appointmentsPending },
-            { label: "Consultations pending", value: summary.data.consultationsPending },
-            { label: "Treatment decisions pending", value: summary.data.treatmentDecisionsPending },
-            { label: "Revenue opportunity", value: formatInr(summary.data.revenueOpportunity) },
-            { label: "Spend at risk", value: formatInr(summary.data.spendAtRisk) },
-          ].map((m) => (
-            <Card key={m.label} className="p-2.5">
-              <span className="block text-base font-semibold text-slate-900">{m.value}</span>
-              <span className="block text-[11px] text-neutral-500">{m.label}</span>
-            </Card>
-          ))}
-        </div>
+        <MetricStrip
+          testId="journeys-summary-strip"
+          cells={[
+            { key: "active", label: "Active", value: summary.data.activeJourneys },
+            { key: "appointments_pending", label: "Appointments pending", value: summary.data.appointmentsPending },
+            { key: "consultations_pending", label: "Consultations pending", value: summary.data.consultationsPending },
+            { key: "treatment_decisions_pending", label: "Treatment decisions pending", value: summary.data.treatmentDecisionsPending },
+            { key: "revenue_opportunity", label: "Revenue opportunity", value: formatInr(summary.data.revenueOpportunity) },
+            { key: "spend_at_risk", label: "Spend at risk", value: formatInr(summary.data.spendAtRisk) },
+          ]}
+        />
       )}
 
       <div className="flex flex-wrap items-center gap-2">

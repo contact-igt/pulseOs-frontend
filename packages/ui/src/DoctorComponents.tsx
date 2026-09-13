@@ -1,6 +1,7 @@
 import type { DoctorDashboard, DoctorRecentPatient, DoctorTodayItem } from "@pulseos/types";
 import { Badge, Card, EmptyState, SectionHeading } from "./primitives";
 import { SegmentedRadial } from "./SegmentedRadial";
+import { MetricStrip } from "./MetricStrip";
 
 function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
@@ -30,29 +31,19 @@ const STATUS_LABEL: Record<DoctorTodayItem["status"], string> = {
   cancelled: "Cancelled",
 };
 
-interface DoctorKpiDef {
-  label: string;
-  value: number;
-}
-
 export function DoctorKpiStrip({ dashboard }: { dashboard: DoctorDashboard }) {
-  const kpis: DoctorKpiDef[] = [
-    { label: "Appointments today", value: dashboard.todayCount },
-    { label: "Checked in", value: dashboard.checkedInCount },
-    { label: "Waiting", value: dashboard.waitingNow },
-    { label: "With me", value: dashboard.withMeCount },
-    { label: "Outcomes pending", value: dashboard.awaitingOutcome.length },
-    { label: "Follow-ups due", value: dashboard.treatmentFollowUps.length },
-  ];
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6" data-testid="doctor-kpi-strip">
-      {kpis.map((k) => (
-        <Card key={k.label} className="p-3">
-          <span className="block text-xl font-semibold tabular-nums text-slate-900">{k.value}</span>
-          <span className="mt-0.5 block text-[11px] leading-tight text-neutral-500">{k.label}</span>
-        </Card>
-      ))}
-    </div>
+    <MetricStrip
+      testId="doctor-kpi-strip"
+      cells={[
+        { key: "appointments", label: "Appointments today", value: dashboard.todayCount },
+        { key: "checked_in", label: "Checked in", value: dashboard.checkedInCount },
+        { key: "waiting", label: "Waiting", value: dashboard.waitingNow },
+        { key: "with_me", label: "With me", value: dashboard.withMeCount },
+        { key: "outcomes_pending", label: "Outcomes pending", value: dashboard.awaitingOutcome.length },
+        { key: "follow_ups", label: "Follow-ups due", value: dashboard.treatmentFollowUps.length },
+      ]}
+    />
   );
 }
 

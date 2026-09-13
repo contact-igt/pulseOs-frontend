@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, ChevronDown, LogOut, Search } from "lucide-react";
+import { Bell, ChevronDown, LogOut, Menu, Search } from "lucide-react";
 import type { SessionUser } from "@pulseos/types";
 import { api } from "@pulseos/api-client";
 
@@ -14,7 +14,17 @@ const ROLE_LABEL: Record<string, string> = {
   DOCTOR: "Doctor",
 };
 
-export function TopBar({ user, title, subtitle }: { user: SessionUser; title: string; subtitle?: string }) {
+export function TopBar({
+  user,
+  title,
+  subtitle,
+  onMenuClick,
+}: {
+  user: SessionUser;
+  title: string;
+  subtitle?: string;
+  onMenuClick?: () => void;
+}) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [profileOpen, setProfileOpen] = useState(false);
@@ -30,10 +40,21 @@ export function TopBar({ user, title, subtitle }: { user: SessionUser; title: st
   }
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-neutral-200 bg-white px-6">
-      <div className="min-w-0">
-        <h1 className="truncate text-base font-semibold text-slate-900">{title}</h1>
-        {subtitle && <p className="truncate text-xs text-neutral-500">{subtitle}</p>}
+    <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-neutral-200 bg-white px-4 sm:px-6">
+      <div className="flex min-w-0 items-center gap-2">
+        <button
+          type="button"
+          onClick={onMenuClick}
+          className="-ml-1 shrink-0 rounded p-1.5 text-neutral-500 transition hover:bg-neutral-100 hover:text-slate-900 lg:hidden"
+          title="Open menu"
+          data-testid="mobile-menu-button"
+        >
+          <Menu size={19} />
+        </button>
+        <div className="min-w-0">
+          <h1 className="truncate text-base font-semibold text-slate-900">{title}</h1>
+          {subtitle && <p className="truncate text-xs text-neutral-500">{subtitle}</p>}
+        </div>
       </div>
 
       <div className="flex items-center gap-3">

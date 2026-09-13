@@ -7,8 +7,17 @@ import { formatInr, formatMoneyOrDash, formatRoas } from "./format";
 
 type SortKey = "spend" | "enquiries" | "treatments" | "revenue" | "roas";
 
-export function SourcePerformanceTable({ rows, onRowClick }: { rows: SourcePerformanceRow[]; onRowClick?: (row: SourcePerformanceRow) => void }) {
-  const [sortKey, setSortKey] = useState<SortKey>("spend");
+export function SourcePerformanceTable({
+  rows,
+  onRowClick,
+  compact = false,
+}: {
+  rows: SourcePerformanceRow[];
+  onRowClick?: (row: SourcePerformanceRow) => void;
+  /** Narrow 3-column layout (source, revenue, ROAS) for a 1/3-width dashboard panel. */
+  compact?: boolean;
+}) {
+  const [sortKey, setSortKey] = useState<SortKey>(compact ? "revenue" : "spend");
   const [desc, setDesc] = useState(true);
 
   const sorted = [...rows].sort((a, b) => {
@@ -25,21 +34,26 @@ export function SourcePerformanceTable({ rows, onRowClick }: { rows: SourcePerfo
     }
   }
 
-  const columns: { key: SortKey; label: string }[] = [
-    { key: "spend", label: "Spend" },
-    { key: "enquiries", label: "Enquiries" },
-    { key: "treatments", label: "Treatments" },
-    { key: "revenue", label: "Revenue" },
-    { key: "roas", label: "ROAS" },
-  ];
+  const columns: { key: SortKey; label: string }[] = compact
+    ? [
+        { key: "revenue", label: "Revenue" },
+        { key: "roas", label: "ROAS" },
+      ]
+    : [
+        { key: "spend", label: "Spend" },
+        { key: "enquiries", label: "Enquiries" },
+        { key: "treatments", label: "Treatments" },
+        { key: "revenue", label: "Revenue" },
+        { key: "roas", label: "ROAS" },
+      ];
 
   return (
-    <Card className="overflow-x-auto p-4">
-      <SectionHeading title="Source / Campaign Performance" />
-      <table className="w-full min-w-[480px] text-left text-xs">
+    <Card className={compact ? "overflow-hidden p-4" : "overflow-x-auto p-4"}>
+      <SectionHeading title={compact ? "Top Sources by Revenue" : "Source / Campaign Performance"} />
+      <table className={compact ? "w-full text-left text-xs" : "w-full min-w-[480px] text-left text-xs"}>
         <thead>
           <tr className="text-neutral-500">
-            <th className="pb-1 font-medium">Campaign</th>
+            <th className="pb-1 font-medium">{compact ? "Source" : "Campaign"}</th>
             {columns.map((c) => (
               <th key={c.key} className="cursor-pointer pb-1 text-right font-medium hover:text-slate-900" onClick={() => toggleSort(c.key)}>
                 {c.label}{sortKey === c.key ? (desc ? " ↓" : " ↑") : ""}
@@ -48,15 +62,19 @@ export function SourcePerformanceTable({ rows, onRowClick }: { rows: SourcePerfo
           </tr>
         </thead>
         <tbody className="divide-y divide-neutral-100">
-          {sorted.map((row) => (
+          {(compact ? sorted.slice(0, 5) : sorted).map((row) => (
             <tr key={row.campaignId ?? row.source} className="cursor-pointer hover:bg-neutral-50" onClick={() => onRowClick?.(row)}>
               <td className="py-1.5">
-                <span className="block text-slate-900">{row.campaignName}</span>
-                <span className="block text-[11px] text-neutral-400">{row.source}</span>
+                <span className="block truncate text-slate-900">{compact ? row.source : row.campaignName}</span>
+                {!compact && <span className="block text-[11px] text-neutral-400">{row.source}</span>}
               </td>
-              <td className="py-1.5 text-right tabular-nums">{formatInr(row.spend)}</td>
-              <td className="py-1.5 text-right tabular-nums">{row.enquiries}</td>
-              <td className="py-1.5 text-right tabular-nums">{row.treatments}</td>
+              {!compact && (
+                <>
+                  <td className="py-1.5 text-right tabular-nums">{formatInr(row.spend)}</td>
+                  <td className="py-1.5 text-right tabular-nums">{row.enquiries}</td>
+                  <td className="py-1.5 text-right tabular-nums">{row.treatments}</td>
+                </>
+              )}
               <td className="py-1.5 text-right tabular-nums">{formatMoneyOrDash(row.revenue)}</td>
               <td className="py-1.5 text-right tabular-nums font-medium">{formatRoas(row.roas)}</td>
             </tr>

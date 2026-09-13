@@ -1,5 +1,6 @@
 export * from "./primitives";
 export * from "./format";
+export * from "./MetricStrip";
 export * from "./KpiStrip";
 export * from "./ExecutiveStripSection";
 export * from "./SegmentedRadial";

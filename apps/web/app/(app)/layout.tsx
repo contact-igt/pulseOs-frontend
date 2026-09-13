@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useRouter, usePathname } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { api } from "@pulseos/api-client";
 import { Sidebar } from "../../components/shell/Sidebar";
 import { TopBar } from "../../components/shell/TopBar";
@@ -24,10 +24,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { data, isLoading, isError } = useQuery({ queryKey: ["session"], queryFn: api.session, retry: false });
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [lastPathname, setLastPathname] = useState(pathname);
 
   useEffect(() => {
     if (isError) router.replace("/login");
   }, [isError, router]);
+
+  // Close the mobile drawer on navigation without an effect (React's
+  // recommended "adjust state during render" pattern for prop-driven resets).
+  if (pathname !== lastPathname) {
+    setLastPathname(pathname);
+    setMobileNavOpen(false);
+  }
 
   if (isLoading) {
     return <div className="flex h-screen items-center justify-center text-sm text-neutral-400">Loading PulseOS…</div>;
@@ -40,10 +49,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <Sidebar user={data.user} />
+      <Sidebar user={data.user} open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <TopBar user={data.user} title={meta.title} subtitle={meta.subtitle} />
-        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-neutral-50 p-6">{children}</main>
+        <TopBar user={data.user} title={meta.title} subtitle={meta.subtitle} onMenuClick={() => setMobileNavOpen((v) => !v)} />
+        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-neutral-50 p-4 sm:p-6">{children}</main>
       </div>
     </div>
   );

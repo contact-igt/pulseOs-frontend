@@ -31,7 +31,7 @@ test.describe("Admin Command Centre", () => {
     // Drill-down affordance: clicking a KPI cell navigates to a filtered sub-page.
     // That sub-page (Patients) is out of scope for this checkpoint and not yet built,
     // so console errors picked up while briefly on it don't count against this dashboard.
-    await page.getByTestId("kpi-waitingNow").getByRole("button").click();
+    await page.getByTestId("kpi-waitingNow").click();
     await expect(page).toHaveURL(/\/patients\?filter=waitingNow/);
     await page.goBack();
     await expect(page.getByTestId("command-centre")).toBeVisible();

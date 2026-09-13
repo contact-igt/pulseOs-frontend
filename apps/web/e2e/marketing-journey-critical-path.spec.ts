@@ -18,7 +18,7 @@ test.describe("Marketing → Patient Journey critical path", () => {
     await expect(page.getByText("Attributed revenue")).toBeVisible();
     await expect(page.getByText("Spend At Risk").first()).toBeVisible();
     await expect(page.getByText("Patient Journey Performance")).toBeVisible();
-    await expect(page.getByText("Source / Campaign Performance")).toBeVisible();
+    await expect(page.getByText("Top Sources by Revenue")).toBeVisible();
   });
 
   test("clicking a Spend At Risk category drills into filtered Patients", async ({ page }) => {

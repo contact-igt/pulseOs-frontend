@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
-import { AppointmentDrawer, AppointmentList, Card, ErrorState, PatientFlowBoard, Skeleton } from "@pulseos/ui";
+import { AppointmentDrawer, AppointmentList, ErrorState, MetricStrip, PatientFlowBoard, Skeleton } from "@pulseos/ui";
 import type { AppointmentAction, AppointmentRow, PatientFlowCount } from "@pulseos/types";
 
 function buildFlow(today: AppointmentRow[]): PatientFlowCount[] {
@@ -85,39 +85,14 @@ export default function FrontDeskPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4" data-testid="front-desk-page">
-      <div className="grid grid-cols-3 gap-2 lg:grid-cols-6" data-testid="front-desk-kpi-strip">
-        {kpis.map((k) => (
-          <Card key={k.label} className="p-3">
-            <span className="block text-xl font-semibold tabular-nums text-slate-900">{k.value}</span>
-            <span className="mt-0.5 block text-[11px] leading-tight text-neutral-500">{k.label}</span>
-          </Card>
-        ))}
-      </div>
-
-      <PatientFlowBoard data={buildFlow(today)} />
-
-      <div>
-        <input
-          type="text"
-          placeholder="Search today's patients…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full max-w-xs rounded border border-neutral-200 bg-white px-2.5 py-1.5 text-xs outline-none focus:border-primary-400"
-          data-testid="front-desk-search"
-        />
-      </div>
-
-      <AppointmentList
-        title="Today's Arrivals"
-        rows={filteredToday}
-        onAction={handleAction}
-        onComplete={handleComplete}
-        onRowClick={(row) => setSelected(row)}
-        emptyMessage="No appointments today."
+    <div className="mx-auto max-w-7xl space-y-5" data-testid="front-desk-page">
+      <MetricStrip
+        testId="front-desk-kpi-strip"
+        cells={kpis.map((k) => ({ key: k.label, label: k.label, value: k.value }))}
       />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.9fr_1fr]">
+        <PatientFlowBoard data={buildFlow(today)} />
         <AppointmentList
           title="Waiting Queue"
           rows={dashboard.data.waitingQueue}
@@ -127,8 +102,30 @@ export default function FrontDeskPage() {
           showDoctor={false}
           emptyMessage="No one waiting."
         />
+      </div>
+
+      <div>
+        <input
+          type="text"
+          placeholder="Search today's patients…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full max-w-xs rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-xs outline-none focus:border-primary-400"
+          data-testid="front-desk-search"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <AppointmentList
-          title="Pending Confirmations"
+          title="Recent Arrivals"
+          rows={filteredToday}
+          onAction={handleAction}
+          onComplete={handleComplete}
+          onRowClick={(row) => setSelected(row)}
+          emptyMessage="No appointments today."
+        />
+        <AppointmentList
+          title="Pending Confirmation"
           rows={dashboard.data.pendingConfirmations}
           onAction={handleAction}
           onRowClick={(row) => setSelected(row)}
