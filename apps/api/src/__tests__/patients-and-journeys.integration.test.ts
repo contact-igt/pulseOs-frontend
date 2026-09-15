@@ -31,6 +31,43 @@ describe.skipIf(!DEMO_PASSWORD)("patients and journeys (integration)", () => {
     expect(rows.every((r) => r.name.toLowerCase().includes("priya"))).toBe(true);
   });
 
+  describe("global search typeahead (GET /patients/search)", () => {
+    it("returns nothing for a query shorter than 2 characters — never a full-directory fetch", async () => {
+      const res = await app.inject({ method: "GET", url: "/patients/search?q=p", cookies: { pulseos_session: cookie } });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual([]);
+    });
+
+    it("matches by name or phone, tenant-scoped, capped, ordered by name", async () => {
+      const res = await app.inject({ method: "GET", url: "/patients/search?q=Priya", cookies: { pulseos_session: cookie } });
+      expect(res.statusCode).toBe(200);
+      const rows = res.json() as { id: string; name: string; phone: string; currentJourneyType: string | null }[];
+      expect(rows.length).toBeGreaterThan(0);
+      expect(rows.length).toBeLessThanOrEqual(8);
+      expect(rows.every((r) => r.name.toLowerCase().includes("priya"))).toBe(true);
+      for (const r of rows) {
+        expect(typeof r.id).toBe("string");
+        expect(typeof r.phone).toBe("string");
+      }
+    });
+
+    it("matching on phone digits also finds the patient", async () => {
+      const byName = await app.inject({ method: "GET", url: "/patients/search?q=Priya", cookies: { pulseos_session: cookie } });
+      const [priya] = byName.json() as { phone: string }[];
+      expect(priya).toBeTruthy();
+
+      const byPhone = await app.inject({ method: "GET", url: `/patients/search?q=${priya.phone.slice(-6)}`, cookies: { pulseos_session: cookie } });
+      expect(byPhone.statusCode).toBe(200);
+      const rows = byPhone.json() as { phone: string }[];
+      expect(rows.some((r) => r.phone === priya.phone)).toBe(true);
+    });
+
+    it("unauthenticated request is rejected", async () => {
+      const res = await app.inject({ method: "GET", url: "/patients/search?q=Priya" });
+      expect(res.statusCode).toBe(401);
+    });
+  });
+
   it("Patient 360 shows a patient with more than one active journey (Patient != Journey)", async () => {
     const [priya] = await db.select().from(patients).where(eq(patients.name, "Priya Sharma")).limit(1);
     const res = await app.inject({ method: "GET", url: `/patients/${priya.id}/360`, cookies: { pulseos_session: cookie } });

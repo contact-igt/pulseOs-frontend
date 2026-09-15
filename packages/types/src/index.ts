@@ -315,6 +315,16 @@ export interface PatientListRow {
   appointmentStatus: string | null;
 }
 
+// Deliberately minimal — the global-search typeahead's own lightweight query,
+// not a reuse of PatientListRow (which joins journeys/tasks/timeline tenant-wide
+// for the Patients table and would be a full-directory fetch on every keystroke).
+export interface PatientSearchRow {
+  id: string;
+  name: string;
+  phone: string;
+  currentJourneyType: string | null;
+}
+
 export interface JourneyCardVm {
   id: string;
   journeyType: string;

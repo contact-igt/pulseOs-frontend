@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requirePermission } from "../auth/permission.middleware.js";
-import { createPatient, getPatient360, listPatients } from "./patient.service.js";
+import { createPatient, getPatient360, listPatients, searchPatients } from "./patient.service.js";
 import { getPatientTimeline } from "../timeline/timeline.service.js";
 
 const createPatientBody = z.object({
@@ -25,6 +25,14 @@ export async function patientRoutes(app: FastifyInstance) {
       stage: query.stage,
       ownerId: query.ownerId,
     });
+  });
+
+  // The global-search typeahead's own lightweight endpoint — see
+  // patient.service.ts's searchPatients for why this isn't listPatients.
+  app.get("/patients/search", async (request) => {
+    const tenantId = request.sessionUser!.tenantId;
+    const { q } = request.query as { q?: string };
+    return searchPatients(app.db, tenantId, q ?? "");
   });
 
   app.get("/patients/:id/360", async (request, reply) => {

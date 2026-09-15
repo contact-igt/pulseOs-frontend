@@ -1,4 +1,4 @@
-import { and, desc, eq, ilike, or } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, or } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import {
   appointments,
@@ -16,7 +16,7 @@ import {
 import { allocatedAcquisitionCost } from "../marketing/formulas.js";
 import { getAttributionSummary } from "../acquisition/attribution.service.js";
 import { resolveOrCreatePatient } from "./identity.service.js";
-import type { CreatePatientInput, CreatePatientResult, JourneyCardVm, Patient360, PatientListRow } from "@pulseos/types";
+import type { CreatePatientInput, CreatePatientResult, JourneyCardVm, Patient360, PatientListRow, PatientSearchRow } from "@pulseos/types";
 
 /**
  * Identity-first creation — no Journey, no source/specialty context. For
@@ -47,6 +47,40 @@ export async function createPatient(db: Db, tenantId: string, actorId: string, i
   }
 
   return { patientId: patient.id, isNewPatient };
+}
+
+/**
+ * The global-search typeahead's own query — deliberately NOT listPatients,
+ * which joins tenant-wide journeys/tasks/timeline for the Patients table and
+ * would be a full-directory fetch on every keystroke. Capped and scoped to
+ * only what a result row needs: name, phone, and (cheaply, since the result
+ * set is already capped to `limit`) each match's most recent journey type.
+ */
+export async function searchPatients(db: Db, tenantId: string, query: string, limit = 8): Promise<PatientSearchRow[]> {
+  const trimmed = query.trim();
+  if (trimmed.length < 2) return [];
+
+  const rows = await db
+    .select({ id: patients.id, name: patients.name, phone: patients.phone })
+    .from(patients)
+    .where(and(eq(patients.tenantId, tenantId), or(ilike(patients.name, `%${trimmed}%`), ilike(patients.phone, `%${trimmed}%`))))
+    .orderBy(patients.name)
+    .limit(limit);
+
+  if (rows.length === 0) return [];
+
+  const journeyRows = await db
+    .select({ patientId: journeys.patientId, journeyType: journeys.journeyType, createdAt: journeys.createdAt })
+    .from(journeys)
+    .where(inArray(journeys.patientId, rows.map((r) => r.id)));
+
+  const latestJourneyByPatient = new Map<string, { journeyType: string; createdAt: Date }>();
+  for (const j of journeyRows) {
+    const existing = latestJourneyByPatient.get(j.patientId);
+    if (!existing || j.createdAt > existing.createdAt) latestJourneyByPatient.set(j.patientId, j);
+  }
+
+  return rows.map((r) => ({ id: r.id, name: r.name, phone: r.phone, currentJourneyType: latestJourneyByPatient.get(r.id)?.journeyType ?? null }));
 }
 
 export interface PatientListFilters {
