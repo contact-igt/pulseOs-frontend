@@ -14,7 +14,7 @@ import {
   users,
 } from "../../db/schema.js";
 import { allocatedAcquisitionCost } from "../marketing/formulas.js";
-import { normalizePhone } from "./phone.js";
+import { normalizePhone, resolveDefaultPhoneRegion } from "./phone.js";
 import type { CreatePatientInput, CreatePatientResult, JourneyCardVm, Patient360, PatientListRow } from "@pulseos/types";
 
 /**
@@ -24,9 +24,16 @@ import type { CreatePatientInput, CreatePatientResult, JourneyCardVm, Patient360
  * phone the same way Add Lead does: never creates a duplicate identity.
  */
 export async function createPatient(db: Db, tenantId: string, actorId: string, input: CreatePatientInput): Promise<CreatePatientResult> {
-  const phone = normalizePhone(input.phone);
+  const defaultRegion = await resolveDefaultPhoneRegion(db, tenantId);
+  const normalized = normalizePhone(input.phone, defaultRegion);
 
-  const [existing] = await db.select({ id: patients.id }).from(patients).where(and(eq(patients.tenantId, tenantId), eq(patients.phone, phone))).limit(1);
+  // When normalization fails (an invalid/unparseable number) there is no
+  // reliable canonical key, so the fallback is an exact match on the raw
+  // string — never a fuzzy match, never an automatic merge of two
+  // uncertain identities.
+  const [existing] = normalized.e164
+    ? await db.select({ id: patients.id }).from(patients).where(and(eq(patients.tenantId, tenantId), eq(patients.phoneE164, normalized.e164))).limit(1)
+    : await db.select({ id: patients.id }).from(patients).where(and(eq(patients.tenantId, tenantId), eq(patients.phone, input.phone))).limit(1);
   if (existing) {
     return { patientId: existing.id, isNewPatient: false };
   }
@@ -36,7 +43,9 @@ export async function createPatient(db: Db, tenantId: string, actorId: string, i
     .values({
       tenantId,
       name: input.name,
-      phone,
+      phone: input.phone,
+      phoneE164: normalized.e164,
+      phoneCountry: normalized.country,
       email: input.email ?? null,
       preferredLanguage: input.preferredLanguage ?? "English",
       branchId: input.branchId,

@@ -52,12 +52,18 @@ export const patients = pgTable("patients", {
   tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
   branchId: uuid("branch_id").references(() => branches.id),
   name: text("name").notNull(),
+  // Raw, as-entered/as-received value — always preserved, still the display value.
   phone: text("phone").notNull(),
+  // Canonical E.164 form (null when normalization failed) — the only field
+  // identity resolution ever matches on. Never fuzzy-matched.
+  phoneE164: text("phone_e164"),
+  phoneCountry: text("phone_country"),
   email: text("email"),
   preferredLanguage: text("preferred_language").notNull().default("English"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   tenantIdx: index("patients_tenant_idx").on(t.tenantId),
+  phoneE164Idx: index("patients_phone_e164_idx").on(t.phoneE164),
 }));
 
 export const journeyStageEnum = pgEnum("journey_stage", [

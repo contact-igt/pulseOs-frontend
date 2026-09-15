@@ -14,18 +14,19 @@ import {
   treatmentOpportunities,
   users,
 } from "../../db/schema.js";
-import { normalizePhone } from "../patient/phone.js";
+import { normalizePhone, resolveDefaultPhoneRegion } from "../patient/phone.js";
 import { createTask } from "../task/task.service.js";
 import type { CreateLeadInput, CreateLeadResult, LeadPhoneLookupResult, LeadRow, LeadStatus, LeadsSummary } from "@pulseos/types";
 
 export async function lookupPatientByPhone(db: Db, tenantId: string, rawPhone: string): Promise<LeadPhoneLookupResult> {
-  const phone = normalizePhone(rawPhone);
-  if (!phone) return { patient: null };
+  const defaultRegion = await resolveDefaultPhoneRegion(db, tenantId);
+  const normalized = normalizePhone(rawPhone, defaultRegion);
+  if (!normalized.e164) return { patient: null };
 
   const [patient] = await db
     .select({ id: patients.id, name: patients.name, phone: patients.phone })
     .from(patients)
-    .where(and(eq(patients.tenantId, tenantId), eq(patients.phone, phone)))
+    .where(and(eq(patients.tenantId, tenantId), eq(patients.phoneE164, normalized.e164)))
     .limit(1);
   if (!patient) return { patient: null };
 
@@ -34,16 +35,18 @@ export async function lookupPatientByPhone(db: Db, tenantId: string, rawPhone: s
 }
 
 export async function createLead(db: Db, tenantId: string, actorId: string, input: CreateLeadInput): Promise<CreateLeadResult> {
-  const phone = normalizePhone(input.phone);
+  const defaultRegion = await resolveDefaultPhoneRegion(db, tenantId);
+  const normalized = normalizePhone(input.phone, defaultRegion);
 
   // Canonical duplicate-prevention check: always resolve by phone, never
   // trust a client-supplied patientId blindly — a stale hint must not create
-  // a duplicate identity, and a match must not be ignored.
-  const [existingPatient] = await db
-    .select({ id: patients.id })
-    .from(patients)
-    .where(and(eq(patients.tenantId, tenantId), eq(patients.phone, phone)))
-    .limit(1);
+  // a duplicate identity, and a match must not be ignored. Falls back to an
+  // exact raw-string match when normalization fails (no reliable canonical
+  // key) — never a fuzzy match, never an automatic merge of two uncertain
+  // identities.
+  const [existingPatient] = normalized.e164
+    ? await db.select({ id: patients.id }).from(patients).where(and(eq(patients.tenantId, tenantId), eq(patients.phoneE164, normalized.e164))).limit(1)
+    : await db.select({ id: patients.id }).from(patients).where(and(eq(patients.tenantId, tenantId), eq(patients.phone, input.phone))).limit(1);
 
   let patientId: string;
   let isNewPatient: boolean;
@@ -56,7 +59,9 @@ export async function createLead(db: Db, tenantId: string, actorId: string, inpu
       .values({
         tenantId,
         name: input.name,
-        phone,
+        phone: input.phone,
+        phoneE164: normalized.e164,
+        phoneCountry: normalized.country,
         email: input.email ?? null,
         preferredLanguage: input.preferredLanguage ?? "English",
         branchId: input.branchId,

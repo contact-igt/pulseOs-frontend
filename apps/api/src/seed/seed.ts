@@ -376,7 +376,7 @@ async function main() {
       status: "CONNECTED",
       displayName: "WhatsApp (Meta Cloud API)",
       capabilities: ["SEND_MESSAGE", "RECEIVE_MESSAGE", "RECEIVE_STATUS"],
-      configuration: { mode: "fixture", phoneNumberId: "FIXTURE_PHONE_NUMBER_ID", businessAccountId: "FIXTURE_WABA_ID" },
+      configuration: { phoneNumberId: "FIXTURE_PHONE_NUMBER_ID", businessAccountId: "FIXTURE_WABA_ID" },
     })
     .returning();
   await db.insert(connectorSecrets).values({
@@ -397,7 +397,7 @@ async function main() {
       status: "CONNECTED",
       displayName: "Runo",
       capabilities: ["RECEIVE_CALL_EVENT", "RECEIVE_RECORDING"],
-      configuration: { mode: "fixture" },
+      configuration: null,
     })
     .returning();
   await db.insert(connectorSecrets).values({

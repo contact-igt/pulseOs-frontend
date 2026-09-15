@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
 import { Badge, EmptyState, ErrorState, SectionHeading, Skeleton } from "@pulseos/ui";
-import type { ConnectorStatus, ConnectorType } from "@pulseos/types";
+import type { ConnectorMode, ConnectorStatus, ConnectorType } from "@pulseos/types";
 import { Mail, MessageCircle, Phone, Radio, ShieldCheck, Target, Zap } from "lucide-react";
 
 const TYPE_ICON: Record<ConnectorType, typeof Phone> = {
@@ -44,6 +44,12 @@ const STATUS_TONE: Record<ConnectorStatus, "neutral" | "warning" | "danger" | "p
   ERROR: "danger",
   DISABLED: "neutral",
 };
+
+// A connected connector is only ever really "live" when its mode says so —
+// FIXTURE/SANDBOX must never read as equivalent to a real production
+// connection, no matter how healthy their status looks otherwise.
+const MODE_LABEL: Record<ConnectorMode, string> = { FIXTURE: "Fixture", SANDBOX: "Sandbox", LIVE: "Live" };
+const MODE_TONE: Record<ConnectorMode, "neutral" | "warning" | "primary"> = { FIXTURE: "neutral", SANDBOX: "warning", LIVE: "primary" };
 
 function relativeTime(iso: string | null) {
   if (!iso) return "—";
@@ -97,6 +103,7 @@ export default function IntegrationsPage() {
                   <p className="mt-0.5 text-[11px] text-neutral-500">{TYPE_LABEL[c.type]}</p>
                   <div className="mt-1 flex flex-wrap items-center gap-1">
                     <Badge tone={STATUS_TONE[c.status]}>{STATUS_LABEL[c.status]}</Badge>
+                    <Badge tone={MODE_TONE[c.mode]}>{MODE_LABEL[c.mode]}</Badge>
                     {c.capabilities.slice(0, 2).map((cap) => (
                       <span key={cap} className="rounded bg-neutral-100 px-1.5 py-0.5 text-[9px] font-medium text-neutral-500">
                         {cap.replace(/_/g, " ")}
@@ -123,7 +130,10 @@ export default function IntegrationsPage() {
                   {TYPE_LABEL[detail.data.connector.type]} · provider key <code className="rounded bg-neutral-100 px-1 py-0.5 text-[11px]">{detail.data.connector.provider}</code>
                 </p>
               </div>
-              <Badge tone={STATUS_TONE[detail.data.connector.status]}>{STATUS_LABEL[detail.data.connector.status]}</Badge>
+              <span className="flex items-center gap-1.5">
+                <Badge tone={STATUS_TONE[detail.data.connector.status]}>{STATUS_LABEL[detail.data.connector.status]}</Badge>
+                <Badge tone={MODE_TONE[detail.data.connector.mode]}>{MODE_LABEL[detail.data.connector.mode]}</Badge>
+              </span>
             </div>
 
             <div className="grid grid-cols-3 gap-4 border-y border-neutral-100 py-4 text-xs">

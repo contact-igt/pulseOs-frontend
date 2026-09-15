@@ -1,20 +1,29 @@
 import { and, desc, eq, ne } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { journeys, patients } from "../../db/schema.js";
+import { normalizePhone, resolveDefaultPhoneRegion } from "../patient/phone.js";
 
 // Conservative identity resolution shared by every inbound connector
-// (WhatsApp, Runo): exact phone match within the tenant only. A hospital
-// wants every inbound contact captured, so a genuinely new number creates a
-// new Patient — but nothing here ever fuzzy-matches or merges, since a wrong
-// match would attach a stranger's conversation or call to someone else's
-// record. "When identity is uncertain: store/match conservatively."
+// (WhatsApp, Runo, website forms, Meta/Google leads): normalizes the raw
+// phone to canonical E.164 using the tenant's default region and matches on
+// that — so "+91 98765 43210", "919876543210" and "09876543210" all resolve
+// to the same Patient. When normalization fails (an invalid/unparseable
+// number), there's no reliable canonical key, so the fallback is an exact
+// match on the raw string — never a fuzzy match, never an automatic merge of
+// two uncertain identities. "When identity is uncertain: store/match
+// conservatively."
 export async function findOrCreatePatientByPhone(db: Db, tenantId: string, phone: string, name: string | null) {
-  const [existing] = await db.select().from(patients).where(and(eq(patients.tenantId, tenantId), eq(patients.phone, phone))).limit(1);
+  const defaultRegion = await resolveDefaultPhoneRegion(db, tenantId);
+  const normalized = normalizePhone(phone, defaultRegion);
+
+  const [existing] = normalized.e164
+    ? await db.select().from(patients).where(and(eq(patients.tenantId, tenantId), eq(patients.phoneE164, normalized.e164))).limit(1)
+    : await db.select().from(patients).where(and(eq(patients.tenantId, tenantId), eq(patients.phone, phone))).limit(1);
   if (existing) return existing;
 
   const [created] = await db
     .insert(patients)
-    .values({ tenantId, phone, name: name ?? "Unknown caller" })
+    .values({ tenantId, phone, phoneE164: normalized.e164, phoneCountry: normalized.country, name: name ?? "Unknown caller" })
     .returning();
   return created;
 }

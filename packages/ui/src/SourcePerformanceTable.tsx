@@ -2,10 +2,20 @@
 
 import { useState } from "react";
 import type { SourcePerformanceRow } from "@pulseos/types";
-import { Card, SectionHeading } from "./primitives";
+import { Badge, Card, SectionHeading } from "./primitives";
 import { formatInr, formatMoneyOrDash, formatRoas } from "./format";
 
 type SortKey = "spend" | "enquiries" | "treatments" | "revenue" | "roas";
+
+// A synced campaign's spend/performance numbers are only as real as the
+// connector that produced them — a FIXTURE-mode campaign must never read as
+// equivalent to a LIVE one anywhere this table is used (Command Centre,
+// Campaigns/Sources). No badge at all for a manually-created campaign with
+// no connectorMode (never synced, so the question doesn't apply).
+function ConnectorModeBadge({ mode }: { mode: SourcePerformanceRow["connectorMode"] }) {
+  if (!mode || mode === "LIVE") return null;
+  return <Badge tone={mode === "SANDBOX" ? "warning" : "neutral"}>{mode === "SANDBOX" ? "Sandbox" : "Fixture"}</Badge>;
+}
 
 export function SourcePerformanceTable({
   rows,
@@ -65,7 +75,10 @@ export function SourcePerformanceTable({
           {(compact ? sorted.slice(0, 5) : sorted).map((row) => (
             <tr key={row.campaignId ?? row.source} className="cursor-pointer hover:bg-neutral-50" onClick={() => onRowClick?.(row)}>
               <td className="py-1.5">
-                <span className="block truncate text-slate-900">{compact ? row.source : row.campaignName}</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="block truncate text-slate-900">{compact ? row.source : row.campaignName}</span>
+                  <ConnectorModeBadge mode={row.connectorMode} />
+                </span>
                 {!compact && <span className="block text-[11px] text-neutral-400">{row.source}</span>}
               </td>
               {!compact && (
