@@ -1,14 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
 import { useRouter } from "next/navigation";
 import { Badge, EmptyState, ErrorState, SectionHeading, Skeleton } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import { withFrom } from "@/components/shell/BackLink";
-import type { ConversationChannel, OwnershipState } from "@pulseos/types";
-import { CalendarPlus, ListPlus, Mail, MessageCircle, MessageSquareText, Phone, User, Users as UsersIcon } from "lucide-react";
+import type { ConversationChannel, ConversationDetail, OwnershipState } from "@pulseos/types";
+import { ArrowLeft, CalendarPlus, ListPlus, Mail, MessageCircle, MessageSquareText, PanelRight, Phone, User, Users as UsersIcon, X } from "lucide-react";
 
 const CHANNEL_ICON: Record<ConversationChannel, typeof Mail> = {
   WHATSAPP: MessageCircle,
@@ -63,6 +63,14 @@ export default function InboxPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [assignTarget, setAssignTarget] = useState("");
+  // Below `md` the list and thread are two full-width screens, not two
+  // squeezed columns — this tracks which one is showing.
+  const [mobileView, setMobileView] = useState<"list" | "thread">("list");
+  // Patient Context is a persistent 3rd column only at very wide viewports
+  // (2xl+); everywhere narrower it's a toggleable drawer over the thread —
+  // this is what actually fixes the "3 columns squeeze the thread" bug:
+  // reclaiming the context column's ~300px instead of shrinking it.
+  const [contextOpen, setContextOpen] = useState(false);
 
   const conversations = useQuery({
     queryKey: ["conversations", channel, ownershipState, search],
@@ -83,6 +91,20 @@ export default function InboxPage() {
     () => conversations.data?.find((c) => c.id === effectiveSelectedId) ?? null,
     [conversations.data, effectiveSelectedId],
   );
+
+  function selectConversation(id: string) {
+    setSelectedId(id);
+    setMobileView("thread");
+  }
+
+  useEffect(() => {
+    if (!contextOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setContextOpen(false);
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [contextOpen]);
 
   function refreshAfterAction() {
     queryClient.invalidateQueries({ queryKey: ["conversations"] });
@@ -121,9 +143,27 @@ export default function InboxPage() {
     refreshAfterAction();
   }
 
+  function openBookAppointment() {
+    if (!detail.data?.patientContext || !selectedConversation) return;
+    quickCreate.openNewAppointment({ patient: { id: detail.data.patientContext.patientId, name: selectedConversation.patientName, phone: "" } });
+  }
+
+  function openCreateTask() {
+    if (!detail.data?.patientContext || !selectedConversation) return;
+    quickCreate.openAddTask({ patient: { id: detail.data.patientContext.patientId, name: selectedConversation.patientName, phone: "" } });
+  }
+
+  function goToProfile() {
+    if (!detail.data?.patientContext) return;
+    router.push(withFrom(`/patients/${detail.data.patientContext.patientId}`, "inbox"));
+  }
+
   return (
     <div className="flex h-full gap-4" data-testid="inbox-page">
-      <aside className="flex w-64 flex-shrink-0 flex-col overflow-hidden rounded-lg border border-neutral-200 bg-white lg:w-80">
+      {/* Conversation list — full width on its own screen below md, a fixed-width column alongside the thread at md+. */}
+      <aside
+        className={`${mobileView === "thread" ? "hidden" : "flex"} w-full flex-shrink-0 flex-col overflow-hidden rounded-lg border border-neutral-200 bg-white md:flex md:w-72 xl:w-80`}
+      >
         <div className="space-y-2 border-b border-neutral-100 p-3">
           <input
             value={search}
@@ -167,13 +207,13 @@ export default function InboxPage() {
               <button
                 key={c.id}
                 type="button"
-                onClick={() => setSelectedId(c.id)}
+                onClick={() => selectConversation(c.id)}
                 data-testid={`conversation-${c.id}`}
                 className={`flex w-full flex-col gap-1 border-b border-neutral-100 px-3 py-2 text-left hover:bg-neutral-50 ${active ? "bg-primary-50" : ""}`}
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="flex items-center gap-1.5 text-xs font-medium text-slate-900">
-                    <Icon size={13} className="text-neutral-400" />
+                    <Icon size={14} className="text-neutral-400" />
                     {c.patientName}
                   </span>
                   <span className="whitespace-nowrap text-[10px] text-neutral-400">{relativeTime(c.lastMessageAt)}</span>
@@ -191,19 +231,25 @@ export default function InboxPage() {
         </div>
       </aside>
 
-      <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-neutral-200 bg-white">
+      {/* Thread — the primary surface. Never shares its width with Patient Context below 2xl. */}
+      <section className={`${mobileView === "list" ? "hidden" : "flex"} min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-neutral-200 bg-white md:flex`}>
         {!selectedConversation && <EmptyState message="Select a conversation to view messages." />}
         {selectedConversation && (
           <>
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-100 p-3">
-              <div>
-                <p className="text-sm font-semibold text-slate-900">{selectedConversation.patientName}</p>
-                <p className="mt-0.5 flex items-center gap-1.5 text-xs text-neutral-500">
-                  {CHANNEL_LABEL[selectedConversation.channel]}
-                  <Badge tone={OWNERSHIP_TONE[selectedConversation.ownershipState]}>{OWNERSHIP_LABEL[selectedConversation.ownershipState]}</Badge>
-                </p>
+              <div className="flex min-w-0 items-center gap-2">
+                <button type="button" onClick={() => setMobileView("list")} className="shrink-0 rounded p-1 text-neutral-500 hover:bg-neutral-100 md:hidden" aria-label="Back to conversations">
+                  <ArrowLeft size={18} />
+                </button>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-slate-900">{selectedConversation.patientName}</p>
+                  <p className="mt-0.5 flex items-center gap-1.5 text-xs text-neutral-500">
+                    {CHANNEL_LABEL[selectedConversation.channel]}
+                    <Badge tone={OWNERSHIP_TONE[selectedConversation.ownershipState]}>{OWNERSHIP_LABEL[selectedConversation.ownershipState]}</Badge>
+                  </p>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {selectedConversation.ownershipState !== "CLOSED" && selectedConversation.ownershipState !== "HUMAN_ACTIVE" && (
                   <button type="button" onClick={handleClaim} data-testid="claim-conversation" className="rounded border border-neutral-200 px-2 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100">
                     Claim
@@ -239,6 +285,16 @@ export default function InboxPage() {
                     </button>
                   </div>
                 )}
+                <button
+                  type="button"
+                  onClick={() => setContextOpen(true)}
+                  className="rounded p-1.5 text-neutral-500 hover:bg-neutral-100 2xl:hidden"
+                  title="Patient context"
+                  aria-label="Show patient context"
+                  data-testid="open-patient-context"
+                >
+                  <PanelRight size={16} />
+                </button>
               </div>
             </div>
 
@@ -290,58 +346,75 @@ export default function InboxPage() {
         )}
       </section>
 
-      <aside className="hidden w-72 flex-shrink-0 overflow-y-auto rounded-lg border border-neutral-200 bg-white p-3 lg:block">
-        <SectionHeading title="Patient context" />
-        {!detail.data?.patientContext && <p className="text-xs text-neutral-400">No active journey for this patient.</p>}
-        {detail.data?.patientContext && (
-          <dl className="space-y-2 text-xs">
-            <Row label="Journey" value={detail.data.patientContext.journeyType} />
-            <Row label="Stage" value={detail.data.patientContext.stage?.replace(/_/g, " ") ?? null} />
-            <Row label="Owner" value={detail.data.patientContext.ownerName} />
-            <Row
-              label="Next appointment"
-              value={detail.data.patientContext.appointmentTime ? new Date(detail.data.patientContext.appointmentTime).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : null}
-            />
-            <Row
-              label="Next action due"
-              value={detail.data.patientContext.nextActionDueAt ? new Date(detail.data.patientContext.nextActionDueAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : null}
-            />
-            <Row label="Last interaction" value={detail.data.patientContext.lastInteractionAt ? relativeTime(detail.data.patientContext.lastInteractionAt) : null} />
-          </dl>
-        )}
-
-        {detail.data?.patientContext && (
-          <div className="mt-4 border-t border-neutral-100 pt-3">
-            <SectionHeading title="Quick Actions" />
-            <div className="space-y-1">
-              <QuickActionButton
-                icon={CalendarPlus}
-                label="Book Appointment"
-                onClick={() =>
-                  quickCreate.openNewAppointment({
-                    patient: { id: detail.data!.patientContext!.patientId, name: selectedConversation!.patientName, phone: "" },
-                  })
-                }
-              />
-              <QuickActionButton
-                icon={ListPlus}
-                label="Create Task"
-                onClick={() =>
-                  quickCreate.openAddTask({
-                    patient: { id: detail.data!.patientContext!.patientId, name: selectedConversation!.patientName, phone: "" },
-                  })
-                }
-              />
-              <QuickActionButton
-                icon={User}
-                label="View Full Profile"
-                onClick={() => router.push(withFrom(`/patients/${detail.data!.patientContext!.patientId}`, "inbox"))}
-              />
-            </div>
-          </div>
-        )}
+      {/* Patient Context — a real 3rd column only at very wide viewports. */}
+      <aside className="hidden w-72 flex-shrink-0 overflow-y-auto rounded-lg border border-neutral-200 bg-white p-3 2xl:block xl:w-80">
+        <PatientContextPanel detail={detail.data} onBook={openBookAppointment} onTask={openCreateTask} onProfile={goToProfile} />
       </aside>
+
+      {/* Same content as a slide-over drawer everywhere narrower than 2xl. */}
+      {contextOpen && (
+        <div className="fixed inset-0 z-40 flex justify-end 2xl:hidden" role="dialog" aria-modal="true" aria-label="Patient context">
+          <button type="button" aria-label="Close" onClick={() => setContextOpen(false)} className="absolute inset-0 bg-slate-900/30 transition-opacity duration-200" />
+          <div className="relative flex h-full w-full max-w-xs flex-col overflow-y-auto border-l border-neutral-200 bg-white p-3 shadow-xl transition-transform duration-200">
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wide text-neutral-400">Patient context</span>
+              <button type="button" onClick={() => setContextOpen(false)} className="rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-slate-900" data-testid="close-patient-context">
+                <X size={16} />
+              </button>
+            </div>
+            <PatientContextPanel detail={detail.data} onBook={openBookAppointment} onTask={openCreateTask} onProfile={goToProfile} hideTitle />
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function PatientContextPanel({
+  detail,
+  onBook,
+  onTask,
+  onProfile,
+  hideTitle = false,
+}: {
+  detail: ConversationDetail | undefined;
+  onBook: () => void;
+  onTask: () => void;
+  onProfile: () => void;
+  hideTitle?: boolean;
+}) {
+  return (
+    <>
+      {!hideTitle && <SectionHeading title="Patient context" />}
+      {!detail?.patientContext && <p className="text-xs text-neutral-400">No active journey for this patient.</p>}
+      {detail?.patientContext && (
+        <dl className="space-y-2 text-xs">
+          <Row label="Journey" value={detail.patientContext.journeyType} />
+          <Row label="Stage" value={detail.patientContext.stage?.replace(/_/g, " ") ?? null} />
+          <Row label="Owner" value={detail.patientContext.ownerName} />
+          <Row
+            label="Next appointment"
+            value={detail.patientContext.appointmentTime ? new Date(detail.patientContext.appointmentTime).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : null}
+          />
+          <Row
+            label="Next action due"
+            value={detail.patientContext.nextActionDueAt ? new Date(detail.patientContext.nextActionDueAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : null}
+          />
+          <Row label="Last interaction" value={detail.patientContext.lastInteractionAt ? relativeTime(detail.patientContext.lastInteractionAt) : null} />
+        </dl>
+      )}
+
+      {detail?.patientContext && (
+        <div className="mt-4 border-t border-neutral-100 pt-3">
+          <SectionHeading title="Quick Actions" />
+          <div className="space-y-1">
+            <QuickActionButton icon={CalendarPlus} label="Book Appointment" onClick={onBook} />
+            <QuickActionButton icon={ListPlus} label="Create Task" onClick={onTask} />
+            <QuickActionButton icon={User} label="View Full Profile" onClick={onProfile} />
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
