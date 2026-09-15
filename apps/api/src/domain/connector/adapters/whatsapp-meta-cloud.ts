@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { META_GRAPH_API_VERSION, verifyMetaChallenge, verifyMetaSignature } from "../meta-webhook.js";
 import type { MessagingProviderAdapter, ParsedWhatsAppWebhook } from "../types.js";
 
 // Ported patterns from invictus-chatbot's AuthWhatsApp controller/service (read
@@ -9,18 +9,9 @@ import type { MessagingProviderAdapter, ParsedWhatsAppWebhook } from "../types.j
 // token, response.messages[0].id is the wamid). HMAC signature verification
 // was NOT present in that reference implementation — added here per Meta's
 // own documented webhook security contract, since PulseOS must not accept
-// unsigned webhook traffic.
-const META_API_VERSION = "v23.0";
-
-function verifySignature(rawBody: string, signatureHeader: string | undefined, appSecret: string): boolean {
-  if (!signatureHeader?.startsWith("sha256=")) return false;
-  const expectedHex = createHmac("sha256", appSecret).update(rawBody, "utf8").digest("hex");
-  const providedHex = signatureHeader.slice("sha256=".length);
-  const expected = Buffer.from(expectedHex, "hex");
-  const provided = Buffer.from(providedHex, "hex");
-  if (expected.length !== provided.length) return false;
-  return timingSafeEqual(expected, provided);
-}
+// unsigned webhook traffic. Challenge/signature verification now shared
+// with the Meta Lead Ads adapter via meta-webhook.ts, rather than each
+// Meta-family adapter re-implementing the same HMAC check.
 
 interface MetaWebhookValue {
   metadata?: { phone_number_id?: string };
@@ -33,18 +24,11 @@ export const whatsAppMetaCloudAdapter: MessagingProviderAdapter = {
   capabilities: ["SEND_MESSAGE", "RECEIVE_MESSAGE", "RECEIVE_STATUS"],
 
   verifyWebhookChallenge(query, secrets) {
-    const mode = query["hub.mode"];
-    const token = query["hub.verify_token"];
-    const challenge = query["hub.challenge"];
-    if (mode !== "subscribe" || !token || !challenge) return null;
-    if (token !== secrets.webhookVerifyToken) return null;
-    return challenge;
+    return verifyMetaChallenge(query, secrets.webhookVerifyToken);
   },
 
   verifyWebhookSignature(rawBody, signatureHeader, secrets) {
-    const appSecret = secrets.appSecret;
-    if (typeof appSecret !== "string" || !appSecret) return false;
-    return verifySignature(rawBody, signatureHeader, appSecret);
+    return verifyMetaSignature(rawBody, signatureHeader, secrets.appSecret);
   },
 
   parseWebhookPayload(payload): ParsedWhatsAppWebhook {
@@ -100,7 +84,7 @@ export const whatsAppMetaCloudAdapter: MessagingProviderAdapter = {
       throw new Error("WhatsApp connector is missing phoneNumberId configuration or accessToken secret");
     }
 
-    const res = await fetch(`https://graph.facebook.com/${META_API_VERSION}/${phoneNumberId}/messages`, {
+    const res = await fetch(`https://graph.facebook.com/${META_GRAPH_API_VERSION}/${phoneNumberId}/messages`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
       body: JSON.stringify({ messaging_product: "whatsapp", to, type: "text", text: { body } }),

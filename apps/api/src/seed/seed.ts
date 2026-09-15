@@ -11,8 +11,10 @@ import {
   connectorSecrets,
   consultationOutcomes,
   conversations,
+  conversionFeedbackEvents,
   customFieldDefinitions,
   customFieldValues,
+  gbpPerformanceMetrics,
   journeys,
   marketingCampaigns,
   messages,
@@ -335,6 +337,7 @@ async function main() {
   await db.delete(conversations);
   await db.delete(timelineEvents);
   await db.delete(revenueEvents);
+  await db.delete(conversionFeedbackEvents);
   await db.delete(treatmentOpportunities);
   await db.delete(consultationOutcomes);
   await db.delete(tasks);
@@ -347,6 +350,7 @@ async function main() {
   await db.delete(users);
   await db.delete(branches);
   await db.delete(connectorSecrets);
+  await db.delete(gbpPerformanceMetrics);
   await db.delete(connectors);
   await db.delete(customFieldDefinitions);
   await db.delete(specialtyTemplates);
@@ -405,6 +409,54 @@ async function main() {
   await db.insert(connectorSecrets).values({
     connectorId: runoConnector.id,
     encryptedPayload: encryptSecret({ webhookSharedSecret: "pulseos-fixture-runo-secret" }),
+  });
+
+  await db.insert(connectors).values({
+    tenantId: tenant.id, type: "ACQUISITION", provider: "website_form", status: "CONNECTED", mode: "FIXTURE",
+    displayName: "Website Contact Form", capabilities: ["RECEIVE_FORM"], configuration: { formIds: ["landing-fertility-v2"] },
+  });
+
+  // GBP is aggregate location analytics only — SYNC_PERFORMANCE, never
+  // RECEIVE_LEAD/RECEIVE_FORM, since it must never create a Patient.
+  const [gbpConnector] = await db
+    .insert(connectors)
+    .values({
+      tenantId: tenant.id, type: "ACQUISITION", provider: "google_business_profile", status: "CONNECTED", mode: "FIXTURE",
+      displayName: "Google Business Profile", capabilities: ["SYNC_PERFORMANCE"], configuration: { locationId: "locations/FIXTURE_LOCATION_ID" },
+    })
+    .returning();
+  await db.insert(connectorSecrets).values({
+    connectorId: gbpConnector.id,
+    encryptedPayload: encryptSecret({ accessToken: "FIXTURE_GBP_ACCESS_TOKEN" }),
+  });
+
+  const [googleLeadFormsConnector] = await db
+    .insert(connectors)
+    .values({
+      tenantId: tenant.id, type: "ACQUISITION", provider: "google_ads_lead_forms", status: "CONNECTED", mode: "FIXTURE",
+      displayName: "Google Ads Lead Forms", capabilities: ["RECEIVE_LEAD", "SYNC_CAMPAIGNS", "SYNC_SPEND", "EXPORT_CONVERSION"],
+      configuration: {},
+    })
+    .returning();
+  await db.insert(connectorSecrets).values({
+    connectorId: googleLeadFormsConnector.id,
+    encryptedPayload: encryptSecret({ googleKey: "pulseos-fixture-google-key" }),
+  });
+
+  // Fixture Meta Lead Ads — honestly labeled FIXTURE, never implies a real
+  // Meta App Review-approved integration. No real pageAccessToken/appSecret
+  // exist in local dev.
+  const [metaLeadAdsConnector] = await db
+    .insert(connectors)
+    .values({
+      tenantId: tenant.id, type: "ACQUISITION", provider: "meta_lead_ads", status: "CONNECTED", mode: "FIXTURE",
+      displayName: "Meta Lead Ads", capabilities: ["RECEIVE_LEAD", "SYNC_CAMPAIGNS", "SYNC_SPEND", "EXPORT_CONVERSION"],
+      configuration: { pageId: "FIXTURE_PAGE_ID" },
+    })
+    .returning();
+  await db.insert(connectorSecrets).values({
+    connectorId: metaLeadAdsConnector.id,
+    encryptedPayload: encryptSecret({ appSecret: "FIXTURE_TEST_APP_SECRET", webhookVerifyToken: "pulseos-fixture-verify-token", pageAccessToken: "FIXTURE_PAGE_ACCESS_TOKEN" }),
   });
 
   await db.insert(connectors).values([

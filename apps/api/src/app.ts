@@ -18,6 +18,7 @@ import { webhookRoutes } from "./domain/connector/webhook.routes.js";
 import { leadRoutes } from "./domain/lead/lead.routes.js";
 import { specialtyRoutes } from "./domain/specialty/specialty.routes.js";
 import { campaignRoutes } from "./domain/campaign/campaign.routes.js";
+import { websiteFormRoutes } from "./domain/acquisition/website-form.routes.js";
 
 export async function buildApp() {
   const app = Fastify({ logger: true });
@@ -54,6 +55,7 @@ export async function buildApp() {
 
   await app.register(authRoutes);
   await app.register(webhookRoutes);
+  await app.register(websiteFormRoutes);
   await app.register(async (protectedApp) => {
     protectedApp.addHook("preHandler", (request, reply, done) => requireAuth(request, reply, done));
     await protectedApp.register(dashboardRoutes);

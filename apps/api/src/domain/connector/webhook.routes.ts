@@ -1,9 +1,11 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { getConnectorById, getConnectorSecrets, touchConnectorError, touchConnectorSuccess } from "./connector.service.js";
 import { markEventFailed, markEventProcessed, recordConnectorEvent } from "./connector-event.service.js";
-import { getMessagingAdapter, getTelephonyAdapter } from "./registry.js";
+import { getAcquisitionAdapter, getMessagingAdapter, getTelephonyAdapter } from "./registry.js";
 import { processInboundWhatsAppMessage, processWhatsAppStatusUpdate } from "./whatsapp-webhook.service.js";
 import { persistInboundCall } from "./call-webhook.service.js";
+import { processProviderLead } from "../acquisition/lead-webhook.service.js";
+import { ingestNormalizedLead } from "../acquisition/lead-ingestion.service.js";
 
 interface RequestWithRawBody extends FastifyRequest {
   rawBody?: string;
@@ -144,5 +146,132 @@ export async function webhookRoutes(app: FastifyInstance) {
     }
 
     return reply.status(200).send({ ok: true });
+  });
+
+  app.get("/webhooks/meta-lead-ads/:connectorId", async (request, reply) => {
+    const { connectorId } = request.params as { connectorId: string };
+    const connector = await getConnectorById(app.db, connectorId);
+    if (!connector) return reply.status(404).send("not_found");
+
+    const adapter = getAcquisitionAdapter(connector.provider);
+    if (!adapter?.verifyWebhookChallenge) return reply.status(404).send("not_found");
+
+    const secrets = await getConnectorSecrets(app.db, connectorId);
+    if (!secrets) return reply.status(403).send("forbidden");
+
+    const query = request.query as Record<string, string>;
+    const challenge = adapter.verifyWebhookChallenge(query, secrets);
+    if (challenge === null) return reply.status(403).send("forbidden");
+    return reply.status(200).send(challenge);
+  });
+
+  app.post("/webhooks/meta-lead-ads/:connectorId", async (request, reply) => {
+    const { connectorId } = request.params as { connectorId: string };
+    const connector = await getConnectorById(app.db, connectorId);
+    if (!connector || connector.status === "DISABLED") return reply.status(200).send({ ok: true });
+
+    const adapter = getAcquisitionAdapter(connector.provider);
+    if (!adapter?.parseWebhookLeadReferences || !adapter.fetchLead) return reply.status(200).send({ ok: true });
+
+    const secrets = await getConnectorSecrets(app.db, connectorId);
+    if (!secrets) return reply.status(200).send({ ok: true });
+
+    const rawBody = (request as RequestWithRawBody).rawBody ?? "";
+    const signatureHeader = request.headers["x-hub-signature-256"] as string | undefined;
+    if (adapter.verifyWebhookSignature && !adapter.verifyWebhookSignature(rawBody, signatureHeader, secrets)) {
+      app.log.warn({ connectorId }, "Meta Lead Ads webhook signature rejected");
+      return reply.status(401).send({ error: "invalid_signature" });
+    }
+
+    const config = { ...((connector.configuration as Record<string, unknown>) ?? {}), mode: connector.mode.toLowerCase() };
+    const refs = adapter.parseWebhookLeadReferences(request.body);
+
+    for (const ref of refs) {
+      const { duplicate, eventId } = await recordConnectorEvent(app.db, {
+        tenantId: connector.tenantId,
+        connectorId,
+        externalEventId: ref.externalLeadId,
+        direction: "inbound",
+        payload: { type: "leadgen" },
+      });
+      if (duplicate) continue;
+
+      try {
+        await processProviderLead(app.db, connector.tenantId, adapter, ref, config, secrets, {
+          journeyTypeFallback: "Meta Lead Ads Enquiry",
+          campaignNameFallback: "Meta Lead Ads Campaign",
+          sourceLabel: "Meta Lead Ads",
+          taskDueInHours: 2,
+          firstTouchEventType: "meta_lead_received",
+          firstTouchTitle: "Meta Lead Ads enquiry received",
+          additionalTouchEventType: "meta_lead_additional_touch",
+          additionalTouchTitle: "Additional Meta Lead Ads touch recorded",
+          connectorId,
+        });
+        await markEventProcessed(app.db, eventId);
+        await touchConnectorSuccess(app.db, connectorId);
+      } catch (err) {
+        await markEventFailed(app.db, eventId, (err as Error).message);
+        await touchConnectorError(app.db, connectorId, (err as Error).message);
+      }
+    }
+
+    return reply.status(200).send({ ok: true });
+  });
+
+  // Google's contract (unlike Meta's) is a single POST per lead carrying the
+  // full submission — no separate fetch step, no GET challenge handshake,
+  // and auth is a plaintext google_key field inside the body rather than a
+  // signed header. Response shape follows Google's own documented contract:
+  // {} on success, {message} on error, 4xx non-retryable / 5xx retryable.
+  app.post("/webhooks/google-ads-lead-forms/:connectorId", async (request, reply) => {
+    const { connectorId } = request.params as { connectorId: string };
+    const connector = await getConnectorById(app.db, connectorId);
+    if (!connector || connector.status === "DISABLED") return reply.status(200).send({});
+
+    const adapter = getAcquisitionAdapter(connector.provider);
+    if (!adapter?.verifyWebhookKey || !adapter.parseWebhookLead) return reply.status(200).send({});
+
+    const secrets = await getConnectorSecrets(app.db, connectorId);
+    if (!secrets) return reply.status(200).send({});
+
+    if (!adapter.verifyWebhookKey(request.body, secrets)) {
+      app.log.warn({ connectorId }, "Google Ads Lead Forms webhook key rejected");
+      return reply.status(400).send({ message: "invalid_google_key" });
+    }
+
+    const leads = adapter.parseWebhookLead(request.body);
+    for (const lead of leads) {
+      const { duplicate, eventId } = await recordConnectorEvent(app.db, {
+        tenantId: connector.tenantId,
+        connectorId,
+        externalEventId: lead.externalLeadId,
+        direction: "inbound",
+        payload: { type: "lead_form" },
+      });
+      if (duplicate) continue;
+
+      try {
+        await ingestNormalizedLead(app.db, connector.tenantId, lead, {
+          journeyTypeFallback: "Google Ads Lead Enquiry",
+          campaignNameFallback: "Google Ads Lead Forms Campaign",
+          sourceLabel: "Google Ads Lead Forms",
+          taskDueInHours: 2,
+          firstTouchEventType: "google_lead_received",
+          firstTouchTitle: "Google Ads lead enquiry received",
+          additionalTouchEventType: "google_lead_additional_touch",
+          additionalTouchTitle: "Additional Google Ads lead touch recorded",
+          connectorId,
+        });
+        await markEventProcessed(app.db, eventId);
+        await touchConnectorSuccess(app.db, connectorId);
+      } catch (err) {
+        await markEventFailed(app.db, eventId, (err as Error).message);
+        await touchConnectorError(app.db, connectorId, (err as Error).message);
+        return reply.status(500).send({ message: "processing_failed" });
+      }
+    }
+
+    return reply.status(200).send({});
   });
 }
