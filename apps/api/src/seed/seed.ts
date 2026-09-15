@@ -32,6 +32,7 @@ import { encryptSecret } from "../domain/security/encryption.js";
 import { normalizePhone } from "../domain/patient/phone.js";
 import { ensureDefaultSpecialties } from "../domain/specialty/specialty.service.js";
 import { createLead } from "../domain/lead/lead.service.js";
+import { recordTouchpoint } from "../domain/acquisition/attribution.service.js";
 
 function requireDemoPassword(): string {
   const value = process.env.DEMO_PASSWORD;
@@ -665,8 +666,14 @@ async function main() {
       followUp: { type: "CALLBACK", dueAt: daysFromNow(2, 11).toISOString(), assignedTo: coordinator.id },
     }),
     createLead(db, tenant.id, admin.id, {
+      // Multi-touch attribution demo journey — the prompt's own canonical
+      // example (Meta -> Google Search -> Appointment): first touch here is
+      // Meta, a second touchpoint (Google) is recorded below once the
+      // journey exists, so Patient 360's first/last-touch + full-history
+      // display has a real cross-source example to show, not just
+      // single-touch data.
       name: "Kiran Rao", phone: "9811122002", specialtyKey: "FERTILITY", branchId: branchA.id,
-      source: "google", campaignId: googleCampaign.id, journeyType: "Fertility",
+      source: "meta", campaignId: metaCampaign.id, journeyType: "Fertility",
       ownerId: coordinator.id, customFieldValues: { ivf_interest: true, treatment_stage: "Evaluation" },
     }),
     createLead(db, tenant.id, admin.id, {
@@ -696,6 +703,22 @@ async function main() {
   // already exercise the "new lead + first follow-up task" path instead.
   await db.update(journeys).set({ contactedAt: daysFromNow(-3, 10) }).where(eq(journeys.id, leadResults[2].journeyId)); // Faisal
   await db.update(journeys).set({ contactedAt: daysFromNow(-1, 9) }).where(eq(journeys.id, leadResults[3].journeyId)); // Sunita
+
+  // Kiran Rao's second, later touch — same journey, different source.
+  // recordTouchpoint (not a hand-inserted row) so first_touch stays Meta
+  // and this correctly becomes last_touch.
+  await recordTouchpoint(db, {
+    tenantId: tenant.id,
+    patientId: leadResults[1].patientId,
+    journeyId: leadResults[1].journeyId,
+    details: { source: "google", occurredAt: daysFromNow(1, 14), utmCampaign: googleCampaign.name },
+    campaignId: googleCampaign.id,
+  });
+  await db.insert(timelineEvents).values({
+    tenantId: tenant.id, patientId: leadResults[1].patientId, journeyId: leadResults[1].journeyId,
+    actorType: "system", eventType: "source_captured", title: `Also engaged via ${googleCampaign.name}`,
+    sourceChannel: "google", occurredAt: daysFromNow(1, 14),
+  });
 
   console.log("Seed complete.");
   console.log(`Conversations: ${CONVERSATION_CONFIGS.length}`);

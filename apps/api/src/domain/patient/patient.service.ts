@@ -14,6 +14,7 @@ import {
   users,
 } from "../../db/schema.js";
 import { allocatedAcquisitionCost } from "../marketing/formulas.js";
+import { getAttributionSummary } from "../acquisition/attribution.service.js";
 import { resolveOrCreatePatient } from "./identity.service.js";
 import type { CreatePatientInput, CreatePatientResult, JourneyCardVm, Patient360, PatientListRow } from "@pulseos/types";
 
@@ -230,7 +231,10 @@ export async function getPatient360(db: Db, tenantId: string, patientId: string)
     });
   }
 
-  // Acquisition context: first-touch campaign on the patient's most recent journey.
+  // Acquisition context: full attribution (first touch, current last touch,
+  // full history count) on the patient's most recent journey — one read
+  // surface shared with Campaigns/Command Centre, see
+  // acquisition/attribution.service.ts::getAttributionSummary.
   const primaryJourneyId = journeyRows[0]?.id;
   let acquisition: Patient360["acquisition"] = {
     source: journeyRows[0]?.source ?? null,
@@ -239,19 +243,17 @@ export async function getPatient360(db: Db, tenantId: string, patientId: string)
     allocatedAcquisitionCost: null,
     estimatedTreatmentValue: 0,
     attributedRevenue: 0,
+    touchpointCount: 0,
+    lastTouch: null,
   };
 
   if (primaryJourneyId) {
-    const [touchpoint] = await db
-      .select({ occurredAt: campaignTouchpoints.occurredAt, campaignId: campaignTouchpoints.campaignId, source: campaignTouchpoints.source })
-      .from(campaignTouchpoints)
-      .where(and(eq(campaignTouchpoints.journeyId, primaryJourneyId), eq(campaignTouchpoints.touchType, "first_touch")))
-      .limit(1);
+    const { firstTouch, currentLastTouch, history } = await getAttributionSummary(db, primaryJourneyId);
 
     let allocatedCost: number | null = null;
     let campaignName: string | null = null;
-    if (touchpoint?.campaignId) {
-      const [campaign] = await db.select().from(marketingCampaigns).where(eq(marketingCampaigns.id, touchpoint.campaignId)).limit(1);
+    if (firstTouch?.campaignId) {
+      const [campaign] = await db.select().from(marketingCampaigns).where(eq(marketingCampaigns.id, firstTouch.campaignId)).limit(1);
       if (campaign) {
         campaignName = campaign.name;
         const campaignTouchpointRows = await db
@@ -271,13 +273,28 @@ export async function getPatient360(db: Db, tenantId: string, patientId: string)
     const revenueRows = await db.select({ amount: revenueEvents.amount }).from(revenueEvents).where(eq(revenueEvents.patientId, patientId));
     const attributedRevenue = revenueRows.reduce((sum, r) => sum + r.amount, 0);
 
+    // A journey with only ever one recorded touch has no meaningful "last
+    // touch" distinct from the first — surfacing one here would just repeat
+    // the same row twice.
+    let lastTouch: Patient360["acquisition"]["lastTouch"] = null;
+    if (history.length > 1 && currentLastTouch && currentLastTouch.id !== firstTouch?.id) {
+      let lastTouchCampaignName: string | null = null;
+      if (currentLastTouch.campaignId) {
+        const [lastCampaign] = await db.select({ name: marketingCampaigns.name }).from(marketingCampaigns).where(eq(marketingCampaigns.id, currentLastTouch.campaignId)).limit(1);
+        lastTouchCampaignName = lastCampaign?.name ?? null;
+      }
+      lastTouch = { source: currentLastTouch.source, campaignName: lastTouchCampaignName, occurredAt: currentLastTouch.occurredAt.toISOString() };
+    }
+
     acquisition = {
-      source: touchpoint?.source ?? journeyRows[0]?.source ?? null,
+      source: firstTouch?.source ?? journeyRows[0]?.source ?? null,
       campaignName,
-      firstTouchAt: touchpoint ? touchpoint.occurredAt.toISOString() : null,
+      firstTouchAt: firstTouch ? firstTouch.occurredAt.toISOString() : null,
       allocatedAcquisitionCost: allocatedCost,
       estimatedTreatmentValue,
       attributedRevenue,
+      touchpointCount: history.length,
+      lastTouch,
     };
   }
 

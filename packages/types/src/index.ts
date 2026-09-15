@@ -353,6 +353,10 @@ export interface Patient360 {
     allocatedAcquisitionCost: number | null;
     estimatedTreatmentValue: number;
     attributedRevenue: number;
+    // Full multi-touch context — lastTouch is null when the journey has
+    // only ever had the one (first) touch.
+    touchpointCount: number;
+    lastTouch: { source: SourceChannel | null; campaignName: string | null; occurredAt: string } | null;
   };
 }
 

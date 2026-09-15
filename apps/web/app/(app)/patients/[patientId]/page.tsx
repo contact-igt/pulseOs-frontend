@@ -171,6 +171,16 @@ export default function Patient360Page() {
             <span className="text-sm font-medium text-slate-700">{formatInr(acquisition.attributedRevenue)}</span>
           </div>
         </div>
+
+        {acquisition.lastTouch && (
+          <div className="mt-4 flex items-center gap-2 rounded-lg border border-primary-100 bg-primary-50 px-3 py-2 text-xs" data-testid="patient-last-touch">
+            <span className="font-medium text-primary-700">Multi-touch:</span>
+            <span className="text-primary-700">
+              {acquisition.touchpointCount} touches recorded — most recently via <strong>{acquisition.lastTouch.source ?? "unknown source"}</strong>
+              {acquisition.lastTouch.campaignName ? ` (${acquisition.lastTouch.campaignName})` : ""} on {fmtDate(acquisition.lastTouch.occurredAt)}. First touch above is preserved.
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

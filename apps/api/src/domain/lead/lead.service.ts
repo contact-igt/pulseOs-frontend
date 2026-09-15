@@ -16,6 +16,7 @@ import {
 } from "../../db/schema.js";
 import { normalizePhone, resolveDefaultPhoneRegion } from "../patient/phone.js";
 import { resolveOrCreatePatient } from "../patient/identity.service.js";
+import { recordTouchpoint } from "../acquisition/attribution.service.js";
 import { createTask } from "../task/task.service.js";
 import type { CreateLeadInput, CreateLeadResult, LeadPhoneLookupResult, LeadRow, LeadStatus, LeadsSummary } from "@pulseos/types";
 
@@ -77,14 +78,20 @@ export async function createLead(db: Db, tenantId: string, actorId: string, inpu
     .returning();
 
   if (input.campaignId) {
-    await db.insert(campaignTouchpoints).values({
+    // Journey-scoped attribution (first touch immutable, later touches
+    // become last_touch, full history preserved) rather than always writing
+    // first_touch — see acquisition/attribution.service.ts. A brand-new
+    // Journey has no prior touchpoints, so this call is always the first
+    // touch for it; the first/last distinction only becomes visible once a
+    // second touch is recorded against the same still-open Journey (e.g. by
+    // a future adapter's webhook, or a subsequent Add Lead call that
+    // resolves to this Journey).
+    await recordTouchpoint(db, {
       tenantId,
       patientId,
       journeyId: journey.id,
+      details: { source: input.source, occurredAt: new Date() },
       campaignId: input.campaignId,
-      source: input.source,
-      touchType: "first_touch",
-      occurredAt: new Date(),
     });
   }
 
