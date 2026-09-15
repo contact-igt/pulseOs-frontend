@@ -244,7 +244,16 @@ export async function sendMessage(db: Db, tenantId: string, conversationId: stri
       const secrets = to ? await getConnectorSecrets(db, connector.id) : null;
       if (to && secrets) {
         try {
-          const sent = await adapter.sendMessage((connector.configuration as Record<string, unknown>) ?? {}, secrets, to, body);
+          // mode must be stamped onto config exactly like campaign-sync.service.ts
+          // does for its adapter calls — without it, config.mode is undefined, every
+          // adapter's `if (config.mode === "fixture")` guard is skipped, and a FIXTURE
+          // connector attempts a real provider API call with fixture secrets. That
+          // always fails, which permanently flips the connector to ERROR via
+          // touchConnectorError below — the actual root cause of a previously
+          // observed flake where connector-checkpoint's own live-reply step
+          // corrupted connector status for any later run against the same DB.
+          const config = { ...((connector.configuration as Record<string, unknown>) ?? {}), mode: connector.mode.toLowerCase() };
+          const sent = await adapter.sendMessage(config, secrets, to, body);
           providerMessageId = sent.providerMessageId;
           deliveryStatus = "sent";
           await touchConnectorSuccess(db, connector.id);
