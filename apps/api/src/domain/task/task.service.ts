@@ -1,7 +1,7 @@
-import { and, eq, gte, lt, or } from "drizzle-orm";
+import { and, eq, gte, lt, or, sql } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { journeys, patients, tasks, timelineEvents, users } from "../../db/schema.js";
-import type { CreateTaskInput, TaskRow, TaskView } from "@pulseos/types";
+import type { CreateTaskInput, TaskCounts, TaskRow, TaskView } from "@pulseos/types";
 
 function todayRange() {
   const start = new Date();
@@ -68,6 +68,41 @@ export async function listTasks(db: Db, tenantId: string, filters: TaskFilters):
     .orderBy(tasks.dueAt);
 
   return rows.map(toRow);
+}
+
+/**
+ * One aggregate query for the "My Work" tab counts, mirroring listTasks's
+ * exact view-condition logic (today/overdue/upcoming/completed) via
+ * COUNT(*) FILTER instead of four separate round trips. Scoped to the
+ * caller's own assignment — never an arbitrary assignedTo override.
+ */
+export async function getTaskCounts(db: Db, tenantId: string, userId: string): Promise<TaskCounts> {
+  const { start, end } = todayRange();
+  const now = new Date();
+
+  const overdueCond = and(eq(tasks.status, "pending"), lt(tasks.dueAt, now));
+  const todayCond = and(eq(tasks.status, "pending"), gte(tasks.dueAt, start), lt(tasks.dueAt, end));
+  const upcomingCond = and(or(eq(tasks.status, "pending"), eq(tasks.status, "in_progress")), gte(tasks.dueAt, end));
+  const completedCond = eq(tasks.status, "completed");
+
+  const [row] = await db
+    .select({
+      mine: sql<number>`count(*)`,
+      overdue: sql<number>`count(*) filter (where ${overdueCond})`,
+      today: sql<number>`count(*) filter (where ${todayCond})`,
+      upcoming: sql<number>`count(*) filter (where ${upcomingCond})`,
+      completed: sql<number>`count(*) filter (where ${completedCond})`,
+    })
+    .from(tasks)
+    .where(and(eq(tasks.tenantId, tenantId), eq(tasks.assignedTo, userId)));
+
+  return {
+    mine: Number(row.mine),
+    overdue: Number(row.overdue),
+    today: Number(row.today),
+    upcoming: Number(row.upcoming),
+    completed: Number(row.completed),
+  };
 }
 
 export async function createTask(db: Db, tenantId: string, createdBy: string, input: CreateTaskInput): Promise<TaskRow> {

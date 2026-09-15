@@ -45,6 +45,7 @@ import type {
   SpecialtyTemplateVm,
   SpendAtRisk,
   SpendAtRiskSummary,
+  TaskCounts,
   TaskRow,
   TaskView,
   TeamWorkloadRow,
@@ -149,6 +150,7 @@ export const api = {
   lookups: () => request<Lookups>("/lookups"),
   tasks: (filters: { view?: TaskView; assignedTo?: string; patientId?: string } = {}) =>
     request<TaskRow[]>(`/tasks${toQuery({ ...filters })}`),
+  taskCounts: () => request<TaskCounts>("/tasks/counts"),
   createTask: (input: CreateTaskInput) => request<TaskRow>("/tasks", { method: "POST", body: JSON.stringify(input) }),
   addTaskNote: (id: string, notes: string) => request<TaskRow>(`/tasks/${id}/note`, { method: "PATCH", body: JSON.stringify({ notes }) }),
   rescheduleTask: (id: string, dueAt: string) => request<TaskRow>(`/tasks/${id}/reschedule`, { method: "PATCH", body: JSON.stringify({ dueAt }) }),

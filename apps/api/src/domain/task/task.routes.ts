@@ -6,6 +6,7 @@ import {
   completeTask,
   createTask,
   getTaskById,
+  getTaskCounts,
   listTasks,
   reassignTask,
   rescheduleTask,
@@ -27,6 +28,14 @@ export async function taskRoutes(app: FastifyInstance) {
     const tenantId = request.sessionUser!.tenantId;
     const query = request.query as { view?: TaskView; assignedTo?: string; patientId?: string };
     return listTasks(app.db, tenantId, { view: query.view, assignedTo: query.assignedTo, patientId: query.patientId });
+  });
+
+  // Registered ahead of nothing conflicting — "/tasks/:id/..." mutation
+  // routes below are all PATCH with a fixed suffix, so this GET is unambiguous.
+  app.get("/tasks/counts", async (request) => {
+    const tenantId = request.sessionUser!.tenantId;
+    const userId = request.sessionUser!.id;
+    return getTaskCounts(app.db, tenantId, userId);
   });
 
   app.post("/tasks", { preHandler: requirePermission("MANAGE_TASKS") }, async (request) => {

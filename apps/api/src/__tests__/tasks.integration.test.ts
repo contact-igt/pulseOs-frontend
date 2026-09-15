@@ -2,7 +2,7 @@ import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { buildApp } from "../app.js";
 import { queryClient } from "../db/client.js";
 import type { FastifyInstance } from "fastify";
-import type { JourneyListRow, TaskRow } from "@pulseos/types";
+import type { JourneyListRow, SessionUser, TaskRow } from "@pulseos/types";
 
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD;
 
@@ -57,6 +57,55 @@ describe.skipIf(!DEMO_PASSWORD)("tasks / follow-ups / my work (integration)", ()
     const complete = await app.inject({ method: "PATCH", url: "/tasks/00000000-0000-0000-0000-000000000000/complete", cookies: { pulseos_session: doctorCookie } });
     expect(complete.statusCode).toBe(403);
     expect(complete.json().requiredPermission).toBe("MANAGE_TASKS");
+  });
+
+  it("aggregates task counts per view for the current session's own tasks in one efficient query, respecting tenant + assignment", async () => {
+    const session = await app.inject({ method: "GET", url: "/auth/session", cookies: { pulseos_session: coordinatorCookie } });
+    const { user } = session.json() as { user: SessionUser };
+
+    const before = await app.inject({ method: "GET", url: "/tasks/counts", cookies: { pulseos_session: coordinatorCookie } });
+    expect(before.statusCode).toBe(200);
+    const beforeCounts = before.json() as { mine: number; overdue: number; today: number; upcoming: number; completed: number };
+
+    const overdueDue = new Date(Date.now() - 2 * 86400000).toISOString();
+    const todayDue = new Date(Date.now() + 3600000).toISOString();
+    const upcomingDue = new Date(Date.now() + 5 * 86400000).toISOString();
+
+    await app.inject({ method: "POST", url: "/tasks", cookies: { pulseos_session: coordinatorCookie }, payload: { patientId: somePatientId, journeyId: someJourneyId, type: "CALLBACK", dueAt: overdueDue, assignedTo: user.id } });
+    await app.inject({ method: "POST", url: "/tasks", cookies: { pulseos_session: coordinatorCookie }, payload: { patientId: somePatientId, journeyId: someJourneyId, type: "CALLBACK", dueAt: todayDue, assignedTo: user.id } });
+    await app.inject({ method: "POST", url: "/tasks", cookies: { pulseos_session: coordinatorCookie }, payload: { patientId: somePatientId, journeyId: someJourneyId, type: "CALLBACK", dueAt: upcomingDue, assignedTo: user.id } });
+    const toComplete = await app.inject({ method: "POST", url: "/tasks", cookies: { pulseos_session: coordinatorCookie }, payload: { patientId: somePatientId, journeyId: someJourneyId, type: "CALLBACK", dueAt: upcomingDue, assignedTo: user.id } });
+    await app.inject({ method: "PATCH", url: `/tasks/${(toComplete.json() as TaskRow).id}/complete`, cookies: { pulseos_session: coordinatorCookie } });
+
+    const after = await app.inject({ method: "GET", url: "/tasks/counts", cookies: { pulseos_session: coordinatorCookie } });
+    expect(after.statusCode).toBe(200);
+    const afterCounts = after.json() as typeof beforeCounts;
+
+    expect(afterCounts.mine).toBe(beforeCounts.mine + 4);
+    expect(afterCounts.overdue).toBe(beforeCounts.overdue + 1);
+    expect(afterCounts.today).toBe(beforeCounts.today + 1);
+    expect(afterCounts.upcoming).toBe(beforeCounts.upcoming + 1);
+    expect(afterCounts.completed).toBe(beforeCounts.completed + 1);
+  });
+
+  it("task counts are scoped to the caller's own assignment — a doctor's counts never include a coordinator's tasks", async () => {
+    const coordinatorSession = await app.inject({ method: "GET", url: "/auth/session", cookies: { pulseos_session: coordinatorCookie } });
+    const { user: coordinatorUser } = coordinatorSession.json() as { user: SessionUser };
+
+    const before = await app.inject({ method: "GET", url: "/tasks/counts", cookies: { pulseos_session: doctorCookie } });
+    const beforeCounts = before.json() as { mine: number };
+
+    // Explicitly assigned to the coordinator, not the doctor — must not move the doctor's count.
+    await app.inject({
+      method: "POST",
+      url: "/tasks",
+      cookies: { pulseos_session: coordinatorCookie },
+      payload: { patientId: somePatientId, journeyId: someJourneyId, type: "CALLBACK", dueAt: new Date(Date.now() + 86400000).toISOString(), assignedTo: coordinatorUser.id },
+    });
+
+    const after = await app.inject({ method: "GET", url: "/tasks/counts", cookies: { pulseos_session: doctorCookie } });
+    const afterCounts = after.json() as { mine: number };
+    expect(afterCounts.mine).toBe(beforeCounts.mine);
   });
 
   it("creates a task with the full field set and returns it", async () => {

@@ -64,6 +64,12 @@ export default function MyWorkPage() {
     enabled: !!currentUserId,
   });
 
+  const counts = useQuery({
+    queryKey: ["tasks", "counts", currentUserId],
+    queryFn: api.taskCounts,
+    enabled: !!currentUserId,
+  });
+
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: ["tasks"] });
   }
@@ -113,10 +119,15 @@ export default function MyWorkPage() {
             role="tab"
             aria-selected={tab === t.key}
             onClick={() => setTab(t.key)}
-            className={`rounded px-3 py-1.5 text-xs font-medium transition ${tab === t.key ? "bg-primary-50 text-primary-700" : "text-neutral-500 hover:bg-neutral-100"}`}
+            className={`flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition ${tab === t.key ? "bg-primary-50 text-primary-700" : "text-neutral-500 hover:bg-neutral-100"}`}
             data-testid={`my-work-tab-${t.key}`}
           >
             {t.label}
+            {counts.data && (
+              <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-normal tabular-nums text-neutral-500" data-testid={`my-work-tab-count-${t.key}`}>
+                {counts.data[t.key]}
+              </span>
+            )}
           </button>
         ))}
       </div>

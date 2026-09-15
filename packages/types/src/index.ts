@@ -405,6 +405,14 @@ export interface TaskRow {
   createdAt: string;
 }
 
+export interface TaskCounts {
+  mine: number;
+  overdue: number;
+  today: number;
+  upcoming: number;
+  completed: number;
+}
+
 export interface CreateTaskInput {
   patientId: string;
   journeyId?: string;
