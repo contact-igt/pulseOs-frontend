@@ -110,7 +110,13 @@ describe.skipIf(!DEMO_PASSWORD)("WhatsApp webhook (integration, fixture mode)", 
 
   it("POST with a valid signature persists an inbound message, creates the Conversation, and resolves a Patient", async () => {
     const wamid = `wamid.FIXTURE_${Date.now()}`;
-    const from = "919000000002";
+    // A phone number unique per test run, not a fixed constant: some other suite in this
+    // shared dev DB may close conversations broadly (e.g. exercising a Close Conversation
+    // action), and a fixed phone number would resolve to the SAME patient/conversation on
+    // every rerun of this suite, so this test could inherit an already-CLOSED conversation
+    // from a prior run instead of asserting on the brand-new HUMAN_REQUIRED one it actually
+    // creates. A unique number guarantees a fresh Patient + Conversation every time.
+    const from = `919${String(Date.now()).slice(-9)}`;
     const payload = metaMessagePayload({ wamid, from, body: "I'd like to know about IVF costs", name: "Fixture Patient" });
     const rawBody = JSON.stringify(payload);
 

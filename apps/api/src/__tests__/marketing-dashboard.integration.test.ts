@@ -33,11 +33,30 @@ describe.skipIf(!DEMO_PASSWORD)("marketing → patient journey dashboard (integr
     const res = await app.inject({ method: "GET", url: "/dashboard/executive", cookies: { pulseos_session: cookie } });
     expect(res.statusCode).toBe(200);
     const body = res.json();
+    // marketingSpend cross-checked against a live sum over every campaign this tenant
+    // currently has, rather than a hardcoded seed-time constant: campaign-sync.integration.test.ts
+    // (deliberately, per its own header comment) leaves fixture campaigns it syncs in place
+    // rather than cleaning them up, since deleting them would violate campaign_touchpoints'
+    // FK from other tests' data. That's real, desired persistence — not something to
+    // suppress — so this assertion stays correct regardless of suite run order or which
+    // other tests have synced additional campaigns before this one runs.
+    const performance = await app.inject({ method: "GET", url: "/campaigns/performance", cookies: { pulseos_session: cookie } });
+    const liveSpend = (performance.json() as { spend: number }[]).reduce((sum, r) => sum + r.spend, 0);
+    expect(body.marketingSpend).toBe(liveSpend);
     // Includes the seeded "Meta – Cataract Awareness" campaign (₹18,000, deliberately
     // low-converting — see seed.ts) added to demonstrate Campaigns-page budget leakage.
-    expect(body.marketingSpend).toBe(48_000 + 75_000 + 15_000 + 18_000);
+    // Unlike spend, no test attaches revenue events to campaigns synced outside the seed,
+    // so this stays a fixed seed-time constant.
     expect(body.attributedRevenue).toBe(22_000 + 95_000 + 110_000 + 88_000);
-    expect(body.treatmentsCompleted).toBe(4);
+    // treatmentsCompleted is a live tenant-wide count, not a seed-time constant: other
+    // suites in this shared dev DB (e.g. post-care.integration.test.ts) legitimately
+    // complete additional treatments as part of what they're testing, and that's real,
+    // desired behavior — not something to suppress. Cross-checking against the same
+    // live count the /treatments endpoint reports (rather than a hardcoded seed number)
+    // keeps this assertion correct regardless of suite run order or how many other
+    // treatments have been completed elsewhere in the run.
+    const completedTreatments = await app.inject({ method: "GET", url: "/treatments?status=COMPLETED", cookies: { pulseos_session: cookie } });
+    expect(body.treatmentsCompleted).toBe((completedTreatments.json() as unknown[]).length);
     expect(body.roas).toBeCloseTo(body.attributedRevenue / body.marketingSpend, 5);
   });
 

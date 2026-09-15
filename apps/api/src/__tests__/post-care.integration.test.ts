@@ -1,8 +1,9 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { buildApp } from "../app.js";
-import { queryClient } from "../db/client.js";
+import { db, queryClient } from "../db/client.js";
+import { treatmentOpportunities } from "../db/schema.js";
 import type { FastifyInstance } from "fastify";
-import type { TaskRow, TreatmentRow } from "@pulseos/types";
+import type { JourneyListRow, SessionUser, TaskRow, TreatmentRow } from "@pulseos/types";
 
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD;
 
@@ -33,10 +34,31 @@ describe.skipIf(!DEMO_PASSWORD)("post-care / recall (integration)", () => {
   });
 
   it("completing a scheduled treatment deterministically generates a post-care call task and a review recall task", async () => {
-    const list = await app.inject({ method: "GET", url: "/treatments?status=SCHEDULED", cookies: { pulseos_session: coordinatorCookie } });
-    const rows = list.json() as TreatmentRow[];
-    expect(rows.length).toBeGreaterThan(0);
-    const target = rows[0];
+    // A test-local SCHEDULED treatment, not a shared seeded one: the seed's finite pool of
+    // SCHEDULED treatments is a one-time resource, and this test permanently consumes
+    // whichever one it completes (that's the real behavior under test — a completed
+    // treatment never goes back to SCHEDULED). Relying on `/treatments?status=SCHEDULED`
+    // rows[0] worked only on a freshly-seeded DB and failed on every subsequent run of the
+    // same suite once the pool was exhausted. Inserting our own fixture here makes the test
+    // repeatable indefinitely, independent of suite run order or how many times it's rerun.
+    const session = await app.inject({ method: "GET", url: "/auth/session", cookies: { pulseos_session: coordinatorCookie } });
+    const { user } = session.json() as { user: SessionUser };
+    const journeys = await app.inject({ method: "GET", url: "/journeys", cookies: { pulseos_session: coordinatorCookie } });
+    const journey = (journeys.json() as JourneyListRow[])[0];
+
+    const [treatment] = await db
+      .insert(treatmentOpportunities)
+      .values({
+        tenantId: user.tenantId,
+        patientId: journey.patientId,
+        journeyId: journey.id,
+        treatmentLabel: "Post-care test fixture",
+        status: "SCHEDULED",
+        estimatedValue: 50_000,
+        plannedDate: new Date(),
+      })
+      .returning();
+    const target = { id: treatment.id, patientId: treatment.patientId };
 
     const complete = await app.inject({
       method: "PATCH", url: `/treatments/${target.id}/status`, cookies: { pulseos_session: coordinatorCookie }, payload: { status: "COMPLETED" },
