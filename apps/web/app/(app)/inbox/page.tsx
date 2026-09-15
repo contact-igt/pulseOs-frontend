@@ -6,6 +6,7 @@ import { api } from "@pulseos/api-client";
 import { useRouter } from "next/navigation";
 import { Badge, EmptyState, ErrorState, SectionHeading, Skeleton } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
+import { withFrom } from "@/components/shell/BackLink";
 import type { ConversationChannel, OwnershipState } from "@pulseos/types";
 import { CalendarPlus, ListPlus, Mail, MessageCircle, MessageSquareText, Phone, User, Users as UsersIcon } from "lucide-react";
 
@@ -334,7 +335,7 @@ export default function InboxPage() {
               <QuickActionButton
                 icon={User}
                 label="View Full Profile"
-                onClick={() => router.push(`/patients/${detail.data!.patientContext!.patientId}`)}
+                onClick={() => router.push(withFrom(`/patients/${detail.data!.patientContext!.patientId}`, "inbox"))}
               />
             </div>
           </div>

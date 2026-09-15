@@ -16,6 +16,7 @@ import {
   SpendAtRisk,
   TeamPanel,
 } from "@pulseos/ui";
+import { withFrom } from "@/components/shell/BackLink";
 
 const RANGE_OPTIONS = [
   { label: "Today", days: 1 },
@@ -121,7 +122,7 @@ export default function CommandCentrePage() {
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         {attention.isLoading ? <Skeleton className="h-64" /> : attention.isError ? <ErrorState message="Could not load attention queue." /> : attention.data && (
-          <AttentionQueue items={attention.data} onItemClick={(item) => router.push(`/patients/${item.id}`)} />
+          <AttentionQueue items={attention.data} onItemClick={(item) => router.push(withFrom(`/patients/${item.id}`, "command-centre"))} />
         )}
         {patientFlow.isLoading ? <Skeleton className="h-64" /> : patientFlow.isError ? <ErrorState message="Could not load patient flow." /> : patientFlow.data && (
           <PatientFlowBoard data={patientFlow.data} onBucketClick={(bucket) => router.push(`/appointments?flow=${bucket}`)} compact />

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { api } from "@pulseos/api-client";
 import { Badge, Card, EmptyState, ErrorState, Skeleton } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
+import { withFrom } from "@/components/shell/BackLink";
 import type { TaskRow, TaskStatus, TaskType, TaskView } from "@pulseos/types";
 
 const TABS: { key: TaskView | "mine"; label: string }[] = [
@@ -141,7 +142,7 @@ export default function MyWorkPage() {
                     <div className="min-w-0">
                       <button
                         type="button"
-                        onClick={() => router.push(`/patients/${task.patientId}`)}
+                        onClick={() => router.push(withFrom(`/patients/${task.patientId}`, "my-work"))}
                         className="text-sm font-medium text-slate-900 hover:underline"
                       >
                         {task.patientName}

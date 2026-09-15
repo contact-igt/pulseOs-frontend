@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { api } from "@pulseos/api-client";
 import { Badge, Card, ErrorState, SectionHeading, Skeleton } from "@pulseos/ui";
+import { withFrom } from "@/components/shell/BackLink";
 import type { TreatmentRow, TreatmentStatus } from "@pulseos/types";
 
 const STATUS_TONE: Record<TreatmentStatus, "neutral" | "warning" | "danger" | "primary"> = {
@@ -92,7 +93,7 @@ export default function TreatmentPage() {
               <tbody className="divide-y divide-neutral-100">
                 {treatments.data.map((row) => (
                   <tr key={row.id} className="hover:bg-neutral-50">
-                    <td className="cursor-pointer px-2 py-2 text-slate-900" onClick={() => router.push(`/patients/${row.patientId}`)}>{row.patientName}</td>
+                    <td className="cursor-pointer px-2 py-2 text-slate-900" onClick={() => router.push(withFrom(`/patients/${row.patientId}`, "treatments"))}>{row.patientName}</td>
                     <td className="px-2 py-2 text-neutral-600">{row.doctorName ?? "—"}</td>
                     <td className="px-2 py-2 text-neutral-600">{row.treatmentLabel}</td>
                     <td className="px-2 py-2 text-right tabular-nums text-slate-900">{fmtInr(row.estimatedValue)}</td>

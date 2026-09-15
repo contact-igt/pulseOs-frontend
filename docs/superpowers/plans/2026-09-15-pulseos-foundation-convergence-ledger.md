@@ -7,24 +7,30 @@ Worktree: `.claude/worktrees/pulseos-foundation-convergence`.
 
 ## Groups
 
+Renumbered 2026-09-16 to match the "FOUNDATION CONVERGENCE + ENTERPRISE UX
+COMPLETION MASTER LOOP" prompt's §48 execution order (adds a dedicated
+Back-navigation group, splits UI work by page cluster). A-E are unaffected
+(same letters, same scope in both prompts).
+
 | Group | Scope | Status | Commit(s) | Tests | Review |
 |---|---|---|---|---|---|
 | A | Convergence workspace + baseline gate | done | c0faf9b, 12fbb38 | 129/129 pass | self |
 | B | Migration/schema reconciliation | done | 05067f7 | 129/129 pass | self |
 | C | Phone normalization + connector-mode reconciliation | done | 35bafeb | 138/138 pass | self, browser-verified |
-| D | Unified acquisition ingestion | not started | — | — | — |
-| E | Full attribution reconciliation | not started | — | — | — |
-| F | Meta/Google/Website/GBP adapters ported | not started | — | — | — |
+| D | Unified acquisition ingestion | done | 70a8ce8 | 139/139 pass | self, browser-verified |
+| E | Full first/last-touch attribution reconciliation | done | 89ac3a6 | 142/142 pass | self, browser-verified |
+| F | Website / Meta / Google / GBP adapters ported | not started | — | — | — |
 | G | Campaign analytics + conversion feedback | not started | — | — | — |
-| H | Settings specialty controls completion | not started | — | — | — |
-| I | Action/button audit | not started | — | — | — |
+| H | Specialty Settings completion (reorder/required/options) | not started | — | — | — |
+| I | Action/button/dead-control audit | not started | — | — | — |
 | J | Shared table system unification | not started | — | — | — |
-| K | Inbox responsive reconstruction | not started | — | — | — |
-| L | Patient 360 Timeline visual refinement | not started | — | — | — |
-| M | Command Centre / Campaigns enterprise polish | not started | — | — | — |
-| N | Responsive / motion / accessibility pass | not started | — | — | — |
-| O | Full E2E + screenshot review | not started | — | — | — |
-| P | Final code review + verification | not started | — | — | — |
+| K | Navigation hierarchy + Back system | in progress | — | — | — |
+| L | Inbox enterprise reconstruction | not started | — | — | — |
+| M | Patient 360 / Appointment / Treatment UX | not started | — | — | — |
+| N | Command Centre / Leads / Campaigns UI | not started | — | — | — |
+| O | Responsive / accessibility / motion | not started | — | — | — |
+| P | E2E + screenshot package | not started | — | — | — |
+| Q | Final whole-branch review | not started | — | — | — |
 
 ## Resume point for the next session
 

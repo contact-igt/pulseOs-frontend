@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { api } from "@pulseos/api-client";
 import { Badge, Card, EmptyState, ErrorState, MetricStrip, Skeleton } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
+import { withFrom } from "@/components/shell/BackLink";
 import type { LeadRow, LeadStatus } from "@pulseos/types";
 
 const STATUS_TABS: { key: LeadStatus | "all"; label: string }[] = [
@@ -136,7 +137,7 @@ export default function LeadsPage() {
             </thead>
             <tbody className="divide-y divide-neutral-100">
               {leads.data.map((lead: LeadRow) => (
-                <tr key={lead.id} className="cursor-pointer hover:bg-neutral-50" onClick={() => router.push(`/patients/${lead.patientId}`)} data-testid={`lead-row-${lead.id}`}>
+                <tr key={lead.id} className="cursor-pointer hover:bg-neutral-50" onClick={() => router.push(withFrom(`/patients/${lead.patientId}`, "leads"))} data-testid={`lead-row-${lead.id}`}>
                   <td className="px-4 py-2 text-slate-900">{lead.patientName}</td>
                   <td className="px-2 py-2 text-neutral-600">{lead.phone}</td>
                   <td className="px-2 py-2 text-neutral-600">{lead.specialtyLabel ?? "—"}</td>

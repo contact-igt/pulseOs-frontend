@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
 import { Badge, Card, ErrorState, Skeleton, Timeline } from "@pulseos/ui";
 import { formatInr, formatMoneyOrDash } from "@pulseos/ui";
+import { BackLink } from "@/components/shell/BackLink";
 import type { JourneyCardVm } from "@pulseos/types";
 
 function fmtDate(iso: string | null) {
@@ -85,6 +86,8 @@ export default function Patient360Page() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-5" data-testid="patient-360">
+      <BackLink fallback="/patients" fallbackLabel="Back to Patients" />
+
       {/* Header / patient context */}
       <Card className="p-5">
         <div className="flex items-start gap-3">

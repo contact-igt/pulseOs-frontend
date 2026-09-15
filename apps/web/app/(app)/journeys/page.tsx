@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@pulseos/api-client";
 import { Badge, Card, EmptyState, ErrorState, MetricStrip, Skeleton, formatInr, formatMoneyOrDash } from "@pulseos/ui";
+import { withFrom } from "@/components/shell/BackLink";
 import type { JourneyStage } from "@pulseos/types";
 
 const STAGE_TONE: Partial<Record<JourneyStage, "neutral" | "warning" | "danger" | "primary">> = {
@@ -93,7 +94,7 @@ export default function JourneysPage() {
             </thead>
             <tbody className="divide-y divide-neutral-100">
               {journeys.data.map((j) => (
-                <tr key={j.id} className="cursor-pointer hover:bg-neutral-50" onClick={() => router.push(`/patients/${j.patientId}`)}>
+                <tr key={j.id} className="cursor-pointer hover:bg-neutral-50" onClick={() => router.push(withFrom(`/patients/${j.patientId}`, "journeys"))}>
                   <td className="px-4 py-2 text-slate-900">{j.patientName}</td>
                   <td className="px-2 py-2 text-neutral-600">{j.journeyType}</td>
                   <td className="px-2 py-2 text-neutral-600">
