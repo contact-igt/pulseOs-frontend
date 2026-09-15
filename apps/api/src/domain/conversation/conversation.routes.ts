@@ -5,15 +5,19 @@ import {
   assignConversation,
   claimConversation,
   closeConversation,
+  getConversationAutomation,
   getConversationDetail,
   listConversations,
   returnConversationToAi,
   sendMessage,
+  setConversationAutomation,
 } from "./conversation.service.js";
+import type { SetConversationAutomationInput } from "./conversation.service.js";
 
 const REASON_STATUS: Record<string, number> = {
   conversation_not_found: 404,
   conversation_closed: 409,
+  schedule_required: 400,
 };
 
 export async function conversationRoutes(app: FastifyInstance) {
@@ -78,5 +82,25 @@ export async function conversationRoutes(app: FastifyInstance) {
     const result = await closeConversation(app.db, tenantId, id, actorId);
     if (!result.ok) return reply.status(REASON_STATUS[result.reason] ?? 400).send({ error: result.reason });
     return result;
+  });
+
+  // Configuration/scheduling state only — see conversation.service.ts's
+  // setConversationAutomation for why this never implies a live agent runtime.
+  app.get("/conversations/:id/automation", async (request, reply) => {
+    const tenantId = request.sessionUser!.tenantId;
+    const { id } = request.params as { id: string };
+    const preference = await getConversationAutomation(app.db, tenantId, id);
+    if (!preference) return reply.status(404).send({ error: "conversation_not_found" });
+    return preference;
+  });
+
+  app.patch("/conversations/:id/automation", { preHandler: requirePermission("MANAGE_INBOX") }, async (request, reply) => {
+    const tenantId = request.sessionUser!.tenantId;
+    const actorId = request.sessionUser!.id;
+    const { id } = request.params as { id: string };
+    const input = request.body as SetConversationAutomationInput;
+    const result = await setConversationAutomation(app.db, tenantId, id, actorId, input);
+    if (!result.ok) return reply.status(REASON_STATUS[result.reason] ?? 400).send({ error: result.reason });
+    return result.preference;
   });
 }

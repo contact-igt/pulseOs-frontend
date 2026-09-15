@@ -500,6 +500,20 @@ export interface TreatmentRow {
 export type ConversationChannel = "WHATSAPP" | "CALL" | "SMS" | "EMAIL" | "INTERNAL";
 export type OwnershipState = "AI_ACTIVE" | "HUMAN_REQUIRED" | "HUMAN_ASSIGNED" | "HUMAN_ACTIVE" | "AI_RESUME_PENDING" | "CLOSED";
 
+// Configuration/scheduling preference only — PulseOS has no agent runtime yet
+// to act on "ai_when_available" or "ai_scheduled". This records what a human
+// has asked for, honestly labeled as config, never as something executing.
+export type ConversationAutomationMode = "manual" | "ai_when_available" | "ai_scheduled";
+
+export interface ConversationAutomationPreference {
+  mode: ConversationAutomationMode;
+  scheduledStart: string | null;
+  scheduledEnd: string | null;
+  timezone: string | null;
+  updatedBy: string | null;
+  updatedAt: string | null;
+}
+
 export interface ConversationRow {
   id: string;
   patientId: string;

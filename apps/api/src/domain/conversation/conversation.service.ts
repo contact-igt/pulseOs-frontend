@@ -1,9 +1,9 @@
 import { and, asc, desc, eq, gte, inArray, or } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
-import { appointments, conversations, journeys, messages, patients, tasks, timelineEvents, users } from "../../db/schema.js";
+import { appointments, conversationAutomationPreferences, conversations, journeys, messages, patients, tasks, timelineEvents, users } from "../../db/schema.js";
 import { getConnectorById, getConnectorSecrets, touchConnectorError, touchConnectorSuccess } from "../connector/connector.service.js";
 import { getMessagingAdapter } from "../connector/registry.js";
-import type { ConversationChannel, ConversationDetail, ConversationRow, OwnershipState } from "@pulseos/types";
+import type { ConversationAutomationMode, ConversationAutomationPreference, ConversationChannel, ConversationDetail, ConversationRow, OwnershipState } from "@pulseos/types";
 
 export interface ConversationFilters {
   channel?: ConversationChannel;
@@ -222,6 +222,76 @@ export async function closeConversation(db: Db, tenantId: string, conversationId
     actorType: "user", actorId, eventType: "conversation_closed", title: "Conversation closed",
   });
   return { ok: true };
+}
+
+const AUTOMATION_MODE_LABEL: Record<ConversationAutomationMode, string> = {
+  manual: "Manual only",
+  ai_when_available: "AI when available",
+  ai_scheduled: "AI scheduled",
+};
+
+function toAutomationPreference(row: {
+  mode: ConversationAutomationMode; scheduledStart: Date | null; scheduledEnd: Date | null; timezone: string | null; updatedBy: string | null; updatedAt: Date;
+} | null): ConversationAutomationPreference {
+  if (!row) return { mode: "manual", scheduledStart: null, scheduledEnd: null, timezone: null, updatedBy: null, updatedAt: null };
+  return {
+    mode: row.mode,
+    scheduledStart: row.scheduledStart ? row.scheduledStart.toISOString() : null,
+    scheduledEnd: row.scheduledEnd ? row.scheduledEnd.toISOString() : null,
+    timezone: row.timezone,
+    updatedBy: row.updatedBy,
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+export async function getConversationAutomation(db: Db, tenantId: string, conversationId: string): Promise<ConversationAutomationPreference | null> {
+  const existing = await findConversation(db, tenantId, conversationId);
+  if (!existing) return null;
+
+  const [row] = await db.select().from(conversationAutomationPreferences).where(eq(conversationAutomationPreferences.conversationId, conversationId)).limit(1);
+  return toAutomationPreference(row ?? null);
+}
+
+export interface SetConversationAutomationInput {
+  mode: ConversationAutomationMode;
+  scheduledStart?: string;
+  scheduledEnd?: string;
+  timezone?: string;
+}
+
+export async function setConversationAutomation(
+  db: Db,
+  tenantId: string,
+  conversationId: string,
+  actorId: string,
+  input: SetConversationAutomationInput,
+): Promise<{ ok: true; preference: ConversationAutomationPreference } | { ok: false; reason: string }> {
+  const existing = await findConversation(db, tenantId, conversationId);
+  if (!existing) return { ok: false, reason: "conversation_not_found" };
+  if (input.mode === "ai_scheduled" && (!input.scheduledStart || !input.scheduledEnd || !input.timezone)) {
+    return { ok: false, reason: "schedule_required" };
+  }
+
+  const scheduledStart = input.mode === "ai_scheduled" && input.scheduledStart ? new Date(input.scheduledStart) : null;
+  const scheduledEnd = input.mode === "ai_scheduled" && input.scheduledEnd ? new Date(input.scheduledEnd) : null;
+  const timezone = input.mode === "ai_scheduled" ? (input.timezone ?? null) : null;
+
+  const [row] = await db
+    .insert(conversationAutomationPreferences)
+    .values({ tenantId, conversationId, mode: input.mode, scheduledStart, scheduledEnd, timezone, updatedBy: actorId, updatedAt: new Date() })
+    .onConflictDoUpdate({
+      target: conversationAutomationPreferences.conversationId,
+      set: { mode: input.mode, scheduledStart, scheduledEnd, timezone, updatedBy: actorId, updatedAt: new Date() },
+    })
+    .returning();
+
+  await db.insert(timelineEvents).values({
+    tenantId, patientId: existing.patientId, journeyId: existing.journeyId,
+    actorType: "user", actorId, eventType: "conversation_automation_updated",
+    title: `AI scheduling preference set to ${AUTOMATION_MODE_LABEL[input.mode]}`,
+  });
+
+  return { ok: true, preference: toAutomationPreference(row) };
 }
 
 export async function sendMessage(db: Db, tenantId: string, conversationId: string, actorId: string, body: string): Promise<{ ok: true } | { ok: false; reason: string }> {

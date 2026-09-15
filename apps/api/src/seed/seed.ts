@@ -10,6 +10,7 @@ import {
   connectors,
   connectorSecrets,
   consultationOutcomes,
+  conversationAutomationPreferences,
   conversations,
   conversionFeedbackEvents,
   customFieldDefinitions,
@@ -334,6 +335,7 @@ async function main() {
   await db.delete(calls);
   await db.delete(connectorEvents);
   await db.delete(messages);
+  await db.delete(conversationAutomationPreferences);
   await db.delete(conversations);
   await db.delete(timelineEvents);
   await db.delete(revenueEvents);

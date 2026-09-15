@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { Badge, ConfirmDialog, EmptyState, ErrorState, OverflowMenu, SectionHeading, Skeleton, useDialogFocus } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import { withFrom } from "@/components/shell/BackLink";
-import type { ConversationChannel, ConversationDetail, OwnershipState } from "@pulseos/types";
+import type { ConversationAutomationMode, ConversationAutomationPreference, ConversationChannel, ConversationDetail, OwnershipState } from "@pulseos/types";
 import { ArrowLeft, CalendarPlus, ListPlus, Mail, MessageCircle, MessageSquareText, PanelRight, Phone, User, Users as UsersIcon, X } from "lucide-react";
 
 const CHANNEL_ICON: Record<ConversationChannel, typeof Mail> = {
@@ -42,6 +42,12 @@ const OWNERSHIP_TONE: Record<OwnershipState, "neutral" | "warning" | "danger" | 
   HUMAN_ACTIVE: "primary",
   AI_RESUME_PENDING: "neutral",
   CLOSED: "neutral",
+};
+
+const AUTOMATION_MODE_LABEL: Record<ConversationAutomationMode, string> = {
+  manual: "Manual only",
+  ai_when_available: "AI when available",
+  ai_scheduled: "AI scheduled",
 };
 
 // One primary ownership action per state, per the functional-hardening pass:
@@ -79,6 +85,7 @@ export default function InboxPage() {
   // reveals the picker row it needs without giving it standing header space.
   const [assigning, setAssigning] = useState(false);
   const [confirmingClose, setConfirmingClose] = useState(false);
+  const [schedulingAi, setSchedulingAi] = useState(false);
   // Below `md` the list and thread are two full-width screens, not two
   // squeezed columns — this tracks which one is showing.
   const [mobileView, setMobileView] = useState<"list" | "thread">("list");
@@ -124,7 +131,14 @@ export default function InboxPage() {
     setAssigning(false);
     setAssignTarget("");
     setConfirmingClose(false);
+    setSchedulingAi(false);
   }
+
+  const automation = useQuery({
+    queryKey: ["conversation-automation", effectiveSelectedId],
+    queryFn: () => api.conversationAutomation(effectiveSelectedId!),
+    enabled: !!effectiveSelectedId,
+  });
 
   function refreshAfterAction() {
     queryClient.invalidateQueries({ queryKey: ["conversations"] });
@@ -268,6 +282,11 @@ export default function InboxPage() {
                   <p className="mt-0.5 flex items-center gap-1.5 text-xs text-neutral-500">
                     {CHANNEL_LABEL[selectedConversation.channel]}
                     <Badge tone={OWNERSHIP_TONE[selectedConversation.ownershipState]}>{OWNERSHIP_LABEL[selectedConversation.ownershipState]}</Badge>
+                    {automation.data && automation.data.mode !== "manual" && (
+                      <span className="rounded border border-neutral-200 px-1.5 py-0.5 text-[10px] font-medium text-neutral-500" data-testid="automation-mode-indicator">
+                        {AUTOMATION_MODE_LABEL[automation.data.mode]}
+                      </span>
+                    )}
                   </p>
                 </div>
               </div>
@@ -288,6 +307,7 @@ export default function InboxPage() {
                     testId="conversation-more-actions"
                     items={[
                       { key: "assign", label: "Assign to…", onClick: () => setAssigning(true) },
+                      { key: "schedule-ai", label: "Schedule AI…", onClick: () => setSchedulingAi(true) },
                       { key: "close", label: "Close conversation", danger: true, onClick: () => setConfirmingClose(true) },
                     ]}
                   />
@@ -348,6 +368,18 @@ export default function InboxPage() {
               onConfirm={handleClose}
               onCancel={() => setConfirmingClose(false)}
             />
+
+            {schedulingAi && effectiveSelectedId && (
+              <AiSchedulePanel
+                conversationId={effectiveSelectedId}
+                current={automation.data}
+                onSaved={() => {
+                  setSchedulingAi(false);
+                  queryClient.invalidateQueries({ queryKey: ["conversation-automation", effectiveSelectedId] });
+                }}
+                onCancel={() => setSchedulingAi(false)}
+              />
+            )}
 
             <div className="flex-1 space-y-3 overflow-y-auto p-3">
               {detail.isLoading && <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10" />)}</div>}
@@ -421,6 +453,100 @@ export default function InboxPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// datetime-local inputs want "YYYY-MM-DDTHH:mm" in the browser's local time —
+// neither an ISO string (UTC "Z") nor Date's own toString() match that shape.
+function isoToLocalInputValue(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function AiSchedulePanel({
+  conversationId,
+  current,
+  onSaved,
+  onCancel,
+}: {
+  conversationId: string;
+  current: ConversationAutomationPreference | undefined;
+  onSaved: () => void;
+  onCancel: () => void;
+}) {
+  const [mode, setMode] = useState<ConversationAutomationMode>(current?.mode ?? "manual");
+  const [start, setStart] = useState(current?.scheduledStart ? isoToLocalInputValue(current.scheduledStart) : "");
+  const [end, setEnd] = useState(current?.scheduledEnd ? isoToLocalInputValue(current.scheduledEnd) : "");
+  const [timezone, setTimezone] = useState(current?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "Asia/Kolkata");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    setError(null);
+    if (mode === "ai_scheduled" && (!start || !end)) {
+      setError("Choose a start and end time for the AI window.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.setConversationAutomation(conversationId, {
+        mode,
+        scheduledStart: mode === "ai_scheduled" ? new Date(start).toISOString() : undefined,
+        scheduledEnd: mode === "ai_scheduled" ? new Date(end).toISOString() : undefined,
+        timezone: mode === "ai_scheduled" ? timezone : undefined,
+      });
+      onSaved();
+    } catch {
+      setError("Could not save this preference — please try again.");
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2 border-b border-neutral-100 bg-neutral-50 px-3 py-3" data-testid="ai-schedule-panel">
+      <div>
+        <p className="text-xs font-semibold text-slate-900">AI scheduling preference</p>
+        <p className="text-[11px] text-neutral-500">
+          Configuration only — PulseOS has no live AI agent yet to act on this. Saving just records what should happen once one exists.
+        </p>
+      </div>
+      <select
+        value={mode}
+        onChange={(e) => setMode(e.target.value as ConversationAutomationMode)}
+        className="rounded border border-neutral-200 bg-white px-1.5 py-1 text-xs text-slate-700"
+        data-testid="automation-mode-select"
+      >
+        <option value="manual">Manual only</option>
+        <option value="ai_when_available">AI when available</option>
+        <option value="ai_scheduled">AI scheduled</option>
+      </select>
+      {mode === "ai_scheduled" && (
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-1 text-[11px] text-neutral-500">
+            Start
+            <input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} className="rounded border border-neutral-200 px-1.5 py-1 text-xs" data-testid="automation-start-input" />
+          </label>
+          <label className="flex items-center gap-1 text-[11px] text-neutral-500">
+            End
+            <input type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} className="rounded border border-neutral-200 px-1.5 py-1 text-xs" data-testid="automation-end-input" />
+          </label>
+          <label className="flex items-center gap-1 text-[11px] text-neutral-500">
+            Timezone
+            <input type="text" value={timezone} onChange={(e) => setTimezone(e.target.value)} className="w-32 rounded border border-neutral-200 px-1.5 py-1 text-xs" data-testid="automation-timezone-input" />
+          </label>
+        </div>
+      )}
+      {error && <p className="text-[11px] text-danger-600">{error}</p>}
+      <div className="flex gap-2">
+        <button type="button" onClick={save} disabled={saving} className="rounded bg-primary-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-40" data-testid="save-automation">
+          {saving ? "Saving…" : "Save"}
+        </button>
+        <button type="button" onClick={onCancel} className="rounded px-2.5 py-1 text-xs text-neutral-500 hover:bg-neutral-100">
+          Cancel
+        </button>
+      </div>
     </div>
   );
 }

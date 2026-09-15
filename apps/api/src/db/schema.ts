@@ -394,6 +394,26 @@ export const conversations = pgTable("conversations", {
   externalThreadUnique: uniqueIndex("conversations_connector_external_thread_unique").on(t.connectorId, t.externalThreadId),
 }));
 
+// Configuration/scheduling preference only — there is no agent runtime yet
+// to actually act on "ai_scheduled". One row per conversation (upserted),
+// honestly representing what a human has asked for, not what is executing.
+export const conversationAutomationModeEnum = pgEnum("conversation_automation_mode", ["manual", "ai_when_available", "ai_scheduled"]);
+
+export const conversationAutomationPreferences = pgTable("conversation_automation_preferences", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  conversationId: uuid("conversation_id").notNull().references(() => conversations.id),
+  mode: conversationAutomationModeEnum("mode").notNull().default("manual"),
+  scheduledStart: timestamp("scheduled_start", { withTimezone: true }),
+  scheduledEnd: timestamp("scheduled_end", { withTimezone: true }),
+  timezone: text("timezone"),
+  updatedBy: uuid("updated_by").references(() => users.id),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  tenantIdx: index("conversation_automation_preferences_tenant_idx").on(t.tenantId),
+  conversationUnique: uniqueIndex("conversation_automation_preferences_conversation_unique").on(t.conversationId),
+}));
+
 export const messageSenderEnum = pgEnum("message_sender", ["patient", "staff", "ai", "system"]);
 export const messageDeliveryStatusEnum = pgEnum("message_delivery_status", ["queued", "sent", "delivered", "read", "failed"]);
 

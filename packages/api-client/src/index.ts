@@ -11,6 +11,8 @@ import type {
   ConnectorDetail,
   ConnectorRow,
   ConsultationOutcomeValue,
+  ConversationAutomationMode,
+  ConversationAutomationPreference,
   ConversationChannel,
   ConversationDetail,
   ConversationRow,
@@ -177,6 +179,9 @@ export const api = {
     request<{ ok: true }>(`/conversations/${id}/assign`, { method: "PATCH", body: JSON.stringify({ assignedTo }) }),
   returnConversationToAi: (id: string) => request<{ ok: true }>(`/conversations/${id}/return-to-ai`, { method: "PATCH", body: JSON.stringify({}) }),
   closeConversation: (id: string) => request<{ ok: true }>(`/conversations/${id}/close`, { method: "PATCH", body: JSON.stringify({}) }),
+  conversationAutomation: (id: string) => request<ConversationAutomationPreference>(`/conversations/${id}/automation`),
+  setConversationAutomation: (id: string, input: { mode: ConversationAutomationMode; scheduledStart?: string; scheduledEnd?: string; timezone?: string }) =>
+    request<ConversationAutomationPreference>(`/conversations/${id}/automation`, { method: "PATCH", body: JSON.stringify(input) }),
   connectors: () => request<ConnectorRow[]>("/connectors"),
   connector: (id: string) => request<ConnectorDetail>(`/connectors/${id}`),
   updateConnector: (id: string, input: { displayName?: string; configuration?: Record<string, unknown>; secrets?: Record<string, unknown> }) =>

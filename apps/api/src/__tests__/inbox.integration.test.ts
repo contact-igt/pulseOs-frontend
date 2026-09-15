@@ -136,4 +136,79 @@ describe.skipIf(!DEMO_PASSWORD)("inbox / conversations (integration)", () => {
     const res = await app.inject({ method: "PATCH", url: "/conversations/00000000-0000-0000-0000-000000000000/claim", cookies: { pulseos_session: coordinatorCookie } });
     expect(res.statusCode).toBe(404);
   });
+
+  describe("per-conversation AI scheduling preference (config only — no agent runtime)", () => {
+    it("defaults to manual with no schedule when never configured", async () => {
+      const list = await app.inject({ method: "GET", url: "/conversations", cookies: { pulseos_session: coordinatorCookie } });
+      const target = (list.json() as ConversationRow[])[0];
+
+      const res = await app.inject({ method: "GET", url: `/conversations/${target.id}/automation`, cookies: { pulseos_session: coordinatorCookie } });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.mode).toBe("manual");
+      expect(body.scheduledStart).toBeNull();
+      expect(body.scheduledEnd).toBeNull();
+    });
+
+    it("rejects ai_scheduled mode without a scheduledStart/scheduledEnd/timezone", async () => {
+      const list = await app.inject({ method: "GET", url: "/conversations", cookies: { pulseos_session: coordinatorCookie } });
+      const target = (list.json() as ConversationRow[])[0];
+
+      const res = await app.inject({
+        method: "PATCH", url: `/conversations/${target.id}/automation`, cookies: { pulseos_session: coordinatorCookie },
+        payload: { mode: "ai_scheduled" },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error).toBe("schedule_required");
+    });
+
+    it("saves an ai_scheduled preference, reflects it on GET, and writes a Timeline event — MANAGE_INBOX only", async () => {
+      const list = await app.inject({ method: "GET", url: "/conversations", cookies: { pulseos_session: coordinatorCookie } });
+      const target = (list.json() as ConversationRow[])[0];
+
+      // No role currently has VIEW_INBOX without MANAGE_INBOX (they're always granted
+      // together — see ROLE_PERMISSIONS), so the MANAGE_INBOX preHandler on this route
+      // can't be distinguished from the module-wide VIEW_INBOX hook with today's roles.
+      // It's still declared (matching every other mutation route in this file) for when
+      // that changes; here we can only assert doctor is blocked at all.
+      const doctorAttempt = await app.inject({
+        method: "PATCH", url: `/conversations/${target.id}/automation`, cookies: { pulseos_session: doctorCookie },
+        payload: { mode: "manual" },
+      });
+      expect(doctorAttempt.statusCode).toBe(403);
+      expect(doctorAttempt.json().requiredPermission).toBe("VIEW_INBOX");
+
+      const scheduledStart = new Date(Date.now() + 3600_000).toISOString();
+      const scheduledEnd = new Date(Date.now() + 7200_000).toISOString();
+      const save = await app.inject({
+        method: "PATCH", url: `/conversations/${target.id}/automation`, cookies: { pulseos_session: coordinatorCookie },
+        payload: { mode: "ai_scheduled", scheduledStart, scheduledEnd, timezone: "Asia/Kolkata" },
+      });
+      expect(save.statusCode).toBe(200);
+      const saved = save.json();
+      expect(saved.mode).toBe("ai_scheduled");
+      expect(saved.scheduledStart).toBe(scheduledStart);
+      expect(saved.timezone).toBe("Asia/Kolkata");
+
+      const get = await app.inject({ method: "GET", url: `/conversations/${target.id}/automation`, cookies: { pulseos_session: coordinatorCookie } });
+      expect(get.json().mode).toBe("ai_scheduled");
+
+      // A second save (switching back to manual) must upsert the same row, not create a second one.
+      const revert = await app.inject({
+        method: "PATCH", url: `/conversations/${target.id}/automation`, cookies: { pulseos_session: coordinatorCookie },
+        payload: { mode: "manual" },
+      });
+      expect(revert.statusCode).toBe(200);
+      expect(revert.json().scheduledStart).toBeNull();
+
+      const timeline = await app.inject({ method: "GET", url: `/patients/${target.patientId}/timeline`, cookies: { pulseos_session: coordinatorCookie } });
+      const eventTypes = (timeline.json() as { eventType: string }[]).map((e) => e.eventType);
+      expect(eventTypes).toContain("conversation_automation_updated");
+    });
+
+    it("404s for a conversation that does not exist", async () => {
+      const res = await app.inject({ method: "GET", url: "/conversations/00000000-0000-0000-0000-000000000000/automation", cookies: { pulseos_session: coordinatorCookie } });
+      expect(res.statusCode).toBe(404);
+    });
+  });
 });
