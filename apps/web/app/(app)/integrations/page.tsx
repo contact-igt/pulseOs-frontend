@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
 import { Badge, EmptyState, ErrorState, SectionHeading, Skeleton } from "@pulseos/ui";
+import { hasPermission } from "@pulseos/types";
 import type { ConnectorMode, ConnectorStatus, ConnectorType } from "@pulseos/types";
 import { Mail, MessageCircle, Phone, Radio, ShieldCheck, Target, Zap } from "lucide-react";
 
@@ -64,6 +65,14 @@ function relativeTime(iso: string | null) {
 export default function IntegrationsPage() {
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState<"campaigns" | "performance" | null>(null);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+
+  const session = useQuery({ queryKey: ["session"], queryFn: api.session });
+  // MANAGE_INTEGRATIONS gates sync/config mutations server-side — mirrored
+  // here only to avoid showing dead controls, never as the actual
+  // authorization boundary.
+  const canManage = !!session.data && hasPermission(session.data.user.role, "MANAGE_INTEGRATIONS");
 
   const connectors = useQuery({ queryKey: ["connectors"], queryFn: api.connectors });
   const effectiveSelectedId = selectedId ?? connectors.data?.[0]?.id ?? null;
@@ -73,6 +82,17 @@ export default function IntegrationsPage() {
     queryFn: () => api.connector(effectiveSelectedId!),
     enabled: !!effectiveSelectedId,
   });
+
+  async function runSync(kind: "campaigns" | "performance") {
+    if (!effectiveSelectedId) return;
+    setSyncing(kind);
+    setSyncMessage(null);
+    const result = kind === "campaigns" ? await api.syncConnectorCampaigns(effectiveSelectedId) : await api.syncConnectorPerformance(effectiveSelectedId);
+    setSyncing(null);
+    setSyncMessage(result.ok ? `Synced ${result.syncedCount} record${result.syncedCount === 1 ? "" : "s"}.` : (result.message ?? result.reason));
+    queryClient.invalidateQueries({ queryKey: ["connector", effectiveSelectedId] });
+    queryClient.invalidateQueries({ queryKey: ["connectors"] });
+  }
 
   return (
     <div className="flex h-full gap-4" data-testid="integrations-page">
@@ -90,7 +110,10 @@ export default function IntegrationsPage() {
               <button
                 key={c.id}
                 type="button"
-                onClick={() => setSelectedId(c.id)}
+                onClick={() => {
+                  setSelectedId(c.id);
+                  setSyncMessage(null);
+                }}
                 data-testid={`connector-row-${c.provider}`}
                 className={`flex w-full items-start gap-2 border-b border-neutral-100 px-3 py-2.5 text-left hover:bg-neutral-50 ${active ? "bg-primary-50" : ""}`}
               >
@@ -214,13 +237,38 @@ export default function IntegrationsPage() {
               )}
             </div>
 
-            <button
-              type="button"
-              onClick={() => queryClient.invalidateQueries({ queryKey: ["connector", effectiveSelectedId] })}
-              className="rounded border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100"
-            >
-              Refresh
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => queryClient.invalidateQueries({ queryKey: ["connector", effectiveSelectedId] })}
+                className="rounded border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100"
+              >
+                Refresh
+              </button>
+              {canManage && detail.data.connector.capabilities.includes("SYNC_CAMPAIGNS") && (
+                <button
+                  type="button"
+                  onClick={() => runSync("campaigns")}
+                  disabled={syncing !== null}
+                  className="rounded bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+                  data-testid="sync-campaigns-button"
+                >
+                  {syncing === "campaigns" ? "Syncing…" : "Sync Campaigns"}
+                </button>
+              )}
+              {canManage && detail.data.connector.capabilities.includes("SYNC_PERFORMANCE") && (
+                <button
+                  type="button"
+                  onClick={() => runSync("performance")}
+                  disabled={syncing !== null}
+                  className="rounded bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+                  data-testid="sync-performance-button"
+                >
+                  {syncing === "performance" ? "Syncing…" : "Sync Performance"}
+                </button>
+              )}
+              {syncMessage && <span className="text-xs text-neutral-500">{syncMessage}</span>}
+            </div>
           </div>
         )}
       </div>

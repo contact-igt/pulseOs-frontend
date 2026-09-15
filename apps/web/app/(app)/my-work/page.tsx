@@ -7,6 +7,7 @@ import { api } from "@pulseos/api-client";
 import { Badge, Card, EmptyState, ErrorState, Skeleton } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import { withFrom } from "@/components/shell/BackLink";
+import { hasPermission } from "@pulseos/types";
 import type { TaskRow, TaskStatus, TaskType, TaskView } from "@pulseos/types";
 
 const TABS: { key: TaskView | "mine"; label: string }[] = [
@@ -52,6 +53,10 @@ export default function MyWorkPage() {
 
   const session = useQuery({ queryKey: ["session"], queryFn: api.session });
   const currentUserId = session.data?.user.id;
+  // MANAGE_TASKS gates create/complete/reschedule/note server-side (Doctor
+  // has only the weaker VIEW_TASKS) — mirrored here only to avoid showing
+  // dead controls, never as the actual authorization boundary.
+  const canManageTasks = !!session.data && hasPermission(session.data.user.role, "MANAGE_TASKS");
 
   const tasks = useQuery({
     queryKey: ["tasks", tab, currentUserId],
@@ -93,14 +98,16 @@ export default function MyWorkPage() {
           <h1 className="text-xl font-semibold text-slate-900">My Work</h1>
           <p className="text-sm text-neutral-500">Tasks, callbacks and follow-ups assigned to you.</p>
         </div>
-        <button
-          type="button"
-          onClick={() => quickCreate.openAddTask()}
-          className="shrink-0 rounded-lg bg-primary-600 px-3.5 py-2 text-sm font-medium text-white transition hover:bg-primary-700"
-          data-testid="add-task-button"
-        >
-          + Add Task
-        </button>
+        {canManageTasks && (
+          <button
+            type="button"
+            onClick={() => quickCreate.openAddTask()}
+            className="shrink-0 rounded-lg bg-primary-600 px-3.5 py-2 text-sm font-medium text-white transition hover:bg-primary-700"
+            data-testid="add-task-button"
+          >
+            + Add Task
+          </button>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-1 rounded border border-neutral-200 bg-white p-1" role="tablist">
@@ -125,11 +132,13 @@ export default function MyWorkPage() {
         {tasks.data && tasks.data.length === 0 && (
           <div className="p-8">
             <EmptyState message="You're all caught up." />
-            <div className="mt-3 flex justify-center">
-              <button type="button" onClick={() => quickCreate.openAddTask()} className="text-xs font-medium text-primary-600 hover:underline">
-                + Add Task
-              </button>
-            </div>
+            {canManageTasks && (
+              <div className="mt-3 flex justify-center">
+                <button type="button" onClick={() => quickCreate.openAddTask()} className="text-xs font-medium text-primary-600 hover:underline">
+                  + Add Task
+                </button>
+              </div>
+            )}
           </div>
         )}
         {tasks.data && tasks.data.length > 0 && (
@@ -157,7 +166,7 @@ export default function MyWorkPage() {
                       {task.notes && <p className="mt-1.5 text-xs text-neutral-600">{task.notes}</p>}
                     </div>
 
-                    {task.status !== "completed" && (
+                    {canManageTasks && task.status !== "completed" && (
                       <div className="flex shrink-0 items-center gap-1.5">
                         <button type="button" onClick={() => reschedule(task.id, 1)} className="rounded border border-neutral-200 px-2 py-1 text-xs text-neutral-600 hover:bg-neutral-50" data-testid={`task-reschedule-${task.id}`}>
                           +1 day
@@ -169,7 +178,7 @@ export default function MyWorkPage() {
                     )}
                   </div>
 
-                  {task.status !== "completed" && (
+                  {canManageTasks && task.status !== "completed" && (
                     <div className="mt-2 flex items-center gap-1.5">
                       <input
                         type="text"

@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@pulseos/api-client";
 import { Badge, Card, EmptyState, ErrorState, Skeleton } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
+import { hasPermission } from "@pulseos/types";
 import type { JourneyStage } from "@pulseos/types";
 
 const STAGE_TONE: Partial<Record<JourneyStage, "neutral" | "warning" | "danger" | "primary">> = {
@@ -38,6 +39,12 @@ export default function PatientsPage() {
     queryFn: () => api.patients({ search: search || undefined }),
   });
 
+  // EDIT_PATIENTS gates patient creation server-side (Doctor doesn't have
+  // it) — mirrored here only to avoid showing a dead control, never as the
+  // actual authorization boundary.
+  const session = useQuery({ queryKey: ["session"], queryFn: api.session });
+  const canEditPatients = !!session.data && hasPermission(session.data.user.role, "EDIT_PATIENTS");
+
   return (
     <div className="mx-auto max-w-6xl space-y-4" data-testid="patients-page">
       <div className="flex items-start justify-between gap-3">
@@ -45,14 +52,16 @@ export default function PatientsPage() {
           <h1 className="text-xl font-semibold text-slate-900">Patients</h1>
           <p className="text-sm text-neutral-500">Find and understand people, not leads.</p>
         </div>
-        <button
-          type="button"
-          onClick={() => quickCreate.openAddPatient()}
-          className="shrink-0 rounded-lg bg-primary-600 px-3.5 py-2 text-sm font-medium text-white transition hover:bg-primary-700"
-          data-testid="add-patient-button"
-        >
-          + Add Patient
-        </button>
+        {canEditPatients && (
+          <button
+            type="button"
+            onClick={() => quickCreate.openAddPatient()}
+            className="shrink-0 rounded-lg bg-primary-600 px-3.5 py-2 text-sm font-medium text-white transition hover:bg-primary-700"
+            data-testid="add-patient-button"
+          >
+            + Add Patient
+          </button>
+        )}
       </div>
 
       <div className="flex items-center gap-2">
@@ -73,11 +82,13 @@ export default function PatientsPage() {
         {data && data.length === 0 && (
           <div className="p-8">
             <EmptyState message="No patients found." />
-            <div className="mt-3 flex justify-center">
-              <button type="button" onClick={() => quickCreate.openAddPatient()} className="text-xs font-medium text-primary-600 hover:underline">
-                + Add Patient
-              </button>
-            </div>
+            {canEditPatients && (
+              <div className="mt-3 flex justify-center">
+                <button type="button" onClick={() => quickCreate.openAddPatient()} className="text-xs font-medium text-primary-600 hover:underline">
+                  + Add Patient
+                </button>
+              </div>
+            )}
           </div>
         )}
         {data && data.length > 0 && (

@@ -6,7 +6,10 @@ import { useRouter } from "next/navigation";
 import { api } from "@pulseos/api-client";
 import { Badge, Card, ErrorState, SectionHeading, Skeleton, formatInr } from "@pulseos/ui";
 import { withFrom } from "@/components/shell/BackLink";
+import { hasPermission } from "@pulseos/types";
 import type { TreatmentRow, TreatmentStatus } from "@pulseos/types";
+
+const DANGER_TRANSITIONS = new Set<TreatmentStatus>(["DECLINED", "CANCELLED"]);
 
 const STATUS_TONE: Record<TreatmentStatus, "neutral" | "warning" | "danger" | "primary"> = {
   ADVISED: "neutral",
@@ -47,6 +50,13 @@ export default function TreatmentPage() {
     queryKey: ["treatments", status],
     queryFn: () => api.treatments(status ? { status } : {}),
   });
+
+  // MANAGE_TREATMENT gates the status-transition endpoint server-side
+  // (Doctor has VIEW_TREATMENT but advises via RECORD_CONSULTATION_OUTCOME,
+  // not by driving the funnel here) — mirrored here only to avoid showing
+  // dead controls, never as the actual authorization boundary.
+  const session = useQuery({ queryKey: ["session"], queryFn: api.session });
+  const canManage = !!session.data && hasPermission(session.data.user.role, "MANAGE_TREATMENT");
 
   async function transition(row: TreatmentRow, next: TreatmentStatus) {
     await api.updateTreatmentStatus(row.id, next);
@@ -99,19 +109,25 @@ export default function TreatmentPage() {
                     <td className="px-2 py-2 text-neutral-600">{fmtDate(row.lastContactAt)}</td>
                     <td className="px-2 py-2 text-neutral-600">{fmtDate(row.plannedDate)}</td>
                     <td className="px-2 py-2">
-                      <div className="flex gap-1">
-                        {(NEXT_STEPS[row.status] ?? []).map((step) => (
-                          <button
-                            key={step.status}
-                            type="button"
-                            onClick={() => transition(row, step.status)}
-                            className="rounded border border-neutral-200 px-1.5 py-0.5 text-[11px] font-medium text-neutral-600 hover:bg-neutral-100"
-                            data-testid={`treatment-${row.id}-${step.status}`}
-                          >
-                            {step.label}
-                          </button>
-                        ))}
-                      </div>
+                      {canManage && (
+                        <div className="flex gap-1">
+                          {(NEXT_STEPS[row.status] ?? []).map((step) => (
+                            <button
+                              key={step.status}
+                              type="button"
+                              onClick={() => transition(row, step.status)}
+                              className={
+                                DANGER_TRANSITIONS.has(step.status)
+                                  ? "rounded border border-danger-100 px-1.5 py-0.5 text-[11px] font-medium text-danger-700 hover:bg-danger-100"
+                                  : "rounded border border-neutral-200 px-1.5 py-0.5 text-[11px] font-medium text-neutral-600 hover:bg-neutral-100"
+                              }
+                              data-testid={`treatment-${row.id}-${step.status}`}
+                            >
+                              {step.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}

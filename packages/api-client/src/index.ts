@@ -182,6 +182,10 @@ export const api = {
   connector: (id: string) => request<ConnectorDetail>(`/connectors/${id}`),
   updateConnector: (id: string, input: { displayName?: string; configuration?: Record<string, unknown>; secrets?: Record<string, unknown> }) =>
     request<{ ok: true }>(`/connectors/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
+  syncConnectorCampaigns: (id: string) =>
+    request<{ ok: true; syncedCount: number } | { ok: false; reason: string; message?: string }>(`/connectors/${id}/sync-campaigns`, { method: "POST", body: JSON.stringify({}) }),
+  syncConnectorPerformance: (id: string) =>
+    request<{ ok: true; syncedCount: number } | { ok: false; reason: string; message?: string }>(`/connectors/${id}/sync-performance`, { method: "POST", body: JSON.stringify({}) }),
   createAppointment: (input: CreateAppointmentInput) => request<AppointmentRow>("/appointments", { method: "POST", body: JSON.stringify(input) }),
 
   // Leads (CRM-2/3/4)

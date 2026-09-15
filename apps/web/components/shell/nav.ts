@@ -65,7 +65,7 @@ const DOCTOR_NAV: NavGroup[] = [
   {
     label: "Patients",
     items: [
-      { label: "Appointments", href: "/appointments", icon: "CalendarCheck", implemented: false },
+      { label: "Appointments", href: "/appointments", icon: "CalendarCheck", implemented: true },
       { label: "Patients", href: "/patients", icon: "Users", implemented: true },
     ],
   },

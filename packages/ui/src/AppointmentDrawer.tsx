@@ -55,6 +55,7 @@ export function AppointmentDrawer({
   onAction,
   onComplete,
   onReschedule,
+  readOnly = false,
 }: {
   appointment: AppointmentRow | null;
   recentEvents?: TimelineEventVm[];
@@ -62,6 +63,8 @@ export function AppointmentDrawer({
   onAction: (row: AppointmentRow, action: AppointmentAction) => void;
   onComplete: (row: AppointmentRow) => void;
   onReschedule: (row: AppointmentRow, newIso: string) => void;
+  /** Hide the Confirm/Check-In/Complete/Reschedule/No-show/Cancel actions for a viewer who can't call them (e.g. Doctor, VIEW_APPOINTMENTS only). */
+  readOnly?: boolean;
 }) {
   const [rescheduling, setRescheduling] = useState(false);
   const [newDateTime, setNewDateTime] = useState("");
@@ -143,6 +146,7 @@ export function AppointmentDrawer({
         </div>
 
         {/* Actions */}
+        {!readOnly && (
         <div className="sticky bottom-0 space-y-2 border-t border-neutral-100 bg-white p-4">
           {rescheduling ? (
             <div className="space-y-2">
@@ -227,6 +231,7 @@ export function AppointmentDrawer({
             </>
           )}
         </div>
+        )}
       </div>
     </div>
   );

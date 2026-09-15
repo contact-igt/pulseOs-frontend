@@ -40,10 +40,23 @@ describe.skipIf(!DEMO_PASSWORD)("tasks / follow-ups / my work (integration)", ()
     expect(res.statusCode).toBe(401);
   });
 
-  it("a role without MANAGE_TASKS is forbidden with the specific permission named", async () => {
-    const res = await app.inject({ method: "GET", url: "/tasks", cookies: { pulseos_session: doctorCookie } });
-    expect(res.statusCode).toBe(403);
-    expect(res.json().requiredPermission).toBe("MANAGE_TASKS");
+  it("Doctor has VIEW_TASKS (can see their own My Work queue) but not MANAGE_TASKS (cannot create, complete, reschedule, or reassign)", async () => {
+    const list = await app.inject({ method: "GET", url: "/tasks", cookies: { pulseos_session: doctorCookie } });
+    expect(list.statusCode).toBe(200);
+    expect(Array.isArray(list.json())).toBe(true);
+
+    const create = await app.inject({
+      method: "POST",
+      url: "/tasks",
+      cookies: { pulseos_session: doctorCookie },
+      payload: { patientId: somePatientId, journeyId: someJourneyId, type: "CALLBACK", dueAt: new Date(Date.now() + 86400000).toISOString() },
+    });
+    expect(create.statusCode).toBe(403);
+    expect(create.json().requiredPermission).toBe("MANAGE_TASKS");
+
+    const complete = await app.inject({ method: "PATCH", url: "/tasks/00000000-0000-0000-0000-000000000000/complete", cookies: { pulseos_session: doctorCookie } });
+    expect(complete.statusCode).toBe(403);
+    expect(complete.json().requiredPermission).toBe("MANAGE_TASKS");
   });
 
   it("creates a task with the full field set and returns it", async () => {

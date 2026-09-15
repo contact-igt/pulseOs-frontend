@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
 import { AppointmentDrawer, AppointmentList, ErrorState, Skeleton } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
+import { hasPermission } from "@pulseos/types";
 import type { AppointmentAction, AppointmentRow } from "@pulseos/types";
 
 type ViewTab = "today" | "upcoming" | "no_show" | "completed";
@@ -40,6 +41,12 @@ export default function AppointmentsPage() {
   });
 
   const lookups = useQuery({ queryKey: ["lookups"], queryFn: api.lookups });
+
+  // MANAGE_APPOINTMENTS gates every action endpoint server-side (Doctor has
+  // only VIEW_APPOINTMENTS) — mirrored here only to avoid showing dead
+  // controls, never as the actual authorization boundary.
+  const session = useQuery({ queryKey: ["session"], queryFn: api.session });
+  const canManage = !!session.data && hasPermission(session.data.user.role, "MANAGE_APPOINTMENTS");
 
   const filters =
     tab === "today"
@@ -87,16 +94,18 @@ export default function AppointmentsPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-4" data-testid="appointments-page">
-      <div className="flex items-center justify-end">
-        <button
-          type="button"
-          onClick={() => quickCreate.openNewAppointment()}
-          className="rounded-lg bg-primary-600 px-3.5 py-2 text-sm font-medium text-white transition hover:bg-primary-700"
-          data-testid="new-appointment-button"
-        >
-          + New Appointment
-        </button>
-      </div>
+      {canManage && (
+        <div className="flex items-center justify-end">
+          <button
+            type="button"
+            onClick={() => quickCreate.openNewAppointment()}
+            className="rounded-lg bg-primary-600 px-3.5 py-2 text-sm font-medium text-white transition hover:bg-primary-700"
+            data-testid="new-appointment-button"
+          >
+            + New Appointment
+          </button>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-neutral-200 bg-white p-2">
         <div className="flex gap-0.5 rounded border border-neutral-200 p-0.5">
@@ -144,8 +153,8 @@ export default function AppointmentsPage() {
         <AppointmentList
           title={TABS.find((t) => t.key === tab)!.label}
           rows={searched}
-          onAction={handleAction}
-          onComplete={handleComplete}
+          onAction={canManage ? handleAction : undefined}
+          onComplete={canManage ? handleComplete : undefined}
           onRowClick={(row) => setSelected(row)}
           emptyMessage="No appointments match these filters."
         />
@@ -158,6 +167,7 @@ export default function AppointmentsPage() {
         onAction={handleAction}
         onComplete={handleComplete}
         onReschedule={handleReschedule}
+        readOnly={!canManage}
       />
     </div>
   );
