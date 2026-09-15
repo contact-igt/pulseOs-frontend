@@ -24,7 +24,7 @@ Back-navigation group, splits UI work by page cluster). A-E are unaffected
 | H | Specialty Settings completion (reorder/required/options) | not started | — | — | — |
 | I | Action/button/dead-control audit | not started | — | — | — |
 | J | Shared table system unification | not started | — | — | — |
-| K | Navigation hierarchy + Back system | in progress | — | — | — |
+| K | Navigation hierarchy + Back system | in progress (BackLink primitive done) | 1bbff04 | n/a (no web unit tests) | self, browser-verified |
 | L | Inbox enterprise reconstruction | not started | — | — | — |
 | M | Patient 360 / Appointment / Treatment UX | not started | — | — | — |
 | N | Command Centre / Leads / Campaigns UI | not started | — | — | — |
@@ -34,26 +34,49 @@ Back-navigation group, splits UI work by page cluster). A-E are unaffected
 
 ## Resume point for the next session
 
-Groups A-C are done, committed (`c0faf9b`, `12fbb38`, `05067f7`, `35bafeb`),
-and fully verified (fresh lint/typecheck/test/build, plus a live browser
-check of the Integrations page). Groups D-P are **not started** — do not
-assume otherwise from anything outside this ledger + `git log` after a
-context compaction.
+Groups A, B, C, D, E are done and committed (`c0faf9b`, `12fbb38`, `99476fb`,
+`05067f7`, `35bafeb`, `06a13fa` [seed fix], `70a8ce8`, `89ac3a6`). Group K is
+started (`1bbff04`: the BackLink primitive, wired into Patient 360 and all 7
+of its entry points). Groups F, G, H, I, J, L, M, N, O, P, Q are **not
+started** — do not assume otherwise from anything outside this ledger +
+`git log` after a context compaction.
 
-**Suggested next task: Group D (unified acquisition ingestion).** The
-building block already exists and is proven —
-`connector/patient-identity.service.ts::findOrCreatePatientByPhone` (Group C)
-is the canonical phone-based identity resolver; `lead.service.ts::createLead`
-and `patient.service.ts::createPatient` currently each re-implement the same
-dedupe-then-create logic inline rather than calling into one shared
-function. Group D's actual work is consolidating those three (plus, once
-Group F ports them, the Website/Meta/Google ingestion paths) onto one
-call path, per plan §12 (raw enquiry → normalize → resolve-or-create Patient
-→ create/attach Journey → touchpoint → custom fields → assignment →
-Timeline → optional Task). Group E (attribution) is a natural follow-on
-since `attribution.service.ts::recordTouchpoint` needs to become that one
-path's touchpoint-writing step, replacing `lead.service.ts`'s current inline
-`touchType: "first_touch"` insert.
+**What actually exists now that F/G build on:**
+- `domain/patient/identity.service.ts::resolveOrCreatePatient` — the one
+  identity path. Every new ingestion source (Website/Meta/Google) should
+  call this, never re-implement dedupe.
+- `domain/acquisition/attribution.service.ts::recordTouchpoint` — the one
+  touchpoint-writing path (first/last-touch aware). Every new ingestion
+  source should call this too, passing a `TouchpointDetails` (medium/utm/
+  external ids/click ids — the columns are already on `campaign_touchpoints`
+  from Group B, just not populated by anything except manual leads yet).
+- `domain/acquisition/attribution.service.ts::resolveCampaign` — find-or-
+  create a `MarketingCampaign` by `externalCampaignId`, ready for adapter
+  webhooks to call directly.
+- `connectors.mode` (FIXTURE/SANDBOX/LIVE) is real and UI-honest (Group C) —
+  any newly-ported adapter should default new connectors to `FIXTURE` and
+  never claim LIVE without real credentials.
+
+**Suggested next task: Group F (Website/Meta/Google/GBP adapters).** Port
+from `feature/acquisition-attribution-connectors`'s
+`domain/acquisition/adapters/` (`meta-lead-ads.ts`, `google-ads-lead-forms.ts`,
+`google-business-profile.ts`) and `website-form.service.ts` +
+`website-form.routes.ts`, adapting each to call `resolveOrCreatePatient` +
+`recordTouchpoint` instead of whatever that branch's now-superseded direct
+insert logic did. GBP explicitly must never touch `patients` (aggregate-only,
+already true on the source branch — preserve that rule). Then Group G
+(campaign analytics) becomes straightforward since the data these adapters
+produce is what makes richer Campaigns-page metrics meaningful.
+
+**Group K remaining:** Campaign drilldown and Settings/specialty-editor
+detail screens don't have dedicated routes yet on this branch (Campaigns is
+a single page with inline table, Settings is a single page with inline
+expand/collapse per specialty — no `/campaigns/[id]` or
+`/settings/specialties/[key]` route exists), so there's no page header to
+attach a Back control to yet. Whether Group K or Group N should introduce
+those dedicated routes (vs. keeping the current inline-expand pattern and
+deciding Back doesn't apply there) is a real product decision, not
+mechanical work — flag it to the Brain rather than deciding unilaterally.
 
 **Known issue for Group M (not fixed, out of scope for A-C):** Command
 Centre's "Spend At Risk" panel renders amounts with 3 decimal places
