@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
 import { useRouter } from "next/navigation";
-import { Badge, EmptyState, ErrorState, SectionHeading, Skeleton, useDialogFocus } from "@pulseos/ui";
+import { Badge, ConfirmDialog, EmptyState, ErrorState, OverflowMenu, SectionHeading, Skeleton, useDialogFocus } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import { withFrom } from "@/components/shell/BackLink";
 import type { ConversationChannel, ConversationDetail, OwnershipState } from "@pulseos/types";
@@ -44,6 +44,18 @@ const OWNERSHIP_TONE: Record<OwnershipState, "neutral" | "warning" | "danger" | 
   CLOSED: "neutral",
 };
 
+// One primary ownership action per state, per the functional-hardening pass:
+// a single clear next step instead of 3-4 always-visible buttons. Assign,
+// Close and other rarer actions live in the "More" menu instead. CLOSED has
+// no primary action — there is nothing further to do with a closed thread.
+const PRIMARY_ACTION_LABEL: Partial<Record<OwnershipState, string>> = {
+  HUMAN_REQUIRED: "Claim",
+  HUMAN_ASSIGNED: "Claim",
+  AI_ACTIVE: "Take over",
+  AI_RESUME_PENDING: "Take over",
+  HUMAN_ACTIVE: "Return to AI",
+};
+
 function relativeTime(iso: string) {
   const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
   if (mins < 1) return "just now";
@@ -63,6 +75,10 @@ export default function InboxPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [assignTarget, setAssignTarget] = useState("");
+  // "Assign to…" is a rare action tucked in the ownership More menu — this
+  // reveals the picker row it needs without giving it standing header space.
+  const [assigning, setAssigning] = useState(false);
+  const [confirmingClose, setConfirmingClose] = useState(false);
   // Below `md` the list and thread are two full-width screens, not two
   // squeezed columns — this tracks which one is showing.
   const [mobileView, setMobileView] = useState<"list" | "thread">("list");
@@ -99,6 +115,17 @@ export default function InboxPage() {
 
   const contextDialogRef = useDialogFocus<HTMLDivElement>(contextOpen, () => setContextOpen(false));
 
+  // Reset per-conversation transient UI (assign picker, close confirmation) when the
+  // selected conversation changes — adjusted during render rather than in an effect,
+  // per React's guidance for state resets keyed off a changing value.
+  const [resetForId, setResetForId] = useState(effectiveSelectedId);
+  if (effectiveSelectedId !== resetForId) {
+    setResetForId(effectiveSelectedId);
+    setAssigning(false);
+    setAssignTarget("");
+    setConfirmingClose(false);
+  }
+
   function refreshAfterAction() {
     queryClient.invalidateQueries({ queryKey: ["conversations"] });
     queryClient.invalidateQueries({ queryKey: ["conversation", effectiveSelectedId] });
@@ -119,6 +146,7 @@ export default function InboxPage() {
   async function handleClose() {
     if (!effectiveSelectedId) return;
     await api.closeConversation(effectiveSelectedId);
+    setConfirmingClose(false);
     refreshAfterAction();
   }
 
@@ -126,6 +154,7 @@ export default function InboxPage() {
     if (!effectiveSelectedId || !assignTarget) return;
     await api.assignConversation(effectiveSelectedId, assignTarget);
     setAssignTarget("");
+    setAssigning(false);
     refreshAfterAction();
   }
 
@@ -243,40 +272,25 @@ export default function InboxPage() {
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                {selectedConversation.ownershipState !== "CLOSED" && selectedConversation.ownershipState !== "HUMAN_ACTIVE" && (
-                  <button type="button" onClick={handleClaim} data-testid="claim-conversation" className="rounded border border-neutral-200 px-2 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100">
-                    Claim
-                  </button>
-                )}
-                {selectedConversation.ownershipState !== "CLOSED" && selectedConversation.ownershipState !== "AI_ACTIVE" && selectedConversation.ownershipState !== "AI_RESUME_PENDING" && (
-                  <button type="button" onClick={handleReturnToAi} data-testid="return-to-ai" className="rounded border border-neutral-200 px-2 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100">
-                    Return to AI
-                  </button>
-                )}
-                {selectedConversation.ownershipState !== "CLOSED" && (
-                  <button type="button" onClick={handleClose} data-testid="close-conversation" className="rounded border border-neutral-200 px-2 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100">
-                    Close
-                  </button>
-                )}
-                {selectedConversation.ownershipState !== "CLOSED" && (
-                  <div className="flex items-center gap-1">
-                    <select
-                      value={assignTarget}
-                      onChange={(e) => setAssignTarget(e.target.value)}
-                      className="rounded border border-neutral-200 bg-white px-1.5 py-1 text-xs text-slate-700"
-                    >
-                      <option value="">Assign to…</option>
-                      {lookups.data?.owners.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={handleAssign}
-                      disabled={!assignTarget}
-                      className="rounded border border-neutral-200 px-2 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-40"
-                    >
-                      Assign
+                {selectedConversation.ownershipState !== "CLOSED" && (() => {
+                  const label = PRIMARY_ACTION_LABEL[selectedConversation.ownershipState];
+                  if (!label) return null;
+                  const onClick = selectedConversation.ownershipState === "HUMAN_ACTIVE" ? handleReturnToAi : handleClaim;
+                  const testId = selectedConversation.ownershipState === "HUMAN_ACTIVE" ? "return-to-ai" : label === "Take over" ? "take-over-conversation" : "claim-conversation";
+                  return (
+                    <button type="button" onClick={onClick} data-testid={testId} className="rounded bg-primary-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-primary-700">
+                      {label}
                     </button>
-                  </div>
+                  );
+                })()}
+                {selectedConversation.ownershipState !== "CLOSED" && (
+                  <OverflowMenu
+                    testId="conversation-more-actions"
+                    items={[
+                      { key: "assign", label: "Assign to…", onClick: () => setAssigning(true) },
+                      { key: "close", label: "Close conversation", danger: true, onClick: () => setConfirmingClose(true) },
+                    ]}
+                  />
                 )}
                 <button
                   type="button"
@@ -290,6 +304,50 @@ export default function InboxPage() {
                 </button>
               </div>
             </div>
+
+            {assigning && (
+              <div className="flex items-center gap-1.5 border-b border-neutral-100 bg-neutral-50 px-3 py-2">
+                <span className="text-xs text-neutral-500">Assign to</span>
+                <select
+                  value={assignTarget}
+                  onChange={(e) => setAssignTarget(e.target.value)}
+                  className="rounded border border-neutral-200 bg-white px-1.5 py-1 text-xs text-slate-700"
+                  autoFocus
+                  data-testid="assign-target-select"
+                >
+                  <option value="">Choose a person…</option>
+                  {lookups.data?.owners.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleAssign}
+                  disabled={!assignTarget}
+                  className="rounded bg-primary-600 px-2 py-1 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-40"
+                  data-testid="confirm-assign"
+                >
+                  Assign
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAssigning(false);
+                    setAssignTarget("");
+                  }}
+                  className="rounded px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-100"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+
+            <ConfirmDialog
+              open={confirmingClose}
+              title="Close this conversation?"
+              description="No further messages will send from PulseOS on this thread, and it moves out of every active queue. You can still view its history, but reopening a closed conversation isn't currently supported — only close it once the patient's request is fully resolved."
+              confirmLabel="Close conversation"
+              onConfirm={handleClose}
+              onCancel={() => setConfirmingClose(false)}
+            />
 
             <div className="flex-1 space-y-3 overflow-y-auto p-3">
               {detail.isLoading && <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10" />)}</div>}

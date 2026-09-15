@@ -25,3 +25,4 @@ export * from "./DoctorComponents";
 export * from "./OutcomeActionList";
 export * from "./Timeline";
 export * from "./useDialogFocus";
+export * from "./ConfirmDialog";
