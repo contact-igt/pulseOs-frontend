@@ -58,6 +58,9 @@ export async function leadRoutes(app: FastifyInstance) {
     if (!parsed.success) return reply.status(400).send({ error: "invalid_request", details: parsed.error.flatten() });
 
     const result = await createLead(app.db, tenantId, actorId, parsed.data);
+    if ("validationError" in result) {
+      return reply.status(422).send({ error: "missing_required_fields", fields: result.missingRequiredFields });
+    }
     return reply.status(201).send(result);
   });
 }

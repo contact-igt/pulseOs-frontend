@@ -17,6 +17,7 @@ const REASON_STATUS: Record<string, number> = {
 
 const updateSpecialtyBody = z.object({
   displayName: z.string().min(1).optional(),
+  defaultJourneyType: z.string().min(1).optional(),
   enabled: z.boolean().optional(),
 });
 

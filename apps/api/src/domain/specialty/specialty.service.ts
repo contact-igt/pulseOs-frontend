@@ -96,6 +96,7 @@ export async function updateSpecialty(db: Db, tenantId: string, key: string, inp
     .update(specialtyTemplates)
     .set({
       ...(input.displayName !== undefined ? { displayName: input.displayName } : {}),
+      ...(input.defaultJourneyType !== undefined ? { defaultJourneyType: input.defaultJourneyType } : {}),
       ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
     })
     .where(eq(specialtyTemplates.id, existing.id));

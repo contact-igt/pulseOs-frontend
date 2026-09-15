@@ -748,7 +748,12 @@ async function main() {
       name: "Geeta Nambiar", phone: "9811122006", specialtyKey: "GENERAL_OPD", branchId: branchA.id,
       source: "walk_in", journeyType: "General Consultation", ownerId: frontDesk.id, notes: "Walk-in, no prior contact.",
     }),
-  ]);
+  ]).then((results) =>
+    results.map((r) => {
+      if ("validationError" in r) throw new Error(`seed lead unexpectedly missing required field(s): ${r.missingRequiredFields.join(", ")}`);
+      return r;
+    }),
+  );
 
   // Back-date contact on two journeys (no follow-up task on either) so the
   // Leads page's No Response bucket has realistic rows — Anjali/Ramesh above

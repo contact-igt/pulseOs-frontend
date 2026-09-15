@@ -151,6 +151,47 @@ describe.skipIf(!DEMO_PASSWORD)("leads (integration)", () => {
     expect(lead?.specialtyLabel).toBe("Ophthalmology");
   });
 
+  it("a specialty's required custom field blocks lead creation until a value is provided", async () => {
+    const create = await app.inject({
+      method: "POST",
+      url: "/specialties/GENERAL_OPD/fields",
+      cookies: { pulseos_session: adminCookie },
+      payload: { key: "referral_reason", label: "Referral reason", fieldType: "TEXT", required: true },
+    });
+    expect(create.statusCode).toBe(201);
+    const field = create.json() as { id: string };
+
+    try {
+      const phone = uniquePhone();
+      const missing = await app.inject({
+        method: "POST",
+        url: "/leads",
+        cookies: { pulseos_session: coordinatorCookie },
+        payload: { name: "Required Field Check", phone, specialtyKey: "GENERAL_OPD", branchId, source: "website", journeyType: "General Consultation" },
+      });
+      expect(missing.statusCode).toBe(422);
+      expect(missing.json()).toMatchObject({ error: "missing_required_fields", fields: ["referral_reason"] });
+
+      const provided = await app.inject({
+        method: "POST",
+        url: "/leads",
+        cookies: { pulseos_session: coordinatorCookie },
+        payload: {
+          name: "Required Field Check",
+          phone,
+          specialtyKey: "GENERAL_OPD",
+          branchId,
+          source: "website",
+          journeyType: "General Consultation",
+          customFieldValues: { referral_reason: "GP referral" },
+        },
+      });
+      expect(provided.statusCode).toBe(201);
+    } finally {
+      await app.inject({ method: "PATCH", url: `/specialties/fields/${field.id}`, cookies: { pulseos_session: adminCookie }, payload: { archived: true } });
+    }
+  });
+
   it("creates a first follow-up task when followUp is provided, and the lead then carries a Next Action", async () => {
     const phone = uniquePhone();
     const dueAt = new Date(Date.now() + 86400000).toISOString();

@@ -1,8 +1,10 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { eq } from "drizzle-orm";
 import { buildApp } from "../app.js";
-import { queryClient } from "../db/client.js";
+import { db, queryClient } from "../db/client.js";
+import { customFieldValues } from "../db/schema.js";
 import type { FastifyInstance } from "fastify";
-import type { CustomFieldDefinitionVm, SpecialtyDetailVm, SpecialtyTemplateVm } from "@pulseos/types";
+import type { CreateLeadResult, CustomFieldDefinitionVm, SpecialtyDetailVm, SpecialtyTemplateVm } from "@pulseos/types";
 
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD;
 
@@ -11,16 +13,23 @@ async function loginAs(app: FastifyInstance, email: string): Promise<string> {
   return res.cookies.find((c) => c.name === "pulseos_session")!.value;
 }
 
+function uniquePhone(): string {
+  return `9${Math.floor(100000000 + Math.random() * 899999999)}`;
+}
+
 describe.skipIf(!DEMO_PASSWORD)("specialty configuration (integration)", () => {
   let app: FastifyInstance;
   let adminCookie: string;
   let coordinatorCookie: string;
+  let branchId: string;
 
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
     adminCookie = await loginAs(app, "admin@pulseos.local");
     coordinatorCookie = await loginAs(app, "coordinator@pulseos.local");
+    const lookups = await app.inject({ method: "GET", url: "/lookups", cookies: { pulseos_session: adminCookie } });
+    branchId = (lookups.json() as { branches: { id: string }[] }).branches[0].id;
   });
 
   afterAll(async () => {
@@ -93,6 +102,114 @@ describe.skipIf(!DEMO_PASSWORD)("specialty configuration (integration)", () => {
 
     const afterArchive = await app.inject({ method: "GET", url: "/specialties/PAEDIATRICS/fields", cookies: { pulseos_session: coordinatorCookie } });
     expect((afterArchive.json() as CustomFieldDefinitionVm[]).map((f) => f.key)).not.toContain("allergy_notes");
+  });
+
+  it("Hospital Admin can edit a specialty's display label and default Journey type — historical value restored after", async () => {
+    const before = await app.inject({ method: "GET", url: "/specialties/PAEDIATRICS", cookies: { pulseos_session: adminCookie } });
+    const original = before.json() as SpecialtyDetailVm;
+
+    try {
+      const patch = await app.inject({
+        method: "PATCH",
+        url: "/specialties/PAEDIATRICS",
+        cookies: { pulseos_session: adminCookie },
+        payload: { displayName: "Paediatrics & Child Health", defaultJourneyType: "Child Wellness" },
+      });
+      expect(patch.statusCode).toBe(200);
+
+      const after = await app.inject({ method: "GET", url: "/specialties/PAEDIATRICS", cookies: { pulseos_session: adminCookie } });
+      const updated = after.json() as SpecialtyDetailVm;
+      expect(updated.displayName).toBe("Paediatrics & Child Health");
+      expect(updated.defaultJourneyType).toBe("Child Wellness");
+    } finally {
+      await app.inject({
+        method: "PATCH",
+        url: "/specialties/PAEDIATRICS",
+        cookies: { pulseos_session: adminCookie },
+        payload: { displayName: original.displayName, defaultJourneyType: original.defaultJourneyType },
+      });
+    }
+  });
+
+  it("Hospital Admin can reorder a specialty's fields by swapping sortOrder, and the new order persists", async () => {
+    const before = await app.inject({ method: "GET", url: "/specialties/GYNECOLOGY", cookies: { pulseos_session: adminCookie } });
+    const fields = (before.json() as SpecialtyDetailVm).fields;
+    expect(fields.length).toBeGreaterThanOrEqual(2);
+    const [first, second] = fields;
+
+    try {
+      await app.inject({ method: "PATCH", url: `/specialties/fields/${first.id}`, cookies: { pulseos_session: adminCookie }, payload: { sortOrder: second.sortOrder } });
+      await app.inject({ method: "PATCH", url: `/specialties/fields/${second.id}`, cookies: { pulseos_session: adminCookie }, payload: { sortOrder: first.sortOrder } });
+
+      const after = await app.inject({ method: "GET", url: "/specialties/GYNECOLOGY", cookies: { pulseos_session: adminCookie } });
+      const reordered = (after.json() as SpecialtyDetailVm).fields;
+      expect(reordered[0].id).toBe(second.id);
+      expect(reordered[1].id).toBe(first.id);
+    } finally {
+      await app.inject({ method: "PATCH", url: `/specialties/fields/${first.id}`, cookies: { pulseos_session: adminCookie }, payload: { sortOrder: first.sortOrder } });
+      await app.inject({ method: "PATCH", url: `/specialties/fields/${second.id}`, cookies: { pulseos_session: adminCookie }, payload: { sortOrder: second.sortOrder } });
+    }
+  });
+
+  it("a SELECT field's options can be created and later edited, and both persist", async () => {
+    const create = await app.inject({
+      method: "POST",
+      url: "/specialties/GENERAL_OPD/fields",
+      cookies: { pulseos_session: adminCookie },
+      payload: { key: "referral_source", label: "Referral source", fieldType: "SELECT", options: ["Doctor", "Family"] },
+    });
+    expect(create.statusCode).toBe(201);
+    const field = create.json() as CustomFieldDefinitionVm;
+    expect(field.options).toEqual(["Doctor", "Family"]);
+
+    const edit = await app.inject({
+      method: "PATCH",
+      url: `/specialties/fields/${field.id}`,
+      cookies: { pulseos_session: adminCookie },
+      payload: { options: ["Doctor", "Family", "Online ad"] },
+    });
+    expect(edit.statusCode).toBe(200);
+
+    const detail = await app.inject({ method: "GET", url: "/specialties/GENERAL_OPD", cookies: { pulseos_session: adminCookie } });
+    const persisted = (detail.json() as SpecialtyDetailVm).fields.find((f) => f.id === field.id);
+    expect(persisted?.options).toEqual(["Doctor", "Family", "Online ad"]);
+
+    await app.inject({ method: "PATCH", url: `/specialties/fields/${field.id}`, cookies: { pulseos_session: adminCookie }, payload: { archived: true } });
+  });
+
+  it("archiving a field preserves values already recorded against it on existing journeys — no cascade delete", async () => {
+    const create = await app.inject({
+      method: "POST",
+      url: "/specialties/GENERAL_OPD/fields",
+      cookies: { pulseos_session: adminCookie },
+      payload: { key: "insurance_provider", label: "Insurance provider", fieldType: "TEXT" },
+    });
+    const field = create.json() as CustomFieldDefinitionVm;
+
+    const lead = await app.inject({
+      method: "POST",
+      url: "/leads",
+      cookies: { pulseos_session: coordinatorCookie },
+      payload: {
+        name: "Archive History Check",
+        phone: uniquePhone(),
+        specialtyKey: "GENERAL_OPD",
+        branchId,
+        source: "website",
+        journeyType: "General Consultation",
+        customFieldValues: { insurance_provider: "Star Health" },
+      },
+    });
+    const { journeyId } = lead.json() as CreateLeadResult;
+
+    await app.inject({ method: "PATCH", url: `/specialties/fields/${field.id}`, cookies: { pulseos_session: adminCookie }, payload: { archived: true } });
+
+    const [valueRow] = await db.select().from(customFieldValues).where(eq(customFieldValues.journeyId, journeyId));
+    expect(valueRow).toBeDefined();
+    expect(valueRow.value).toBe("Star Health");
+
+    const activeFields = await app.inject({ method: "GET", url: "/specialties/GENERAL_OPD/fields", cookies: { pulseos_session: coordinatorCookie } });
+    expect((activeFields.json() as CustomFieldDefinitionVm[]).map((f) => f.key)).not.toContain("insurance_provider");
   });
 
   it("a specialty key that does not exist for this tenant 404s rather than leaking another tenant's config", async () => {

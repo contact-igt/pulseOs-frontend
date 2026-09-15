@@ -36,7 +36,22 @@ export async function lookupPatientByPhone(db: Db, tenantId: string, rawPhone: s
   return { patient: { id: patient.id, name: patient.name, phone: patient.phone, activeJourneyCount: journeyRows.length } };
 }
 
-export async function createLead(db: Db, tenantId: string, actorId: string, input: CreateLeadInput): Promise<CreateLeadResult> {
+export type CreateLeadOutcome = CreateLeadResult | { validationError: true; missingRequiredFields: string[] };
+
+export async function createLead(db: Db, tenantId: string, actorId: string, input: CreateLeadInput): Promise<CreateLeadOutcome> {
+  // Required-field enforcement happens before any write — server-side, not
+  // just the Add Lead form's `required` attribute, so an API call that
+  // bypasses the UI can't silently skip data Settings marked mandatory.
+  const specialtyFields = await db
+    .select({ key: customFieldDefinitions.key, required: customFieldDefinitions.required })
+    .from(customFieldDefinitions)
+    .where(and(eq(customFieldDefinitions.tenantId, tenantId), eq(customFieldDefinitions.specialtyKey, input.specialtyKey), eq(customFieldDefinitions.archived, false)));
+  const provided = input.customFieldValues ?? {};
+  const missingRequiredFields = specialtyFields.filter((f) => f.required && (provided[f.key] === undefined || provided[f.key] === null || provided[f.key] === "")).map((f) => f.key);
+  if (missingRequiredFields.length > 0) {
+    return { validationError: true, missingRequiredFields };
+  }
+
   // Canonical duplicate-prevention check: always resolve by phone through
   // the one shared identity path, never trust a client-supplied patientId
   // blindly — a stale hint must not create a duplicate identity, and a

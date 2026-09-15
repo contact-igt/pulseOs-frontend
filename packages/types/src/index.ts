@@ -657,6 +657,7 @@ export interface SpecialtyDetailVm extends SpecialtyTemplateVm {
 
 export interface UpdateSpecialtyInput {
   displayName?: string;
+  defaultJourneyType?: string;
   enabled?: boolean;
 }
 
