@@ -10,21 +10,60 @@ Worktree: `.claude/worktrees/pulseos-foundation-convergence`.
 | Group | Scope | Status | Commit(s) | Tests | Review |
 |---|---|---|---|---|---|
 | A | Convergence workspace + baseline gate | done | c0faf9b, 12fbb38 | 129/129 pass | self |
-| B | Migration/schema reconciliation | done | (pending commit) | 129/129 pass | self |
-| C | Phone normalization + connector-mode reconciliation | pending | — | — | — |
-| D | Unified acquisition ingestion | pending | — | — | — |
-| E | Full attribution reconciliation | pending | — | — | — |
-| F | Meta/Google/Website/GBP adapters ported | pending | — | — | — |
-| G | Campaign analytics + conversion feedback | pending | — | — | — |
-| H | Settings specialty controls completion | pending | — | — | — |
-| I | Action/button audit | pending | — | — | — |
-| J | Shared table system unification | pending | — | — | — |
-| K | Inbox responsive reconstruction | pending | — | — | — |
-| L | Patient 360 Timeline visual refinement | pending | — | — | — |
-| M | Command Centre / Campaigns enterprise polish | pending | — | — | — |
-| N | Responsive / motion / accessibility pass | pending | — | — | — |
-| O | Full E2E + screenshot review | pending | — | — | — |
-| P | Final code review + verification | pending | — | — | — |
+| B | Migration/schema reconciliation | done | 05067f7 | 129/129 pass | self |
+| C | Phone normalization + connector-mode reconciliation | done | 35bafeb | 138/138 pass | self, browser-verified |
+| D | Unified acquisition ingestion | not started | — | — | — |
+| E | Full attribution reconciliation | not started | — | — | — |
+| F | Meta/Google/Website/GBP adapters ported | not started | — | — | — |
+| G | Campaign analytics + conversion feedback | not started | — | — | — |
+| H | Settings specialty controls completion | not started | — | — | — |
+| I | Action/button audit | not started | — | — | — |
+| J | Shared table system unification | not started | — | — | — |
+| K | Inbox responsive reconstruction | not started | — | — | — |
+| L | Patient 360 Timeline visual refinement | not started | — | — | — |
+| M | Command Centre / Campaigns enterprise polish | not started | — | — | — |
+| N | Responsive / motion / accessibility pass | not started | — | — | — |
+| O | Full E2E + screenshot review | not started | — | — | — |
+| P | Final code review + verification | not started | — | — | — |
+
+## Resume point for the next session
+
+Groups A-C are done, committed (`c0faf9b`, `12fbb38`, `05067f7`, `35bafeb`),
+and fully verified (fresh lint/typecheck/test/build, plus a live browser
+check of the Integrations page). Groups D-P are **not started** — do not
+assume otherwise from anything outside this ledger + `git log` after a
+context compaction.
+
+**Suggested next task: Group D (unified acquisition ingestion).** The
+building block already exists and is proven —
+`connector/patient-identity.service.ts::findOrCreatePatientByPhone` (Group C)
+is the canonical phone-based identity resolver; `lead.service.ts::createLead`
+and `patient.service.ts::createPatient` currently each re-implement the same
+dedupe-then-create logic inline rather than calling into one shared
+function. Group D's actual work is consolidating those three (plus, once
+Group F ports them, the Website/Meta/Google ingestion paths) onto one
+call path, per plan §12 (raw enquiry → normalize → resolve-or-create Patient
+→ create/attach Journey → touchpoint → custom fields → assignment →
+Timeline → optional Task). Group E (attribution) is a natural follow-on
+since `attribution.service.ts::recordTouchpoint` needs to become that one
+path's touchpoint-writing step, replacing `lead.service.ts`'s current inline
+`touchType: "first_touch"` insert.
+
+**Known issue for Group M (not fixed, out of scope for A-C):** Command
+Centre's "Spend At Risk" panel renders amounts with 3 decimal places
+(`₹41,333.333` instead of `₹41,333`) — a pre-existing display-formatting
+defect, confirmed still present live in the browser during Group C's
+verification pass. Same root cause the original audit found on the
+Campaigns page.
+
+**Known scope boundary for Group G:** the Campaigns page
+(`apps/web/app/(app)/campaigns/page.tsx`) queries through
+`campaign.service.ts`'s own `campaignPerformance`, a separate path from
+`dashboard.service.ts::getSourcePerformance` (which Group C's connector-mode
+badge was wired into, via `SourcePerformanceTable`, used by Command Centre).
+The Campaigns page does not yet show connector-mode badges — deliberately
+left for Group G rather than expanding Group C's diff into a second,
+parallel backend path.
 
 ## Rulings
 
