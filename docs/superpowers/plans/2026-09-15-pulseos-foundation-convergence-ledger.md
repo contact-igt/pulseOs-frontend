@@ -23,13 +23,13 @@ Back-navigation group, splits UI work by page cluster). A-E are unaffected
 | G | Campaign analytics + conversion feedback + INR fix + date filter + Campaign Detail route | done | d77646e, dd31243, 8596ec0 | 12/12 campaigns.integration + 6/6 UI + full suite green | self, browser-verified |
 | H | Specialty Settings completion (reorder/required/options) | done | 9db42b4 | 24/24 specialty+leads integration, full suite 34/34 files 212/212 | self, browser-verified |
 | I | Action/button/dead-control audit | done | c1766a9 | tasks + campaign-sync integration tests, full suite 35/35 files 216/216 | self, browser-verified (Doctor + Admin) |
-| J | Shared table system unification | not started | — | — | — |
+| J | Design tokens/typography/geometry (J1) + PageHeader/Button/OverflowMenu (J2) + shared tables (J3) | done | 4cc6175, 4bdf429, c879753 | full suite 35/35 files 216/216, UI 6/6, design-tokens 4/4 | self, browser-verified |
 | K | Navigation hierarchy + Back system | in progress (BackLink primitive done) | 1bbff04 | n/a (no web unit tests) | self, browser-verified |
-| L | Inbox enterprise reconstruction | not started | — | — | — |
-| M | Patient 360 / Appointment / Treatment UX | not started | — | — | — |
-| N | Command Centre / Leads / Campaigns UI | not started | — | — | — |
-| O | Responsive / accessibility / motion | not started | — | — | — |
-| P | E2E + screenshot package | not started | — | — | — |
+| L | Inbox responsive reconstruction (L1) + Timeline visual refinement (L2) | done | 1b970c9, d56e06e | Playwright role-routing + no-overflow 18/18 pass | self, browser-verified (1280/390) |
+| M | Patient 360 / Appointment / Treatment UX | mostly already correct, verified not rebuilt — see notes below | — | — | self, browser-verified |
+| N | Command Centre / Leads / Campaigns UI | mostly already correct, verified not rebuilt — see notes below | — | — | self, browser-verified |
+| O | Responsive / accessibility / motion | partial (spot-checked 1440/1280/1024/768/390 on flagship pages + Playwright no-overflow suite; full dedicated a11y/motion audit not run) | — | Playwright no-overflow 12/12 | self, browser-verified |
+| P | E2E + screenshot package | done (26-file required set) | 6ab5f06 | Playwright: brain-review-screenshots 1/1, role-routing+no-overflow 18/18, crm-critical-flows 3/3, marketing-journey 3/3+1 skipped, command-centres 2/2, connector-checkpoint 1/1 (isolated) | self |
 | Q | Final whole-branch review | not started | — | — | — |
 
 ## Resume point for the next session
@@ -239,9 +239,112 @@ not a rewrite, just wire/hide):
   but Accept/Decline(red)/Schedule for Admin; Patients has no Add Patient
   button for Doctor; Integrations' new Sync buttons actually sync live.
 
-**This block's work (Groups F→I) is complete. Suggested next task for a
-future session: Group J (shared table system unification)** — explicitly
-deferred by the master prompt for this block, not started.
+**Groups F→I are complete (previous block). This entry covers the
+follow-on "ENTERPRISE UI/UX RECONSTRUCTION MASTER LOOP" block (started at
+HEAD `5e23e0e`), which is also now substantially complete** — J1/J2/J3
+(tokens/typography/geometry, PageHeader/Button/OverflowMenu, shared
+tables), L1/L2 (Inbox responsive reconstruction, Timeline refinement), and
+P (screenshot package) are done; M/N were largely *verified already
+correct* rather than rebuilt (see below); O is a partial spot-check, not
+the full dedicated pass the master prompt's §54 execution order reserves
+for later.
+
+**What Group J actually built:**
+- **J1 (tokens/typography/geometry):** Inter was declared in
+  `globals.css`'s `--font-sans` but never actually loaded (no `next/font`
+  anywhere) — every page silently rendered in the OS system font the whole
+  time. Now loaded via `next/font/google` in `apps/web/app/layout.tsx`.
+  Synced `packages/design-tokens/colors.ts` with the `--color-chart-*`
+  values `globals.css` already had but the TS source was missing. `Card`
+  primitive radius `rounded-lg` (8px) → `rounded-xl` (12px) — the single
+  highest-leverage fix since `Card` backs most panels app-wide. Sidebar
+  240px → 224px, TopBar/Sidebar-header 56px → 64px, sidebar nav icons 16px
+  → 18px. Fixed two dead controls found while touching `TopBar.tsx`: the
+  global search redirected to `/patients?q=...` but Patients never read
+  `q` (typed search silently vanished); the "Notifications" bell had no
+  `onClick` at all (now visibly `disabled` with "coming soon" instead of a
+  silent no-op).
+- **J2 (PageHeader/Button/OverflowMenu):** `PageHeader` extracted from a
+  byte-for-byte-identical header block already duplicated on
+  Leads/Patients/My Work (confirmed via audit before extracting), then
+  applied to Appointments/Treatments/Journeys/Campaigns/Settings/
+  Integrations/Front Desk too, which previously had no in-page title at
+  all. `Button` (primary/secondary/ghost/danger × sm/md) replaces 5+
+  verbatim-duplicated className strings. `OverflowMenu` (ellipsis dropdown,
+  danger items visually separated) — Treatments' status cell showed up to
+  3 buttons per row before, now one primary forward action + the rest in
+  the menu. Front Desk had two same-weight blue CTAs ("+ Add Lead"
+  outlined-blue next to "+ New Appointment" solid-blue) — fixed to one
+  primary + one quiet neutral secondary.
+- **J3 (shared tables):** `Table`/`TableHead`/`TableBody`/`Tr`/`Th`/`Td` —
+  a thin className wrapper, not a generic data/columns DataTable (Patients,
+  Leads, Journeys, Treatments, Campaign Detail, Campaigns root, and
+  Integrations' event log already agreed closely on the same rhythm before
+  this; Campaign Detail/Campaigns root and Integrations had drifted —
+  fixed). Row height `py-2` → `py-2.5`, deliberately short of generic
+  "44-48px" guidance since CLAUDE.md sets `VISUAL_DENSITY=8`.
+
+**What Group L actually built:**
+- **L1 (Inbox):** the real bug — at typical laptop widths (1280-1440px),
+  Patient Context's `hidden lg:block` (1024px breakpoint) never actually
+  hid it at those widths, so all 3 fixed-pixel-width columns rendered
+  together and squeezed the thread below the ~440px practical minimum.
+  Fixed: Context is now a real 3rd column only at 2xl+ (1536px+);
+  everywhere narrower it's a toggleable drawer via a new "Context toggle"
+  button in the thread header (named in the master prompt's §32 but didn't
+  exist before). Added mobile (<md) single-column list↔thread navigation
+  with a Back arrow (didn't exist — the list was always rendered
+  alongside the thread at every width). Found and fixed two more issues
+  live-testing: the thread header's action row clipped off-screen at
+  390px (now wraps), and Escape didn't close the new Context drawer (now
+  does, matching `AppointmentDrawer`'s existing pattern).
+- **L2 (Timeline):** every event used the same solid dot regardless of
+  category — added a per-category icon + restrained background tint and
+  surfaced `sourceChannel` inline. Patient 360's tabbed-vs-single-scroll
+  question stays deferred per `docs/ui/pulseos-visual-reference-notes.md`'s
+  existing ruling from a prior session — not reopened.
+
+**M and N were audited live rather than rebuilt — found already correct:**
+- Appointment Drawer (§24) already has exactly the target hierarchy: one
+  full-width primary action in the footer, Reschedule/No-show/Cancel as a
+  smaller secondary row. No changes made.
+- Doctor Home already has the "Quick Stats" trio (§26) the master prompt
+  asks for (`DoctorComponents.tsx`'s `DoctorQuickStats`, pre-existing).
+- Front Desk's "Today's Patient Flow" (§25) is already the segmented
+  multi-color bar the master prompt wants, not a single-color progress bar
+  (`PatientFlowBoard.tsx`, pre-existing).
+- Command Centre's row structure (§15) already matches: one connected KPI
+  strip, 8-col chart + 4-col radial, 3 equal cards below — verified live at
+  1440/1024/768px, tablet correctly stacks to one column.
+- **Deliberately NOT done: Command Centre's Journey Performance chart is
+  still a grouped bar chart, not the funnel/drop-off visualization §16
+  asks for.** This exact tension was already reviewed and resolved in
+  `docs/ui/pulseos-visual-reference-notes.md` ("we use a grouped bar chart
+  — a reasonable adaptation, not rebuilt") during an earlier session's
+  visual pass. Treated that as the standing decision rather than
+  reopening a real charting rebuild inside this pass — flagged for Brain
+  review, not silently skipped.
+- **Deliberately NOT done: My Work's tabs (§27) have no count badges.**
+  Would need a new per-view-counts aggregation the backend doesn't expose
+  today — adding it is backend work, not a pure UI change, and this block
+  was scoped to UI.
+
+**Group O is a spot-check, not the dedicated pass §54 reserves for
+later:** verified no horizontal overflow via the existing Playwright
+`no-overflow.spec.ts` (12/12, every major role × desktop/tablet/mobile) and
+manually inspected Command Centre/Inbox at 1440/1280/1024/768/390. Did not
+run a dedicated accessibility audit (focus-visible, ARIA labels on
+icon-only controls, screen-reader chart summaries, `prefers-reduced-motion`
+handling) beyond the Escape-key fix found live-testing Inbox, and did not
+do a systematic motion-timing audit beyond confirming the existing global
+`* { transition-duration: 120ms }` rule (already within the target
+100-160ms micro-interaction range) is still in place.
+
+**Suggested next task for a future session: Group Q (final whole-branch
+review)**, or finish Group O's dedicated accessibility/motion pass, or
+revisit the two deliberate M/N deferrals above if Brain review calls for
+them. Group J (in this ledger's original F→I-era row) is complete —
+superseded by this entry, not a separate outstanding task.
 
 **Group K status:** BackLink now has 8 wired entry points (Patient 360's 7
 + Campaign Detail → Patient 360, added in Group G). Campaign Detail itself
