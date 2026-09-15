@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
 import { Badge, EmptyState, ErrorState, SectionHeading, Skeleton } from "@pulseos/ui";
 import type { ConnectorStatus, ConnectorType } from "@pulseos/types";
-import { Mail, MessageCircle, Phone, Radio, ShieldCheck, Zap } from "lucide-react";
+import { Mail, MessageCircle, Phone, Radio, ShieldCheck, Target, Zap } from "lucide-react";
 
 const TYPE_ICON: Record<ConnectorType, typeof Phone> = {
   MESSAGING: MessageCircle,
@@ -14,6 +14,7 @@ const TYPE_ICON: Record<ConnectorType, typeof Phone> = {
   EMAIL: Mail,
   STORAGE: Radio,
   HIS: ShieldCheck,
+  ACQUISITION: Target,
 };
 
 const TYPE_LABEL: Record<ConnectorType, string> = {
@@ -23,6 +24,7 @@ const TYPE_LABEL: Record<ConnectorType, string> = {
   EMAIL: "Email",
   STORAGE: "Storage",
   HIS: "HIS",
+  ACQUISITION: "Acquisition",
 };
 
 const STATUS_LABEL: Record<ConnectorStatus, string> = {

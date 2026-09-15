@@ -11,6 +11,7 @@ function toRow(c: typeof connectors.$inferSelect, hasSecrets: boolean): Connecto
     provider: c.provider,
     displayName: c.displayName,
     status: c.status,
+    mode: c.mode,
     capabilities: c.capabilities,
     hasSecrets,
     lastSyncAt: c.lastSyncAt?.toISOString() ?? null,

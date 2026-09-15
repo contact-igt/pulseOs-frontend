@@ -10,7 +10,7 @@ Worktree: `.claude/worktrees/pulseos-foundation-convergence`.
 | Group | Scope | Status | Commit(s) | Tests | Review |
 |---|---|---|---|---|---|
 | A | Convergence workspace + baseline gate | done | c0faf9b, 12fbb38 | 129/129 pass | self |
-| B | Migration/schema reconciliation | in progress | — | — | — |
+| B | Migration/schema reconciliation | done | (pending commit) | 129/129 pass | self |
 | C | Phone normalization + connector-mode reconciliation | pending | — | — | — |
 | D | Unified acquisition ingestion | pending | — | — | — |
 | E | Full attribution reconciliation | pending | — | — | — |
@@ -31,9 +31,59 @@ Worktree: `.claude/worktrees/pulseos-foundation-convergence`.
 - Attribution model, migration strategy, Exotel/Superfone, `/treatment` redirect, AI
   runtime scope: see plan doc "Key rulings" — carried here as binding for this branch.
 
+## Group B — what was actually done
+
+Ported the additive acquisition-branch schema into `schema.ts` (no drops, no
+renames, no column-type changes): `tenants.default_phone_region`;
+`marketing_campaigns.connector_id`/`external_account_id` + a
+`(tenant_id, external_campaign_id)` unique index; 14 new nullable columns on
+`campaign_touchpoints` (medium/utm_*/external_*/gclid family);
+`connectors.mode` (new `connector_mode` enum FIXTURE/SANDBOX/LIVE, default
+FIXTURE); `connector_type` gains `ACQUISITION`; `connector_capability` gains
+8 acquisition-related values; four new tables
+(`conversion_feedback_events`, `gbp_performance_metrics`,
+`connector_disposition_mappings`, `connector_config_audit_events`).
+Updated `packages/types` (`ConnectorMode`, `ConnectorRow.mode`,
+`SourcePerformanceRow.connectorMode`, widened `ConnectorType`/
+`ConnectorCapability`), `connector.service.ts` (`toRow` now returns `mode`),
+`dashboard.service.ts` (`getSourcePerformance` now joins the owning
+connector's mode per campaign), and the Integrations page's
+type/icon/label maps (added `ACQUISITION`).
+
+Generated migration `0008_brave_bulldozer.sql` via `drizzle-kit generate` —
+pure `CREATE TYPE`/`ALTER TYPE ... ADD VALUE`/`CREATE TABLE`/
+`ALTER TABLE ... ADD COLUMN` statements, linear after this branch's `0007`.
+Verified by migrating a throwaway clean database
+(`createdb pulseos_migration_test` → `db:migrate` → `db:seed` → `dropdb`)
+end to end with no errors.
+
+**Known gap, recorded rather than silently patched:** the shared local
+`pulseos_dev` database (used by every worktree's `pnpm dev`) already has 13
+applied migrations in `drizzle.__drizzle_migrations` — more than any single
+branch's own migration folder — meaning a prior session hand-applied a
+combination of branches' migrations directly against it outside of git
+history. Its actual column/table shape already matches what this branch's
+`schema.ts` + migration `0008` produce (verified column-by-column:
+`connectors.mode`, `campaign_touchpoints` new columns,
+`tenants.default_phone_region`, all four new tables already present). The
+full API test suite (129/129) and a browser-verified `pnpm dev` both run
+correctly against it as-is. However, `pulseos_dev`'s migration journal does
+**not** contain an entry matching this branch's `0008` file (different
+filename/hash than whatever combination produced its current state), so
+running `pnpm db:migrate` against `pulseos_dev` from this branch **will
+currently fail** with "already exists" errors if attempted. This is a
+pre-existing operational-ops gap in the shared dev database, not introduced
+by this session — recommended follow-up (not done here, out of scope for a
+schema-reconciliation checkpoint): rebuild `pulseos_dev` from a clean
+`db:migrate`+`db:seed` on this branch once it's the adopted lineage, so the
+journal and the branch agree again.
+
 ## Known blockers
 
-(none yet)
+- See "Group B — what was actually done" above re: `pulseos_dev`'s
+  migration journal vs. this branch's `0008` — not a functional blocker
+  (server runs fine), but `db:migrate` should not be run against the shared
+  dev DB from this branch until reconciled.
 
 ## Baseline gate results
 

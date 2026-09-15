@@ -57,6 +57,13 @@
       "when": 1789313271298,
       "tag": "0007_wandering_thor",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1789464992946,
+      "tag": "0008_brave_bulldozer",
+      "breakpoints": true
     }
   ]
 }

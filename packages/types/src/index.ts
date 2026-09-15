@@ -161,6 +161,10 @@ export interface SourcePerformanceRow {
   treatments: number;
   revenue: number;
   roas: number | null;
+  // A synced campaign's spend/performance numbers are only as real as the
+  // connector that produced them — null for a manually-created campaign
+  // that was never synced from a provider (the question doesn't apply).
+  connectorMode: ConnectorMode | null;
 }
 
 export interface ExecutiveStrip {
@@ -562,8 +566,12 @@ export interface CoordinatorDashboard {
 // Connectors (Group R) — provider-neutral integration configuration.
 // ---------------------------------------------------------------------------
 
-export type ConnectorType = "MESSAGING" | "TELEPHONY" | "ADS" | "EMAIL" | "STORAGE" | "HIS";
+export type ConnectorType = "MESSAGING" | "TELEPHONY" | "ADS" | "EMAIL" | "STORAGE" | "HIS" | "ACQUISITION";
 export type ConnectorStatus = "NOT_CONFIGURED" | "CONNECTING" | "CONNECTED" | "DEGRADED" | "ERROR" | "DISABLED";
+// FIXTURE/SANDBOX/LIVE — never inferred, always the connector's actual
+// provenance, so the UI can never visually imply a live production
+// connection for a connector that is actually fixture- or sandbox-backed.
+export type ConnectorMode = "FIXTURE" | "SANDBOX" | "LIVE";
 export type ConnectorCapability =
   | "SEND_MESSAGE"
   | "RECEIVE_MESSAGE"
@@ -572,7 +580,15 @@ export type ConnectorCapability =
   | "RECEIVE_CALL_EVENT"
   | "FETCH_RECORDING"
   | "RECEIVE_RECORDING"
-  | "RECEIVE_TRANSCRIPT";
+  | "RECEIVE_TRANSCRIPT"
+  | "RECEIVE_LEAD"
+  | "SYNC_CAMPAIGNS"
+  | "SYNC_AD_GROUPS"
+  | "SYNC_ADS"
+  | "SYNC_SPEND"
+  | "SYNC_PERFORMANCE"
+  | "RECEIVE_FORM"
+  | "EXPORT_CONVERSION";
 
 export interface ConnectorRow {
   id: string;
@@ -580,6 +596,7 @@ export interface ConnectorRow {
   provider: string;
   displayName: string;
   status: ConnectorStatus;
+  mode: ConnectorMode;
   capabilities: ConnectorCapability[];
   hasSecrets: boolean;
   lastSyncAt: string | null;

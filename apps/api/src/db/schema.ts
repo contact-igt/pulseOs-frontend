@@ -5,6 +5,9 @@ export const roleEnum = pgEnum("role", ["SUPER_ADMIN", "HOSPITAL_ADMIN", "FRONT_
 export const tenants = pgTable("tenants", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
+  // ISO 3166-1 alpha-2 region used as the default country context when
+  // normalizing a phone number to E.164 with no other signal available.
+  defaultPhoneRegion: text("default_phone_region").notNull().default("IN"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -154,9 +157,19 @@ export const campaignStatusEnum = pgEnum("campaign_status", ["active", "paused",
 export const marketingCampaigns = pgTable("marketing_campaigns", {
   id: uuid("id").primaryKey().defaultRandom(),
   tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  // Which connector synced this campaign, and therefore which mode
+  // (FIXTURE/SANDBOX/LIVE) its spend/status data actually reflects — null
+  // for manually-created campaigns (e.g. seed data) that were never synced
+  // from a provider. The Campaigns/Sources UI joins through this to show
+  // mode clearly rather than ever implying real synced spend for a fixture
+  // connector.
+  connectorId: uuid("connector_id").references(() => connectors.id),
   source: sourceEnum("source").notNull(),
   name: text("name").notNull(),
   externalCampaignId: text("external_campaign_id"),
+  // Ad-account-level id (Meta ad account, Google Ads customer id...) — the
+  // level above campaign, needed once campaign spend sync is wired in.
+  externalAccountId: text("external_account_id"),
   spendAmount: integer("spend_amount").notNull().default(0),
   currency: text("currency").notNull().default("INR"),
   startDate: timestamp("start_date", { withTimezone: true }).notNull(),
@@ -165,11 +178,18 @@ export const marketingCampaigns = pgTable("marketing_campaigns", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   tenantIdx: index("marketing_campaigns_tenant_idx").on(t.tenantId),
+  // NULLs never collide in a Postgres unique index, so manually-created
+  // campaigns (no externalCampaignId) are unaffected — this only guards
+  // against re-creating a duplicate campaign row for the same provider id.
+  tenantExternalUnique: uniqueIndex("marketing_campaigns_tenant_external_unique").on(t.tenantId, t.externalCampaignId),
 }));
 
-// MVP attribution: one touchpoint per journey. `touchType` is modeled as
-// first_touch | last_touch to leave room for genuine multi-touch capture
-// later (see north-star addendum); today first and last touch coincide.
+// `touchType` marks structural role, not a fixed count: the row created by a
+// journey's very first attribution event stays "first_touch" forever (never
+// overwritten); every touchpoint recorded after that is "last_touch" — the
+// one among those with the latest occurredAt is the current last touch, and
+// all "last_touch" rows together are the full touchpoint history between
+// first and now. See acquisition/attribution.service.ts.
 export const touchTypeEnum = pgEnum("touch_type", ["first_touch", "last_touch"]);
 
 export const campaignTouchpoints = pgTable("campaign_touchpoints", {
@@ -180,12 +200,70 @@ export const campaignTouchpoints = pgTable("campaign_touchpoints", {
   campaignId: uuid("campaign_id").references(() => marketingCampaigns.id),
   source: sourceEnum("source").notNull(),
   touchType: touchTypeEnum("touch_type").notNull().default("first_touch"),
+  // UTM-style context, kept as raw strings alongside the resolved campaignId
+  // so a touchpoint is still meaningful even when no MarketingCampaign could
+  // be resolved (e.g. an unrecognized utm_campaign value on a website form).
+  medium: text("medium"),
+  utmCampaign: text("utm_campaign"),
+  utmContent: text("utm_content"),
+  utmTerm: text("utm_term"),
+  // Provider hierarchy ids, preserved verbatim for drill-down even though
+  // only externalCampaignId currently resolves to a MarketingCampaign.
+  externalAccountId: text("external_account_id"),
+  externalCampaignId: text("external_campaign_id"),
+  externalAdGroupId: text("external_ad_group_id"),
+  externalAdId: text("external_ad_id"),
+  externalFormId: text("external_form_id"),
+  externalLeadId: text("external_lead_id"),
+  // Click identifiers — gclid/gbraid/wbraid for Google traffic, fbclid for
+  // Meta traffic. Preserved for downstream conversion feedback, never used
+  // for identity matching.
+  gclid: text("gclid"),
+  gbraid: text("gbraid"),
+  wbraid: text("wbraid"),
+  fbclid: text("fbclid"),
   occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
   metadata: jsonb("metadata"),
 }, (t) => ({
   tenantIdx: index("campaign_touchpoints_tenant_idx").on(t.tenantId),
   journeyIdx: index("campaign_touchpoints_journey_idx").on(t.journeyId),
   campaignIdx: index("campaign_touchpoints_campaign_idx").on(t.campaignId),
+}));
+
+export const conversionFeedbackEventTypeEnum = pgEnum("conversion_feedback_event_type", [
+  "QUALIFIED_ENQUIRY", "APPOINTMENT_BOOKED", "APPOINTMENT_ATTENDED", "CONSULTATION_COMPLETED",
+  "TREATMENT_ADVISED", "TREATMENT_COMPLETED", "REVENUE_RECORDED",
+]);
+
+// A candidate outbound conversion-feedback event, built only when the
+// patient is consent-eligible (marketingConsent) — see
+// acquisition/conversion-feedback.service.ts. Deliberately never sent to any
+// provider by this checkpoint; this table is the payload-building/audit
+// layer only. click ids and externalCampaignId are copied from the
+// journey's current attribution (attribution.service.getAttributionSummary)
+// at the moment the milestone is recorded, not looked up live later.
+export const conversionFeedbackEvents = pgTable("conversion_feedback_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  journeyId: uuid("journey_id").notNull().references(() => journeys.id),
+  patientId: uuid("patient_id").notNull().references(() => patients.id),
+  eventType: conversionFeedbackEventTypeEnum("event_type").notNull(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+  value: integer("value"),
+  currency: text("currency").notNull().default("INR"),
+  source: sourceEnum("source"),
+  externalCampaignId: text("external_campaign_id"),
+  gclid: text("gclid"),
+  gbraid: text("gbraid"),
+  wbraid: text("wbraid"),
+  fbclid: text("fbclid"),
+  // "{journeyId}:{eventType}" — a journey reports each milestone at most
+  // once, even if the triggering domain event somehow fires twice.
+  idempotencyKey: text("idempotency_key").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  tenantIdx: index("conversion_feedback_events_tenant_idx").on(t.tenantId),
+  idempotencyUnique: uniqueIndex("conversion_feedback_events_idempotency_unique").on(t.idempotencyKey),
 }));
 
 export const consultationOutcomeEnum = pgEnum("consultation_outcome_type", [
@@ -335,11 +413,17 @@ export const messages = pgTable("messages", {
 // one. Secrets never live on this row — see connectorSecrets below.
 // ---------------------------------------------------------------------------
 
-export const connectorTypeEnum = pgEnum("connector_type", ["MESSAGING", "TELEPHONY", "ADS", "EMAIL", "STORAGE", "HIS"]);
+export const connectorTypeEnum = pgEnum("connector_type", ["MESSAGING", "TELEPHONY", "ADS", "EMAIL", "STORAGE", "HIS", "ACQUISITION"]);
 export const connectorStatusEnum = pgEnum("connector_status", ["NOT_CONFIGURED", "CONNECTING", "CONNECTED", "DEGRADED", "ERROR", "DISABLED"]);
+// FIXTURE/SANDBOX/LIVE — never inferred, always the connector's actual
+// provenance, so the UI can never visually imply a live production
+// connection for a connector that is actually fixture- or sandbox-backed.
+export const connectorModeEnum = pgEnum("connector_mode", ["FIXTURE", "SANDBOX", "LIVE"]);
 export const connectorCapabilityEnum = pgEnum("connector_capability", [
   "SEND_MESSAGE", "RECEIVE_MESSAGE", "RECEIVE_STATUS",
   "INITIATE_CALL", "RECEIVE_CALL_EVENT", "FETCH_RECORDING", "RECEIVE_RECORDING", "RECEIVE_TRANSCRIPT",
+  "RECEIVE_LEAD", "SYNC_CAMPAIGNS", "SYNC_AD_GROUPS", "SYNC_ADS", "SYNC_SPEND", "SYNC_PERFORMANCE",
+  "RECEIVE_FORM", "EXPORT_CONVERSION",
 ]);
 
 export const connectors = pgTable("connectors", {
@@ -350,6 +434,7 @@ export const connectors = pgTable("connectors", {
   // in domain logic, only used to look up the adapter implementation.
   provider: text("provider").notNull(),
   status: connectorStatusEnum("status").notNull().default("NOT_CONFIGURED"),
+  mode: connectorModeEnum("mode").notNull().default("FIXTURE"),
   displayName: text("display_name").notNull(),
   capabilities: connectorCapabilityEnum("capabilities").array().notNull(),
   // Non-secret configuration only (phone_number_id, webhook path, account id...).
@@ -362,6 +447,29 @@ export const connectors = pgTable("connectors", {
 }, (t) => ({
   tenantIdx: index("connectors_tenant_idx").on(t.tenantId),
   tenantProviderUnique: uniqueIndex("connectors_tenant_provider_unique").on(t.tenantId, t.provider),
+}));
+
+// Google Business Profile aggregate listing performance — a dedicated table
+// because this data is location-shaped, not campaign-shaped, and does not
+// belong in marketing_campaigns. Deliberately has NO patientId/journeyId/
+// touchpoint link of any kind: these are aggregate metrics for a Google
+// Business listing, never a trackable event for an individual person, so
+// nothing here can ever create or touch a Patient.
+export const gbpPerformanceMetrics = pgTable("gbp_performance_metrics", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  connectorId: uuid("connector_id").notNull().references(() => connectors.id),
+  metricDate: timestamp("metric_date", { withTimezone: true }).notNull(),
+  impressions: integer("impressions"),
+  clicks: integer("clicks"),
+  searchImpressions: integer("search_impressions"),
+  websiteClicks: integer("website_clicks"),
+  callClicks: integer("call_clicks"),
+  directionRequests: integer("direction_requests"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  tenantIdx: index("gbp_performance_metrics_tenant_idx").on(t.tenantId),
+  connectorDateUnique: uniqueIndex("gbp_performance_metrics_connector_date_unique").on(t.connectorId, t.metricDate),
 }));
 
 // One encrypted blob per connector holding every secret field the adapter
@@ -394,6 +502,51 @@ export const connectorEvents = pgTable("connector_events", {
 }, (t) => ({
   connectorIdx: index("connector_events_connector_idx").on(t.connectorId),
   idempotencyUnique: uniqueIndex("connector_events_connector_external_unique").on(t.connectorId, t.externalEventId),
+}));
+
+// ---------------------------------------------------------------------------
+// Disposition -> Next Action mappings. Tenant-scoped, connector-scoped,
+// admin-editable. `action` is a fixed whitelist — arbitrary provider
+// disposition text can never invoke an arbitrary backend action, only ever
+// the exact whitelisted ones below with validated config.
+// ---------------------------------------------------------------------------
+
+export const dispositionActionEnum = pgEnum("disposition_action", ["CREATE_CALLBACK_TASK", "ADVANCE_JOURNEY_STAGE"]);
+
+export const connectorDispositionMappings = pgTable("connector_disposition_mappings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  connectorId: uuid("connector_id").notNull().references(() => connectors.id),
+  providerDisposition: text("provider_disposition").notNull(),
+  action: dispositionActionEnum("action").notNull(),
+  actionConfig: jsonb("action_config").notNull(),
+  createdBy: uuid("created_by").references(() => users.id),
+  updatedBy: uuid("updated_by").references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  connectorIdx: index("disposition_mappings_connector_idx").on(t.connectorId),
+  uniquePerConnector: uniqueIndex("disposition_mappings_connector_disposition_unique").on(t.connectorId, t.providerDisposition),
+}));
+
+// Every create/update/delete of a connector config value (disposition
+// mappings today; extensible to other admin-editable connector config)
+// is recorded here — who, what changed, before/after.
+export const connectorAuditActionEnum = pgEnum("connector_audit_action", ["CREATE", "UPDATE", "DELETE"]);
+
+export const connectorConfigAuditEvents = pgTable("connector_config_audit_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  connectorId: uuid("connector_id").notNull().references(() => connectors.id),
+  actorId: uuid("actor_id").notNull().references(() => users.id),
+  entityType: text("entity_type").notNull(),
+  entityId: uuid("entity_id").notNull(),
+  action: connectorAuditActionEnum("action").notNull(),
+  before: jsonb("before"),
+  after: jsonb("after"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  connectorIdx: index("connector_audit_connector_idx").on(t.connectorId),
 }));
 
 // ---------------------------------------------------------------------------

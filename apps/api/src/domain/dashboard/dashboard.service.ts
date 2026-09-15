@@ -4,6 +4,7 @@ import {
   appointments,
   branches,
   campaignTouchpoints,
+  connectors,
   consultationOutcomes,
   journeys,
   marketingCampaigns,
@@ -386,8 +387,16 @@ export async function getSpendAtRiskByReason(db: Db, tenantId: string): Promise<
 export async function getSourcePerformance(db: Db, tenantId: string): Promise<SourcePerformanceRow[]> {
   const campaigns = await db.select().from(marketingCampaigns).where(eq(marketingCampaigns.tenantId, tenantId));
 
+  // A synced campaign's numbers are only as real as the connector that
+  // produced them — one lookup up front rather than N, joined in below so
+  // the UI can distinguish FIXTURE/SANDBOX from LIVE-synced spend.
+  const connectorModeById = new Map(
+    (await db.select({ id: connectors.id, mode: connectors.mode }).from(connectors).where(eq(connectors.tenantId, tenantId))).map((c) => [c.id, c.mode]),
+  );
+
   const rows: SourcePerformanceRow[] = [];
   for (const campaign of campaigns) {
+    const connectorMode = campaign.connectorId ? (connectorModeById.get(campaign.connectorId) ?? null) : null;
     const journeyIdsResult = await db
       .select({ journeyId: campaignTouchpoints.journeyId })
       .from(campaignTouchpoints)
@@ -405,6 +414,7 @@ export async function getSourcePerformance(db: Db, tenantId: string): Promise<So
         treatments: 0,
         revenue: 0,
         roas: null,
+        connectorMode,
       });
       continue;
     }
@@ -428,6 +438,7 @@ export async function getSourcePerformance(db: Db, tenantId: string): Promise<So
       treatments: treatCount.c,
       revenue,
       roas: roasOf(revenue, campaign.spendAmount),
+      connectorMode,
     });
   }
 
