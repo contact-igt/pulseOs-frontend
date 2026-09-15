@@ -21,7 +21,7 @@ Back-navigation group, splits UI work by page cluster). A-E are unaffected
 | E | Full first/last-touch attribution reconciliation | done | 89ac3a6 | 142/142 pass | self, browser-verified |
 | F | Website / Meta / Google / GBP adapters ported | done | f5855f3 | 34/34 files, 202/202 pass | self, browser-verified |
 | G | Campaign analytics + conversion feedback + INR fix + date filter + Campaign Detail route | done | d77646e, dd31243, 8596ec0 | 12/12 campaigns.integration + 6/6 UI + full suite green | self, browser-verified |
-| H | Specialty Settings completion (reorder/required/options) | not started | — | — | — |
+| H | Specialty Settings completion (reorder/required/options) | done | 9db42b4 | 24/24 specialty+leads integration, full suite 34/34 files 212/212 | self, browser-verified |
 | I | Action/button/dead-control audit | not started | — | — | — |
 | J | Shared table system unification | not started | — | — | — |
 | K | Navigation hierarchy + Back system | in progress (BackLink primitive done) | 1bbff04 | n/a (no web unit tests) | self, browser-verified |
@@ -34,16 +34,16 @@ Back-navigation group, splits UI work by page cluster). A-E are unaffected
 
 ## Resume point for the next session
 
-Groups A, B, C, D, E, F, G are done and committed (`c0faf9b`, `12fbb38`,
+Groups A, B, C, D, E, F, G, H are done and committed (`c0faf9b`, `12fbb38`,
 `99476fb`, `05067f7`, `35bafeb`, `06a13fa` [seed fix], `70a8ce8`, `89ac3a6`,
 `1bbff04` [Group K start], `f5855f3` [Group F], `d77646e` [Group G part 1:
 campaign sync/GBP sync/conversion feedback], `dd31243` [Group G part 2: INR
 compact formatting fix + campaign date filter], `8596ec0` [Group G part 3:
-Campaign Detail route]). Group K is started (BackLink primitive, wired into
-Patient 360 and all 7 of its entry points, plus now Campaign Detail →
-Patient 360 as an 8th). Groups H, I, J, L, M, N, O, P, Q are **not started**
-— do not assume otherwise from anything outside this ledger + `git log`
-after a context compaction.
+Campaign Detail route], `9db42b4` [Group H: Specialty Settings completion]).
+Group K is started (BackLink primitive, wired into Patient 360 and all 7 of
+its entry points, plus now Campaign Detail → Patient 360 as an 8th). Groups
+I, J, L, M, N, O, P, Q are **not started** — do not assume otherwise from
+anything outside this ledger + `git log` after a context compaction.
 
 **What Group F actually built:** all 4 acquisition adapters
 (`website-form.service.ts`, `adapters/meta-lead-ads.ts`,
@@ -114,23 +114,75 @@ shared `meta-webhook.ts` used by both WhatsApp and Meta Lead Ads, now on
   any newly-ported adapter should default new connectors to `FIXTURE` and
   never claim LIVE without real credentials.
 
-**Suggested next task: Group H (Specialty Settings completion).** Current
-inline Settings UI (`apps/web/app/(app)/settings/page.tsx`) already supports
-enable/disable specialty, add custom field, archive field. Backend
-(`specialtyTemplates`/`customFieldDefinitions` schema +
-`specialty.service.ts`) already has `sortOrder`/`required`/`archived`/
-`options` columns and `updateCustomField` already persists all of them — the
-service layer needs almost no work. Missing: UI for editing display label +
-default Journey type on `specialtyTemplates` (needs
-`UpdateSpecialtyInput`/`updateSpecialty` to accept `defaultJourneyType`, not
-just `displayName`/`enabled`); Required/Optional toggle on existing fields
-(currently read-only after creation); up/down reorder controls (swap two
-fields' `sortOrder` via existing single-field PATCH, no new endpoint needed);
-Select-type `options` editor (create-field form has no options input at
-all). `AddLeadDrawer.tsx` already fully honors `required`/`options`/order
-from the API with zero form-side changes needed. Do NOT create
-`/settings/specialties/[key]` — stay inline, per the standing scope
-decision.
+**What Group H actually built:**
+- `UpdateSpecialtyInput.defaultJourneyType` wired through
+  `specialty.service.ts::updateSpecialty` + `specialty.routes.ts`'s zod
+  schema — the only backend gap; `sortOrder`/`required`/`archived`/`options`
+  were already fully persisted by the existing `updateCustomField`.
+- `apps/web/app/(app)/settings/page.tsx` rewritten: inline-editable Display
+  label + Default Journey type (save-on-blur) atop each expanded specialty;
+  each field row gets up/down `ChevronUp`/`ChevronDown` reorder buttons (swap
+  two fields' `sortOrder` via two PATCH calls, no new endpoint), a
+  Required/Optional checkbox, and — for `SELECT`/`MULTI_SELECT` fields only
+  — a comma-separated Options editor; the create-field form also gained an
+  Options input shown conditionally for those two types. All inline, no new
+  route (per the standing "no `/settings/specialties/[key]` yet" decision).
+- **New: server-side required-field enforcement.** `createLead` previously
+  silently dropped any missing custom field value, required or not — the
+  Add Lead form's HTML `required` attribute was the *only* enforcement, so a
+  raw API call could bypass it entirely. `lead.service.ts::createLead` now
+  checks every active required field for the specialty *before any write*
+  and returns `{validationError: true, missingRequiredFields}`;
+  `lead.routes.ts` turns that into `422 missing_required_fields`. This is a
+  real gap this session closed, not something the master prompt named
+  explicitly by file — flagged here since it's a behavior change to an
+  existing endpoint's error surface (previously always 201 on valid zod
+  shape; now can be 422 for a specialty with a required field an admin
+  configured).
+- Live-verified in browser end-to-end: renamed Ophthalmology's display
+  label, reordered Laterality above Eye concern, marked Eye concern
+  required, added a 4th Select option — Add Lead immediately reflected the
+  new name, order, required asterisk, and option, with zero form-side code
+  changes (`AddLeadDrawer.tsx` untouched). Demo DB reseeded afterward to
+  restore canonical state.
+
+**Discovered during Group H's full-gate run: a pre-existing, order-dependent
+test flakiness, root-caused and NOT fixed (out of scope for this block).**
+`post-care.integration.test.ts`'s first test permanently completes the
+*only* seeded `SCHEDULED` treatment (`IVF Cycle 1`, ₹70,000, the sole
+`status: "SCHEDULED"` literal in `seed.ts`) to exercise the post-care-task
+side effect. `marketing-dashboard.integration.test.ts` separately hardcodes
+`treatmentsCompleted === 4` against the seed's 4 literal `COMPLETED`
+treatments. Vitest's file execution order is not stable run-to-run (no
+`sequence.shuffle` configured, but order still varies) — when
+`post-care` happens to run before `marketing-dashboard` in the same
+`vitest run`, the shared Postgres DB has 5 completed treatments by the time
+`marketing-dashboard` runs, and its hardcoded assertion fails, e.g.:
+```
+✓ src/__tests__/marketing-dashboard...  ← FAILS: expected 5 to be 4
+```
+Reproduced twice: one fresh-reseed run failed this way, the very next
+fresh-reseed run (same code, same seed) passed 34/34 clean — confirming it's
+run-order-dependent, not a regression from Group F/G/H's own changes (no
+code this session touched either test file or the treatment-completion
+logic). Root fix would be giving `post-care.integration.test.ts` its own
+dedicated fixture treatment rather than reaching into shared seed state — a
+test-infrastructure change outside Group H's scope, not applied here per
+"do not weaken tests" (loosening `marketing-dashboard`'s assertion would
+count) and not requested by the master prompt. Recommended follow-up for
+whichever group next touches test infra.
+
+**Suggested next task: Group I (action/button/dead-control audit).** Not
+started. Master prompt gives per-page rules for Leads, Patients,
+Appointments, My Work, Treatments, Inbox (Quick Actions limited to 3:
+Book Appointment/Create Task/View Full Profile), Integrations, Campaigns (no
+Add Campaign button) — systematically walk each page for: more than one
+clear primary action per region, dead buttons (no handler / route to a
+disabled or missing page / discards form values), role-inappropriate
+actions surfaced to the wrong role, and decorative controls that look
+clickable but do nothing. For each finding: wire it, remove it, or visibly
+disable it. Live-verify every page touched, per the master prompt's Group I
+verification list.
 
 **Group K status:** BackLink now has 8 wired entry points (Patient 360's 7
 + Campaign Detail → Patient 360, added in Group G). Campaign Detail itself
