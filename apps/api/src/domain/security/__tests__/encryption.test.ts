@@ -1,7 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { decryptSecret, encryptSecret } from "../encryption.js";
 
 describe("connector secret encryption", () => {
+  // Self-contained rather than relying on ambient `.env` loading — `pnpm dev`
+  // loads apps/api/.env, but a bare `vitest run` does not, which otherwise
+  // makes this suite fail outside the dev-server process.
+  beforeAll(() => {
+    process.env.CONNECTOR_ENCRYPTION_KEY ??= "test-only-not-a-real-secret-key";
+  });
+
   it("round-trips a JSON secret payload", () => {
     const payload = { accessToken: "EAA...fixture", webhookVerifyToken: "verify-me" };
     const encrypted = encryptSecret(payload);

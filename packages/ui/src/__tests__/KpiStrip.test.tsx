@@ -26,7 +26,7 @@ describe("KpiStripSection", () => {
     const onSegmentClick = vi.fn();
     render(<KpiStripSection data={DATA} onSegmentClick={onSegmentClick} />);
     const card = screen.getByTestId("kpi-waitingNow");
-    fireEvent.click(card.querySelector("button")!);
+    fireEvent.click(card);
     expect(onSegmentClick).toHaveBeenCalledWith("waitingNow");
   });
 });

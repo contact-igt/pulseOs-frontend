@@ -48,3 +48,13 @@ Tenant isolation mandatory — never trust `tenant_id` from a request body, alwa
 - `pnpm db:migrate` then `pnpm db:seed` to populate demo data.
 - `pnpm dev` runs both apps via Turborepo.
 - Demo accounts (password = local `DEMO_PASSWORD` value): `admin@pulseos.local` (Hospital Admin), `doctor@pulseos.local` / `doctor2@pulseos.local` (Doctor), `frontdesk@pulseos.local`, `coordinator@pulseos.local`.
+
+## Local Runtime Handoff
+
+PulseOS is hosted locally only — Claude Code must never deploy it to Vercel/Railway/Render/Fly.io or any remote service unless explicitly asked. Every meaningful implementation session must end with the app running locally and left available for the user to open, not just "started":
+
+1. Confirm the correct worktree/branch/HEAD before touching any process — `pwd && git rev-parse --show-toplevel && git branch --show-current`. Never start an obsolete worktree, another PulseOS branch, or a legacy reference repo (WhatsNexus/Lead Panel/invictus-chatbot).
+2. Check `lsof -nP -iTCP -sTCP:LISTEN | grep -E '3310|4310'` before starting anything. If something already owns the port: reuse it if it's the correct current worktree's process; if it's a stale PulseOS process (including one running from the wrong checkout — this has happened, and is diagnosed via `lsof -p <pid> | grep cwd`), kill only that one and restart from the correct worktree; if it belongs to another project, never kill it — use a different port and report the real URL.
+3. Start API + web (`pnpm dev`, or the two apps separately), verify with a fresh HTTP request to each (API health endpoint, web root/login), then open `/login` in a browser and confirm it actually renders (no `ERR_CONNECTION_REFUSED`, no server-error screen, CSS/JS loaded) before claiming it works. A successful build or Playwright run is not proof the dev server is still up afterward — check again, live, right before reporting.
+4. Leave both dev servers running when the task ends. Do not kill them as "cleanup." The user must be able to open the reported URL immediately.
+5. Report actual detected ports/URLs — never assume or invent them — plus safe demo credentials (see accounts above; never output DB passwords, provider tokens, API keys, or encryption keys).
