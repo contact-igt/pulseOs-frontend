@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { api } from "@pulseos/api-client";
-import { Badge, Card, ErrorState, SectionHeading, Skeleton } from "@pulseos/ui";
+import { Badge, Card, ErrorState, PageHeader, SectionHeading, Skeleton } from "@pulseos/ui";
 import type { CustomFieldDefinitionVm, CustomFieldType, SpecialtyDetailVm, UpdateCustomFieldInput } from "@pulseos/types";
 
 const FIELD_TYPES: CustomFieldType[] = ["TEXT", "NUMBER", "DATE", "BOOLEAN", "SELECT", "MULTI_SELECT", "PHONE"];
@@ -221,10 +221,7 @@ export default function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-5" data-testid="settings-page">
-      <div>
-        <h1 className="text-xl font-semibold text-slate-900">Settings</h1>
-        <p className="text-sm text-neutral-500">Specialties, custom fields and hospital configuration.</p>
-      </div>
+      <PageHeader title="Settings" subtitle="Specialties, custom fields and hospital configuration." />
 
       <Card className="p-4">
         <SectionHeading title="Specialties & Fields" subtitle="Configure which specialties Add Lead offers, and their custom fields" />

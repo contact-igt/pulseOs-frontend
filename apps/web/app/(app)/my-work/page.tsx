@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { api } from "@pulseos/api-client";
-import { Badge, Card, EmptyState, ErrorState, Skeleton } from "@pulseos/ui";
+import { Badge, Button, Card, EmptyState, ErrorState, PageHeader, Skeleton } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import { withFrom } from "@/components/shell/BackLink";
 import { hasPermission } from "@pulseos/types";
@@ -93,22 +93,17 @@ export default function MyWorkPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-4" data-testid="my-work-page">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900">My Work</h1>
-          <p className="text-sm text-neutral-500">Tasks, callbacks and follow-ups assigned to you.</p>
-        </div>
-        {canManageTasks && (
-          <button
-            type="button"
-            onClick={() => quickCreate.openAddTask()}
-            className="shrink-0 rounded-lg bg-primary-600 px-3.5 py-2 text-sm font-medium text-white transition hover:bg-primary-700"
-            data-testid="add-task-button"
-          >
-            + Add Task
-          </button>
-        )}
-      </div>
+      <PageHeader
+        title="My Work"
+        subtitle="Tasks, callbacks and follow-ups assigned to you."
+        action={
+          canManageTasks && (
+            <Button variant="primary" onClick={() => quickCreate.openAddTask()} data-testid="add-task-button">
+              + Add Task
+            </Button>
+          )
+        }
+      />
 
       <div className="flex flex-wrap gap-1 rounded border border-neutral-200 bg-white p-1" role="tablist">
         {TABS.map((t) => (

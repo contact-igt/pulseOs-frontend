@@ -4,12 +4,10 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { api } from "@pulseos/api-client";
-import { Badge, Card, ErrorState, SectionHeading, Skeleton, formatInr } from "@pulseos/ui";
+import { Badge, Button, Card, ErrorState, OverflowMenu, PageHeader, SectionHeading, Skeleton, formatInr } from "@pulseos/ui";
 import { withFrom } from "@/components/shell/BackLink";
 import { hasPermission } from "@pulseos/types";
 import type { TreatmentRow, TreatmentStatus } from "@pulseos/types";
-
-const DANGER_TRANSITIONS = new Set<TreatmentStatus>(["DECLINED", "CANCELLED"]);
 
 const STATUS_TONE: Record<TreatmentStatus, "neutral" | "warning" | "danger" | "primary"> = {
   ADVISED: "neutral",
@@ -22,18 +20,23 @@ const STATUS_TONE: Record<TreatmentStatus, "neutral" | "warning" | "danger" | "p
   LOST: "danger",
 };
 
-const NEXT_STEPS: Partial<Record<TreatmentStatus, { status: TreatmentStatus; label: string }[]>> = {
-  ADVISED: [
-    { status: "DECISION_PENDING", label: "Awaiting decision" },
-    { status: "ACCEPTED", label: "Accept" },
-    { status: "DECLINED", label: "Decline" },
-  ],
-  DECISION_PENDING: [
-    { status: "ACCEPTED", label: "Accept" },
-    { status: "DECLINED", label: "Decline" },
-  ],
-  ACCEPTED: [{ status: "SCHEDULED", label: "Schedule" }],
-  SCHEDULED: [{ status: "COMPLETED", label: "Complete" }],
+// One clear forward action per status (rendered as a real button) plus any
+// rare/secondary transitions tucked into an overflow menu — never a wall of
+// 3 buttons in one row (the Table Action Rule).
+const NEXT_STEPS: Partial<Record<TreatmentStatus, { primary: { status: TreatmentStatus; label: string }; secondary: { status: TreatmentStatus; label: string; danger?: boolean }[] }>> = {
+  ADVISED: {
+    primary: { status: "ACCEPTED", label: "Accept" },
+    secondary: [
+      { status: "DECISION_PENDING", label: "Awaiting decision" },
+      { status: "DECLINED", label: "Decline", danger: true },
+    ],
+  },
+  DECISION_PENDING: {
+    primary: { status: "ACCEPTED", label: "Accept" },
+    secondary: [{ status: "DECLINED", label: "Decline", danger: true }],
+  },
+  ACCEPTED: { primary: { status: "SCHEDULED", label: "Schedule" }, secondary: [] },
+  SCHEDULED: { primary: { status: "COMPLETED", label: "Complete" }, secondary: [] },
 };
 
 function fmtDate(iso: string | null) {
@@ -65,6 +68,8 @@ export default function TreatmentPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-4" data-testid="treatments-page">
+      <PageHeader title="Treatments" subtitle="Operational conversion tracking, not an EMR." />
+
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-neutral-200 bg-white p-2">
         <select value={status} onChange={(e) => setStatus(e.target.value as TreatmentStatus | "")} className="rounded border border-neutral-200 bg-white px-2 py-1 text-xs text-slate-700">
           <option value="">All statuses</option>
@@ -109,23 +114,20 @@ export default function TreatmentPage() {
                     <td className="px-2 py-2 text-neutral-600">{fmtDate(row.lastContactAt)}</td>
                     <td className="px-2 py-2 text-neutral-600">{fmtDate(row.plannedDate)}</td>
                     <td className="px-2 py-2">
-                      {canManage && (
-                        <div className="flex gap-1">
-                          {(NEXT_STEPS[row.status] ?? []).map((step) => (
-                            <button
-                              key={step.status}
-                              type="button"
-                              onClick={() => transition(row, step.status)}
-                              className={
-                                DANGER_TRANSITIONS.has(step.status)
-                                  ? "rounded border border-danger-100 px-1.5 py-0.5 text-[11px] font-medium text-danger-700 hover:bg-danger-100"
-                                  : "rounded border border-neutral-200 px-1.5 py-0.5 text-[11px] font-medium text-neutral-600 hover:bg-neutral-100"
-                              }
-                              data-testid={`treatment-${row.id}-${step.status}`}
-                            >
-                              {step.label}
-                            </button>
-                          ))}
+                      {canManage && NEXT_STEPS[row.status] && (
+                        <div className="flex items-center gap-1">
+                          <Button size="sm" onClick={() => transition(row, NEXT_STEPS[row.status]!.primary.status)} data-testid={`treatment-${row.id}-${NEXT_STEPS[row.status]!.primary.status}`}>
+                            {NEXT_STEPS[row.status]!.primary.label}
+                          </Button>
+                          <OverflowMenu
+                            testId={`treatment-${row.id}-more`}
+                            items={NEXT_STEPS[row.status]!.secondary.map((s) => ({
+                              key: s.status,
+                              label: s.label,
+                              danger: s.danger,
+                              onClick: () => transition(row, s.status),
+                            }))}
+                          />
                         </div>
                       )}
                     </td>

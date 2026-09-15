@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@pulseos/api-client";
-import { Badge, Card, EmptyState, ErrorState, Skeleton } from "@pulseos/ui";
+import { Badge, Button, Card, EmptyState, ErrorState, PageHeader, Skeleton } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import { hasPermission } from "@pulseos/types";
 import type { JourneyStage } from "@pulseos/types";
@@ -49,24 +49,19 @@ export default function PatientsPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-4" data-testid="patients-page">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold text-slate-900">Patients</h1>
-          <p className="text-sm text-neutral-500">Find and understand people, not leads.</p>
-        </div>
-        {canEditPatients && (
-          <button
-            type="button"
-            onClick={() => quickCreate.openAddPatient()}
-            className="shrink-0 rounded-lg bg-primary-600 px-3.5 py-2 text-sm font-medium text-white transition hover:bg-primary-700"
-            data-testid="add-patient-button"
-          >
-            + Add Patient
-          </button>
-        )}
-      </div>
+      <PageHeader
+        title="Patients"
+        subtitle="Find and understand people, not leads."
+        action={
+          canEditPatients && (
+            <Button variant="primary" onClick={() => quickCreate.openAddPatient()} data-testid="add-patient-button">
+              + Add Patient
+            </Button>
+          )
+        }
+      />
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
         <input
           type="search"
           placeholder="Search by name or phone…"
@@ -75,6 +70,7 @@ export default function PatientsPage() {
           className="w-72 rounded border border-neutral-300 px-3 py-1.5 text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
           data-testid="patient-search"
         />
+        {data && <span className="text-xs text-neutral-400">{data.length} patient{data.length === 1 ? "" : "s"}</span>}
         {stageFilter && <span className="text-xs text-neutral-400">Filtered from dashboard: {stageFilter}</span>}
       </div>
 

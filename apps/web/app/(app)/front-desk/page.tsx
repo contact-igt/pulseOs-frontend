@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
-import { AppointmentDrawer, AppointmentList, ErrorState, MetricStrip, PatientFlowBoard, Skeleton } from "@pulseos/ui";
+import { AppointmentDrawer, AppointmentList, Button, ErrorState, MetricStrip, PageHeader, PatientFlowBoard, Skeleton } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import type { AppointmentAction, AppointmentRow, PatientFlowCount } from "@pulseos/types";
 
@@ -88,23 +88,20 @@ export default function FrontDeskPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-5" data-testid="front-desk-page">
-      <div className="flex items-center justify-end gap-2">
-        <button
-          type="button"
-          onClick={() => quickCreate.openAddLead({ source: "walk_in" })}
-          className="rounded-lg border border-primary-200 px-3.5 py-2 text-sm font-medium text-primary-700 transition hover:bg-primary-50"
-          data-testid="front-desk-add-lead-button"
-        >
-          + Add Lead
-        </button>
-        <button
-          type="button"
-          onClick={() => quickCreate.openNewAppointment()}
-          className="rounded-lg bg-primary-600 px-3.5 py-2 text-sm font-medium text-white transition hover:bg-primary-700"
-        >
-          + New Appointment
-        </button>
-      </div>
+      <PageHeader
+        title="Front Desk"
+        subtitle="Today's arrivals, waiting queue and confirmations."
+        action={
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" onClick={() => quickCreate.openAddLead({ source: "walk_in" })} data-testid="front-desk-add-lead-button">
+              + Add Lead
+            </Button>
+            <Button variant="primary" onClick={() => quickCreate.openNewAppointment()}>
+              + New Appointment
+            </Button>
+          </div>
+        }
+      />
 
       <MetricStrip
         testId="front-desk-kpi-strip"

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
-import { AppointmentDrawer, AppointmentList, ErrorState, Skeleton } from "@pulseos/ui";
+import { AppointmentDrawer, AppointmentList, Button, ErrorState, PageHeader, Skeleton } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import { hasPermission } from "@pulseos/types";
 import type { AppointmentAction, AppointmentRow } from "@pulseos/types";
@@ -94,18 +94,17 @@ export default function AppointmentsPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-4" data-testid="appointments-page">
-      {canManage && (
-        <div className="flex items-center justify-end">
-          <button
-            type="button"
-            onClick={() => quickCreate.openNewAppointment()}
-            className="rounded-lg bg-primary-600 px-3.5 py-2 text-sm font-medium text-white transition hover:bg-primary-700"
-            data-testid="new-appointment-button"
-          >
-            + New Appointment
-          </button>
-        </div>
-      )}
+      <PageHeader
+        title="Appointments"
+        subtitle="Every appointment, every state."
+        action={
+          canManage && (
+            <Button variant="primary" onClick={() => quickCreate.openNewAppointment()} data-testid="new-appointment-button">
+              + New Appointment
+            </Button>
+          )
+        }
+      />
 
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-neutral-200 bg-white p-2">
         <div className="flex gap-0.5 rounded border border-neutral-200 p-0.5">
