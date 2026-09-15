@@ -15,6 +15,7 @@ import {
   users,
 } from "../../db/schema.js";
 import { normalizePhone, resolveDefaultPhoneRegion } from "../patient/phone.js";
+import { resolveOrCreatePatient } from "../patient/identity.service.js";
 import { createTask } from "../task/task.service.js";
 import type { CreateLeadInput, CreateLeadResult, LeadPhoneLookupResult, LeadRow, LeadStatus, LeadsSummary } from "@pulseos/types";
 
@@ -35,41 +36,21 @@ export async function lookupPatientByPhone(db: Db, tenantId: string, rawPhone: s
 }
 
 export async function createLead(db: Db, tenantId: string, actorId: string, input: CreateLeadInput): Promise<CreateLeadResult> {
-  const defaultRegion = await resolveDefaultPhoneRegion(db, tenantId);
-  const normalized = normalizePhone(input.phone, defaultRegion);
+  // Canonical duplicate-prevention check: always resolve by phone through
+  // the one shared identity path, never trust a client-supplied patientId
+  // blindly — a stale hint must not create a duplicate identity, and a
+  // match must not be ignored.
+  const { patient, isNewPatient } = await resolveOrCreatePatient(db, {
+    tenantId,
+    phone: input.phone,
+    name: input.name,
+    email: input.email,
+    preferredLanguage: input.preferredLanguage,
+    branchId: input.branchId,
+  });
+  const patientId = patient.id;
 
-  // Canonical duplicate-prevention check: always resolve by phone, never
-  // trust a client-supplied patientId blindly — a stale hint must not create
-  // a duplicate identity, and a match must not be ignored. Falls back to an
-  // exact raw-string match when normalization fails (no reliable canonical
-  // key) — never a fuzzy match, never an automatic merge of two uncertain
-  // identities.
-  const [existingPatient] = normalized.e164
-    ? await db.select({ id: patients.id }).from(patients).where(and(eq(patients.tenantId, tenantId), eq(patients.phoneE164, normalized.e164))).limit(1)
-    : await db.select({ id: patients.id }).from(patients).where(and(eq(patients.tenantId, tenantId), eq(patients.phone, input.phone))).limit(1);
-
-  let patientId: string;
-  let isNewPatient: boolean;
-  if (existingPatient) {
-    patientId = existingPatient.id;
-    isNewPatient = false;
-  } else {
-    const [created] = await db
-      .insert(patients)
-      .values({
-        tenantId,
-        name: input.name,
-        phone: input.phone,
-        phoneE164: normalized.e164,
-        phoneCountry: normalized.country,
-        email: input.email ?? null,
-        preferredLanguage: input.preferredLanguage ?? "English",
-        branchId: input.branchId,
-      })
-      .returning();
-    patientId = created.id;
-    isNewPatient = true;
-
+  if (isNewPatient) {
     await db.insert(timelineEvents).values({
       tenantId,
       patientId,

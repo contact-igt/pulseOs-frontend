@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { conversations, messages, timelineEvents } from "../../db/schema.js";
-import { findOrCreatePatientByPhone } from "./patient-identity.service.js";
+import { findOrCreatePatientByPhone } from "../patient/identity.service.js";
 import type { InboundMessageEvent, MessageStatusEvent } from "./types.js";
 
 async function findOrCreateConversation(db: Db, tenantId: string, connectorId: string, patientId: string, externalThreadId: string, lastMessageAt: Date) {

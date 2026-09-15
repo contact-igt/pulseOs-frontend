@@ -13,9 +13,9 @@ export interface NormalizedPhone {
 // Canonical phone identity: raw input is always preserved (patients.phone,
 // the display value), E.164 is the only value ever used for identity
 // matching (patients.phoneE164), and a tenant's default region is a
-// parameter, not a hard-coded assumption — see
-// connector/patient-identity.service.ts::resolveDefaultPhoneRegion for the
-// tenant-lookup call site every entry point (manual Add Lead/Patient,
+// parameter, not a hard-coded assumption — see resolveDefaultPhoneRegion
+// below, and identity.service.ts::resolveOrCreatePatient, the single
+// identity-resolution path every entry point (manual Add Lead/Patient,
 // website, Meta, Google, WhatsApp, Runo) shares.
 export function normalizePhone(raw: string, defaultRegion: string): NormalizedPhone {
   const trimmed = raw.trim();

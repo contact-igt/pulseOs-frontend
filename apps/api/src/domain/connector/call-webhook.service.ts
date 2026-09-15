@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { calls, journeys, tasks, timelineEvents } from "../../db/schema.js";
-import { findMostRecentActiveJourney, findOrCreatePatientByPhone } from "./patient-identity.service.js";
+import { findMostRecentActiveJourney, findOrCreatePatientByPhone } from "../patient/identity.service.js";
 import type { InboundCallEvent } from "./types.js";
 
 // Disposition → Next Action mapping lives on the connector's own (non-secret)
