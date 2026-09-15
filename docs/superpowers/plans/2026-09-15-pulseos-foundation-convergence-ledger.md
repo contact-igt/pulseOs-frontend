@@ -22,7 +22,7 @@ Back-navigation group, splits UI work by page cluster). A-E are unaffected
 | F | Website / Meta / Google / GBP adapters ported | done | f5855f3 | 34/34 files, 202/202 pass | self, browser-verified |
 | G | Campaign analytics + conversion feedback + INR fix + date filter + Campaign Detail route | done | d77646e, dd31243, 8596ec0 | 12/12 campaigns.integration + 6/6 UI + full suite green | self, browser-verified |
 | H | Specialty Settings completion (reorder/required/options) | done | 9db42b4 | 24/24 specialty+leads integration, full suite 34/34 files 212/212 | self, browser-verified |
-| I | Action/button/dead-control audit | not started | — | — | — |
+| I | Action/button/dead-control audit | done | c1766a9 | tasks + campaign-sync integration tests, full suite 35/35 files 216/216 | self, browser-verified (Doctor + Admin) |
 | J | Shared table system unification | not started | — | — | — |
 | K | Navigation hierarchy + Back system | in progress (BackLink primitive done) | 1bbff04 | n/a (no web unit tests) | self, browser-verified |
 | L | Inbox enterprise reconstruction | not started | — | — | — |
@@ -34,16 +34,20 @@ Back-navigation group, splits UI work by page cluster). A-E are unaffected
 
 ## Resume point for the next session
 
-Groups A, B, C, D, E, F, G, H are done and committed (`c0faf9b`, `12fbb38`,
-`99476fb`, `05067f7`, `35bafeb`, `06a13fa` [seed fix], `70a8ce8`, `89ac3a6`,
-`1bbff04` [Group K start], `f5855f3` [Group F], `d77646e` [Group G part 1:
-campaign sync/GBP sync/conversion feedback], `dd31243` [Group G part 2: INR
-compact formatting fix + campaign date filter], `8596ec0` [Group G part 3:
-Campaign Detail route], `9db42b4` [Group H: Specialty Settings completion]).
-Group K is started (BackLink primitive, wired into Patient 360 and all 7 of
-its entry points, plus now Campaign Detail → Patient 360 as an 8th). Groups
-I, J, L, M, N, O, P, Q are **not started** — do not assume otherwise from
-anything outside this ledger + `git log` after a context compaction.
+Groups A, B, C, D, E, F, G, H, I are done and committed (`c0faf9b`,
+`12fbb38`, `99476fb`, `05067f7`, `35bafeb`, `06a13fa` [seed fix], `70a8ce8`,
+`89ac3a6`, `1bbff04` [Group K start], `f5855f3` [Group F], `d77646e` [Group
+G part 1: campaign sync/GBP sync/conversion feedback], `dd31243` [Group G
+part 2: INR compact formatting fix + campaign date filter], `8596ec0`
+[Group G part 3: Campaign Detail route], `9db42b4` [Group H: Specialty
+Settings completion], `c1766a9` [Group I: action/button/dead-control
+audit]). Group K is started (BackLink primitive, wired into Patient 360 and
+all 7 of its entry points, plus now Campaign Detail → Patient 360 as an
+8th). Groups J, L, M, N, O, P, Q are **not started** — do not assume
+otherwise from anything outside this ledger + `git log` after a context
+compaction. **This is the end of the F→G→H→I execution block the last
+session was asked to run — the branch is intentionally paused here for
+Brain review, not merged, not deployed, not pushed.**
 
 **What Group F actually built:** all 4 acquisition adapters
 (`website-form.service.ts`, `adapters/meta-lead-ads.ts`,
@@ -172,17 +176,72 @@ test-infrastructure change outside Group H's scope, not applied here per
 count) and not requested by the master prompt. Recommended follow-up for
 whichever group next touches test infra.
 
-**Suggested next task: Group I (action/button/dead-control audit).** Not
-started. Master prompt gives per-page rules for Leads, Patients,
-Appointments, My Work, Treatments, Inbox (Quick Actions limited to 3:
-Book Appointment/Create Task/View Full Profile), Integrations, Campaigns (no
-Add Campaign button) — systematically walk each page for: more than one
-clear primary action per region, dead buttons (no handler / route to a
-disabled or missing page / discards form values), role-inappropriate
-actions surfaced to the wrong role, and decorative controls that look
-clickable but do nothing. For each finding: wire it, remove it, or visibly
-disable it. Live-verify every page touched, per the master prompt's Group I
-verification list.
+**What Group I actually found and fixed** (audited via two parallel
+Explore agents covering all 8 named pages, then fixed the real findings —
+not a rewrite, just wire/hide):
+- **Severe, pre-existing bug: "My Work" was completely broken for Doctor.**
+  `GET /tasks` required `MANAGE_TASKS`, which Doctor doesn't have, but My
+  Work is Doctor's *only* Operations nav item — every load 403'd, page
+  showed nothing but `ErrorState`. Root cause: `MANAGE_TASKS` had no
+  `VIEW_TASKS` sibling, unlike every other domain in `ROLE_PERMISSIONS`
+  (`VIEW_PATIENTS`/`EDIT_PATIENTS`, `VIEW_APPOINTMENTS`/`MANAGE_APPOINTMENTS`,
+  etc.). Added `VIEW_TASKS` (all 5 roles have it, including Doctor);
+  `GET /tasks` now requires only that; every mutation
+  (create/note/reschedule/reassign/complete) still requires `MANAGE_TASKS`
+  via a per-route `preHandler` override. Doctor's My Work now loads and
+  shows their own assigned tasks read-only (no Complete/+1 day/note
+  controls, matching their lack of MANAGE_TASKS).
+- **Dead "+ Add X" buttons for Doctor** on Patients, Appointments, My Work:
+  `QuickCreateProvider` already gates *drawer mounting* by role
+  (`canEditPatients`/`canManageAppointments`/`canManageTasks`, all
+  `role !== "DOCTOR"`), but the trigger buttons on the pages themselves
+  never checked the same thing — clicking silently did nothing for Doctor.
+  Fixed by gating each button with `hasPermission(role, ...)` (the
+  `EDIT_PATIENTS`/`MANAGE_APPOINTMENTS`/`MANAGE_TASKS` equivalent of the
+  provider's boolean), using the pattern the existing `ROLE_PERMISSIONS`
+  comment already documents: UI-side checks exist only to avoid dead
+  controls, server enforcement is the real boundary and was already correct.
+- **Appointments row/drawer actions silently 403'd for Doctor** (has
+  `VIEW_APPOINTMENTS`, not `MANAGE_APPOINTMENTS`). `AppointmentList`
+  already hid its action buttons when `onAction`/`onComplete` props are
+  omitted — page now omits them for a non-managing viewer. Added a
+  `readOnly` prop to `AppointmentDrawer` (packages/ui) that hides the
+  entire actions footer the same way.
+- **Treatments status-transition buttons** shown to Doctor
+  (`MANAGE_TREATMENT` required, Doctor lacks it — advises via
+  `RECORD_CONSULTATION_OUTCOME` instead) — now hidden for that role.
+  Also: Decline/Cancel transitions were styled identically to
+  Accept/Schedule (no danger visual separation) — now render in the same
+  danger red used by the status badges.
+- **nav.ts inconsistency**: Doctor's sidebar marked Appointments
+  `implemented: false` ("Not built yet") even though the route exists and
+  Doctor has `VIEW_APPOINTMENTS` — masking the dead-button bug above rather
+  than fixing it. Now `implemented: true`; confirmed live the page is a
+  genuinely safe read-only view for Doctor.
+- **Integrations: real backend actions had no UI trigger at all.** The only
+  button was "Refresh" (`queryClient.invalidateQueries` — a cache refetch,
+  not a sync). `POST /connectors/:id/sync-campaigns` and `/sync-performance`
+  (built in Group G) were unreachable from the UI. Added `Sync Campaigns`/
+  `Sync Performance` buttons, shown only when the selected connector's
+  `capabilities` include that sync type and only for `MANAGE_INTEGRATIONS`
+  roles; live-verified both against the seeded Meta Lead Ads and Google
+  Business Profile connectors ("Synced 2 records.", `LAST SYNC` updates).
+  This backend endpoint had no test at all either — added
+  `campaign-sync.integration.test.ts` (upsert-by-external-id, 422
+  unsupported_capability, 404 unknown connector).
+- **Inbox** (Quick Actions = exactly Book Appointment / Create Task / View
+  Full Profile) and **Campaigns** (no Add Campaign button anywhere) — both
+  audited clean, confirmed live, no changes needed.
+- Live-verified as both Doctor (`doctor@pulseos.local`) and Hospital Admin
+  (`admin@pulseos.local`): My Work loads for Doctor; Appointments loads
+  read-only for Doctor (drawer shows only "View full patient context →",
+  no action footer); Treatments shows an empty Actions column for Doctor
+  but Accept/Decline(red)/Schedule for Admin; Patients has no Add Patient
+  button for Doctor; Integrations' new Sync buttons actually sync live.
+
+**This block's work (Groups F→I) is complete. Suggested next task for a
+future session: Group J (shared table system unification)** — explicitly
+deferred by the master prompt for this block, not started.
 
 **Group K status:** BackLink now has 8 wired entry points (Patient 360's 7
 + Campaign Detail → Patient 360, added in Group G). Campaign Detail itself
