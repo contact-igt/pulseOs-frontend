@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@pulseos/api-client";
-import { Badge, Button, Card, EmptyState, ErrorState, PageHeader, Skeleton } from "@pulseos/ui";
+import { Badge, Button, Card, EmptyState, ErrorState, PageHeader, Skeleton, Table, TableBody, TableHead, Td, Th, Tr } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import { hasPermission } from "@pulseos/types";
 import type { JourneyStage } from "@pulseos/types";
@@ -90,39 +90,37 @@ export default function PatientsPage() {
           </div>
         )}
         {data && data.length > 0 && (
-          <table className="w-full min-w-[820px] text-left text-xs">
-            <thead className="border-b border-neutral-100 text-neutral-500">
+          <Table className="min-w-[820px]">
+            <TableHead>
               <tr>
-                <th className="px-4 py-2 font-medium">Patient</th>
-                <th className="px-2 py-2 font-medium">Branch</th>
-                <th className="px-2 py-2 font-medium">Journeys</th>
-                <th className="px-2 py-2 font-medium">Stage</th>
-                <th className="px-2 py-2 font-medium">Source</th>
-                <th className="px-2 py-2 font-medium">Last Interaction</th>
-                <th className="px-2 py-2 font-medium">Next Action</th>
-                <th className="px-2 py-2 font-medium">Owner</th>
+                <Th leading>Patient</Th>
+                <Th>Branch</Th>
+                <Th align="center">Journeys</Th>
+                <Th>Stage</Th>
+                <Th>Source</Th>
+                <Th>Last Interaction</Th>
+                <Th>Next Action</Th>
+                <Th>Owner</Th>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-100">
+            </TableHead>
+            <TableBody>
               {data.map((p) => (
-                <tr key={p.id} className="cursor-pointer hover:bg-neutral-50" onClick={() => router.push(`/patients/${p.id}`)}>
-                  <td className="px-4 py-2">
+                <Tr key={p.id} onClick={() => router.push(`/patients/${p.id}`)}>
+                  <Td leading>
                     <span className="block text-slate-900">{p.name}</span>
                     <span className="block text-[11px] text-neutral-400">{p.phone}</span>
-                  </td>
-                  <td className="px-2 py-2 text-neutral-600">{p.branchName ?? "—"}</td>
-                  <td className="px-2 py-2 text-center tabular-nums">{p.activeJourneyCount}</td>
-                  <td className="px-2 py-2">
-                    {p.currentStage ? <Badge tone={STAGE_TONE[p.currentStage] ?? "neutral"}>{p.currentStage.replace(/_/g, " ")}</Badge> : "—"}
-                  </td>
-                  <td className="px-2 py-2 text-neutral-600">{p.source ?? "—"}</td>
-                  <td className="px-2 py-2 text-neutral-600">{fmtDate(p.lastInteractionAt)}</td>
-                  <td className="px-2 py-2 text-neutral-600">{fmtDate(p.nextActionDueAt)}</td>
-                  <td className="px-2 py-2 text-neutral-600">{p.ownerName ?? "—"}</td>
-                </tr>
+                  </Td>
+                  <Td className="text-neutral-600">{p.branchName ?? "—"}</Td>
+                  <Td align="center">{p.activeJourneyCount}</Td>
+                  <Td>{p.currentStage ? <Badge tone={STAGE_TONE[p.currentStage] ?? "neutral"}>{p.currentStage.replace(/_/g, " ")}</Badge> : "—"}</Td>
+                  <Td className="text-neutral-600">{p.source ?? "—"}</Td>
+                  <Td className="text-neutral-600">{fmtDate(p.lastInteractionAt)}</Td>
+                  <Td className="text-neutral-600">{fmtDate(p.nextActionDueAt)}</Td>
+                  <Td className="text-neutral-600">{p.ownerName ?? "—"}</Td>
+                </Tr>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
       </Card>
     </div>

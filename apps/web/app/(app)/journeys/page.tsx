@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@pulseos/api-client";
-import { Badge, Card, EmptyState, ErrorState, MetricStrip, PageHeader, Skeleton, formatInr, formatMoneyOrDash } from "@pulseos/ui";
+import { Badge, Card, EmptyState, ErrorState, MetricStrip, PageHeader, Skeleton, Table, TableBody, TableHead, Td, Th, Tr, formatInr, formatMoneyOrDash } from "@pulseos/ui";
 import { withFrom } from "@/components/shell/BackLink";
 import type { JourneyStage } from "@pulseos/types";
 
@@ -74,41 +74,41 @@ export default function JourneysPage() {
         {journeys.isError && <div className="p-4"><ErrorState message="Could not load journeys." /></div>}
         {journeys.data && journeys.data.length === 0 && <div className="p-4"><EmptyState message="No journeys match these filters." /></div>}
         {journeys.data && journeys.data.length > 0 && (
-          <table className="w-full min-w-[960px] text-left text-xs">
-            <thead className="border-b border-neutral-100 text-neutral-500">
+          <Table className="min-w-[960px]">
+            <TableHead>
               <tr>
-                <th className="px-4 py-2 font-medium">Patient</th>
-                <th className="px-2 py-2 font-medium">Journey</th>
-                <th className="px-2 py-2 font-medium">Source / Campaign</th>
-                <th className="px-2 py-2 font-medium">Stage</th>
-                <th className="px-2 py-2 font-medium">Doctor</th>
-                <th className="px-2 py-2 font-medium">Owner</th>
-                <th className="px-2 py-2 font-medium">Last Activity</th>
-                <th className="px-2 py-2 font-medium">Next Action</th>
-                <th className="px-2 py-2 text-right font-medium">Acq. Cost</th>
-                <th className="px-2 py-2 text-right font-medium">Treatment Value</th>
+                <Th leading>Patient</Th>
+                <Th>Journey</Th>
+                <Th>Source / Campaign</Th>
+                <Th>Stage</Th>
+                <Th>Doctor</Th>
+                <Th>Owner</Th>
+                <Th>Last Activity</Th>
+                <Th>Next Action</Th>
+                <Th align="right">Acq. Cost</Th>
+                <Th align="right">Treatment Value</Th>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-100">
+            </TableHead>
+            <TableBody>
               {journeys.data.map((j) => (
-                <tr key={j.id} className="cursor-pointer hover:bg-neutral-50" onClick={() => router.push(withFrom(`/patients/${j.patientId}`, "journeys"))}>
-                  <td className="px-4 py-2 text-slate-900">{j.patientName}</td>
-                  <td className="px-2 py-2 text-neutral-600">{j.journeyType}</td>
-                  <td className="px-2 py-2 text-neutral-600">
+                <Tr key={j.id} onClick={() => router.push(withFrom(`/patients/${j.patientId}`, "journeys"))}>
+                  <Td leading className="text-slate-900">{j.patientName}</Td>
+                  <Td className="text-neutral-600">{j.journeyType}</Td>
+                  <Td className="text-neutral-600">
                     <span className="block">{j.source}</span>
                     {j.campaignName && <span className="block text-[11px] text-neutral-400">{j.campaignName}</span>}
-                  </td>
-                  <td className="px-2 py-2"><Badge tone={STAGE_TONE[j.stage] ?? "neutral"}>{j.stage.replace(/_/g, " ")}</Badge></td>
-                  <td className="px-2 py-2 text-neutral-600">{j.doctorName ?? "—"}</td>
-                  <td className="px-2 py-2 text-neutral-600">{j.ownerName ?? "—"}</td>
-                  <td className="px-2 py-2 text-neutral-600">{fmtDate(j.lastActivityAt)}</td>
-                  <td className="px-2 py-2 text-neutral-600">{fmtDate(j.nextActionDueAt)}</td>
-                  <td className="px-2 py-2 text-right tabular-nums">{formatMoneyOrDash(j.acquisitionCost)}</td>
-                  <td className="px-2 py-2 text-right tabular-nums">{j.treatmentValue > 0 ? formatInr(j.treatmentValue) : "—"}</td>
-                </tr>
+                  </Td>
+                  <Td><Badge tone={STAGE_TONE[j.stage] ?? "neutral"}>{j.stage.replace(/_/g, " ")}</Badge></Td>
+                  <Td className="text-neutral-600">{j.doctorName ?? "—"}</Td>
+                  <Td className="text-neutral-600">{j.ownerName ?? "—"}</Td>
+                  <Td className="text-neutral-600">{fmtDate(j.lastActivityAt)}</Td>
+                  <Td className="text-neutral-600">{fmtDate(j.nextActionDueAt)}</Td>
+                  <Td align="right">{formatMoneyOrDash(j.acquisitionCost)}</Td>
+                  <Td align="right">{j.treatmentValue > 0 ? formatInr(j.treatmentValue) : "—"}</Td>
+                </Tr>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
       </Card>
     </div>

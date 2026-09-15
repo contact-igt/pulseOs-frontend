@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
-import { Badge, EmptyState, ErrorState, PageHeader, SectionHeading, Skeleton } from "@pulseos/ui";
+import { Badge, EmptyState, ErrorState, PageHeader, SectionHeading, Skeleton, Table, TableBody, TableHead, Td, Th, Tr } from "@pulseos/ui";
 import { hasPermission } from "@pulseos/types";
 import type { ConnectorMode, ConnectorStatus, ConnectorType } from "@pulseos/types";
 import { Mail, MessageCircle, Phone, Radio, ShieldCheck, Target, Zap } from "lucide-react";
@@ -212,29 +212,29 @@ export default function IntegrationsPage() {
               <SectionHeading title="Recent events" subtitle={`${detail.data.recentEvents.length}`} />
               {detail.data.recentEvents.length === 0 && <p className="text-xs text-neutral-400">No events recorded yet.</p>}
               {detail.data.recentEvents.length > 0 && (
-                <div className="overflow-hidden rounded border border-neutral-100">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-neutral-50 text-neutral-500">
+                <div className="overflow-hidden rounded-lg border border-neutral-100">
+                  <Table>
+                    <TableHead>
                       <tr>
-                        <th className="px-2 py-1.5 font-medium">Direction</th>
-                        <th className="px-2 py-1.5 font-medium">Status</th>
-                        <th className="px-2 py-1.5 font-medium">Event id</th>
-                        <th className="px-2 py-1.5 font-medium">Received</th>
+                        <Th>Direction</Th>
+                        <Th>Status</Th>
+                        <Th>Event id</Th>
+                        <Th>Received</Th>
                       </tr>
-                    </thead>
-                    <tbody className="divide-y divide-neutral-100">
+                    </TableHead>
+                    <TableBody>
                       {detail.data.recentEvents.map((e) => (
-                        <tr key={e.id}>
-                          <td className="px-2 py-1.5 text-neutral-600">{e.direction}</td>
-                          <td className="px-2 py-1.5">
+                        <Tr key={e.id} className="hover:bg-transparent">
+                          <Td className="text-neutral-600">{e.direction}</Td>
+                          <Td>
                             <Badge tone={e.status === "failed" ? "danger" : e.status === "duplicate" ? "warning" : "neutral"}>{e.status}</Badge>
-                          </td>
-                          <td className="px-2 py-1.5 text-neutral-500">{e.externalEventId}</td>
-                          <td className="px-2 py-1.5 text-neutral-500">{relativeTime(e.receivedAt)}</td>
-                        </tr>
+                          </Td>
+                          <Td className="text-neutral-500">{e.externalEventId}</Td>
+                          <Td className="text-neutral-500">{relativeTime(e.receivedAt)}</Td>
+                        </Tr>
                       ))}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
               )}
             </div>

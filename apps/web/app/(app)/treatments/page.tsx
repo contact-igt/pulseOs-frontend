@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { api } from "@pulseos/api-client";
-import { Badge, Button, Card, ErrorState, OverflowMenu, PageHeader, SectionHeading, Skeleton, formatInr } from "@pulseos/ui";
+import { Badge, Button, Card, ErrorState, OverflowMenu, PageHeader, SectionHeading, Skeleton, Table, TableBody, TableHead, Td, Th, Tr, formatInr } from "@pulseos/ui";
 import { withFrom } from "@/components/shell/BackLink";
 import { hasPermission } from "@pulseos/types";
 import type { TreatmentRow, TreatmentStatus } from "@pulseos/types";
@@ -86,34 +86,34 @@ export default function TreatmentPage() {
         {treatments.data && treatments.data.length === 0 && <p className="py-8 text-center text-sm text-neutral-400">No treatment opportunities match this filter.</p>}
         {treatments.data && treatments.data.length > 0 && (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-left text-xs">
-              <thead className="border-b border-neutral-100 text-neutral-500">
+            <Table className="min-w-[900px]">
+              <TableHead>
                 <tr>
-                  <th className="px-2 py-2 font-medium">Patient</th>
-                  <th className="px-2 py-2 font-medium">Doctor</th>
-                  <th className="px-2 py-2 font-medium">Treatment</th>
-                  <th className="px-2 py-2 text-right font-medium">Est. Value</th>
-                  <th className="px-2 py-2 font-medium">Status</th>
-                  <th className="px-2 py-2 font-medium">Owner</th>
-                  <th className="px-2 py-2 font-medium">Next Action</th>
-                  <th className="px-2 py-2 font-medium">Last Contact</th>
-                  <th className="px-2 py-2 font-medium">Planned Date</th>
-                  <th className="px-2 py-2 font-medium">Actions</th>
+                  <Th>Patient</Th>
+                  <Th>Doctor</Th>
+                  <Th>Treatment</Th>
+                  <Th align="right">Est. Value</Th>
+                  <Th>Status</Th>
+                  <Th>Owner</Th>
+                  <Th>Next Action</Th>
+                  <Th>Last Contact</Th>
+                  <Th>Planned Date</Th>
+                  <Th>Actions</Th>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-100">
+              </TableHead>
+              <TableBody>
                 {treatments.data.map((row) => (
-                  <tr key={row.id} className="hover:bg-neutral-50">
-                    <td className="cursor-pointer px-2 py-2 text-slate-900" onClick={() => router.push(withFrom(`/patients/${row.patientId}`, "treatments"))}>{row.patientName}</td>
-                    <td className="px-2 py-2 text-neutral-600">{row.doctorName ?? "—"}</td>
-                    <td className="px-2 py-2 text-neutral-600">{row.treatmentLabel}</td>
-                    <td className="px-2 py-2 text-right tabular-nums text-slate-900">{formatInr(row.estimatedValue)}</td>
-                    <td className="px-2 py-2"><Badge tone={STATUS_TONE[row.status]}>{row.status.replace(/_/g, " ")}</Badge></td>
-                    <td className="px-2 py-2 text-neutral-600">{row.ownerName ?? "—"}</td>
-                    <td className="px-2 py-2 text-neutral-600">{fmtDate(row.nextActionDueAt)}</td>
-                    <td className="px-2 py-2 text-neutral-600">{fmtDate(row.lastContactAt)}</td>
-                    <td className="px-2 py-2 text-neutral-600">{fmtDate(row.plannedDate)}</td>
-                    <td className="px-2 py-2">
+                  <Tr key={row.id}>
+                    <Td className="cursor-pointer text-slate-900" onClick={() => router.push(withFrom(`/patients/${row.patientId}`, "treatments"))}>{row.patientName}</Td>
+                    <Td className="text-neutral-600">{row.doctorName ?? "—"}</Td>
+                    <Td className="text-neutral-600">{row.treatmentLabel}</Td>
+                    <Td align="right" className="text-slate-900">{formatInr(row.estimatedValue)}</Td>
+                    <Td><Badge tone={STATUS_TONE[row.status]}>{row.status.replace(/_/g, " ")}</Badge></Td>
+                    <Td className="text-neutral-600">{row.ownerName ?? "—"}</Td>
+                    <Td className="text-neutral-600">{fmtDate(row.nextActionDueAt)}</Td>
+                    <Td className="text-neutral-600">{fmtDate(row.lastContactAt)}</Td>
+                    <Td className="text-neutral-600">{fmtDate(row.plannedDate)}</Td>
+                    <Td>
                       {canManage && NEXT_STEPS[row.status] && (
                         <div className="flex items-center gap-1">
                           <Button size="sm" onClick={() => transition(row, NEXT_STEPS[row.status]!.primary.status)} data-testid={`treatment-${row.id}-${NEXT_STEPS[row.status]!.primary.status}`}>
@@ -130,11 +130,11 @@ export default function TreatmentPage() {
                           />
                         </div>
                       )}
-                    </td>
-                  </tr>
+                    </Td>
+                  </Tr>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         )}
       </Card>

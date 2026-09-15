@@ -4,7 +4,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
-import { Badge, Card, ConnectorModeBadge, EmptyState, ErrorState, MetricStrip, SectionHeading, Skeleton, formatInr, formatMoneyOrDash, formatRoas } from "@pulseos/ui";
+import { Badge, Card, ConnectorModeBadge, EmptyState, ErrorState, MetricStrip, SectionHeading, Skeleton, Table, TableBody, TableHead, Td, Th, Tr, formatInr, formatMoneyOrDash, formatRoas } from "@pulseos/ui";
 import { BackLink, withFrom } from "@/components/shell/BackLink";
 
 function fmtDate(iso: string): string {
@@ -96,34 +96,34 @@ export default function CampaignDetailPage() {
         {journeyList.isError && <ErrorState message="Could not load attributed journeys." />}
         {journeyList.data && journeyList.data.length === 0 && <EmptyState message="No journeys attributed to this campaign yet." />}
         {journeyList.data && journeyList.data.length > 0 && (
-          <table className="w-full min-w-[720px] text-left text-xs">
-            <thead className="border-b border-neutral-100 text-neutral-500">
+          <Table className="min-w-[720px]">
+            <TableHead>
               <tr>
-                <th className="py-2 pr-2 font-medium">Patient</th>
-                <th className="py-2 pr-2 font-medium">Journey type</th>
-                <th className="py-2 pr-2 font-medium">Stage</th>
-                <th className="py-2 pr-2 font-medium">Doctor</th>
-                <th className="py-2 pr-2 font-medium">Last activity</th>
-                <th className="py-2 pr-2 text-right font-medium">Treatment value</th>
+                <Th leading>Patient</Th>
+                <Th>Journey type</Th>
+                <Th>Stage</Th>
+                <Th>Doctor</Th>
+                <Th>Last activity</Th>
+                <Th align="right">Treatment value</Th>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-100">
+            </TableHead>
+            <TableBody>
               {journeyList.data.map((row) => (
-                <tr key={row.id} className="hover:bg-neutral-50" data-testid={`campaign-journey-row-${row.id}`}>
-                  <td className="py-1.5 pr-2">
+                <Tr key={row.id} data-testid={`campaign-journey-row-${row.id}`}>
+                  <Td leading>
                     <Link href={withFrom(`/patients/${row.patientId}`, "campaigns")} className="font-medium text-primary-700 hover:underline">
                       {row.patientName}
                     </Link>
-                  </td>
-                  <td className="py-1.5 pr-2 text-neutral-600">{row.journeyType}</td>
-                  <td className="py-1.5 pr-2"><Badge tone={row.stage === "lost" ? "danger" : "primary"}>{row.stage.replace(/_/g, " ")}</Badge></td>
-                  <td className="py-1.5 pr-2 text-neutral-600">{row.doctorName ?? "—"}</td>
-                  <td className="py-1.5 pr-2 text-neutral-600">{fmtDate(row.lastActivityAt)}</td>
-                  <td className="py-1.5 pr-2 text-right tabular-nums">{formatInr(row.treatmentValue)}</td>
-                </tr>
+                  </Td>
+                  <Td className="text-neutral-600">{row.journeyType}</Td>
+                  <Td><Badge tone={row.stage === "lost" ? "danger" : "primary"}>{row.stage.replace(/_/g, " ")}</Badge></Td>
+                  <Td className="text-neutral-600">{row.doctorName ?? "—"}</Td>
+                  <Td className="text-neutral-600">{fmtDate(row.lastActivityAt)}</Td>
+                  <Td align="right">{formatInr(row.treatmentValue)}</Td>
+                </Tr>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
       </Card>
     </div>

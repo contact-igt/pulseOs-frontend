@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { api } from "@pulseos/api-client";
-import { Badge, Button, Card, EmptyState, ErrorState, MetricStrip, PageHeader, Skeleton } from "@pulseos/ui";
+import { Badge, Button, Card, EmptyState, ErrorState, MetricStrip, PageHeader, Skeleton, Table, TableBody, TableHead, Td, Th, Tr } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import { withFrom } from "@/components/shell/BackLink";
 import type { LeadRow, LeadStatus } from "@pulseos/types";
@@ -114,42 +114,42 @@ export default function LeadsPage() {
           </div>
         )}
         {leads.data && leads.data.length > 0 && (
-          <table className="w-full min-w-[980px] text-left text-xs">
-            <thead className="border-b border-neutral-100 text-neutral-500">
+          <Table className="min-w-[980px]">
+            <TableHead>
               <tr>
-                <th className="px-4 py-2 font-medium">Lead / Patient</th>
-                <th className="px-2 py-2 font-medium">Phone</th>
-                <th className="px-2 py-2 font-medium">Specialty</th>
-                <th className="px-2 py-2 font-medium">Source</th>
-                <th className="px-2 py-2 font-medium">Campaign</th>
-                <th className="px-2 py-2 font-medium">Status</th>
-                <th className="px-2 py-2 font-medium">Owner</th>
-                <th className="px-2 py-2 font-medium">Last Interaction</th>
-                <th className="px-2 py-2 font-medium">Next Action</th>
-                <th className="px-2 py-2 font-medium">Created</th>
-                <th className="px-2 py-2 font-medium">Priority</th>
+                <Th leading>Lead / Patient</Th>
+                <Th>Phone</Th>
+                <Th>Specialty</Th>
+                <Th>Source</Th>
+                <Th>Campaign</Th>
+                <Th>Status</Th>
+                <Th>Owner</Th>
+                <Th>Last Interaction</Th>
+                <Th>Next Action</Th>
+                <Th>Created</Th>
+                <Th>Priority</Th>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-100">
+            </TableHead>
+            <TableBody>
               {leads.data.map((lead: LeadRow) => (
-                <tr key={lead.id} className="cursor-pointer hover:bg-neutral-50" onClick={() => router.push(withFrom(`/patients/${lead.patientId}`, "leads"))} data-testid={`lead-row-${lead.id}`}>
-                  <td className="px-4 py-2 text-slate-900">{lead.patientName}</td>
-                  <td className="px-2 py-2 text-neutral-600">{lead.phone}</td>
-                  <td className="px-2 py-2 text-neutral-600">{lead.specialtyLabel ?? "—"}</td>
-                  <td className="px-2 py-2 text-neutral-600">{lead.source}</td>
-                  <td className="px-2 py-2 text-neutral-600">{lead.campaignName ?? "—"}</td>
-                  <td className="px-2 py-2">
+                <Tr key={lead.id} onClick={() => router.push(withFrom(`/patients/${lead.patientId}`, "leads"))} data-testid={`lead-row-${lead.id}`}>
+                  <Td leading className="text-slate-900">{lead.patientName}</Td>
+                  <Td className="text-neutral-600">{lead.phone}</Td>
+                  <Td className="text-neutral-600">{lead.specialtyLabel ?? "—"}</Td>
+                  <Td className="text-neutral-600">{lead.source}</Td>
+                  <Td className="text-neutral-600">{lead.campaignName ?? "—"}</Td>
+                  <Td>
                     <Badge tone={STATUS_TONE[lead.leadStatus]}>{STATUS_LABEL[lead.leadStatus]}</Badge>
-                  </td>
-                  <td className="px-2 py-2 text-neutral-600">{lead.ownerName ?? "—"}</td>
-                  <td className="px-2 py-2 text-neutral-600">{fmtDate(lead.lastInteractionAt)}</td>
-                  <td className="px-2 py-2 text-neutral-600">{fmtDate(lead.nextActionDueAt)}</td>
-                  <td className="px-2 py-2 text-neutral-600">{fmtDate(lead.createdAt)}</td>
-                  <td className="px-2 py-2">{lead.priority === "high" ? <Badge tone="warning">High</Badge> : <span className="text-neutral-400">Normal</span>}</td>
-                </tr>
+                  </Td>
+                  <Td className="text-neutral-600">{lead.ownerName ?? "—"}</Td>
+                  <Td className="text-neutral-600">{fmtDate(lead.lastInteractionAt)}</Td>
+                  <Td className="text-neutral-600">{fmtDate(lead.nextActionDueAt)}</Td>
+                  <Td className="text-neutral-600">{fmtDate(lead.createdAt)}</Td>
+                  <Td>{lead.priority === "high" ? <Badge tone="warning">High</Badge> : <span className="text-neutral-400">Normal</span>}</Td>
+                </Tr>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         )}
       </Card>
     </div>

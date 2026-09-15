@@ -16,6 +16,7 @@ export * from "./NewAppointmentDrawer";
 export * from "./AddTaskDrawer";
 export * from "./QuickCreateMenu";
 export * from "./OverflowMenu";
+export * from "./Table";
 export * from "./SpendAtRiskPanel";
 export * from "./SourcePerformanceTable";
 export * from "./TeamPanel";

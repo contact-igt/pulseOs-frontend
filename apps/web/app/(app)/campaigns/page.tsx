@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
-import { Card, ConnectorModeBadge, EmptyState, ErrorState, MetricStrip, PageHeader, SectionHeading, Skeleton, SpendAtRisk, formatInr, formatMoneyOrDash, formatRoas } from "@pulseos/ui";
+import { Card, ConnectorModeBadge, EmptyState, ErrorState, MetricStrip, PageHeader, SectionHeading, Skeleton, SpendAtRisk, Table, TableBody, TableHead, Td, Th, Tr, formatInr, formatMoneyOrDash, formatRoas } from "@pulseos/ui";
 import type { CampaignFilters, SourceChannel } from "@pulseos/types";
 import { withFrom } from "@/components/shell/BackLink";
 
@@ -116,29 +116,29 @@ export default function CampaignsPage() {
           {performance.isError && <ErrorState message="Could not load campaign performance." />}
           {performance.data && performance.data.length === 0 && <EmptyState message="No campaigns match these filters." />}
           {performance.data && performance.data.length > 0 && (
-            <table className="w-full min-w-[860px] text-left text-xs">
-              <thead className="border-b border-neutral-100 text-neutral-500">
+            <Table className="min-w-[860px]">
+              <TableHead>
                 <tr>
-                  <th className="py-2 pr-2 font-medium">Source</th>
-                  <th className="py-2 pr-2 font-medium">Campaign</th>
-                  <th className="py-2 pr-2 text-right font-medium">Spend</th>
-                  <th className="py-2 pr-2 text-right font-medium">Leads</th>
-                  <th className="py-2 pr-2 text-right font-medium">Appts</th>
-                  <th className="py-2 pr-2 text-right font-medium">Consults</th>
-                  <th className="py-2 pr-2 text-right font-medium">Tx Advised</th>
-                  <th className="py-2 pr-2 text-right font-medium">Tx Completed</th>
-                  <th className="py-2 pr-2 text-right font-medium">Revenue</th>
-                  <th className="py-2 pr-2 text-right font-medium">CPL</th>
-                  <th className="py-2 pr-2 text-right font-medium">Cost/Appt</th>
-                  <th className="py-2 pr-2 text-right font-medium">Cost/Tx</th>
-                  <th className="py-2 text-right font-medium">ROAS</th>
+                  <Th>Source</Th>
+                  <Th>Campaign</Th>
+                  <Th align="right">Spend</Th>
+                  <Th align="right">Leads</Th>
+                  <Th align="right">Appts</Th>
+                  <Th align="right">Consults</Th>
+                  <Th align="right">Tx Advised</Th>
+                  <Th align="right">Tx Completed</Th>
+                  <Th align="right">Revenue</Th>
+                  <Th align="right">CPL</Th>
+                  <Th align="right">Cost/Appt</Th>
+                  <Th align="right">Cost/Tx</Th>
+                  <Th align="right">ROAS</Th>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-100">
+              </TableHead>
+              <TableBody>
                 {performance.data.map((row) => (
-                  <tr key={row.campaignId ?? row.campaignName} className="hover:bg-neutral-50" data-testid={`campaign-row-${row.campaignId ?? row.campaignName}`}>
-                    <td className="py-1.5 pr-2 text-neutral-600">{row.source}</td>
-                    <td className="py-1.5 pr-2 text-slate-900">
+                  <Tr key={row.campaignId ?? row.campaignName} data-testid={`campaign-row-${row.campaignId ?? row.campaignName}`}>
+                    <Td className="text-neutral-600">{row.source}</Td>
+                    <Td className="text-slate-900">
                       <span className="flex items-center gap-1.5">
                         {row.campaignId ? (
                           <Link href={withFrom(`/campaigns/${row.campaignId}`, "campaigns")} className="font-medium text-primary-700 hover:underline">
@@ -150,22 +150,22 @@ export default function CampaignsPage() {
                         <ConnectorModeBadge mode={row.connectorMode} />
                       </span>
                       {row.specialtyLabel && <span className="block text-[11px] text-neutral-400">{row.specialtyLabel}</span>}
-                    </td>
-                    <td className="py-1.5 pr-2 text-right tabular-nums">{formatInr(row.spend)}</td>
-                    <td className="py-1.5 pr-2 text-right tabular-nums">{row.leads}</td>
-                    <td className="py-1.5 pr-2 text-right tabular-nums">{row.appointments}</td>
-                    <td className="py-1.5 pr-2 text-right tabular-nums">{row.consultations}</td>
-                    <td className="py-1.5 pr-2 text-right tabular-nums">{row.treatmentAdvised}</td>
-                    <td className="py-1.5 pr-2 text-right tabular-nums">{row.treatmentCompleted}</td>
-                    <td className="py-1.5 pr-2 text-right tabular-nums">{formatInr(row.revenue)}</td>
-                    <td className="py-1.5 pr-2 text-right tabular-nums">{formatMoneyOrDash(row.cpl)}</td>
-                    <td className="py-1.5 pr-2 text-right tabular-nums">{formatMoneyOrDash(row.costPerAppointment)}</td>
-                    <td className="py-1.5 pr-2 text-right tabular-nums">{formatMoneyOrDash(row.costPerTreatment)}</td>
-                    <td className="py-1.5 text-right tabular-nums font-medium">{formatRoas(row.roas)}</td>
-                  </tr>
+                    </Td>
+                    <Td align="right">{formatInr(row.spend)}</Td>
+                    <Td align="right">{row.leads}</Td>
+                    <Td align="right">{row.appointments}</Td>
+                    <Td align="right">{row.consultations}</Td>
+                    <Td align="right">{row.treatmentAdvised}</Td>
+                    <Td align="right">{row.treatmentCompleted}</Td>
+                    <Td align="right">{formatInr(row.revenue)}</Td>
+                    <Td align="right">{formatMoneyOrDash(row.cpl)}</Td>
+                    <Td align="right">{formatMoneyOrDash(row.costPerAppointment)}</Td>
+                    <Td align="right">{formatMoneyOrDash(row.costPerTreatment)}</Td>
+                    <Td align="right" className="font-medium">{formatRoas(row.roas)}</Td>
+                  </Tr>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           )}
         </Card>
 
