@@ -15,12 +15,15 @@ export function SpendAtRisk({ data, onReasonClick }: { data: SpendAtRiskData; on
 
   return (
     <Card className="p-4">
-      <div className="mb-3 flex items-baseline justify-between">
-        <SectionHeading title="Spend At Risk" subtitle="Marketing spend tied to unresolved follow-ups" />
-        <span className="text-lg font-semibold tabular-nums text-danger-500" data-testid="spend-at-risk-total">
-          {formatInrCompact(data.totalAtRisk)}
-        </span>
-      </div>
+      <SectionHeading
+        title="Spend At Risk"
+        subtitle="Marketing spend tied to unresolved follow-ups"
+        action={
+          <span className="text-lg font-semibold tabular-nums text-danger-500" data-testid="spend-at-risk-total">
+            {formatInrCompact(data.totalAtRisk)}
+          </span>
+        }
+      />
       <div className="space-y-1.5">
         {data.byReason.map((row) => (
           <button

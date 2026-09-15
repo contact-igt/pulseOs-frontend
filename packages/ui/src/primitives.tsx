@@ -8,11 +8,14 @@ export function Card({ children, className = "", ...rest }: { children: ReactNod
   );
 }
 
-export function SectionHeading({ title, subtitle }: { title: string; subtitle?: string }) {
+export function SectionHeading({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
   return (
-    <div className="mb-3 flex items-baseline justify-between">
-      <h2 className="text-sm font-semibold tracking-wide text-slate-900">{title}</h2>
-      {subtitle && <span className="text-xs text-neutral-500">{subtitle}</span>}
+    <div className="mb-3 flex items-start justify-between gap-3">
+      <div className="flex items-baseline gap-2">
+        <h2 className="text-sm font-semibold tracking-wide text-slate-900">{title}</h2>
+        {subtitle && <span className="text-xs text-neutral-500">{subtitle}</span>}
+      </div>
+      {action}
     </div>
   );
 }
