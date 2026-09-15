@@ -30,7 +30,9 @@ export default function PatientsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const quickCreate = useQuickCreate();
-  const [search, setSearch] = useState("");
+  // Seeds from the global TopBar search's `?q=` — otherwise a query typed
+  // there silently vanishes on arrival here.
+  const [search, setSearch] = useState(() => searchParams.get("q") ?? "");
 
   const stageFilter = searchParams.get("filter") ?? undefined;
 

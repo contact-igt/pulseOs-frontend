@@ -2,7 +2,7 @@ import type { ComponentPropsWithoutRef, ReactNode } from "react";
 
 export function Card({ children, className = "", ...rest }: { children: ReactNode; className?: string } & ComponentPropsWithoutRef<"div">) {
   return (
-    <div className={`rounded-lg border border-neutral-200 bg-white ${className}`} {...rest}>
+    <div className={`rounded-xl border border-neutral-200 bg-white ${className}`} {...rest}>
       {children}
     </div>
   );

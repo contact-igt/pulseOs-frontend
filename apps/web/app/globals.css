@@ -48,14 +48,15 @@
   --color-chart-indigo: #5b5fc7;
   --color-chart-amber: #c98a1f;
   --color-chart-violet: #8a5fb0;
-
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
+/* --font-sans is injected by next/font (apps/web/app/layout.tsx) on <html>
+   via its `variable` option — do not redeclare it here, that previously
+   shadowed the actually-loaded Inter with a never-fetched string fallback. */
 body {
   background: var(--color-neutral-50);
   color: var(--color-slate-900);
-  font-family: var(--font-sans);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
 * {

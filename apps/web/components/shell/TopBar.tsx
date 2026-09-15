@@ -50,7 +50,7 @@ export function TopBar({
   }
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-neutral-200 bg-white px-4 sm:px-6">
+    <header className="flex h-16 shrink-0 items-center justify-between gap-4 border-b border-neutral-200 bg-white px-4 sm:px-6">
       <div className="flex min-w-0 items-center gap-2">
         <button
           type="button"
@@ -59,7 +59,7 @@ export function TopBar({
           title="Open menu"
           data-testid="mobile-menu-button"
         >
-          <Menu size={19} />
+          <Menu size={20} />
         </button>
         <div className="min-w-0">
           <h1 className="truncate text-base font-semibold text-slate-900">{title}</h1>
@@ -70,7 +70,7 @@ export function TopBar({
       <div className="flex items-center gap-3">
         <form onSubmit={submitSearch} className="hidden sm:block">
           <div className="flex items-center gap-1.5 rounded border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 focus-within:border-primary-300">
-            <Search size={14} className="text-neutral-400" />
+            <Search size={16} className="text-neutral-400" />
             <input
               type="text"
               placeholder="Search patients…"
@@ -84,13 +84,17 @@ export function TopBar({
 
         <QuickCreateMenu items={quickCreateItems} />
 
+        {/* Not wired to anything yet (no notifications domain exists) —
+            visibly disabled rather than a silent no-op click. */}
         <button
           type="button"
-          className="relative rounded p-1.5 text-neutral-500 transition hover:bg-neutral-100 hover:text-slate-900"
-          title="Notifications"
+          disabled
+          className="cursor-not-allowed rounded p-1.5 text-neutral-300"
+          title="Notifications — coming soon"
+          aria-label="Notifications — coming soon"
           data-testid="notifications-button"
         >
-          <Bell size={17} />
+          <Bell size={16} />
         </button>
 
         <div className="relative">
@@ -115,7 +119,7 @@ export function TopBar({
                 className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-600 transition hover:bg-neutral-100 hover:text-slate-900"
                 data-testid="logout-button"
               >
-                <LogOut size={13} />
+                <LogOut size={14} />
                 Log out
               </button>
             </div>

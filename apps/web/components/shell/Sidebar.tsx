@@ -62,18 +62,18 @@ export function Sidebar({ user, open = false, onClose }: { user: SessionUser; op
     <>
       {open && (
         <div
-          className="fixed inset-y-0 left-60 right-0 z-30 bg-slate-900/40 lg:hidden"
+          className="fixed inset-y-0 left-56 right-0 z-30 bg-slate-900/40 lg:hidden"
           onClick={onClose}
           data-testid="sidebar-backdrop"
         />
       )}
       <nav
-        className={`fixed inset-y-0 left-0 z-40 flex h-screen w-60 shrink-0 flex-col border-r border-neutral-200 bg-white transition-transform duration-200 lg:static lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex h-screen w-56 shrink-0 flex-col border-r border-neutral-200 bg-white transition-transform duration-200 lg:static lg:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
         data-testid="sidebar"
       >
-      <div className="flex h-14 items-center border-b border-neutral-200 px-4">
+      <div className="flex h-16 items-center border-b border-neutral-200 px-4">
         <span className="text-base font-semibold tracking-tight text-primary-700">PulseOS</span>
       </div>
 
@@ -96,7 +96,7 @@ export function Sidebar({ user, open = false, onClose }: { user: SessionUser; op
                         }`}
                         data-testid={`nav-${item.href}`}
                       >
-                        <Icon size={16} strokeWidth={2} />
+                        <Icon size={18} strokeWidth={2} />
                         {item.label}
                       </Link>
                     ) : (
@@ -105,7 +105,7 @@ export function Sidebar({ user, open = false, onClose }: { user: SessionUser; op
                         title="Not built yet"
                         data-testid={`nav-disabled-${item.href}`}
                       >
-                        <Icon size={16} strokeWidth={2} />
+                        <Icon size={18} strokeWidth={2} />
                         {item.label}
                       </span>
                     )}
