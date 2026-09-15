@@ -244,8 +244,9 @@ export default function IntegrationsPage() {
                 type="button"
                 onClick={() => queryClient.invalidateQueries({ queryKey: ["connector", effectiveSelectedId] })}
                 className="rounded border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100"
+                title="Reload this connector's status from PulseOS — does not contact the provider"
               >
-                Refresh
+                Reload Status
               </button>
               {canManage && detail.data.connector.capabilities.includes("SYNC_CAMPAIGNS") && (
                 <button
