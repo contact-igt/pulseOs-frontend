@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, gte, inArray, lte } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import {
   appointments,
@@ -32,7 +32,12 @@ export async function getCampaignPerformance(db: Db, tenantId: string, filters: 
     const touchpointRows = await db
       .select({ journeyId: campaignTouchpoints.journeyId })
       .from(campaignTouchpoints)
-      .where(and(eq(campaignTouchpoints.tenantId, tenantId), eq(campaignTouchpoints.campaignId, campaign.id)));
+      .where(and(
+        eq(campaignTouchpoints.tenantId, tenantId),
+        eq(campaignTouchpoints.campaignId, campaign.id),
+        filters.dateFrom ? gte(campaignTouchpoints.occurredAt, new Date(`${filters.dateFrom}T00:00:00.000Z`)) : undefined,
+        filters.dateTo ? lte(campaignTouchpoints.occurredAt, new Date(`${filters.dateTo}T23:59:59.999Z`)) : undefined,
+      ));
     let journeyIds = touchpointRows.map((r) => r.journeyId);
 
     if (journeyIds.length > 0 && (filters.specialtyKey || filters.branchId)) {

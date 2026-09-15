@@ -8,13 +8,13 @@ export async function campaignRoutes(app: FastifyInstance) {
 
   app.get("/campaigns/performance", async (request) => {
     const tenantId = request.sessionUser!.tenantId;
-    const query = request.query as { branchId?: string; specialtyKey?: string; source?: SourceChannel; campaignId?: string };
+    const query = request.query as { branchId?: string; specialtyKey?: string; source?: SourceChannel; campaignId?: string; dateFrom?: string; dateTo?: string };
     return getCampaignPerformance(app.db, tenantId, query);
   });
 
   app.get("/campaigns/marketing-efficiency", async (request) => {
     const tenantId = request.sessionUser!.tenantId;
-    const query = request.query as { branchId?: string; specialtyKey?: string; source?: SourceChannel; campaignId?: string };
+    const query = request.query as { branchId?: string; specialtyKey?: string; source?: SourceChannel; campaignId?: string; dateFrom?: string; dateTo?: string };
     return getMarketingEfficiency(app.db, tenantId, query);
   });
 

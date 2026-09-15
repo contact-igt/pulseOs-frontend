@@ -62,7 +62,25 @@ export default function CampaignsPage() {
             </option>
           ))}
         </select>
-        {(filters.branchId || filters.specialtyKey || filters.source) && (
+        <div className="flex items-center gap-1 text-xs text-neutral-500">
+          <span>From</span>
+          <input
+            type="date"
+            value={filters.dateFrom ?? ""}
+            onChange={(e) => setFilters((f) => ({ ...f, dateFrom: e.target.value || undefined }))}
+            className="rounded border border-neutral-200 bg-white px-2 py-1 text-xs text-slate-700"
+            data-testid="campaigns-date-from"
+          />
+          <span>To</span>
+          <input
+            type="date"
+            value={filters.dateTo ?? ""}
+            onChange={(e) => setFilters((f) => ({ ...f, dateTo: e.target.value || undefined }))}
+            className="rounded border border-neutral-200 bg-white px-2 py-1 text-xs text-slate-700"
+            data-testid="campaigns-date-to"
+          />
+        </div>
+        {(filters.branchId || filters.specialtyKey || filters.source || filters.dateFrom || filters.dateTo) && (
           <button type="button" onClick={() => setFilters({})} className="text-xs text-neutral-400 hover:text-slate-900">
             Clear filters
           </button>

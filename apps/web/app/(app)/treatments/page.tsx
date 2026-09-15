@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { api } from "@pulseos/api-client";
-import { Badge, Card, ErrorState, SectionHeading, Skeleton } from "@pulseos/ui";
+import { Badge, Card, ErrorState, SectionHeading, Skeleton, formatInr } from "@pulseos/ui";
 import { withFrom } from "@/components/shell/BackLink";
 import type { TreatmentRow, TreatmentStatus } from "@pulseos/types";
 
@@ -36,10 +36,6 @@ const NEXT_STEPS: Partial<Record<TreatmentStatus, { status: TreatmentStatus; lab
 function fmtDate(iso: string | null) {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
-}
-
-function fmtInr(n: number) {
-  return `₹${n.toLocaleString("en-IN")}`;
 }
 
 export default function TreatmentPage() {
@@ -96,7 +92,7 @@ export default function TreatmentPage() {
                     <td className="cursor-pointer px-2 py-2 text-slate-900" onClick={() => router.push(withFrom(`/patients/${row.patientId}`, "treatments"))}>{row.patientName}</td>
                     <td className="px-2 py-2 text-neutral-600">{row.doctorName ?? "—"}</td>
                     <td className="px-2 py-2 text-neutral-600">{row.treatmentLabel}</td>
-                    <td className="px-2 py-2 text-right tabular-nums text-slate-900">{fmtInr(row.estimatedValue)}</td>
+                    <td className="px-2 py-2 text-right tabular-nums text-slate-900">{formatInr(row.estimatedValue)}</td>
                     <td className="px-2 py-2"><Badge tone={STATUS_TONE[row.status]}>{row.status.replace(/_/g, " ")}</Badge></td>
                     <td className="px-2 py-2 text-neutral-600">{row.ownerName ?? "—"}</td>
                     <td className="px-2 py-2 text-neutral-600">{fmtDate(row.nextActionDueAt)}</td>

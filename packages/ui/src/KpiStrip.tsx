@@ -1,15 +1,11 @@
 import type { TodayStrip } from "@pulseos/types";
 import { MetricStrip } from "./MetricStrip";
+import { formatInrCompact } from "./format";
 
 interface KpiDef {
   key: keyof TodayStrip;
   label: string;
   format?: (n: number) => string;
-}
-
-function formatInr(n: number) {
-  if (n >= 100000) return `₹${(n / 100000).toFixed(1)}L`;
-  return `₹${n.toLocaleString("en-IN")}`;
 }
 
 const KPIS: KpiDef[] = [
@@ -18,7 +14,7 @@ const KPIS: KpiDef[] = [
   { key: "waitingNow", label: "Waiting now" },
   { key: "consultationsCompleted", label: "Consultations" },
   { key: "treatmentDecisionsPending", label: "Treatment decisions" },
-  { key: "attributedRevenue", label: "Attributed revenue", format: formatInr },
+  { key: "attributedRevenue", label: "Attributed revenue", format: formatInrCompact },
 ];
 
 export function KpiStripSection({ data, onSegmentClick }: { data: TodayStrip; onSegmentClick?: (key: keyof TodayStrip) => void }) {

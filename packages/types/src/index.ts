@@ -787,4 +787,9 @@ export interface CampaignFilters {
   specialtyKey?: string;
   source?: SourceChannel;
   campaignId?: string;
+  // Inclusive ISO date range (YYYY-MM-DD), applied to the touchpoint's
+  // occurredAt — i.e. "leads attributed to this campaign in this window",
+  // not campaign start/end date.
+  dateFrom?: string;
+  dateTo?: string;
 }

@@ -53,6 +53,25 @@ describe.skipIf(!DEMO_PASSWORD)("campaigns / marketing efficiency (integration)"
     expect(rows.every((r) => r.source === "meta")).toBe(true);
   });
 
+  it("filters campaign performance by date range — a window in the far future excludes every seeded touchpoint", async () => {
+    const res = await app.inject({ method: "GET", url: "/campaigns/performance?dateFrom=2099-01-01&dateTo=2099-12-31", cookies: { pulseos_session: adminCookie } });
+    expect(res.statusCode).toBe(200);
+    const rows = res.json() as CampaignPerformanceRow[];
+    // Every row still appears (campaigns aren't filtered out), but none has
+    // any lead attributed inside this impossible window.
+    expect(rows.every((r) => r.leads === 0)).toBe(true);
+  });
+
+  it("a date range wide enough to cover all seed data returns the same totals as no date filter at all", async () => {
+    const unfiltered = await app.inject({ method: "GET", url: "/campaigns/performance", cookies: { pulseos_session: adminCookie } });
+    const filtered = await app.inject({ method: "GET", url: "/campaigns/performance?dateFrom=2020-01-01&dateTo=2099-12-31", cookies: { pulseos_session: adminCookie } });
+    const unfilteredRows = unfiltered.json() as CampaignPerformanceRow[];
+    const filteredRows = filtered.json() as CampaignPerformanceRow[];
+    const totalLeadsUnfiltered = unfilteredRows.reduce((sum, r) => sum + r.leads, 0);
+    const totalLeadsFiltered = filteredRows.reduce((sum, r) => sum + r.leads, 0);
+    expect(totalLeadsFiltered).toBe(totalLeadsUnfiltered);
+  });
+
   it("filters campaign performance by specialty — the seeded Cataract campaign's Ophthalmology leads are isolated from its other traffic", async () => {
     const res = await app.inject({ method: "GET", url: "/campaigns/performance?specialtyKey=OPHTHALMOLOGY", cookies: { pulseos_session: adminCookie } });
     expect(res.statusCode).toBe(200);

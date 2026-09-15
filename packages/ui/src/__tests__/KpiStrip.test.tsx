@@ -17,9 +17,14 @@ describe("KpiStripSection", () => {
     expect(screen.getByText("₹1.4L")).toBeTruthy();
   });
 
-  it("formats revenue as plain rupees below one lakh", () => {
+  it("formats revenue in compact thousands between 1,000 and one lakh", () => {
     render(<KpiStripSection data={{ ...DATA, attributedRevenue: 38000 }} />);
-    expect(screen.getByText("₹38,000")).toBeTruthy();
+    expect(screen.getByText("₹38.0K")).toBeTruthy();
+  });
+
+  it("formats revenue as plain whole rupees below 1,000 — never a 3-decimal value", () => {
+    render(<KpiStripSection data={{ ...DATA, attributedRevenue: 466.667 }} />);
+    expect(screen.getByText("₹467")).toBeTruthy();
   });
 
   it("calls onSegmentClick with the KPI key", () => {
