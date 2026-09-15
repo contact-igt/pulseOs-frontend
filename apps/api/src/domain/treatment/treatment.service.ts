@@ -1,6 +1,7 @@
 import { and, eq, or } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { appointments, journeys, patients, tasks, timelineEvents, treatmentOpportunities, users } from "../../db/schema.js";
+import { recordConversionFeedbackEvent } from "../acquisition/conversion-feedback.service.js";
 import type { TreatmentRow, TreatmentStatus } from "@pulseos/types";
 
 export interface TreatmentFilters {
@@ -167,6 +168,11 @@ export async function updateTreatmentStatus(
         notes: `Schedule review appointment for "${existing.treatmentLabel}"`,
       },
     ]);
+
+    // A completed treatment is the checkpoint-specified trigger point for
+    // conversion feedback — this only ever builds a candidate record
+    // (consent-gated, idempotent), never sends anything to a real provider.
+    await recordConversionFeedbackEvent(db, tenantId, existing.journeyId, "TREATMENT_COMPLETED", existing.estimatedValue, "INR");
   }
 
   return { ok: true };

@@ -60,6 +60,10 @@ export const patients = pgTable("patients", {
   phoneCountry: text("phone_country"),
   email: text("email"),
   preferredLanguage: text("preferred_language").notNull().default("English"),
+  // Conversion-feedback eligibility gate — defaults to true (a patient who
+  // messages/calls/submits a form has implicitly engaged), can be revoked.
+  // See acquisition/conversion-feedback.service.ts.
+  marketingConsent: boolean("marketing_consent").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   tenantIdx: index("patients_tenant_idx").on(t.tenantId),

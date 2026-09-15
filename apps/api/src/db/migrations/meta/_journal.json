@@ -71,6 +71,13 @@
       "when": 1789465298606,
       "tag": "0009_calm_ronan",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789469408107,
+      "tag": "0010_open_lady_bullseye",
+      "breakpoints": true
     }
   ]
 }
