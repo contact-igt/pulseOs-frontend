@@ -19,8 +19,8 @@ Back-navigation group, splits UI work by page cluster). A-E are unaffected
 | C | Phone normalization + connector-mode reconciliation | done | 35bafeb | 138/138 pass | self, browser-verified |
 | D | Unified acquisition ingestion | done | 70a8ce8 | 139/139 pass | self, browser-verified |
 | E | Full first/last-touch attribution reconciliation | done | 89ac3a6 | 142/142 pass | self, browser-verified |
-| F | Website / Meta / Google / GBP adapters ported | not started | — | — | — |
-| G | Campaign analytics + conversion feedback | not started | — | — | — |
+| F | Website / Meta / Google / GBP adapters ported | done | f5855f3 | 34/34 files, 202/202 pass | self, browser-verified |
+| G | Campaign analytics + conversion feedback + INR fix + date filter + Campaign Detail route | done | d77646e, dd31243, 8596ec0 | 12/12 campaigns.integration + 6/6 UI + full suite green | self, browser-verified |
 | H | Specialty Settings completion (reorder/required/options) | not started | — | — | — |
 | I | Action/button/dead-control audit | not started | — | — | — |
 | J | Shared table system unification | not started | — | — | — |
@@ -34,12 +34,69 @@ Back-navigation group, splits UI work by page cluster). A-E are unaffected
 
 ## Resume point for the next session
 
-Groups A, B, C, D, E are done and committed (`c0faf9b`, `12fbb38`, `99476fb`,
-`05067f7`, `35bafeb`, `06a13fa` [seed fix], `70a8ce8`, `89ac3a6`). Group K is
-started (`1bbff04`: the BackLink primitive, wired into Patient 360 and all 7
-of its entry points). Groups F, G, H, I, J, L, M, N, O, P, Q are **not
-started** — do not assume otherwise from anything outside this ledger +
-`git log` after a context compaction.
+Groups A, B, C, D, E, F, G are done and committed (`c0faf9b`, `12fbb38`,
+`99476fb`, `05067f7`, `35bafeb`, `06a13fa` [seed fix], `70a8ce8`, `89ac3a6`,
+`1bbff04` [Group K start], `f5855f3` [Group F], `d77646e` [Group G part 1:
+campaign sync/GBP sync/conversion feedback], `dd31243` [Group G part 2: INR
+compact formatting fix + campaign date filter], `8596ec0` [Group G part 3:
+Campaign Detail route]). Group K is started (BackLink primitive, wired into
+Patient 360 and all 7 of its entry points, plus now Campaign Detail →
+Patient 360 as an 8th). Groups H, I, J, L, M, N, O, P, Q are **not started**
+— do not assume otherwise from anything outside this ledger + `git log`
+after a context compaction.
+
+**What Group F actually built:** all 4 acquisition adapters
+(`website-form.service.ts`, `adapters/meta-lead-ads.ts`,
+`adapters/google-ads-lead-forms.ts`, `adapters/google-business-profile.ts`)
+funnel through the same `lead-ingestion.service.ts::ingestNormalizedLead` →
+`resolveOrCreatePatient` + `recordTouchpoint` path — no adapter duplicates
+identity/attribution logic. GBP only implements `syncPerformance` (no
+`patients`/`journeys` touch by construction — no FK column exists). Verified
+live: cross-provider multi-touch (Meta then Google on one journey → first
+touch stays Meta, last becomes Google), same-patient repeat-lead dedup,
+idempotent duplicate webhook delivery. Also fixed a real bug in passing:
+`whatsapp-meta-cloud.ts` was pinned to EOL Graph API `v23.0`; extracted a
+shared `meta-webhook.ts` used by both WhatsApp and Meta Lead Ads, now on
+`v25.0`.
+
+**What Group G actually built:**
+- `campaign-sync.service.ts` / `gbp-performance.service.ts` (adapter-agnostic
+  sync orchestration, reused verbatim from the acquisition branch) +
+  `POST /connectors/:id/sync-campaigns` / `sync-performance` routes.
+- `conversion-feedback.service.ts` — consent-gated (`patients.marketingConsent`,
+  checked *before* any write), idempotent per `journeyId:eventType`, wired
+  into `treatment.service.ts`'s COMPLETED-status branch so treatment
+  completion fires `TREATMENT_COMPLETED` with real attribution context.
+- Fixed a real seed.ts FK-ordering bug this session's own work exposed
+  (`conversionFeedbackEvents`/`gbpPerformanceMetrics` deletes were missing,
+  crashing `db:seed` once those tables had reachable rows).
+- Fixed the INR "₹46,666.667" bug: root cause was two local duplicate
+  formatters (`SpendAtRisk.tsx`'s `money()`, `KpiStrip.tsx`'s `formatInr()`),
+  not the shared `format.ts` (already correct). Added `formatInrCompact` as
+  the one shared compact-context formatter; both components + `treatments/page.tsx`
+  now use shared formatters, zero local duplicates.
+- Added `dateFrom`/`dateTo` to `CampaignFilters`, filtered on
+  `campaignTouchpoints.occurredAt` in `campaign.service.ts`, compact From/To
+  inputs on the Campaigns filter bar.
+- Built `/campaigns/[id]` (Campaign Detail): header + `MetricStrip` (reuses
+  `getCampaignPerformance` with a `campaignId` filter) + an
+  Attribution/Journeys table (reuses `listJourneys` with a `campaignId`
+  filter — no new backend domain). Added `connectorMode` to
+  `CampaignPerformanceRow` (same join pattern as `getSourcePerformance`) so
+  FIXTURE-mode campaigns never read as LIVE on this page or the Campaigns
+  list; exported the existing `ConnectorModeBadge` from
+  `SourcePerformanceTable` as the one shared badge instead of a per-page
+  duplicate. Campaigns list rows now link into the detail route via
+  `withFrom(..., "campaigns")`; detail page's journey rows link into Patient
+  360 via `withFrom(..., "campaigns")`; BackLink round-trips correctly
+  (verified live in browser).
+- **Known pre-existing issue, not caused by this session:** the Spend At
+  Risk panel's `SectionHeading` (title + subtitle inline) wraps awkwardly in
+  the Campaigns page's narrow right-column layout (`Spend At` / `Risk` split
+  across lines, crowding the subtitle). Confirmed live in browser 2026-09-15
+  during Group G verification. Not a regression from the `formatInrCompact`
+  change (only the number formatting inside that component changed) —
+  belongs to the deferred full visual-refinement pass, not this block.
 
 **What actually exists now that F/G build on:**
 - `domain/patient/identity.service.ts::resolveOrCreatePatient` — the one
@@ -57,42 +114,43 @@ started** — do not assume otherwise from anything outside this ledger +
   any newly-ported adapter should default new connectors to `FIXTURE` and
   never claim LIVE without real credentials.
 
-**Suggested next task: Group F (Website/Meta/Google/GBP adapters).** Port
-from `feature/acquisition-attribution-connectors`'s
-`domain/acquisition/adapters/` (`meta-lead-ads.ts`, `google-ads-lead-forms.ts`,
-`google-business-profile.ts`) and `website-form.service.ts` +
-`website-form.routes.ts`, adapting each to call `resolveOrCreatePatient` +
-`recordTouchpoint` instead of whatever that branch's now-superseded direct
-insert logic did. GBP explicitly must never touch `patients` (aggregate-only,
-already true on the source branch — preserve that rule). Then Group G
-(campaign analytics) becomes straightforward since the data these adapters
-produce is what makes richer Campaigns-page metrics meaningful.
+**Suggested next task: Group H (Specialty Settings completion).** Current
+inline Settings UI (`apps/web/app/(app)/settings/page.tsx`) already supports
+enable/disable specialty, add custom field, archive field. Backend
+(`specialtyTemplates`/`customFieldDefinitions` schema +
+`specialty.service.ts`) already has `sortOrder`/`required`/`archived`/
+`options` columns and `updateCustomField` already persists all of them — the
+service layer needs almost no work. Missing: UI for editing display label +
+default Journey type on `specialtyTemplates` (needs
+`UpdateSpecialtyInput`/`updateSpecialty` to accept `defaultJourneyType`, not
+just `displayName`/`enabled`); Required/Optional toggle on existing fields
+(currently read-only after creation); up/down reorder controls (swap two
+fields' `sortOrder` via existing single-field PATCH, no new endpoint needed);
+Select-type `options` editor (create-field form has no options input at
+all). `AddLeadDrawer.tsx` already fully honors `required`/`options`/order
+from the API with zero form-side changes needed. Do NOT create
+`/settings/specialties/[key]` — stay inline, per the standing scope
+decision.
 
-**Group K remaining:** Campaign drilldown and Settings/specialty-editor
-detail screens don't have dedicated routes yet on this branch (Campaigns is
-a single page with inline table, Settings is a single page with inline
-expand/collapse per specialty — no `/campaigns/[id]` or
-`/settings/specialties/[key]` route exists), so there's no page header to
-attach a Back control to yet. Whether Group K or Group N should introduce
-those dedicated routes (vs. keeping the current inline-expand pattern and
-deciding Back doesn't apply there) is a real product decision, not
-mechanical work — flag it to the Brain rather than deciding unilaterally.
+**Group K status:** BackLink now has 8 wired entry points (Patient 360's 7
++ Campaign Detail → Patient 360, added in Group G). Campaign Detail itself
+now exists (`/campaigns/[id]`, built in Group G) with its own BackLink to
+`/campaigns`. Settings/specialty-editor still has no dedicated detail route
+(deliberately, per the standing "no `/settings/specialties/[key]` yet"
+decision) — Back does not apply there by design, not by omission.
 
-**Known issue for Group M (not fixed, out of scope for A-C):** Command
-Centre's "Spend At Risk" panel renders amounts with 3 decimal places
-(`₹41,333.333` instead of `₹41,333`) — a pre-existing display-formatting
-defect, confirmed still present live in the browser during Group C's
-verification pass. Same root cause the original audit found on the
-Campaigns page.
+**Group M's INR 3-decimal issue is now FIXED (done in Group G, not held for
+Group M).** Root cause: two local duplicate formatters
+(`SpendAtRisk.tsx`'s `money()`, `KpiStrip.tsx`'s `formatInr()`), not the
+shared `format.ts`. Fixed via new shared `formatInrCompact`; see Group G
+section above for detail. Verified live: Campaigns page now shows
+`₹1,56,000`/`₹75,000` etc., never a 3-decimal value.
 
-**Known scope boundary for Group G:** the Campaigns page
-(`apps/web/app/(app)/campaigns/page.tsx`) queries through
-`campaign.service.ts`'s own `campaignPerformance`, a separate path from
-`dashboard.service.ts::getSourcePerformance` (which Group C's connector-mode
-badge was wired into, via `SourcePerformanceTable`, used by Command Centre).
-The Campaigns page does not yet show connector-mode badges — deliberately
-left for Group G rather than expanding Group C's diff into a second,
-parallel backend path.
+**Group G's connector-mode scope gap is now closed.** The Campaigns page
+now shows `ConnectorModeBadge` (same shared component `dashboard.service.ts`
+uses for Command Centre) on both the Campaigns list and Campaign Detail —
+`campaign.service.ts::getCampaignPerformance` now joins `connectors.mode`
+the same way `getSourcePerformance` does.
 
 ## Rulings
 
