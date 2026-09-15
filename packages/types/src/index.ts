@@ -100,14 +100,6 @@ export interface JourneyHealth {
   overallPct: number;
 }
 
-export interface JourneyPerformancePoint {
-  date: string;
-  enquiries: number;
-  appointments: number;
-  consultations: number;
-  treatments: number;
-}
-
 export type ConversionStageKey =
   | "enquiry"
   | "contacted"

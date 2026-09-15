@@ -54,7 +54,7 @@ test.describe("Master visual reconstruction loop — required screenshot set", (
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/command-centre");
     await expect(page.getByTestId("command-centre")).toBeVisible();
-    await page.getByTestId("journey-performance-chart").screenshot({ path: path.join(ARTIFACTS_DIR, "25-journey-performance.png") });
+    await page.getByTestId("journey-funnel").screenshot({ path: path.join(ARTIFACTS_DIR, "25-journey-performance.png") });
     await page.getByTestId("journey-health-radial").screenshot({ path: path.join(ARTIFACTS_DIR, "24-journey-health.png") });
 
     // 07 — Doctor Home

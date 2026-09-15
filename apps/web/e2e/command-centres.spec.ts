@@ -38,8 +38,8 @@ test.describe("Admin Command Centre", () => {
     consoleErrors.length = 0;
 
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "01-admin-command-centre-desktop.png"), fullPage: true });
-    await page.getByTestId("journey-performance-chart").scrollIntoViewIfNeeded();
-    await page.getByTestId("journey-performance-chart").screenshot({ path: path.join(ARTIFACTS_DIR, "05-admin-primary-analytics.png") });
+    await page.getByTestId("journey-funnel").scrollIntoViewIfNeeded();
+    await page.getByTestId("journey-funnel").screenshot({ path: path.join(ARTIFACTS_DIR, "05-admin-primary-analytics.png") });
     await page.getByTestId("journey-health-radial").screenshot({ path: path.join(ARTIFACTS_DIR, "06-journey-health-radial.png") });
 
     await page.setViewportSize({ width: 768, height: 1024 });

@@ -23,4 +23,41 @@ describe("SegmentedRadial", () => {
     fireEvent.click(screen.getByTestId("radial-segment-booked"));
     expect(onSegmentClick).toHaveBeenCalledWith("booked");
   });
+
+  it("centers the two-line label block geometrically on the ring's actual center — no arbitrary per-pixel offsets", () => {
+    const { container } = render(<SegmentedRadial title="Journey Health" segments={SEGMENTS} centerLabel="Journey Conversion" centerValue="26%" />);
+    const svg = container.querySelector("svg")!;
+    const viewBoxWidth = Number(svg.getAttribute("viewBox")!.split(" ")[2]);
+    const geometricCenter = viewBoxWidth / 2;
+
+    const circles = Array.from(container.querySelectorAll("circle"));
+    for (const circle of circles) {
+      expect(Number(circle.getAttribute("cx"))).toBe(geometricCenter);
+      expect(Number(circle.getAttribute("cy"))).toBe(geometricCenter);
+    }
+
+    const texts = Array.from(container.querySelectorAll("text"));
+    expect(texts).toHaveLength(2);
+    for (const text of texts) {
+      expect(Number(text.getAttribute("x"))).toBe(geometricCenter);
+      expect(text.getAttribute("text-anchor")).toBe("middle");
+      expect(text.getAttribute("dominant-baseline")).toBe("central");
+    }
+    // The value line sits above center, the label line below. Each line's y
+    // is its own true visual center (dominant-baseline="central" asserted
+    // above), so the correct centering invariant is that the block's outer
+    // edges — top of the value line, bottom of the label line — sit
+    // equidistant from the ring's center, not that the two differently-sized
+    // lines' y-coordinates naively average to it.
+    const [valueText, labelText] = texts;
+    const valueY = Number(valueText.getAttribute("y"));
+    const labelY = Number(labelText.getAttribute("y"));
+    const valueFontSize = Number(getComputedStyle(valueText).fontSize.replace("px", "")) || 26;
+    const labelFontSize = Number(getComputedStyle(labelText).fontSize.replace("px", "")) || 11;
+    expect(valueY).toBeLessThan(geometricCenter);
+    expect(labelY).toBeGreaterThan(geometricCenter);
+    const topEdge = valueY - valueFontSize / 2;
+    const bottomEdge = labelY + labelFontSize / 2;
+    expect(geometricCenter - topEdge).toBeCloseTo(bottomEdge - geometricCenter, 1);
+  });
 });

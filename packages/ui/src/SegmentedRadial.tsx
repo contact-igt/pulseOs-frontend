@@ -31,11 +31,30 @@ export function SegmentedRadial({
   const gap = 3;
   const outerRadius = 92;
 
+  // Center label geometry, computed rather than eyeballed: two SVG text
+  // lines (value + label), each vertically centered on its own baseline via
+  // dominant-baseline="central", stacked and centered as a block around the
+  // ring's true (cx, cy). No magic per-pixel y offsets to retune by eye.
+  const valueFontSize = 26;
+  const labelFontSize = 11;
+  const lineGap = 4;
+  const blockHeight = valueFontSize + lineGap + labelFontSize;
+  const valueY = center - blockHeight / 2 + valueFontSize / 2;
+  const labelY = center - blockHeight / 2 + valueFontSize + lineGap + labelFontSize / 2;
+
   return (
     <Card className="p-4" data-testid={testId}>
       <SectionHeading title={title} subtitle={subtitle} />
-      <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start sm:gap-6">
-        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0" role="img" aria-label={`${centerLabel}: ${centerValue}`}>
+      <div className="flex min-w-0 flex-col items-center gap-4 sm:flex-row sm:items-start sm:gap-6">
+        {/* CSS controls the rendered box (aspect-square + a max-width cap,
+            allowed to shrink below that in a tight flex row); viewBox stays
+            fixed at the original 220-unit coordinate system so every radius/
+            text-position computed above keeps working unchanged — the SVG
+            just scales its whole content to fit, same technique as a
+            responsive <img>. This is what actually avoids collision at
+            1024px, where a hardcoded 220px box didn't leave the legend any
+            room at all. */}
+        <svg viewBox={`0 0 ${size} ${size}`} className="aspect-square w-full max-w-[170px] shrink" role="img" aria-label={`${centerLabel}: ${centerValue}`}>
           {segments.map((seg, idx) => {
             const radius = outerRadius - idx * (strokeWidth + gap);
             const circumference = 2 * Math.PI * radius;
@@ -59,15 +78,15 @@ export function SegmentedRadial({
               </g>
             );
           })}
-          <text x={center} y={center - 6} textAnchor="middle" className="fill-slate-900 text-[26px] font-semibold" style={{ fontSize: 26, fontWeight: 600 }}>
+          <text x={center} y={valueY} textAnchor="middle" dominantBaseline="central" className="fill-slate-900 font-semibold" style={{ fontSize: valueFontSize, fontWeight: 600 }}>
             {centerValue}
           </text>
-          <text x={center} y={center + 16} textAnchor="middle" style={{ fontSize: 10.5, fill: "var(--color-neutral-500)" }}>
+          <text x={center} y={labelY} textAnchor="middle" dominantBaseline="central" style={{ fontSize: labelFontSize, fill: "var(--color-neutral-500)" }}>
             {centerLabel}
           </text>
         </svg>
 
-        <ul className="w-full space-y-1.5">
+        <ul className="min-w-[140px] flex-1 space-y-1.5">
           {segments.map((seg) => (
             <li key={seg.key}>
               <button

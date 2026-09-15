@@ -23,7 +23,6 @@ import type {
   ExecutiveStrip,
   JourneyHealth,
   JourneyHealthKey,
-  JourneyPerformancePoint,
   MarketingSourceRow,
   PatientFlowCount,
   SourcePerformanceRow,
@@ -187,66 +186,6 @@ export async function getJourneyHealth(db: Db, tenantId: string, filters: Dashbo
   return { segments, totalJourneys, overallPct };
 }
 
-export async function getJourneyPerformanceSeries(
-  db: Db,
-  tenantId: string,
-  days: number,
-  filters: DashboardFilters = {},
-): Promise<JourneyPerformancePoint[]> {
-  const end = new Date();
-  end.setHours(0, 0, 0, 0);
-  end.setDate(end.getDate() + 1);
-  const start = new Date(end);
-  start.setDate(start.getDate() - days);
-
-  const branchClause = filters.branchId ? eq(patients.branchId, filters.branchId) : undefined;
-  const apptBranchClause = filters.branchId ? eq(appointments.branchId, filters.branchId) : undefined;
-  const journeyTypeClause = filters.journeyType ? eq(journeys.journeyType, filters.journeyType) : undefined;
-
-  const enquiryRows = await db
-    .select({ day: sql<string>`date_trunc('day', ${journeys.createdAt})::date`, c: count() })
-    .from(journeys)
-    .innerJoin(patients, eq(journeys.patientId, patients.id))
-    .where(and(eq(journeys.tenantId, tenantId), gte(journeys.createdAt, start), lt(journeys.createdAt, end), branchClause, journeyTypeClause))
-    .groupBy(sql`date_trunc('day', ${journeys.createdAt})::date`);
-
-  const apptRows = await db
-    .select({ day: sql<string>`date_trunc('day', ${appointments.scheduledAt})::date`, c: count() })
-    .from(appointments)
-    .where(and(eq(appointments.tenantId, tenantId), gte(appointments.scheduledAt, start), lt(appointments.scheduledAt, end), apptBranchClause))
-    .groupBy(sql`date_trunc('day', ${appointments.scheduledAt})::date`);
-
-  const consultRows = await db
-    .select({ day: sql<string>`date_trunc('day', ${appointments.scheduledAt})::date`, c: count() })
-    .from(appointments)
-    .where(and(eq(appointments.tenantId, tenantId), eq(appointments.status, "completed"), gte(appointments.scheduledAt, start), lt(appointments.scheduledAt, end), apptBranchClause))
-    .groupBy(sql`date_trunc('day', ${appointments.scheduledAt})::date`);
-
-  const treatmentRows = await db
-    .select({ day: sql<string>`date_trunc('day', ${treatmentOpportunities.createdAt})::date`, c: count() })
-    .from(treatmentOpportunities)
-    .where(and(eq(treatmentOpportunities.tenantId, tenantId), gte(treatmentOpportunities.createdAt, start), lt(treatmentOpportunities.createdAt, end)))
-    .groupBy(sql`date_trunc('day', ${treatmentOpportunities.createdAt})::date`);
-
-  const toMap = (rows: { day: string; c: number }[]) => new Map(rows.map((r) => [new Date(r.day).toISOString().slice(0, 10), r.c]));
-  const enquiryMap = toMap(enquiryRows);
-  const apptMap = toMap(apptRows);
-  const consultMap = toMap(consultRows);
-  const treatmentMap = toMap(treatmentRows);
-
-  const points: JourneyPerformancePoint[] = [];
-  for (let d = new Date(start); d < end; d.setDate(d.getDate() + 1)) {
-    const key = d.toISOString().slice(0, 10);
-    points.push({
-      date: key,
-      enquiries: enquiryMap.get(key) ?? 0,
-      appointments: apptMap.get(key) ?? 0,
-      consultations: consultMap.get(key) ?? 0,
-      treatments: treatmentMap.get(key) ?? 0,
-    });
-  }
-  return points;
-}
 
 export async function getPatientFlow(db: Db, tenantId: string, filters: DashboardFilters = {}): Promise<PatientFlowCount[]> {
   const apptBranchClause = filters.branchId ? eq(appointments.branchId, filters.branchId) : undefined;

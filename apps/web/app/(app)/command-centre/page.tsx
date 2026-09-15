@@ -7,8 +7,8 @@ import { api } from "@pulseos/api-client";
 import {
   AttentionQueue,
   ErrorState,
+  JourneyFunnel,
   JourneyHealthRadial,
-  JourneyPerformanceChart,
   KpiStripSection,
   PatientFlowBoard,
   Skeleton,
@@ -18,18 +18,10 @@ import {
 } from "@pulseos/ui";
 import { withFrom } from "@/components/shell/BackLink";
 
-const RANGE_OPTIONS = [
-  { label: "Today", days: 1 },
-  { label: "Week", days: 7 },
-  { label: "Month", days: 30 },
-  { label: "Custom", days: 90 },
-];
-
 export default function CommandCentrePage() {
   const router = useRouter();
   const [branchId, setBranchId] = useState<string>("");
   const [journeyType, setJourneyType] = useState<string>("");
-  const [rangeDays, setRangeDays] = useState(7);
 
   const filters = { branchId: branchId || undefined, journeyType: journeyType || undefined };
 
@@ -38,10 +30,6 @@ export default function CommandCentrePage() {
 
   const today = useQuery({ queryKey: ["dashboard", "today", filters], queryFn: () => api.today(filters) });
   const journeyHealth = useQuery({ queryKey: ["dashboard", "journey-health", filters], queryFn: () => api.journeyHealth(filters) });
-  const performance = useQuery({
-    queryKey: ["dashboard", "journey-performance", rangeDays, filters],
-    queryFn: () => api.journeyPerformance(rangeDays, filters),
-  });
   const patientFlow = useQuery({ queryKey: ["dashboard", "patient-flow", filters], queryFn: () => api.patientFlow(filters) });
   const attention = useQuery({ queryKey: ["dashboard", "attention", filters], queryFn: () => api.attention(filters) });
   const spendAtRisk = useQuery({ queryKey: ["dashboard", "spend-at-risk-by-reason"], queryFn: () => api.spendAtRiskByReason() });
@@ -52,22 +40,6 @@ export default function CommandCentrePage() {
   return (
     <div className="mx-auto max-w-7xl space-y-5" data-testid="command-centre">
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-neutral-200 bg-white p-2" data-testid="filter-bar">
-        <div className="flex gap-0.5 rounded border border-neutral-200 p-0.5">
-          {RANGE_OPTIONS.map((opt) => (
-            <button
-              key={opt.label}
-              type="button"
-              onClick={() => setRangeDays(opt.days)}
-              className={`rounded px-2.5 py-1 text-xs font-medium transition ${
-                rangeDays === opt.days ? "bg-primary-50 text-primary-700" : "text-neutral-500 hover:bg-neutral-100"
-              }`}
-              data-testid={`range-${opt.label.toLowerCase()}`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-
         <select
           value={branchId}
           onChange={(e) => setBranchId(e.target.value)}
@@ -103,13 +75,21 @@ export default function CommandCentrePage() {
         {today.data && <KpiStripSection data={today.data} onSegmentClick={(key) => router.push(`/patients?filter=${String(key)}`)} />}
       </section>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.9fr_1fr]">
-        {performance.isLoading ? (
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.5fr_1fr]">
+        {journeyHealth.isLoading ? (
           <Skeleton className="h-80" />
-        ) : performance.isError ? (
+        ) : journeyHealth.isError ? (
           <ErrorState message="Could not load journey performance." />
         ) : (
-          performance.data && <JourneyPerformanceChart data={performance.data} windowDays={rangeDays} />
+          journeyHealth.data && (
+            <JourneyFunnel
+              stages={[
+                { key: "enquiry", label: "Enquiries", count: journeyHealth.data.totalJourneys },
+                ...journeyHealth.data.segments.map((s) => ({ key: s.key, label: s.label, count: s.count })),
+              ]}
+              onStageClick={(key) => router.push(key === "enquiry" ? "/journeys" : `/journeys?stage=${key}`)}
+            />
+          )
         )}
         {journeyHealth.isLoading ? (
           <Skeleton className="h-80" />

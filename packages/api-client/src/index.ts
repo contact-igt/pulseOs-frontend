@@ -27,7 +27,6 @@ import type {
   ExecutiveStrip,
   JourneyHealth,
   JourneyListRow,
-  JourneyPerformancePoint,
   JourneysSummary,
   LeadPhoneLookupResult,
   LeadRow,
@@ -130,8 +129,6 @@ export const api = {
   executive: () => request<ExecutiveStrip>("/dashboard/executive"),
   conversion: (f: DashboardQuery = {}) => request<ConversionStage[]>(`/dashboard/conversion${qs(f)}`),
   journeyHealth: (f: DashboardQuery = {}) => request<JourneyHealth>(`/dashboard/journey-health${qs(f)}`),
-  journeyPerformance: (days: number, f: DashboardQuery = {}) =>
-    request<JourneyPerformancePoint[]>(`/dashboard/journey-performance${qs({ ...f, days: String(days) })}`),
   patientFlow: (f: DashboardQuery = {}) => request<PatientFlowCount[]>(`/dashboard/patient-flow${qs(f)}`),
   attention: (f: DashboardQuery = {}) => request<AttentionItem[]>(`/dashboard/attention${qs(f)}`),
   spendAtRisk: () => request<SpendAtRiskSummary>("/dashboard/spend-at-risk"),

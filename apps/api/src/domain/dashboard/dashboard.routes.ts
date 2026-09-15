@@ -6,7 +6,6 @@ import {
   getConversionFunnel,
   getExecutiveStrip,
   getJourneyHealth,
-  getJourneyPerformanceSeries,
   getMarketingSources,
   getPatientFlow,
   getSourcePerformance,
@@ -57,13 +56,6 @@ export async function dashboardRoutes(app: FastifyInstance) {
   app.get("/dashboard/journey-health", async (request) => {
     const tenantId = request.sessionUser!.tenantId;
     return getJourneyHealth(app.db, tenantId, dashboardFilters(request));
-  });
-
-  app.get("/dashboard/journey-performance", async (request) => {
-    const tenantId = request.sessionUser!.tenantId;
-    const query = request.query as { days?: string };
-    const days = query.days ? Math.min(Math.max(Number(query.days) || 14, 1), 90) : 14;
-    return getJourneyPerformanceSeries(app.db, tenantId, days, dashboardFilters(request));
   });
 
   app.get("/dashboard/patient-flow", async (request) => {

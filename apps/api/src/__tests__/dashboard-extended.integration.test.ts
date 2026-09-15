@@ -50,16 +50,6 @@ describe.skipIf(!DEMO_PASSWORD)("extended dashboard aggregations (integration)",
     expect(body.overallPct).toBeLessThanOrEqual(100);
   });
 
-  it("journey performance series returns one point per day for the requested window", async () => {
-    const res = await app.inject({ method: "GET", url: "/dashboard/journey-performance?days=14", cookies: { pulseos_session: cookie } });
-    expect(res.statusCode).toBe(200);
-    const body = res.json() as { date: string; enquiries: number }[];
-    expect(body).toHaveLength(14);
-    for (const point of body) {
-      expect(point.enquiries).toBeGreaterThanOrEqual(0);
-    }
-  });
-
   it("marketing sources include spend and roas derived from campaign spend", async () => {
     const res = await app.inject({ method: "GET", url: "/dashboard/marketing", cookies: { pulseos_session: cookie } });
     expect(res.statusCode).toBe(200);

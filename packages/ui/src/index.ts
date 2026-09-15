@@ -5,7 +5,7 @@ export * from "./KpiStrip";
 export * from "./ExecutiveStripSection";
 export * from "./SegmentedRadial";
 export * from "./JourneyHealthRadial";
-export * from "./JourneyPerformanceChart";
+export * from "./JourneyFunnel";
 export * from "./PatientFlowBoard";
 export * from "./AttentionQueue";
 export * from "./AppointmentList";
