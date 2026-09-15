@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { AppointmentAction, AppointmentRow, AppointmentStatus } from "@pulseos/types";
 import { Badge } from "./primitives";
 import type { TimelineEventVm } from "./Timeline";
+import { useDialogFocus } from "./useDialogFocus";
 
 const STATUS_LABEL: Record<AppointmentStatus, string> = {
   requested: "Requested",
@@ -74,13 +75,7 @@ export function AppointmentDrawer({
     setNewDateTime("");
   }, [appointment?.id]);
 
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    if (appointment) document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [appointment, onClose]);
+  const dialogRef = useDialogFocus<HTMLDivElement>(!!appointment, onClose);
 
   if (!appointment) return null;
   const row = appointment;
@@ -92,9 +87,14 @@ export function AppointmentDrawer({
         type="button"
         aria-label="Close"
         onClick={onClose}
-        className="absolute inset-0 bg-slate-900/30 transition-opacity duration-200"
+        className="absolute inset-0 bg-slate-900/30 transition-opacity duration-200 motion-reduce:transition-none"
       />
-      <div className="relative flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-neutral-200 bg-white shadow-xl transition-transform duration-200" data-testid="appointment-drawer">
+      <div
+        ref={dialogRef}
+        tabIndex={-1}
+        className="relative flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-neutral-200 bg-white shadow-xl transition-transform duration-200 motion-reduce:transition-none focus:outline-none"
+        data-testid="appointment-drawer"
+      >
         {/* Header */}
         <div className="border-b border-neutral-100 p-5">
           <div className="flex items-start justify-between gap-2">
@@ -102,7 +102,7 @@ export function AppointmentDrawer({
               <h2 className="truncate text-lg font-semibold text-slate-900">{row.patientName}</h2>
               <p className="mt-0.5 truncate text-xs text-neutral-500">{row.reason ?? "Consultation"}</p>
             </div>
-            <button type="button" onClick={onClose} className="rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-slate-900" data-testid="appointment-drawer-close">
+            <button type="button" onClick={onClose} aria-label="Close appointment details" className="rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-slate-900" data-testid="appointment-drawer-close">
               ✕
             </button>
           </div>

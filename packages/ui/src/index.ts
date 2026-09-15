@@ -24,3 +24,4 @@ export * from "./SpendAtRisk";
 export * from "./DoctorComponents";
 export * from "./OutcomeActionList";
 export * from "./Timeline";
+export * from "./useDialogFocus";

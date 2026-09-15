@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
 import { useRouter } from "next/navigation";
-import { Badge, EmptyState, ErrorState, SectionHeading, Skeleton } from "@pulseos/ui";
+import { Badge, EmptyState, ErrorState, SectionHeading, Skeleton, useDialogFocus } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import { withFrom } from "@/components/shell/BackLink";
 import type { ConversationChannel, ConversationDetail, OwnershipState } from "@pulseos/types";
@@ -97,14 +97,7 @@ export default function InboxPage() {
     setMobileView("thread");
   }
 
-  useEffect(() => {
-    if (!contextOpen) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setContextOpen(false);
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [contextOpen]);
+  const contextDialogRef = useDialogFocus<HTMLDivElement>(contextOpen, () => setContextOpen(false));
 
   function refreshAfterAction() {
     queryClient.invalidateQueries({ queryKey: ["conversations"] });
@@ -354,11 +347,15 @@ export default function InboxPage() {
       {/* Same content as a slide-over drawer everywhere narrower than 2xl. */}
       {contextOpen && (
         <div className="fixed inset-0 z-40 flex justify-end 2xl:hidden" role="dialog" aria-modal="true" aria-label="Patient context">
-          <button type="button" aria-label="Close" onClick={() => setContextOpen(false)} className="absolute inset-0 bg-slate-900/30 transition-opacity duration-200" />
-          <div className="relative flex h-full w-full max-w-xs flex-col overflow-y-auto border-l border-neutral-200 bg-white p-3 shadow-xl transition-transform duration-200">
+          <button type="button" aria-label="Close" onClick={() => setContextOpen(false)} className="absolute inset-0 bg-slate-900/30 transition-opacity duration-200 motion-reduce:transition-none" />
+          <div
+            ref={contextDialogRef}
+            tabIndex={-1}
+            className="relative flex h-full w-full max-w-xs flex-col overflow-y-auto border-l border-neutral-200 bg-white p-3 shadow-xl transition-transform duration-200 motion-reduce:transition-none focus:outline-none"
+          >
             <div className="mb-1 flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-wide text-neutral-400">Patient context</span>
-              <button type="button" onClick={() => setContextOpen(false)} className="rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-slate-900" data-testid="close-patient-context">
+              <button type="button" onClick={() => setContextOpen(false)} aria-label="Close patient context" className="rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-slate-900" data-testid="close-patient-context">
                 <X size={16} />
               </button>
             </div>
