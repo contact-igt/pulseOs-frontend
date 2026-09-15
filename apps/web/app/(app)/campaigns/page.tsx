@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
-import { Card, EmptyState, ErrorState, MetricStrip, SectionHeading, Skeleton, SpendAtRisk, formatInr, formatMoneyOrDash, formatRoas } from "@pulseos/ui";
+import { Card, ConnectorModeBadge, EmptyState, ErrorState, MetricStrip, SectionHeading, Skeleton, SpendAtRisk, formatInr, formatMoneyOrDash, formatRoas } from "@pulseos/ui";
 import type { CampaignFilters, SourceChannel } from "@pulseos/types";
+import { withFrom } from "@/components/shell/BackLink";
 
 const SOURCE_OPTIONS: SourceChannel[] = ["meta", "google", "website", "whatsapp", "phone", "walk_in", "referral", "organic", "other"];
 
@@ -140,7 +142,16 @@ export default function CampaignsPage() {
                   <tr key={row.campaignId ?? row.campaignName} className="hover:bg-neutral-50" data-testid={`campaign-row-${row.campaignId ?? row.campaignName}`}>
                     <td className="py-1.5 pr-2 text-neutral-600">{row.source}</td>
                     <td className="py-1.5 pr-2 text-slate-900">
-                      {row.campaignName}
+                      <span className="flex items-center gap-1.5">
+                        {row.campaignId ? (
+                          <Link href={withFrom(`/campaigns/${row.campaignId}`, "campaigns")} className="font-medium text-primary-700 hover:underline">
+                            {row.campaignName}
+                          </Link>
+                        ) : (
+                          row.campaignName
+                        )}
+                        <ConnectorModeBadge mode={row.connectorMode} />
+                      </span>
                       {row.specialtyLabel && <span className="block text-[11px] text-neutral-400">{row.specialtyLabel}</span>}
                     </td>
                     <td className="py-1.5 pr-2 text-right tabular-nums">{formatInr(row.spend)}</td>

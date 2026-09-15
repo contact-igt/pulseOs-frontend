@@ -46,6 +46,38 @@ describe.skipIf(!DEMO_PASSWORD)("campaigns / marketing efficiency (integration)"
     }
   });
 
+  it("a manually-seeded campaign (never synced from a provider) reports connectorMode: null — never implies real synced spend", async () => {
+    const res = await app.inject({ method: "GET", url: "/campaigns/performance", cookies: { pulseos_session: adminCookie } });
+    const rows = res.json() as CampaignPerformanceRow[];
+    const cataract = rows.find((r) => r.campaignName === "Meta – Cataract Awareness");
+    expect(cataract).toBeDefined();
+    expect(cataract!.connectorMode).toBeNull();
+  });
+
+  it("a single campaign fetched by campaignId filter returns exactly that one row, for the Campaign Detail page header", async () => {
+    const all = await app.inject({ method: "GET", url: "/campaigns/performance", cookies: { pulseos_session: adminCookie } });
+    const allRows = all.json() as CampaignPerformanceRow[];
+    const target = allRows.find((r) => r.campaignName === "Meta – Cataract Awareness")!;
+    const res = await app.inject({ method: "GET", url: `/campaigns/performance?campaignId=${target.campaignId}`, cookies: { pulseos_session: adminCookie } });
+    expect(res.statusCode).toBe(200);
+    const rows = res.json() as CampaignPerformanceRow[];
+    expect(rows.length).toBe(1);
+    expect(rows[0].campaignId).toBe(target.campaignId);
+  });
+
+  it("Campaign Detail's Attribution/Journey list — /journeys?campaignId returns exactly the journeys counted as leads for that campaign, each linkable to Patient 360", async () => {
+    const all = await app.inject({ method: "GET", url: "/campaigns/performance", cookies: { pulseos_session: adminCookie } });
+    const target = (all.json() as CampaignPerformanceRow[]).find((r) => r.campaignName === "Meta – Cataract Awareness")!;
+    const res = await app.inject({ method: "GET", url: `/journeys?campaignId=${target.campaignId}`, cookies: { pulseos_session: adminCookie } });
+    expect(res.statusCode).toBe(200);
+    const rows = res.json() as { id: string; patientId: string; campaignName: string | null }[];
+    expect(rows.length).toBe(target.leads);
+    for (const row of rows) {
+      expect(row.patientId).toBeTruthy();
+      expect(row.campaignName).toBe("Meta – Cataract Awareness");
+    }
+  });
+
   it("filters campaign performance by source", async () => {
     const res = await app.inject({ method: "GET", url: "/campaigns/performance?source=meta", cookies: { pulseos_session: adminCookie } });
     const rows = res.json() as CampaignPerformanceRow[];

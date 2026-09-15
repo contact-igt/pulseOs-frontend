@@ -767,6 +767,10 @@ export interface CampaignPerformanceRow {
   costPerAppointment: number | null;
   costPerTreatment: number | null;
   roas: number | null;
+  // A synced campaign's numbers are only as real as the connector that
+  // produced them — null for a manually-created campaign that was never
+  // synced from a provider (the question doesn't apply). See SourcePerformanceRow.
+  connectorMode: ConnectorMode | null;
 }
 
 export interface MarketingEfficiencySummary {

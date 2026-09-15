@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { SourcePerformanceRow } from "@pulseos/types";
+import type { ConnectorMode, SourcePerformanceRow } from "@pulseos/types";
 import { Badge, Card, SectionHeading } from "./primitives";
 import { formatInr, formatMoneyOrDash, formatRoas } from "./format";
 
@@ -9,10 +9,12 @@ type SortKey = "spend" | "enquiries" | "treatments" | "revenue" | "roas";
 
 // A synced campaign's spend/performance numbers are only as real as the
 // connector that produced them — a FIXTURE-mode campaign must never read as
-// equivalent to a LIVE one anywhere this table is used (Command Centre,
-// Campaigns/Sources). No badge at all for a manually-created campaign with
-// no connectorMode (never synced, so the question doesn't apply).
-function ConnectorModeBadge({ mode }: { mode: SourcePerformanceRow["connectorMode"] }) {
+// equivalent to a LIVE one anywhere it's shown (Command Centre,
+// Campaigns/Sources, Campaign Detail). No badge at all for a
+// manually-created campaign with no connectorMode (never synced, so the
+// question doesn't apply). Exported — the ONE shared badge, never re-derived
+// locally per page.
+export function ConnectorModeBadge({ mode }: { mode: ConnectorMode | null }) {
   if (!mode || mode === "LIVE") return null;
   return <Badge tone={mode === "SANDBOX" ? "warning" : "neutral"}>{mode === "SANDBOX" ? "Sandbox" : "Fixture"}</Badge>;
 }

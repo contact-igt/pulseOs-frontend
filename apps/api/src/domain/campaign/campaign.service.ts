@@ -3,6 +3,7 @@ import type { Db } from "../../db/client.js";
 import {
   appointments,
   campaignTouchpoints,
+  connectors,
   consultationOutcomes,
   journeys,
   marketingCampaigns,
@@ -26,9 +27,16 @@ export async function getCampaignPerformance(db: Db, tenantId: string, filters: 
   const specialties = await db.select({ key: specialtyTemplates.key, displayName: specialtyTemplates.displayName }).from(specialtyTemplates).where(eq(specialtyTemplates.tenantId, tenantId));
   const specialtyLabelByKey = new Map(specialties.map((s) => [s.key, s.displayName]));
 
+  // A synced campaign's numbers are only as real as the connector that
+  // produced them — one lookup up front, same pattern as getSourcePerformance.
+  const connectorModeById = new Map(
+    (await db.select({ id: connectors.id, mode: connectors.mode }).from(connectors).where(eq(connectors.tenantId, tenantId))).map((c) => [c.id, c.mode]),
+  );
+
   const rows: CampaignPerformanceRow[] = [];
 
   for (const campaign of campaigns) {
+    const connectorMode = campaign.connectorId ? (connectorModeById.get(campaign.connectorId) ?? null) : null;
     const touchpointRows = await db
       .select({ journeyId: campaignTouchpoints.journeyId })
       .from(campaignTouchpoints)
@@ -81,6 +89,7 @@ export async function getCampaignPerformance(db: Db, tenantId: string, filters: 
         costPerAppointment: null,
         costPerTreatment: null,
         roas: null,
+        connectorMode,
       });
       continue;
     }
@@ -113,6 +122,7 @@ export async function getCampaignPerformance(db: Db, tenantId: string, filters: 
       costPerAppointment: costPer(campaign.spendAmount, apptCount),
       costPerTreatment: costPer(campaign.spendAmount, treatmentCompleted),
       roas: roasOf(revenue, campaign.spendAmount),
+      connectorMode,
     });
   }
 
