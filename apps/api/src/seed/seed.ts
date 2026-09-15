@@ -29,6 +29,7 @@ import {
 } from "../db/schema.js";
 import { hashPassword } from "../domain/auth/auth.service.js";
 import { encryptSecret } from "../domain/security/encryption.js";
+import { normalizePhone } from "../domain/patient/phone.js";
 import { ensureDefaultSpecialties } from "../domain/specialty/specialty.service.js";
 import { createLead } from "../domain/lead/lead.service.js";
 
@@ -453,13 +454,23 @@ async function main() {
   const patientRows = await db
     .insert(patients)
     .values(
-      patientNames.map((name, i) => ({
-        tenantId: tenant.id,
-        branchId: i % 2 === 0 ? branchA.id : branchB.id,
-        name,
-        phone: `9${(800000000 + i * 137).toString().slice(0, 9)}`,
-        preferredLanguage: i % 3 === 0 ? "Kannada" : i % 3 === 1 ? "Hindi" : "English",
-      })),
+      patientNames.map((name, i) => {
+        const phone = `9${(800000000 + i * 137).toString().slice(0, 9)}`;
+        // Same normalization every real entry point uses (Add Lead, Add
+        // Patient, webhook identity resolution) — a bulk seed insert that
+        // skipped it would leave these patients permanently unmatchable by
+        // phone against anything created through the app.
+        const normalized = normalizePhone(phone, "IN");
+        return {
+          tenantId: tenant.id,
+          branchId: i % 2 === 0 ? branchA.id : branchB.id,
+          name,
+          phone,
+          phoneE164: normalized.e164,
+          phoneCountry: normalized.country,
+          preferredLanguage: i % 3 === 0 ? "Kannada" : i % 3 === 1 ? "Hindi" : "English",
+        };
+      }),
     )
     .returning();
 
