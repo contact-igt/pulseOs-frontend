@@ -91,21 +91,34 @@ export default function CampaignsPage() {
         {efficiency.isLoading && <div className="grid grid-cols-3 gap-2 lg:grid-cols-6">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-16" />)}</div>}
         {efficiency.isError && <ErrorState message="Could not load marketing efficiency." />}
         {efficiency.data && (
-          <MetricStrip
-            testId="marketing-efficiency-strip"
-            cells={[
-              { key: "spend", label: "Marketing Spend", value: formatInr(efficiency.data.spend) },
-              { key: "leads", label: "Leads", value: efficiency.data.leads },
-              { key: "appointments", label: "Appointments", value: efficiency.data.appointments },
-              { key: "consultations", label: "Consultations", value: efficiency.data.consultations },
-              { key: "treatments", label: "Treatments", value: efficiency.data.treatments },
-              { key: "revenue", label: "Attributed Revenue", value: formatInr(efficiency.data.revenue) },
-              { key: "roas", label: "ROAS", value: formatRoas(efficiency.data.roas) },
-              { key: "cpl", label: "Cost / Lead", value: formatMoneyOrDash(efficiency.data.cpl) },
-              { key: "cpa", label: "Cost / Appointment", value: formatMoneyOrDash(efficiency.data.costPerAppointment) },
-              { key: "cpt", label: "Cost / Treatment", value: formatMoneyOrDash(efficiency.data.costPerTreatment) },
-            ]}
-          />
+          <div className="space-y-2">
+            {/* Primary: the numbers that answer "is this spend working" at a glance. */}
+            <MetricStrip
+              testId="marketing-efficiency-strip"
+              cells={[
+                { key: "spend", label: "Marketing Spend", value: formatInr(efficiency.data.spend) },
+                { key: "leads", label: "Leads", value: efficiency.data.leads },
+                { key: "appointments", label: "Appointments", value: efficiency.data.appointments },
+                { key: "treatments", label: "Treatments", value: efficiency.data.treatments },
+                { key: "revenue", label: "Attributed Revenue", value: formatInr(efficiency.data.revenue) },
+                { key: "roas", label: "ROAS", value: formatRoas(efficiency.data.roas) },
+              ]}
+            />
+            {/* Secondary: derived cost/volume detail — same data, deliberately smaller and quieter than the primary row. */}
+            <div className="grid grid-cols-2 gap-2 rounded-lg border border-neutral-100 bg-neutral-50 px-4 py-2.5 sm:grid-cols-4" data-testid="marketing-efficiency-secondary">
+              {[
+                { key: "consultations", label: "Consultations", value: efficiency.data.consultations },
+                { key: "cpl", label: "Cost / Lead", value: formatMoneyOrDash(efficiency.data.cpl) },
+                { key: "cpa", label: "Cost / Appointment", value: formatMoneyOrDash(efficiency.data.costPerAppointment) },
+                { key: "cpt", label: "Cost / Treatment", value: formatMoneyOrDash(efficiency.data.costPerTreatment) },
+              ].map((cell) => (
+                <div key={cell.key} data-testid={`metric-${cell.key}`}>
+                  <span className="block text-sm font-medium tabular-nums text-neutral-700">{cell.value}</span>
+                  <span className="block text-[11px] text-neutral-500">{cell.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
       </section>
 
@@ -119,8 +132,8 @@ export default function CampaignsPage() {
             <Table className="min-w-[860px]">
               <TableHead>
                 <tr>
-                  <Th>Source</Th>
                   <Th>Campaign</Th>
+                  <Th>Source</Th>
                   <Th align="right">Spend</Th>
                   <Th align="right">Leads</Th>
                   <Th align="right">Appts</Th>
@@ -137,7 +150,6 @@ export default function CampaignsPage() {
               <TableBody>
                 {performance.data.map((row) => (
                   <Tr key={row.campaignId ?? row.campaignName} data-testid={`campaign-row-${row.campaignId ?? row.campaignName}`}>
-                    <Td className="text-neutral-600">{row.source}</Td>
                     <Td className="text-slate-900">
                       <span className="flex items-center gap-1.5">
                         {row.campaignId ? (
@@ -151,6 +163,7 @@ export default function CampaignsPage() {
                       </span>
                       {row.specialtyLabel && <span className="block text-[11px] text-neutral-400">{row.specialtyLabel}</span>}
                     </Td>
+                    <Td className="text-neutral-600">{row.source}</Td>
                     <Td align="right">{formatInr(row.spend)}</Td>
                     <Td align="right">{row.leads}</Td>
                     <Td align="right">{row.appointments}</Td>
