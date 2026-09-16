@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@pulseos/api-client";
 import {
-  Badge, Card, EmptyState, ErrorState, MetricStrip, PageHeader, Skeleton, Table, TableBody, TableHead, Td, Th, Tr,
+  Badge, Card, EmptyState, ErrorState, MetricStrip, Skeleton, Table, TableBody, TableHead, Td, Th, Tr,
   formatInr, formatMoneyOrDash, fmtDate, JOURNEY_STAGE_LABEL, JOURNEY_STAGE_TONE,
 } from "@pulseos/ui";
 import { withFrom } from "@/components/shell/BackLink";
@@ -28,8 +28,6 @@ export default function JourneysPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-4" data-testid="journeys-page">
-      <PageHeader title="Journeys" subtitle="The operational surface behind the Command Centre's numbers." />
-
       {summary.data && (
         <MetricStrip
           testId="journeys-summary-strip"

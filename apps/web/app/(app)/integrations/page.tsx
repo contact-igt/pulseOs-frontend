@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
 import {
-  Badge, EmptyState, ErrorState, PageHeader, SectionHeading, Skeleton, Table, TableBody, TableHead, Td, Th, Tr,
+  Badge, EmptyState, ErrorState, SectionHeading, Skeleton, Table, TableBody, TableHead, Td, Th, Tr,
   relativeTime, CONNECTOR_STATUS_LABEL, CONNECTOR_STATUS_TONE, CONNECTOR_EVENT_STATUS_LABEL, CONNECTOR_EVENT_STATUS_TONE,
 } from "@pulseos/ui";
 import { hasPermission } from "@pulseos/types";
@@ -74,7 +74,6 @@ export default function IntegrationsPage() {
 
   return (
     <div className="flex h-full flex-col gap-4" data-testid="integrations-page">
-      <PageHeader title="Integrations" subtitle="Connected providers and their health." />
       <div className="flex min-h-0 flex-1 gap-4">
       <div className="flex w-96 flex-shrink-0 flex-col overflow-hidden rounded-lg border border-neutral-200 bg-white">
         <div className="border-b border-neutral-100 p-3">

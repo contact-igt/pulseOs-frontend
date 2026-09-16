@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
-import { AppointmentDrawer, AppointmentList, Button, ErrorState, PageHeader, Skeleton } from "@pulseos/ui";
+import { AppointmentDrawer, AppointmentList, Button, ErrorState, Skeleton } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import { hasPermission } from "@pulseos/types";
 import type { AppointmentAction, AppointmentRow } from "@pulseos/types";
@@ -65,6 +65,12 @@ export default function AppointmentsPage() {
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: ["appointments"] });
     queryClient.invalidateQueries({ queryKey: ["timeline"] });
+    // Check-in/status changes move Front Desk's Patient Flow counts and the
+    // Command Centre's today/patient-flow KPIs — keep both in sync, not just
+    // this table (the sync rule: an action's effect must be visible wherever
+    // it's shown, not only where it was taken).
+    queryClient.invalidateQueries({ queryKey: ["front-desk"] });
+    queryClient.invalidateQueries({ queryKey: ["dashboard"] });
   }
 
   async function handleAction(row: AppointmentRow, action: AppointmentAction) {
@@ -94,18 +100,6 @@ export default function AppointmentsPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-4" data-testid="appointments-page">
-      <PageHeader
-        title="Appointments"
-        subtitle="Every appointment, every state."
-        action={
-          canManage && (
-            <Button variant="primary" onClick={() => quickCreate.openNewAppointment()} data-testid="new-appointment-button">
-              + New Appointment
-            </Button>
-          )
-        }
-      />
-
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-neutral-200 bg-white p-2">
         <div className="flex gap-0.5 rounded border border-neutral-200 p-0.5">
           {TABS.map((t) => (
@@ -142,6 +136,12 @@ export default function AppointmentsPage() {
           onChange={(e) => setSearch(e.target.value)}
           className="rounded border border-neutral-200 bg-white px-2 py-1 text-xs outline-none focus:border-primary-400"
         />
+
+        {canManage && (
+          <Button variant="primary" size="sm" onClick={() => quickCreate.openNewAppointment()} data-testid="new-appointment-button" className="ml-auto">
+            + New Appointment
+          </Button>
+        )}
       </div>
 
       {appointments.isLoading ? (

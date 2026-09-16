@@ -70,8 +70,7 @@ test.describe("Session 4 final visual pass screenshots", () => {
     await page.goto("/patients");
     await page.getByText("Priya Sharma", { exact: true }).first().click();
     await expect(page).toHaveURL(/\/patients\/[^/]+$/);
-    await expect(page.getByText(/Timeline/).first()).toBeVisible();
-    await expect(page.getByText("TODAY")).toBeVisible();
+    await expect(page.getByText(/\d+ events?$/)).toBeVisible();
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "39-patient360-mini-flow.png") });
 
     // Global search — match highlighting + current stage shown.

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@pulseos/api-client";
-import { Badge, Button, Card, EmptyState, ErrorState, PageHeader, Skeleton, Table, TableBody, TableHead, Td, Th, Tr, fmtDate, JOURNEY_STAGE_LABEL, JOURNEY_STAGE_TONE } from "@pulseos/ui";
+import { Badge, Button, Card, EmptyState, ErrorState, Skeleton, Table, TableBody, TableHead, Td, Th, Tr, fmtDate, JOURNEY_STAGE_LABEL, JOURNEY_STAGE_TONE } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import { hasPermission } from "@pulseos/types";
 
@@ -34,18 +34,6 @@ export default function PatientsPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-4" data-testid="patients-page">
-      <PageHeader
-        title="Patients"
-        subtitle="Find and understand people, not leads."
-        action={
-          canEditPatients && (
-            <Button variant="primary" onClick={() => quickCreate.openAddPatient()} data-testid="add-patient-button">
-              + Add Patient
-            </Button>
-          )
-        }
-      />
-
       <div className="flex items-center gap-3">
         <input
           type="search"
@@ -57,6 +45,11 @@ export default function PatientsPage() {
         />
         {data && <span className="text-xs text-neutral-400">{data.length} patient{data.length === 1 ? "" : "s"}</span>}
         {stageFilter && <span className="text-xs text-neutral-400">Filtered from dashboard: {stageFilter}</span>}
+        {canEditPatients && (
+          <Button variant="primary" onClick={() => quickCreate.openAddPatient()} data-testid="add-patient-button" className="ml-auto">
+            + Add Patient
+          </Button>
+        )}
       </div>
 
       <Card className="overflow-x-auto p-0">

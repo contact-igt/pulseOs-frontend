@@ -26,15 +26,19 @@ function initials(name: string) {
 // booked, in consultation, or into treatment?" at a glance, no separate
 // funnel needed for a single journey.
 const MINI_FLOW_STEPS = ["Enquiry", "Appointment", "Consultation", "Treatment"] as const;
+// The index of the step currently in progress — "completed" points one past
+// the last step so every step (Treatment included) renders as done, not
+// stuck at "in progress" forever.
 const STAGE_CHECKPOINT: Partial<Record<JourneyStage, number>> = {
-  enquiry: 0, contacted: 0, booked: 1, attended: 1, consulted: 2, treatment_advised: 2, scheduled: 3, completed: 3,
+  enquiry: 0, contacted: 0, booked: 1, attended: 1, consulted: 2, treatment_advised: 2, scheduled: 3, completed: 4,
 };
 
 function JourneyMiniFlow({ stage }: { stage: JourneyStage }) {
   if (stage === "lost") return null;
   const current = STAGE_CHECKPOINT[stage] ?? 0;
+  const currentLabel = MINI_FLOW_STEPS[current] ?? "Treatment complete";
   return (
-    <div className="mt-2.5 flex items-center" aria-label={`Progress: ${MINI_FLOW_STEPS[current]}`}>
+    <div className="mt-2.5 flex items-center" aria-label={`Progress: ${currentLabel}`}>
       {MINI_FLOW_STEPS.map((label, i) => {
         const done = i < current;
         const isCurrent = i === current;
@@ -48,7 +52,7 @@ function JourneyMiniFlow({ stage }: { stage: JourneyStage }) {
               >
                 {done ? "✓" : ""}
               </span>
-              <span className={`whitespace-nowrap text-[10px] ${isCurrent ? "font-medium text-slate-900" : "text-neutral-400"}`}>{label}</span>
+              <span className={`whitespace-nowrap text-[10px] ${isCurrent ? "font-medium text-slate-900" : done ? "text-neutral-600" : "text-neutral-300"}`}>{label}</span>
             </div>
             {i < MINI_FLOW_STEPS.length - 1 && <span className={`mx-1 mb-3.5 h-px flex-1 ${done ? "bg-primary-500" : "bg-neutral-200"}`} />}
           </div>

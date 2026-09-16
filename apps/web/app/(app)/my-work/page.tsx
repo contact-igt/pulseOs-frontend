@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { api } from "@pulseos/api-client";
-import { Badge, Button, Card, EmptyState, ErrorState, PageHeader, Skeleton, fmtDateTime as fmtDate, urgencyLabel } from "@pulseos/ui";
+import { Badge, Button, Card, EmptyState, ErrorState, Skeleton, fmtDateTime as fmtDate, urgencyLabel } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import { withFrom } from "@/components/shell/BackLink";
 import { hasPermission } from "@pulseos/types";
@@ -69,6 +69,9 @@ export default function MyWorkPage() {
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    // A completed/rescheduled task changes Command Centre's Attention/SLA
+    // queue — keep it in sync, not just this list.
+    queryClient.invalidateQueries({ queryKey: ["dashboard"] });
   }
 
   async function complete(id: string) {
@@ -96,17 +99,13 @@ export default function MyWorkPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-4" data-testid="my-work-page">
-      <PageHeader
-        title="My Work"
-        subtitle="Tasks, callbacks and follow-ups assigned to you."
-        action={
-          canManageTasks && (
-            <Button variant="primary" onClick={() => quickCreate.openAddTask()} data-testid="add-task-button">
-              + Add Task
-            </Button>
-          )
-        }
-      />
+      {canManageTasks && (
+        <div className="flex justify-end">
+          <Button variant="primary" onClick={() => quickCreate.openAddTask()} data-testid="add-task-button">
+            + Add Task
+          </Button>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-1 rounded border border-neutral-200 bg-white p-1" role="tablist">
         {TABS.map((t) => (

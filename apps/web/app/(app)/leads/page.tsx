@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { api } from "@pulseos/api-client";
-import { Badge, Button, Card, EmptyState, ErrorState, MetricStrip, PageHeader, Skeleton, Table, TableBody, TableHead, Td, Th, Tr, fmtDate } from "@pulseos/ui";
+import { Badge, Button, Card, EmptyState, ErrorState, MetricStrip, Skeleton, Table, TableBody, TableHead, Td, Th, Tr, fmtDate } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import { withFrom } from "@/components/shell/BackLink";
 import type { LeadRow, LeadStatus } from "@pulseos/types";
@@ -54,15 +54,11 @@ export default function LeadsPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-5" data-testid="leads-page">
-      <PageHeader
-        title="Leads"
-        subtitle="Track every enquiry from source to appointment."
-        action={
-          <Button variant="primary" onClick={() => quickCreate.openAddLead()} data-testid="add-lead-button">
-            + Add Lead
-          </Button>
-        }
-      />
+      <div className="flex justify-end">
+        <Button variant="primary" onClick={() => quickCreate.openAddLead()} data-testid="add-lead-button">
+          + Add Lead
+        </Button>
+      </div>
 
       {summary.data && (
         <MetricStrip

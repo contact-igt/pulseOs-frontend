@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { api } from "@pulseos/api-client";
 import {
-  Badge, Button, Card, ConfirmDialog, ErrorState, OverflowMenu, PageHeader, SectionHeading, Skeleton, Table, TableBody, TableHead, Td, Th, Tr,
+  Badge, Button, Card, ConfirmDialog, ErrorState, OverflowMenu, SectionHeading, Skeleton, Table, TableBody, TableHead, Td, Th, Tr,
   formatInr, fmtDate, TREATMENT_STATUS_LABEL, TREATMENT_STATUS_TONE,
 } from "@pulseos/ui";
 import { withFrom } from "@/components/shell/BackLink";
@@ -64,12 +64,16 @@ export default function TreatmentPage() {
   async function transition(row: TreatmentRow, next: TreatmentStatus) {
     await api.updateTreatmentStatus(row.id, next);
     queryClient.invalidateQueries({ queryKey: ["treatments"] });
+    // A treatment reaching e.g. COMPLETED also advances the underlying
+    // Journey's stage server-side — keep the dashboard's revenue/decision
+    // KPIs and Patient 360/Journeys' stage badges from going stale.
+    queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    queryClient.invalidateQueries({ queryKey: ["journeys"] });
+    queryClient.invalidateQueries({ queryKey: ["patients"] });
   }
 
   return (
     <div className="mx-auto max-w-6xl space-y-4" data-testid="treatments-page">
-      <PageHeader title="Treatments" subtitle="Operational conversion tracking, not an EMR." />
-
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-neutral-200 bg-white p-2">
         <select value={status} onChange={(e) => setStatus(e.target.value as TreatmentStatus | "")} className="rounded border border-neutral-200 bg-white px-2 py-1 text-xs text-slate-700">
           <option value="">All statuses</option>
@@ -79,7 +83,7 @@ export default function TreatmentPage() {
         </select>
         {pipelineCounts && (
           <div className="ml-auto flex items-center gap-3 text-xs text-neutral-500" data-testid="treatment-pipeline-strip">
-            {(["DECISION_PENDING", "ACCEPTED", "SCHEDULED", "COMPLETED"] as TreatmentStatus[]).map((s) => (
+            {(["ADVISED", "DECISION_PENDING", "ACCEPTED", "SCHEDULED", "COMPLETED"] as TreatmentStatus[]).map((s) => (
               <button
                 key={s}
                 type="button"

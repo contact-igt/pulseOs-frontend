@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
-import { Card, ConnectorModeBadge, EmptyState, ErrorState, MetricStrip, PageHeader, SectionHeading, Skeleton, SpendAtRisk, Table, TableBody, TableHead, Td, Th, Tr, formatInr, formatMoneyOrDash, formatRoas } from "@pulseos/ui";
+import { Card, ConnectorModeBadge, EmptyState, ErrorState, MetricStrip, SectionHeading, Skeleton, SpendAtRisk, Table, TableBody, TableHead, Td, Th, Tr, formatInr, formatMoneyOrDash, formatRoas } from "@pulseos/ui";
 import type { CampaignFilters, SourceChannel } from "@pulseos/types";
 import { withFrom } from "@/components/shell/BackLink";
 
@@ -21,8 +21,6 @@ export default function CampaignsPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-5" data-testid="campaigns-page">
-      <PageHeader title="Campaigns / Sources" subtitle="Where spend turns into treatment revenue." />
-
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-neutral-200 bg-white p-2" data-testid="campaigns-filter-bar">
         <select
           value={filters.branchId ?? ""}

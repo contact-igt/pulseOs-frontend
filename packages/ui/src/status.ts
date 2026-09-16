@@ -109,7 +109,7 @@ export const CONNECTOR_EVENT_STATUS_LABEL: Record<string, string> = {
 };
 
 export const CONNECTOR_EVENT_STATUS_TONE: Record<string, Tone> = {
-  processed: "neutral",
+  processed: "success",
   failed: "danger",
   duplicate: "warning",
   pending: "neutral",

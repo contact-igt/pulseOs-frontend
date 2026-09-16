@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { api } from "@pulseos/api-client";
-import { Badge, Card, ConfirmDialog, ErrorState, PageHeader, SectionHeading, Skeleton } from "@pulseos/ui";
+import { Badge, Card, ConfirmDialog, ErrorState, SectionHeading, Skeleton } from "@pulseos/ui";
 import { hasPermission } from "@pulseos/types";
 import type { CustomFieldDefinitionVm, CustomFieldType, SpecialtyDetailVm, UpdateCustomFieldInput } from "@pulseos/types";
 
@@ -275,23 +275,29 @@ export default function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-5" data-testid="settings-page">
-      <PageHeader title="Settings" subtitle="Specialties, custom fields and hospital configuration." />
-
       <Card className="p-4">
         <SectionHeading title="Specialties & Fields" subtitle="Configure which specialties Add Lead offers, and their custom fields" />
 
-        {specialties.isLoading && <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12" />)}</div>}
+        {(specialties.isLoading || session.isLoading) && <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12" />)}</div>}
         {specialties.isError && <ErrorState message="Could not load specialties." />}
-        {specialties.data && (
+        {specialties.data && !session.isLoading && (
           <ul className="divide-y divide-neutral-100 rounded-lg border border-neutral-200" data-testid="specialty-list">
             {specialties.data.map((s) => (
               <li key={s.key}>
                 <div className="flex items-center justify-between px-4 py-3">
-                  <div className="flex min-w-0 flex-1 items-center gap-3 text-left">
-                    <span className="text-sm font-medium text-slate-900">{s.displayName}</span>
-                    <Badge tone={s.enabled ? "primary" : "neutral"}>{s.enabled ? "Enabled" : "Disabled"}</Badge>
-                    <span className="text-xs text-neutral-400">{s.fieldCount} custom field{s.fieldCount === 1 ? "" : "s"}</span>
-                  </div>
+                  {canManage ? (
+                    <button type="button" onClick={() => setExpanded(expanded === s.key ? null : s.key)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                      <span className="text-sm font-medium text-slate-900">{s.displayName}</span>
+                      <Badge tone={s.enabled ? "success" : "neutral"}>{s.enabled ? "Enabled" : "Disabled"}</Badge>
+                      <span className="text-xs text-neutral-400">{s.fieldCount} custom field{s.fieldCount === 1 ? "" : "s"}</span>
+                    </button>
+                  ) : (
+                    <div className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                      <span className="text-sm font-medium text-slate-900">{s.displayName}</span>
+                      <Badge tone={s.enabled ? "success" : "neutral"}>{s.enabled ? "Enabled" : "Disabled"}</Badge>
+                      <span className="text-xs text-neutral-400">{s.fieldCount} custom field{s.fieldCount === 1 ? "" : "s"}</span>
+                    </div>
+                  )}
                   {canManage && (
                     <div className="flex shrink-0 items-center gap-3">
                       <button type="button" onClick={() => toggleEnabled(s.key, s.enabled)} className="text-xs font-medium text-primary-600 hover:underline" data-testid={`specialty-toggle-${s.key}`}>
