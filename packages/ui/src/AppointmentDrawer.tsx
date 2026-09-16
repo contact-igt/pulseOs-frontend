@@ -5,6 +5,7 @@ import type { AppointmentAction, AppointmentRow, AppointmentStatus } from "@puls
 import { Badge } from "./primitives";
 import type { TimelineEventVm } from "./Timeline";
 import { useDialogFocus } from "./useDialogFocus";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 const STATUS_LABEL: Record<AppointmentStatus, string> = {
   requested: "Requested",
@@ -69,10 +70,12 @@ export function AppointmentDrawer({
 }) {
   const [rescheduling, setRescheduling] = useState(false);
   const [newDateTime, setNewDateTime] = useState("");
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
 
   useEffect(() => {
     setRescheduling(false);
     setNewDateTime("");
+    setConfirmingCancel(false);
   }, [appointment?.id]);
 
   const dialogRef = useDialogFocus<HTMLDivElement>(!!appointment, onClose);
@@ -220,7 +223,7 @@ export function AppointmentDrawer({
                 {CAN_CANCEL.has(row.status) && (
                   <button
                     type="button"
-                    onClick={() => onAction(row, "cancel")}
+                    onClick={() => setConfirmingCancel(true)}
                     className="flex-1 rounded border border-danger-100 px-3 py-2 text-xs font-medium text-danger-700 transition hover:bg-danger-100"
                     data-testid="drawer-action-cancel"
                   >
@@ -233,6 +236,19 @@ export function AppointmentDrawer({
         </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmingCancel}
+        title="Cancel this appointment?"
+        description={`This frees ${fmtDateTime(row.scheduledAt)} on ${row.doctorName ? `${row.doctorName}'s` : "the doctor's"} schedule and the patient will no longer be expected. PulseOS does not notify the patient automatically — let them know separately if they haven't already.`}
+        confirmLabel="Cancel appointment"
+        cancelLabel="Keep appointment"
+        onConfirm={() => {
+          setConfirmingCancel(false);
+          onAction(row, "cancel");
+        }}
+        onCancel={() => setConfirmingCancel(false)}
+      />
     </div>
   );
 }

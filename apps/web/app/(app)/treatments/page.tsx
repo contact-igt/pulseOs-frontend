@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { api } from "@pulseos/api-client";
-import { Badge, Button, Card, ErrorState, OverflowMenu, PageHeader, SectionHeading, Skeleton, Table, TableBody, TableHead, Td, Th, Tr, formatInr } from "@pulseos/ui";
+import { Badge, Button, Card, ConfirmDialog, ErrorState, OverflowMenu, PageHeader, SectionHeading, Skeleton, Table, TableBody, TableHead, Td, Th, Tr, formatInr } from "@pulseos/ui";
 import { withFrom } from "@/components/shell/BackLink";
 import { hasPermission } from "@pulseos/types";
 import type { TreatmentRow, TreatmentStatus } from "@pulseos/types";
@@ -48,6 +48,7 @@ export default function TreatmentPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<TreatmentStatus | "">("");
+  const [confirming, setConfirming] = useState<{ row: TreatmentRow; status: TreatmentStatus; label: string } | null>(null);
 
   const treatments = useQuery({
     queryKey: ["treatments", status],
@@ -125,7 +126,7 @@ export default function TreatmentPage() {
                               key: s.status,
                               label: s.label,
                               danger: s.danger,
-                              onClick: () => transition(row, s.status),
+                              onClick: () => (s.danger ? setConfirming({ row, status: s.status, label: s.label }) : transition(row, s.status)),
                             }))}
                           />
                         </div>
@@ -138,6 +139,22 @@ export default function TreatmentPage() {
           </div>
         )}
       </Card>
+
+      <ConfirmDialog
+        open={!!confirming}
+        title={confirming ? `${confirming.label} this treatment?` : ""}
+        description={
+          confirming
+            ? `${confirming.row.patientName}'s "${confirming.row.treatmentLabel}" (${formatInr(confirming.row.estimatedValue)}) moves out of the active pipeline and off every conversion count. This can't be undone from here — a declined treatment isn't re-offered automatically.`
+            : ""
+        }
+        confirmLabel={confirming?.label ?? "Confirm"}
+        onConfirm={() => {
+          if (confirming) transition(confirming.row, confirming.status);
+          setConfirming(null);
+        }}
+        onCancel={() => setConfirming(null)}
+      />
     </div>
   );
 }
