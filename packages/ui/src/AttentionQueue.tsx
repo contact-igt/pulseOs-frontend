@@ -1,13 +1,6 @@
 import type { AttentionItem } from "@pulseos/types";
 import { Badge, Card, EmptyState, SectionHeading } from "./primitives";
-
-const REASON_LABEL: Record<AttentionItem["reason"], string> = {
-  overdue_callback: "Overdue callback",
-  missed_follow_up: "Missed follow-up",
-  no_show: "No-show",
-  high_intent_uncontacted: "High-intent, uncontacted",
-  treatment_decision_pending: "Treatment decision pending",
-};
+import { ATTENTION_REASON_LABEL as REASON_LABEL } from "./status";
 
 export function AttentionQueue({ items, onItemClick }: { items: AttentionItem[]; onItemClick?: (item: AttentionItem) => void }) {
   return (

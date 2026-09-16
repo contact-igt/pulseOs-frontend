@@ -1,5 +1,6 @@
 import type { ConsultationOutcomeValue, DoctorTodayItem } from "@pulseos/types";
 import { Card, EmptyState, SectionHeading } from "./primitives";
+import { fmtTime } from "./format";
 
 const ACTIONS: { outcome: ConsultationOutcomeValue; label: string }[] = [
   { outcome: "CONSULTED", label: "Consultation Completed" },
@@ -8,10 +9,6 @@ const ACTIONS: { outcome: ConsultationOutcomeValue; label: string }[] = [
   { outcome: "FOLLOW_UP_REQUIRED", label: "Follow-up Required" },
   { outcome: "NO_TREATMENT_REQUIRED", label: "No Treatment Required" },
 ];
-
-function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
-}
 
 export function OutcomeActionList({
   items,

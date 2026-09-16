@@ -2,34 +2,8 @@ import type { DoctorDashboard, DoctorRecentPatient, DoctorTodayItem } from "@pul
 import { Badge, Card, EmptyState, SectionHeading } from "./primitives";
 import { SegmentedRadial } from "./SegmentedRadial";
 import { MetricStrip } from "./MetricStrip";
-
-function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
-}
-
-const STATUS_TONE: Record<DoctorTodayItem["status"], "neutral" | "warning" | "danger" | "primary"> = {
-  requested: "neutral",
-  scheduled: "neutral",
-  confirmed: "neutral",
-  checked_in: "warning",
-  waiting: "warning",
-  with_doctor: "primary",
-  completed: "neutral",
-  no_show: "danger",
-  cancelled: "neutral",
-};
-
-const STATUS_LABEL: Record<DoctorTodayItem["status"], string> = {
-  requested: "Requested",
-  scheduled: "Scheduled",
-  confirmed: "Confirmed",
-  checked_in: "Checked in",
-  waiting: "Waiting",
-  with_doctor: "With doctor",
-  completed: "Completed",
-  no_show: "No-show",
-  cancelled: "Cancelled",
-};
+import { APPOINTMENT_STATUS_LABEL as STATUS_LABEL, APPOINTMENT_STATUS_TONE as STATUS_TONE } from "./status";
+import { fmtTime } from "./format";
 
 export function DoctorKpiStrip({ dashboard }: { dashboard: DoctorDashboard }) {
   return (

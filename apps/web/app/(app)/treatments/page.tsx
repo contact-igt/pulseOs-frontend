@@ -4,21 +4,16 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { api } from "@pulseos/api-client";
-import { Badge, Button, Card, ConfirmDialog, ErrorState, OverflowMenu, PageHeader, SectionHeading, Skeleton, Table, TableBody, TableHead, Td, Th, Tr, formatInr } from "@pulseos/ui";
+import {
+  Badge, Button, Card, ConfirmDialog, ErrorState, OverflowMenu, PageHeader, SectionHeading, Skeleton, Table, TableBody, TableHead, Td, Th, Tr,
+  formatInr, fmtDate, TREATMENT_STATUS_LABEL, TREATMENT_STATUS_TONE,
+} from "@pulseos/ui";
 import { withFrom } from "@/components/shell/BackLink";
 import { hasPermission } from "@pulseos/types";
 import type { TreatmentRow, TreatmentStatus } from "@pulseos/types";
 
-const STATUS_TONE: Record<TreatmentStatus, "neutral" | "warning" | "danger" | "primary"> = {
-  ADVISED: "neutral",
-  DECISION_PENDING: "warning",
-  ACCEPTED: "primary",
-  SCHEDULED: "primary",
-  COMPLETED: "neutral",
-  DECLINED: "danger",
-  CANCELLED: "danger",
-  LOST: "danger",
-};
+const STATUS_LABEL = TREATMENT_STATUS_LABEL;
+const STATUS_TONE = TREATMENT_STATUS_TONE;
 
 // One clear forward action per status (rendered as a real button) plus any
 // rare/secondary transitions tucked into an overflow menu — never a wall of
@@ -38,11 +33,6 @@ const NEXT_STEPS: Partial<Record<TreatmentStatus, { primary: { status: Treatment
   ACCEPTED: { primary: { status: "SCHEDULED", label: "Schedule" }, secondary: [] },
   SCHEDULED: { primary: { status: "COMPLETED", label: "Complete" }, secondary: [] },
 };
-
-function fmtDate(iso: string | null) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
-}
 
 export default function TreatmentPage() {
   const router = useRouter();
@@ -75,7 +65,7 @@ export default function TreatmentPage() {
         <select value={status} onChange={(e) => setStatus(e.target.value as TreatmentStatus | "")} className="rounded border border-neutral-200 bg-white px-2 py-1 text-xs text-slate-700">
           <option value="">All statuses</option>
           {(["ADVISED", "DECISION_PENDING", "ACCEPTED", "SCHEDULED", "COMPLETED", "DECLINED", "CANCELLED"] as TreatmentStatus[]).map((s) => (
-            <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
+            <option key={s} value={s}>{STATUS_LABEL[s]}</option>
           ))}
         </select>
       </div>
@@ -109,7 +99,7 @@ export default function TreatmentPage() {
                     <Td className="text-neutral-600">{row.doctorName ?? "—"}</Td>
                     <Td className="text-neutral-600">{row.treatmentLabel}</Td>
                     <Td align="right" className="text-slate-900">{formatInr(row.estimatedValue)}</Td>
-                    <Td><Badge tone={STATUS_TONE[row.status]}>{row.status.replace(/_/g, " ")}</Badge></Td>
+                    <Td><Badge tone={STATUS_TONE[row.status]}>{STATUS_LABEL[row.status]}</Badge></Td>
                     <Td className="text-neutral-600">{row.ownerName ?? "—"}</Td>
                     <Td className="text-neutral-600">{fmtDate(row.nextActionDueAt)}</Td>
                     <Td className="text-neutral-600">{fmtDate(row.lastContactAt)}</Td>

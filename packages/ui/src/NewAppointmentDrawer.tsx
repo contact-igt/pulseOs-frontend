@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { AppointmentRow, CreateAppointmentInput, JourneyCardVm, LookupOption, PatientListRow } from "@pulseos/types";
+import { JOURNEY_STAGE_LABEL } from "./status";
 
 type PatientRef = Pick<PatientListRow, "id" | "name" | "phone">;
 
@@ -199,7 +200,7 @@ export function NewAppointmentDrawer({
                 {journeys.length === 0 && <option value="">No active journeys</option>}
                 {journeys.map((j) => (
                   <option key={j.id} value={j.id}>
-                    {j.journeyType} — {j.stage}
+                    {j.journeyType} — {JOURNEY_STAGE_LABEL[j.stage] ?? j.stage}
                   </option>
                 ))}
               </select>

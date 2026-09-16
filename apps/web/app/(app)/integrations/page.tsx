@@ -3,9 +3,12 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
-import { Badge, EmptyState, ErrorState, PageHeader, SectionHeading, Skeleton, Table, TableBody, TableHead, Td, Th, Tr } from "@pulseos/ui";
+import {
+  Badge, EmptyState, ErrorState, PageHeader, SectionHeading, Skeleton, Table, TableBody, TableHead, Td, Th, Tr,
+  relativeTime, CONNECTOR_STATUS_LABEL, CONNECTOR_STATUS_TONE, CONNECTOR_EVENT_STATUS_LABEL, CONNECTOR_EVENT_STATUS_TONE,
+} from "@pulseos/ui";
 import { hasPermission } from "@pulseos/types";
-import type { ConnectorMode, ConnectorStatus, ConnectorType } from "@pulseos/types";
+import type { ConnectorMode, ConnectorType } from "@pulseos/types";
 import { Mail, MessageCircle, Phone, Radio, ShieldCheck, Target, Zap } from "lucide-react";
 
 const TYPE_ICON: Record<ConnectorType, typeof Phone> = {
@@ -28,39 +31,14 @@ const TYPE_LABEL: Record<ConnectorType, string> = {
   ACQUISITION: "Acquisition",
 };
 
-const STATUS_LABEL: Record<ConnectorStatus, string> = {
-  NOT_CONFIGURED: "Not configured",
-  CONNECTING: "Connecting",
-  CONNECTED: "Connected",
-  DEGRADED: "Degraded",
-  ERROR: "Error",
-  DISABLED: "Disabled",
-};
-
-const STATUS_TONE: Record<ConnectorStatus, "neutral" | "warning" | "danger" | "primary"> = {
-  NOT_CONFIGURED: "neutral",
-  CONNECTING: "warning",
-  CONNECTED: "primary",
-  DEGRADED: "warning",
-  ERROR: "danger",
-  DISABLED: "neutral",
-};
+const STATUS_LABEL = CONNECTOR_STATUS_LABEL;
+const STATUS_TONE = CONNECTOR_STATUS_TONE;
 
 // A connected connector is only ever really "live" when its mode says so —
 // FIXTURE/SANDBOX must never read as equivalent to a real production
 // connection, no matter how healthy their status looks otherwise.
 const MODE_LABEL: Record<ConnectorMode, string> = { FIXTURE: "Fixture", SANDBOX: "Sandbox", LIVE: "Live" };
 const MODE_TONE: Record<ConnectorMode, "neutral" | "warning" | "primary"> = { FIXTURE: "neutral", SANDBOX: "warning", LIVE: "primary" };
-
-function relativeTime(iso: string | null) {
-  if (!iso) return "—";
-  const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.round(hours / 24)}d ago`;
-}
 
 export default function IntegrationsPage() {
   const queryClient = useQueryClient();
@@ -227,7 +205,7 @@ export default function IntegrationsPage() {
                         <Tr key={e.id} className="hover:bg-transparent">
                           <Td className="text-neutral-600">{e.direction}</Td>
                           <Td>
-                            <Badge tone={e.status === "failed" ? "danger" : e.status === "duplicate" ? "warning" : "neutral"}>{e.status}</Badge>
+                            <Badge tone={CONNECTOR_EVENT_STATUS_TONE[e.status] ?? "neutral"}>{CONNECTOR_EVENT_STATUS_LABEL[e.status] ?? e.status}</Badge>
                           </Td>
                           <Td className="text-neutral-500">{e.externalEventId}</Td>
                           <Td className="text-neutral-500">{relativeTime(e.receivedAt)}</Td>

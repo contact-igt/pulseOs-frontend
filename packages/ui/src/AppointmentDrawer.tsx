@@ -6,30 +6,8 @@ import { Badge } from "./primitives";
 import type { TimelineEventVm } from "./Timeline";
 import { useDialogFocus } from "./useDialogFocus";
 import { ConfirmDialog } from "./ConfirmDialog";
-
-const STATUS_LABEL: Record<AppointmentStatus, string> = {
-  requested: "Requested",
-  scheduled: "Confirmed",
-  confirmed: "Confirmed",
-  checked_in: "Checked In",
-  waiting: "Waiting",
-  with_doctor: "With Doctor",
-  completed: "Completed",
-  no_show: "No-show",
-  cancelled: "Cancelled",
-};
-
-const STATUS_TONE: Record<AppointmentStatus, "neutral" | "warning" | "danger" | "primary"> = {
-  requested: "neutral",
-  scheduled: "neutral",
-  confirmed: "neutral",
-  checked_in: "warning",
-  waiting: "warning",
-  with_doctor: "primary",
-  completed: "neutral",
-  no_show: "danger",
-  cancelled: "neutral",
-};
+import { APPOINTMENT_STATUS_LABEL as STATUS_LABEL, APPOINTMENT_STATUS_TONE as STATUS_TONE } from "./status";
+import { fmtTime } from "./format";
 
 const PRIMARY_ACTION: Partial<Record<AppointmentStatus, { action: AppointmentAction; label: string }>> = {
   requested: { action: "confirm", label: "Confirm" },
@@ -45,9 +23,6 @@ const CAN_RESCHEDULE = new Set<AppointmentStatus>(["requested", "scheduled", "co
 
 function fmtDateTime(iso: string) {
   return new Date(iso).toLocaleString("en-IN", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-}
-function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
 }
 
 export function AppointmentDrawer({

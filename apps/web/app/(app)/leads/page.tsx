@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { api } from "@pulseos/api-client";
-import { Badge, Button, Card, EmptyState, ErrorState, MetricStrip, PageHeader, Skeleton, Table, TableBody, TableHead, Td, Th, Tr } from "@pulseos/ui";
+import { Badge, Button, Card, EmptyState, ErrorState, MetricStrip, PageHeader, Skeleton, Table, TableBody, TableHead, Td, Th, Tr, fmtDate } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import { withFrom } from "@/components/shell/BackLink";
 import type { LeadRow, LeadStatus } from "@pulseos/types";
@@ -40,10 +40,6 @@ const STATUS_TONE: Record<LeadStatus, "neutral" | "warning" | "danger" | "primar
   lost: "neutral",
 };
 
-function fmtDate(iso: string | null) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
-}
 
 export default function LeadsPage() {
   const router = useRouter();

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { api } from "@pulseos/api-client";
-import { Badge, Button, Card, EmptyState, ErrorState, PageHeader, Skeleton } from "@pulseos/ui";
+import { Badge, Button, Card, EmptyState, ErrorState, PageHeader, Skeleton, fmtDateTime as fmtDate } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import { withFrom } from "@/components/shell/BackLink";
 import { hasPermission } from "@pulseos/types";
@@ -36,9 +36,6 @@ const STATUS_TONE: Record<TaskStatus, "neutral" | "warning" | "danger" | "primar
   cancelled: "neutral",
 };
 
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-}
 
 function isOverdue(task: TaskRow) {
   return task.status === "pending" && new Date(task.dueAt).getTime() < Date.now();

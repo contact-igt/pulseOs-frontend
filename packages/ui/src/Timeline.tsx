@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CalendarCheck, MessageCircle, Stethoscope, ListChecks, Circle, type LucideIcon } from "lucide-react";
 import { Card, EmptyState, SectionHeading } from "./primitives";
+import { fmtDateTime } from "./format";
 
 export interface TimelineEventVm {
   id: string;
@@ -48,10 +49,6 @@ const FILTERS: { key: "all" | TimelineEventVm["category"]; label: string }[] = [
   { key: "clinical", label: "Clinical-operational" },
   { key: "tasks", label: "Tasks" },
 ];
-
-function fmtDateTime(iso: string) {
-  return new Date(iso).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-}
 
 export function Timeline({ events }: { events: TimelineEventVm[] }) {
   const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("all");

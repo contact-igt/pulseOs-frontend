@@ -1,14 +1,7 @@
 import type { AttentionReason, SpendAtRisk as SpendAtRiskData } from "@pulseos/types";
 import { Card, SectionHeading } from "./primitives";
 import { formatInrCompact } from "./format";
-
-const REASON_LABEL: Record<AttentionReason, string> = {
-  overdue_callback: "Overdue callbacks",
-  missed_follow_up: "Missed follow-ups",
-  no_show: "No-shows",
-  high_intent_uncontacted: "High-intent, uncontacted",
-  treatment_decision_pending: "Treatment decisions pending",
-};
+import { ATTENTION_REASON_LABEL as REASON_LABEL } from "./status";
 
 export function SpendAtRisk({ data, onReasonClick }: { data: SpendAtRiskData; onReasonClick?: (reason: AttentionReason) => void }) {
   const max = Math.max(...data.byReason.map((r) => r.estimatedValue), 1);

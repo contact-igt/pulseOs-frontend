@@ -4,27 +4,12 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@pulseos/api-client";
-import { Badge, Button, Card, EmptyState, ErrorState, PageHeader, Skeleton, Table, TableBody, TableHead, Td, Th, Tr } from "@pulseos/ui";
+import { Badge, Button, Card, EmptyState, ErrorState, PageHeader, Skeleton, Table, TableBody, TableHead, Td, Th, Tr, fmtDate, JOURNEY_STAGE_LABEL, JOURNEY_STAGE_TONE } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import { hasPermission } from "@pulseos/types";
-import type { JourneyStage } from "@pulseos/types";
 
-const STAGE_TONE: Partial<Record<JourneyStage, "neutral" | "warning" | "danger" | "primary">> = {
-  enquiry: "neutral",
-  contacted: "neutral",
-  booked: "primary",
-  attended: "primary",
-  consulted: "primary",
-  treatment_advised: "warning",
-  scheduled: "warning",
-  completed: "primary",
-  lost: "danger",
-};
-
-function fmtDate(iso: string | null) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
-}
+const STAGE_LABEL = JOURNEY_STAGE_LABEL;
+const STAGE_TONE = JOURNEY_STAGE_TONE;
 
 export default function PatientsPage() {
   const router = useRouter();
@@ -112,7 +97,7 @@ export default function PatientsPage() {
                   </Td>
                   <Td className="text-neutral-600">{p.branchName ?? "—"}</Td>
                   <Td align="center">{p.activeJourneyCount}</Td>
-                  <Td>{p.currentStage ? <Badge tone={STAGE_TONE[p.currentStage] ?? "neutral"}>{p.currentStage.replace(/_/g, " ")}</Badge> : "—"}</Td>
+                  <Td>{p.currentStage ? <Badge tone={STAGE_TONE[p.currentStage] ?? "neutral"}>{STAGE_LABEL[p.currentStage] ?? p.currentStage}</Badge> : "—"}</Td>
                   <Td className="text-neutral-600">{p.source ?? "—"}</Td>
                   <Td className="text-neutral-600">{fmtDate(p.lastInteractionAt)}</Td>
                   <Td className="text-neutral-600">{fmtDate(p.nextActionDueAt)}</Td>

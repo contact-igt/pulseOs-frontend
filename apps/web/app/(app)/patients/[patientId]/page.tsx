@@ -4,15 +4,10 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
-import { Badge, Card, ErrorState, Skeleton, Timeline } from "@pulseos/ui";
-import { formatInr, formatMoneyOrDash } from "@pulseos/ui";
+import { Badge, Card, ErrorState, Skeleton, Timeline, JOURNEY_STAGE_LABEL, JOURNEY_STAGE_TONE } from "@pulseos/ui";
+import { formatInr, formatMoneyOrDash, fmtDateTime as fmtDate } from "@pulseos/ui";
 import { BackLink } from "@/components/shell/BackLink";
 import type { JourneyCardVm } from "@pulseos/types";
-
-function fmtDate(iso: string | null) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-}
 
 function initials(name: string) {
   return name
@@ -32,7 +27,7 @@ function JourneyCard({ journey, active, onClick }: { journey: JourneyCardVm; act
     >
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium text-slate-900">{journey.journeyType}</span>
-        <Badge tone={journey.stage === "lost" ? "danger" : "primary"}>{journey.stage.replace(/_/g, " ")}</Badge>
+        <Badge tone={JOURNEY_STAGE_TONE[journey.stage] ?? "neutral"}>{JOURNEY_STAGE_LABEL[journey.stage] ?? journey.stage}</Badge>
       </div>
       <dl className="mt-2 space-y-0.5 text-xs text-neutral-500">
         <div className="flex justify-between"><dt>Owner</dt><dd>{journey.ownerName ?? "—"}</dd></div>

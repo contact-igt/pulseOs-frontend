@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
 import { useRouter } from "next/navigation";
-import { Badge, ConfirmDialog, EmptyState, ErrorState, OverflowMenu, SectionHeading, Skeleton, useDialogFocus } from "@pulseos/ui";
+import { Badge, ConfirmDialog, EmptyState, ErrorState, OverflowMenu, SectionHeading, Skeleton, useDialogFocus, relativeTime, fmtDate, fmtDateTime, JOURNEY_STAGE_LABEL } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import { withFrom } from "@/components/shell/BackLink";
 import type { ConversationAutomationMode, ConversationAutomationPreference, ConversationChannel, ConversationDetail, OwnershipState } from "@pulseos/types";
@@ -62,14 +62,6 @@ const PRIMARY_ACTION_LABEL: Partial<Record<OwnershipState, string>> = {
   HUMAN_ACTIVE: "Return to AI",
 };
 
-function relativeTime(iso: string) {
-  const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.round(hours / 24)}d ago`;
-}
 
 export default function InboxPage() {
   const router = useRouter();
@@ -571,16 +563,10 @@ function PatientContextPanel({
       {detail?.patientContext && (
         <dl className="space-y-2 text-xs">
           <Row label="Journey" value={detail.patientContext.journeyType} />
-          <Row label="Stage" value={detail.patientContext.stage?.replace(/_/g, " ") ?? null} />
+          <Row label="Stage" value={detail.patientContext.stage ? (JOURNEY_STAGE_LABEL[detail.patientContext.stage] ?? detail.patientContext.stage) : null} />
           <Row label="Owner" value={detail.patientContext.ownerName} />
-          <Row
-            label="Next appointment"
-            value={detail.patientContext.appointmentTime ? new Date(detail.patientContext.appointmentTime).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : null}
-          />
-          <Row
-            label="Next action due"
-            value={detail.patientContext.nextActionDueAt ? new Date(detail.patientContext.nextActionDueAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : null}
-          />
+          <Row label="Next appointment" value={detail.patientContext.appointmentTime ? fmtDateTime(detail.patientContext.appointmentTime) : null} />
+          <Row label="Next action due" value={detail.patientContext.nextActionDueAt ? fmtDate(detail.patientContext.nextActionDueAt) : null} />
           <Row label="Last interaction" value={detail.patientContext.lastInteractionAt ? relativeTime(detail.patientContext.lastInteractionAt) : null} />
         </dl>
       )}

@@ -4,12 +4,11 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
-import { Badge, Card, ConnectorModeBadge, EmptyState, ErrorState, MetricStrip, SectionHeading, Skeleton, Table, TableBody, TableHead, Td, Th, Tr, formatInr, formatMoneyOrDash, formatRoas } from "@pulseos/ui";
+import {
+  Badge, Card, ConnectorModeBadge, EmptyState, ErrorState, MetricStrip, SectionHeading, Skeleton, Table, TableBody, TableHead, Td, Th, Tr,
+  formatInr, formatMoneyOrDash, formatRoas, fmtDateWithYear as fmtDate, JOURNEY_STAGE_LABEL, JOURNEY_STAGE_TONE,
+} from "@pulseos/ui";
 import { BackLink, withFrom } from "@/components/shell/BackLink";
-
-function fmtDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
-}
 
 export default function CampaignDetailPage() {
   const params = useParams<{ id: string }>();
@@ -116,7 +115,7 @@ export default function CampaignDetailPage() {
                     </Link>
                   </Td>
                   <Td className="text-neutral-600">{row.journeyType}</Td>
-                  <Td><Badge tone={row.stage === "lost" ? "danger" : "primary"}>{row.stage.replace(/_/g, " ")}</Badge></Td>
+                  <Td><Badge tone={JOURNEY_STAGE_TONE[row.stage] ?? "neutral"}>{JOURNEY_STAGE_LABEL[row.stage] ?? row.stage}</Badge></Td>
                   <Td className="text-neutral-600">{row.doctorName ?? "—"}</Td>
                   <Td className="text-neutral-600">{fmtDate(row.lastActivityAt)}</Td>
                   <Td align="right">{formatInr(row.treatmentValue)}</Td>
