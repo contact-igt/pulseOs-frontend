@@ -117,7 +117,7 @@ export function AddTaskDrawer({
         <div className="flex-1 space-y-3 overflow-y-auto p-5">
           <div>
             <label className={labelClass} htmlFor="task-patient-search">
-              Patient <span className="text-danger-600">*</span>
+              Patient <span className="text-danger-500">*</span>
             </label>
             {patient ? (
               <div className="flex items-center justify-between rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-sm">
@@ -188,7 +188,7 @@ export function AddTaskDrawer({
 
           <div>
             <label className={labelClass} htmlFor="task-due">
-              Due <span className="text-danger-600">*</span>
+              Due <span className="text-danger-500">*</span>
             </label>
             <input id="task-due" type="datetime-local" required value={dueAt} onChange={(e) => setDueAt(e.target.value)} className={inputClass} />
           </div>

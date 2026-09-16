@@ -84,13 +84,13 @@ export function AddPatientDrawer({
         <div className="flex-1 space-y-3 overflow-y-auto p-5">
           <div>
             <label className={labelClass} htmlFor="patient-name">
-              Name <span className="text-danger-600">*</span>
+              Name <span className="text-danger-500">*</span>
             </label>
             <input id="patient-name" type="text" required value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
           </div>
           <div>
             <label className={labelClass} htmlFor="patient-phone">
-              Phone <span className="text-danger-600">*</span>
+              Phone <span className="text-danger-500">*</span>
             </label>
             <input id="patient-phone" type="tel" required value={phone} onChange={(e) => setPhone(e.target.value)} className={inputClass} placeholder="+91 98765 43210" />
           </div>
@@ -102,7 +102,7 @@ export function AddPatientDrawer({
           </div>
           <div>
             <label className={labelClass} htmlFor="patient-branch">
-              Branch <span className="text-danger-600">*</span>
+              Branch <span className="text-danger-500">*</span>
             </label>
             <select id="patient-branch" required value={branchId} onChange={(e) => setBranchId(e.target.value)} className={inputClass}>
               <option value="">Select branch…</option>

@@ -52,7 +52,7 @@ function FieldRow({
           <input type="checkbox" checked={field.required} onChange={(e) => onSave({ required: e.target.checked })} />
           Required
         </label>
-        <button type="button" onClick={onArchive} className="shrink-0 text-neutral-400 hover:text-danger-600">
+        <button type="button" onClick={onArchive} className="shrink-0 text-neutral-400 hover:text-danger-500">
           Archive
         </button>
       </div>

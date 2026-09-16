@@ -538,7 +538,7 @@ function AiSchedulePanel({
           </label>
         </div>
       )}
-      {error && <p className="text-[11px] text-danger-600">{error}</p>}
+      {error && <p className="text-[11px] text-danger-500">{error}</p>}
       <div className="flex gap-2">
         <button type="button" onClick={save} disabled={saving} className="rounded bg-primary-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-40" data-testid="save-automation">
           {saving ? "Saving…" : "Save"}

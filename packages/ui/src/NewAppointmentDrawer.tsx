@@ -138,7 +138,7 @@ export function NewAppointmentDrawer({
         <div className="flex-1 space-y-4 overflow-y-auto p-5">
           <div>
             <label className={labelClass} htmlFor="appt-patient-search">
-              Patient <span className="text-danger-600">*</span>
+              Patient <span className="text-danger-500">*</span>
             </label>
             {patient ? (
               <div className="flex items-center justify-between rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-sm">
@@ -193,7 +193,7 @@ export function NewAppointmentDrawer({
           {patient && (
             <div>
               <label className={labelClass} htmlFor="appt-journey">
-                Journey <span className="text-danger-600">*</span>
+                Journey <span className="text-danger-500">*</span>
               </label>
               <select id="appt-journey" required value={journeyId} onChange={(e) => setJourneyId(e.target.value)} className={inputClass}>
                 {journeys.length === 0 && <option value="">No active journeys</option>}
@@ -209,7 +209,7 @@ export function NewAppointmentDrawer({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelClass} htmlFor="appt-branch">
-                Branch <span className="text-danger-600">*</span>
+                Branch <span className="text-danger-500">*</span>
               </label>
               <select id="appt-branch" required value={branchId} onChange={(e) => setBranchId(e.target.value)} className={inputClass}>
                 <option value="">Select…</option>
@@ -222,7 +222,7 @@ export function NewAppointmentDrawer({
             </div>
             <div>
               <label className={labelClass} htmlFor="appt-doctor">
-                Doctor <span className="text-danger-600">*</span>
+                Doctor <span className="text-danger-500">*</span>
               </label>
               <select id="appt-doctor" required value={doctorId} onChange={(e) => setDoctorId(e.target.value)} className={inputClass}>
                 <option value="">Select…</option>
@@ -237,7 +237,7 @@ export function NewAppointmentDrawer({
 
           <div>
             <label className={labelClass} htmlFor="appt-time">
-              Date &amp; time <span className="text-danger-600">*</span>
+              Date &amp; time <span className="text-danger-500">*</span>
             </label>
             <input id="appt-time" type="datetime-local" required value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} className={inputClass} />
           </div>

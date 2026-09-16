@@ -216,7 +216,7 @@ export function AddLeadDrawer({
             <div className="space-y-3">
               <div>
                 <label className={labelClass} htmlFor="lead-phone">
-                  Phone <span className="text-danger-600">*</span>
+                  Phone <span className="text-danger-500">*</span>
                 </label>
                 <input
                   id="lead-phone"
@@ -242,7 +242,7 @@ export function AddLeadDrawer({
               </div>
               <div>
                 <label className={labelClass} htmlFor="lead-name">
-                  Name <span className="text-danger-600">*</span>
+                  Name <span className="text-danger-500">*</span>
                 </label>
                 <input
                   id="lead-name"
@@ -277,7 +277,7 @@ export function AddLeadDrawer({
             <div className="space-y-3">
               <div>
                 <label className={labelClass} htmlFor="lead-specialty">
-                  Specialty / Service <span className="text-danger-600">*</span>
+                  Specialty / Service <span className="text-danger-500">*</span>
                 </label>
                 <select id="lead-specialty" required value={form.specialtyKey} onChange={(e) => onSpecialtyChange(e.target.value)} className={inputClass} data-testid="lead-specialty-select">
                   <option value="">Select specialty…</option>
@@ -291,7 +291,7 @@ export function AddLeadDrawer({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass} htmlFor="lead-branch">
-                    Branch <span className="text-danger-600">*</span>
+                    Branch <span className="text-danger-500">*</span>
                   </label>
                   <select id="lead-branch" required value={form.branchId} onChange={(e) => setForm((f) => ({ ...f, branchId: e.target.value }))} className={inputClass}>
                     <option value="">Select branch…</option>
@@ -319,7 +319,7 @@ export function AddLeadDrawer({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={labelClass} htmlFor="lead-source">
-                    Source <span className="text-danger-600">*</span>
+                    Source <span className="text-danger-500">*</span>
                   </label>
                   <select
                     id="lead-source"
@@ -351,7 +351,7 @@ export function AddLeadDrawer({
               </div>
               <div>
                 <label className={labelClass} htmlFor="lead-journey-type">
-                  Journey type <span className="text-danger-600">*</span>
+                  Journey type <span className="text-danger-500">*</span>
                 </label>
                 <input id="lead-journey-type" type="text" required value={form.journeyType} onChange={(e) => setForm((f) => ({ ...f, journeyType: e.target.value }))} className={inputClass} />
               </div>
@@ -396,7 +396,7 @@ export function AddLeadDrawer({
                 {fields.map((field) => (
                   <div key={field.id} className={field.fieldType === "TEXT" ? "col-span-2" : ""}>
                     <label className={labelClass} htmlFor={`field-${field.id}`}>
-                      {field.label} {field.required && <span className="text-danger-600">*</span>}
+                      {field.label} {field.required && <span className="text-danger-500">*</span>}
                     </label>
                     {field.fieldType === "BOOLEAN" ? (
                       <label className="flex items-center gap-2 rounded-lg border border-neutral-200 px-3 py-2 text-sm text-slate-700">
