@@ -82,6 +82,10 @@ function SpecialtyDetail({ specialtyKey }: { specialtyKey: string }) {
   const [newType, setNewType] = useState<CustomFieldType>("TEXT");
   const [newOptions, setNewOptions] = useState("");
   const [confirmingArchive, setConfirmingArchive] = useState<CustomFieldDefinitionVm | null>(null);
+  // A save failure here must never look like it silently succeeded — every
+  // input already preserves what was typed (defaultValue/value are untouched
+  // on error), so the only missing piece is surfacing that it didn't persist.
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: ["specialty-detail", specialtyKey] });
@@ -93,20 +97,35 @@ function SpecialtyDetail({ specialtyKey }: { specialtyKey: string }) {
     if (!newLabel.trim()) return;
     const key = newLabel.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
     const options = SELECT_TYPES.has(newType) ? newOptions.split(",").map((s) => s.trim()).filter(Boolean) : undefined;
-    await api.createCustomField(specialtyKey, { key, label: newLabel.trim(), fieldType: newType, options });
-    setNewLabel("");
-    setNewOptions("");
-    invalidate();
+    try {
+      setSaveError(null);
+      await api.createCustomField(specialtyKey, { key, label: newLabel.trim(), fieldType: newType, options });
+      setNewLabel("");
+      setNewOptions("");
+      invalidate();
+    } catch {
+      setSaveError("Could not add this field — your entry is still here, try again.");
+    }
   }
 
   async function archiveField(fieldId: string) {
-    await api.updateCustomField(fieldId, { archived: true });
-    invalidate();
+    try {
+      setSaveError(null);
+      await api.updateCustomField(fieldId, { archived: true });
+      invalidate();
+    } catch {
+      setSaveError("Could not archive this field — try again.");
+    }
   }
 
   async function saveField(fieldId: string, input: UpdateCustomFieldInput) {
-    await api.updateCustomField(fieldId, input);
-    invalidate();
+    try {
+      setSaveError(null);
+      await api.updateCustomField(fieldId, input);
+      invalidate();
+    } catch {
+      setSaveError("Could not save that change — try again.");
+    }
   }
 
   async function moveField(fields: CustomFieldDefinitionVm[], index: number, direction: "up" | "down") {
@@ -114,13 +133,23 @@ function SpecialtyDetail({ specialtyKey }: { specialtyKey: string }) {
     if (swapWith < 0 || swapWith >= fields.length) return;
     const a = fields[index];
     const b = fields[swapWith];
-    await Promise.all([api.updateCustomField(a.id, { sortOrder: b.sortOrder }), api.updateCustomField(b.id, { sortOrder: a.sortOrder })]);
-    invalidate();
+    try {
+      setSaveError(null);
+      await Promise.all([api.updateCustomField(a.id, { sortOrder: b.sortOrder }), api.updateCustomField(b.id, { sortOrder: a.sortOrder })]);
+      invalidate();
+    } catch {
+      setSaveError("Could not reorder that field — try again.");
+    }
   }
 
   async function saveHeader(input: { displayName?: string; defaultJourneyType?: string }) {
-    await api.updateSpecialty(specialtyKey, input);
-    invalidate();
+    try {
+      setSaveError(null);
+      await api.updateSpecialty(specialtyKey, input);
+      invalidate();
+    } catch {
+      setSaveError("Could not save that change — your entry is still here, try again.");
+    }
   }
 
   if (detail.isLoading) return <Skeleton className="h-32" />;
@@ -130,6 +159,11 @@ function SpecialtyDetail({ specialtyKey }: { specialtyKey: string }) {
 
   return (
     <div className="space-y-3 border-t border-neutral-100 p-4">
+      {saveError && (
+        <p className="rounded border border-danger-200 bg-danger-50 px-2.5 py-1.5 text-xs text-danger-700" data-testid="specialty-save-error">
+          {saveError}
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-4 text-xs">
         <label className="flex items-center gap-1.5">
           <span className="text-neutral-400">Display label</span>
