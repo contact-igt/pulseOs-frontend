@@ -45,6 +45,15 @@ export default function TreatmentPage() {
     queryFn: () => api.treatments(status ? { status } : {}),
   });
 
+  // A small pipeline strip needs counts across every status, independent of
+  // the table's own filter — reuses the same list endpoint unfiltered rather
+  // than a new aggregation route (the list is small; no new backend work).
+  const allTreatments = useQuery({ queryKey: ["treatments", "all"], queryFn: () => api.treatments({}) });
+  const pipelineCounts = allTreatments.data?.reduce(
+    (acc, t) => ({ ...acc, [t.status]: (acc[t.status] ?? 0) + 1 }),
+    {} as Partial<Record<TreatmentStatus, number>>,
+  );
+
   // MANAGE_TREATMENT gates the status-transition endpoint server-side
   // (Doctor has VIEW_TREATMENT but advises via RECORD_CONSULTATION_OUTCOME,
   // not by driving the funnel here) — mirrored here only to avoid showing
@@ -68,6 +77,21 @@ export default function TreatmentPage() {
             <option key={s} value={s}>{STATUS_LABEL[s]}</option>
           ))}
         </select>
+        {pipelineCounts && (
+          <div className="ml-auto flex items-center gap-3 text-xs text-neutral-500" data-testid="treatment-pipeline-strip">
+            {(["DECISION_PENDING", "ACCEPTED", "SCHEDULED", "COMPLETED"] as TreatmentStatus[]).map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setStatus(s)}
+                className={`flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-neutral-100 ${status === s ? "bg-primary-50 text-primary-700" : ""}`}
+              >
+                <span className="font-semibold tabular-nums text-slate-900">{pipelineCounts[s] ?? 0}</span>
+                {STATUS_LABEL[s]}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <Card className="overflow-hidden p-4">
