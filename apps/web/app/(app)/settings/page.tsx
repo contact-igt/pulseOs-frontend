@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { api } from "@pulseos/api-client";
-import { Badge, Card, ErrorState, PageHeader, SectionHeading, Skeleton } from "@pulseos/ui";
+import { Badge, Card, ConfirmDialog, ErrorState, PageHeader, SectionHeading, Skeleton } from "@pulseos/ui";
 import type { CustomFieldDefinitionVm, CustomFieldType, SpecialtyDetailVm, UpdateCustomFieldInput } from "@pulseos/types";
 
 const FIELD_TYPES: CustomFieldType[] = ["TEXT", "NUMBER", "DATE", "BOOLEAN", "SELECT", "MULTI_SELECT", "PHONE"];
@@ -81,6 +81,7 @@ function SpecialtyDetail({ specialtyKey }: { specialtyKey: string }) {
   const [newLabel, setNewLabel] = useState("");
   const [newType, setNewType] = useState<CustomFieldType>("TEXT");
   const [newOptions, setNewOptions] = useState("");
+  const [confirmingArchive, setConfirmingArchive] = useState<CustomFieldDefinitionVm | null>(null);
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: ["specialty-detail", specialtyKey] });
@@ -170,7 +171,7 @@ function SpecialtyDetail({ specialtyKey }: { specialtyKey: string }) {
               isLast={i === d.fields.length - 1}
               onMove={(direction) => moveField(d.fields, i, direction)}
               onSave={(input) => saveField(f.id, input)}
-              onArchive={() => archiveField(f.id)}
+              onArchive={() => setConfirmingArchive(f)}
             />
           ))}
         </ul>
@@ -204,6 +205,18 @@ function SpecialtyDetail({ specialtyKey }: { specialtyKey: string }) {
           Add field
         </button>
       </div>
+
+      <ConfirmDialog
+        open={!!confirmingArchive}
+        title={confirmingArchive ? `Archive "${confirmingArchive.label}"?` : ""}
+        description="This removes it from the Add Lead form and this editor going forward. Existing patients who already have a value saved for it keep that value on their record — archiving doesn't delete historical data, only stops collecting it for new journeys."
+        confirmLabel="Archive field"
+        onConfirm={() => {
+          if (confirmingArchive) archiveField(confirmingArchive.id);
+          setConfirmingArchive(null);
+        }}
+        onCancel={() => setConfirmingArchive(null)}
+      />
     </div>
   );
 }

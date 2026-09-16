@@ -59,4 +59,22 @@ test.describe("Destructive-action confirmations", () => {
     await page.getByTestId("confirm-dialog-cancel").click();
     await expect(dialog).toBeHidden();
   });
+
+  test("Archive field requires confirmation stating historical values are kept", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await login(page, "admin@pulseos.local");
+    await page.goto("/settings");
+    await expect(page.getByTestId("settings-page")).toBeVisible();
+
+    await page.getByRole("button", { name: "Edit" }).nth(1).click();
+    await page.getByRole("button", { name: "Archive" }).first().click();
+
+    const dialog = page.getByTestId("confirm-dialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText("keep that value on their record");
+    await expect(dialog).toContainText("doesn't delete historical data");
+
+    await page.getByTestId("confirm-dialog-cancel").click();
+    await expect(dialog).toBeHidden();
+  });
 });
