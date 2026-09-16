@@ -77,3 +77,24 @@ export function relativeTime(iso: string | null | undefined): string {
   if (hours < 24) return `${hours}h ago`;
   return `${Math.round(hours / 24)}d ago`;
 }
+
+/**
+ * "12m overdue" / "3h overdue" / "Due in 2d" — the shared due-date urgency
+ * cue for anything with an SLA (Attention queue, task lists). `overdue`
+ * drives the caller's severity styling (dot color, text color) so overdue
+ * always reads as the strongest cue, never just another badge color.
+ */
+export function urgencyLabel(dueAt: string): { text: string; overdue: boolean } {
+  const diffMins = Math.round((new Date(dueAt).getTime() - Date.now()) / 60_000);
+  if (diffMins <= 0) {
+    const overdueMins = -diffMins;
+    if (overdueMins < 60) return { text: `${Math.max(overdueMins, 1)}m overdue`, overdue: true };
+    const hours = Math.round(overdueMins / 60);
+    if (hours < 24) return { text: `${hours}h overdue`, overdue: true };
+    return { text: `${Math.round(hours / 24)}d overdue`, overdue: true };
+  }
+  if (diffMins < 60) return { text: `Due in ${diffMins}m`, overdue: false };
+  const hours = Math.round(diffMins / 60);
+  if (hours < 24) return { text: `Due in ${hours}h`, overdue: false };
+  return { text: `Due in ${Math.round(hours / 24)}d`, overdue: false };
+}

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { api } from "@pulseos/api-client";
-import { Badge, Button, Card, EmptyState, ErrorState, PageHeader, Skeleton, fmtDateTime as fmtDate } from "@pulseos/ui";
+import { Badge, Button, Card, EmptyState, ErrorState, PageHeader, Skeleton, fmtDateTime as fmtDate, urgencyLabel } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import { withFrom } from "@/components/shell/BackLink";
 import { hasPermission } from "@pulseos/types";
@@ -148,8 +148,13 @@ export default function MyWorkPage() {
           <ul className="divide-y divide-neutral-100" data-testid="my-work-task-list">
             {tasks.data.map((task) => {
               const overdue = isOverdue(task);
+              const urgency = task.status === "pending" ? urgencyLabel(task.dueAt) : null;
               return (
-                <li key={task.id} className="p-4" data-testid={`task-row-${task.id}`}>
+                <li
+                  key={task.id}
+                  className={`p-4 ${overdue ? "border-l-2 border-l-danger-500 bg-danger-100/30" : ""}`}
+                  data-testid={`task-row-${task.id}`}
+                >
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0">
                       <button
@@ -161,9 +166,12 @@ export default function MyWorkPage() {
                       </button>
                       <span className="ml-2 text-xs text-neutral-500">{task.journeyType ?? "General"}</span>
                       <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                        <Badge tone={overdue ? "danger" : STATUS_TONE[task.status]}>{TYPE_LABEL[task.type]}</Badge>
+                        <Badge tone={STATUS_TONE[task.status]}>{TYPE_LABEL[task.type]}</Badge>
                         {task.priority === "high" && <Badge tone="warning">High priority</Badge>}
-                        <span className="text-xs text-neutral-500">Due {fmtDate(task.dueAt)}</span>
+                        <span className={`text-xs tabular-nums ${overdue ? "font-medium text-danger-500" : "text-neutral-500"}`}>
+                          {urgency ? urgency.text : `Due ${fmtDate(task.dueAt)}`}
+                        </span>
+                        <span className="text-xs text-neutral-400">· {fmtDate(task.dueAt)}</span>
                         {task.assignedToName && <span className="text-xs text-neutral-400">· {task.assignedToName}</span>}
                       </div>
                       {task.notes && <p className="mt-1.5 text-xs text-neutral-600">{task.notes}</p>}

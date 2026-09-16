@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { api } from "@pulseos/api-client";
 import { Badge, Card, ConfirmDialog, ErrorState, PageHeader, SectionHeading, Skeleton } from "@pulseos/ui";
+import { hasPermission } from "@pulseos/types";
 import type { CustomFieldDefinitionVm, CustomFieldType, SpecialtyDetailVm, UpdateCustomFieldInput } from "@pulseos/types";
 
 const FIELD_TYPES: CustomFieldType[] = ["TEXT", "NUMBER", "DATE", "BOOLEAN", "SELECT", "MULTI_SELECT", "PHONE"];
@@ -257,6 +258,12 @@ function SpecialtyDetail({ specialtyKey }: { specialtyKey: string }) {
 
 export default function SettingsPage() {
   const queryClient = useQueryClient();
+  const session = useQuery({ queryKey: ["session"], queryFn: api.session });
+  // MANAGE_SPECIALTIES gates every write server-side (Hospital/Super Admin
+  // only) — mirrored here to keep the read-only roles from seeing Edit/
+  // Disable controls that would 403, never as the actual authorization
+  // boundary. Everyone with VIEW access still sees the plain list.
+  const canManage = !!session.data && hasPermission(session.data.user.role, "MANAGE_SPECIALTIES");
   const specialties = useQuery({ queryKey: ["specialties-admin"], queryFn: () => api.specialties(true) });
   const [expanded, setExpanded] = useState<string | null>(null);
 
@@ -280,21 +287,23 @@ export default function SettingsPage() {
             {specialties.data.map((s) => (
               <li key={s.key}>
                 <div className="flex items-center justify-between px-4 py-3">
-                  <button type="button" onClick={() => setExpanded(expanded === s.key ? null : s.key)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                  <div className="flex min-w-0 flex-1 items-center gap-3 text-left">
                     <span className="text-sm font-medium text-slate-900">{s.displayName}</span>
                     <Badge tone={s.enabled ? "primary" : "neutral"}>{s.enabled ? "Enabled" : "Disabled"}</Badge>
                     <span className="text-xs text-neutral-400">{s.fieldCount} custom field{s.fieldCount === 1 ? "" : "s"}</span>
-                  </button>
-                  <div className="flex shrink-0 items-center gap-3">
-                    <button type="button" onClick={() => toggleEnabled(s.key, s.enabled)} className="text-xs font-medium text-primary-600 hover:underline" data-testid={`specialty-toggle-${s.key}`}>
-                      {s.enabled ? "Disable" : "Enable"}
-                    </button>
-                    <button type="button" onClick={() => setExpanded(expanded === s.key ? null : s.key)} className="text-xs text-neutral-500 hover:text-slate-900">
-                      {expanded === s.key ? "Close" : "Edit"}
-                    </button>
                   </div>
+                  {canManage && (
+                    <div className="flex shrink-0 items-center gap-3">
+                      <button type="button" onClick={() => toggleEnabled(s.key, s.enabled)} className="text-xs font-medium text-primary-600 hover:underline" data-testid={`specialty-toggle-${s.key}`}>
+                        {s.enabled ? "Disable" : "Enable"}
+                      </button>
+                      <button type="button" onClick={() => setExpanded(expanded === s.key ? null : s.key)} className="text-xs text-neutral-500 hover:text-slate-900">
+                        {expanded === s.key ? "Close" : "Edit"}
+                      </button>
+                    </div>
+                  )}
                 </div>
-                {expanded === s.key && <SpecialtyDetail specialtyKey={s.key} />}
+                {canManage && expanded === s.key && <SpecialtyDetail specialtyKey={s.key} />}
               </li>
             ))}
           </ul>

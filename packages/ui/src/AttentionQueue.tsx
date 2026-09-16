@@ -1,22 +1,7 @@
 import type { AttentionItem } from "@pulseos/types";
 import { Card, EmptyState, SectionHeading } from "./primitives";
 import { ATTENTION_REASON_LABEL as REASON_LABEL } from "./status";
-
-/** "2h overdue" / "Due in 45m" / "Due in 3h" — urgency at a glance, no separate date lookup needed. */
-function urgencyLabel(dueAt: string): { text: string; overdue: boolean } {
-  const diffMins = Math.round((new Date(dueAt).getTime() - Date.now()) / 60_000);
-  if (diffMins <= 0) {
-    const overdueMins = -diffMins;
-    if (overdueMins < 60) return { text: `${Math.max(overdueMins, 1)}m overdue`, overdue: true };
-    const hours = Math.round(overdueMins / 60);
-    if (hours < 24) return { text: `${hours}h overdue`, overdue: true };
-    return { text: `${Math.round(hours / 24)}d overdue`, overdue: true };
-  }
-  if (diffMins < 60) return { text: `Due in ${diffMins}m`, overdue: false };
-  const hours = Math.round(diffMins / 60);
-  if (hours < 24) return { text: `Due in ${hours}h`, overdue: false };
-  return { text: `Due in ${Math.round(hours / 24)}d`, overdue: false };
-}
+import { urgencyLabel } from "./format";
 
 export function AttentionQueue({ items, onItemClick }: { items: AttentionItem[]; onItemClick?: (item: AttentionItem) => void }) {
   return (
