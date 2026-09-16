@@ -3,7 +3,7 @@ import type { AppointmentStatus, AttentionReason, ConnectorStatus, JourneyStage,
 // One display map per domain, shared across every table/badge/drawer that
 // shows this status — never a raw backend enum in front of a user, and
 // never a second near-identical copy of the same map in a different file.
-export type Tone = "neutral" | "warning" | "danger" | "primary";
+export type Tone = "neutral" | "warning" | "danger" | "primary" | "success";
 
 export const APPOINTMENT_STATUS_LABEL: Record<AppointmentStatus, string> = {
   requested: "Requested",
@@ -24,7 +24,7 @@ export const APPOINTMENT_STATUS_TONE: Record<AppointmentStatus, Tone> = {
   checked_in: "warning",
   waiting: "warning",
   with_doctor: "primary",
-  completed: "neutral",
+  completed: "success",
   no_show: "danger",
   cancelled: "neutral",
 };
@@ -45,7 +45,7 @@ export const TREATMENT_STATUS_TONE: Record<TreatmentStatus, Tone> = {
   DECISION_PENDING: "warning",
   ACCEPTED: "primary",
   SCHEDULED: "primary",
-  COMPLETED: "neutral",
+  COMPLETED: "success",
   DECLINED: "danger",
   CANCELLED: "danger",
   LOST: "danger",
@@ -71,7 +71,7 @@ export const JOURNEY_STAGE_TONE: Partial<Record<JourneyStage, Tone>> = {
   consulted: "primary",
   treatment_advised: "warning",
   scheduled: "warning",
-  completed: "primary",
+  completed: "success",
   lost: "danger",
 };
 
@@ -95,7 +95,7 @@ export const CONNECTOR_STATUS_LABEL: Record<ConnectorStatus, string> = {
 export const CONNECTOR_STATUS_TONE: Record<ConnectorStatus, Tone> = {
   NOT_CONFIGURED: "neutral",
   CONNECTING: "warning",
-  CONNECTED: "primary",
+  CONNECTED: "success",
   DEGRADED: "warning",
   ERROR: "danger",
   DISABLED: "neutral",

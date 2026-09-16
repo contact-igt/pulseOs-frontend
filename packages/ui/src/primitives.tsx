@@ -32,12 +32,15 @@ export function ErrorState({ message }: { message: string }) {
   return <div className="flex h-24 items-center justify-center text-sm text-danger-500">{message}</div>;
 }
 
-export function Badge({ tone = "neutral", children }: { tone?: "neutral" | "warning" | "danger" | "primary"; children: ReactNode }) {
+export function Badge({ tone = "neutral", children }: { tone?: "neutral" | "warning" | "danger" | "primary" | "success"; children: ReactNode }) {
   const tones: Record<string, string> = {
     neutral: "bg-neutral-100 text-neutral-700",
     warning: "bg-warning-100 text-warning-700",
     danger: "bg-danger-100 text-danger-700",
     primary: "bg-primary-100 text-primary-700",
+    // Distinct from "primary" (active/in-progress blue) — reserved for a
+    // genuinely completed/healthy state (CLAUDE.md: success=teal/green).
+    success: "bg-accent-100 text-accent-700",
   };
   return <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${tones[tone]}`}>{children}</span>;
 }
