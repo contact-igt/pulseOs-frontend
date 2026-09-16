@@ -65,7 +65,10 @@ test.describe("CRM + specialty + marketing-efficiency checkpoint screenshots", (
     await page.getByTestId("specialty-toggle-OPHTHALMOLOGY").waitFor();
     const editButtons = page.getByRole("button", { name: "Edit" });
     await editButtons.nth(3).click(); // Ophthalmology row
-    await expect(page.getByText("Eye concern (text)")).toBeVisible();
+    // Field labels render inside an uncontrolled <input defaultValue>, so their
+    // text is a form-control value, never matchable by getByText — use the
+    // row's own testid instead.
+    await expect(page.getByTestId("field-row-eye_concern")).toBeVisible();
     await shot(page, "09-specialty-fields.png");
 
     // 10 — Add Patient
