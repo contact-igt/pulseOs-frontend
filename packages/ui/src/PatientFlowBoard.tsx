@@ -42,14 +42,17 @@ export function PatientFlowBoard({
   return (
     <Card className="p-4">
       <SectionHeading title="Patient Flow Today" subtitle={`${rawTotal} appointments`} />
-      <div className="flex h-9 w-full gap-0.5 overflow-hidden rounded-lg" data-testid="patient-flow-bar">
+      <div className="flex h-9 w-full gap-0.5 overflow-hidden rounded-lg bg-neutral-100" data-testid="patient-flow-bar">
         {data.map((row) => (
           <button
             key={row.bucket}
             type="button"
             title={`${LABELS[row.bucket]}: ${row.count}`}
             onClick={() => onBucketClick?.(row.bucket)}
-            className="h-full min-w-[3px] transition-opacity hover:opacity-80"
+            // A zero-count stage still renders as a thin, subdued sliver (min-width
+            // floor + reduced opacity) — never truly 0px, which would read as
+            // "this stage doesn't exist" rather than "nothing here yet today".
+            className={`h-full min-w-[4px] transition-opacity hover:opacity-80 ${row.count === 0 ? "opacity-30" : ""}`}
             style={{ width: `${(row.count / total) * 100}%`, backgroundColor: COLORS[row.bucket] }}
             data-testid={`flow-bucket-${row.bucket}`}
           />
@@ -63,7 +66,7 @@ export function PatientFlowBoard({
             onClick={() => onBucketClick?.(row.bucket)}
             className="min-w-0 rounded px-0.5 py-0.5 text-left hover:bg-neutral-50"
           >
-            <span className={`block font-semibold tabular-nums text-slate-900 ${compact ? "text-sm" : "text-lg"}`}>{row.count}</span>
+            <span className={`block font-semibold tabular-nums ${row.count === 0 ? "text-neutral-400" : "text-slate-900"} ${compact ? "text-sm" : "text-lg"}`}>{row.count}</span>
             <span className={`block text-neutral-500 ${compact ? "text-[9px] leading-tight" : "truncate text-[11px]"}`}>{labels[row.bucket]}</span>
           </button>
         ))}

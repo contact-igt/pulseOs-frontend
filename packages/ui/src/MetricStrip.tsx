@@ -21,8 +21,8 @@ export function MetricStrip({ cells, testId }: { cells: MetricCellDef[]; testId?
         const testId = cell.testId ?? `metric-${cell.key}`;
         const content = (
           <>
-            <span className="block text-xl font-semibold tabular-nums text-slate-900">{cell.value}</span>
-            <span className="mt-0.5 block text-[11px] leading-tight text-neutral-500">{cell.label}</span>
+            <span className="block text-2xl font-semibold tabular-nums text-slate-900">{cell.value}</span>
+            <span className="mt-1 block text-xs leading-tight text-neutral-500">{cell.label}</span>
           </>
         );
         return cell.onClick ? (
@@ -30,13 +30,13 @@ export function MetricStrip({ cells, testId }: { cells: MetricCellDef[]; testId?
             key={cell.key}
             type="button"
             onClick={cell.onClick}
-            className="flex flex-col items-start px-4 py-3 text-left transition hover:bg-primary-50/60"
+            className="flex flex-col items-start px-4 py-3.5 text-left transition hover:bg-primary-50/60"
             data-testid={testId}
           >
             {content}
           </button>
         ) : (
-          <div key={cell.key} className="px-4 py-3" data-testid={testId}>
+          <div key={cell.key} className="px-4 py-3.5" data-testid={testId}>
             {content}
           </div>
         );

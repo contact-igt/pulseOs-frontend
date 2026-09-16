@@ -61,6 +61,7 @@ export function SegmentedRadial({
             const filled = (Math.min(seg.pct, 100) / 100) * circumference;
             return (
               <g key={seg.key}>
+                <title>{`${seg.label}: ${seg.count} (${seg.pct}%)`}</title>
                 <circle cx={center} cy={center} r={radius} fill="none" stroke="var(--color-neutral-100)" strokeWidth={strokeWidth} />
                 <circle
                   cx={center}
@@ -97,7 +98,7 @@ export function SegmentedRadial({
               >
                 <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: seg.color }} />
                 <span className="min-w-0 flex-1 truncate text-xs text-neutral-600">{seg.label}</span>
-                <span className="shrink-0 text-xs tabular-nums text-slate-700">{seg.count}</span>
+                <span className="w-7 shrink-0 text-right text-xs tabular-nums text-slate-700">{seg.count}</span>
                 <span className="w-9 shrink-0 text-right text-xs tabular-nums text-neutral-400">{seg.pct}%</span>
               </button>
             </li>

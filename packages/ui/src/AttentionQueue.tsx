@@ -1,6 +1,22 @@
 import type { AttentionItem } from "@pulseos/types";
-import { Badge, Card, EmptyState, SectionHeading } from "./primitives";
+import { Card, EmptyState, SectionHeading } from "./primitives";
 import { ATTENTION_REASON_LABEL as REASON_LABEL } from "./status";
+
+/** "2h overdue" / "Due in 45m" / "Due in 3h" — urgency at a glance, no separate date lookup needed. */
+function urgencyLabel(dueAt: string): { text: string; overdue: boolean } {
+  const diffMins = Math.round((new Date(dueAt).getTime() - Date.now()) / 60_000);
+  if (diffMins <= 0) {
+    const overdueMins = -diffMins;
+    if (overdueMins < 60) return { text: `${Math.max(overdueMins, 1)}m overdue`, overdue: true };
+    const hours = Math.round(overdueMins / 60);
+    if (hours < 24) return { text: `${hours}h overdue`, overdue: true };
+    return { text: `${Math.round(hours / 24)}d overdue`, overdue: true };
+  }
+  if (diffMins < 60) return { text: `Due in ${diffMins}m`, overdue: false };
+  const hours = Math.round(diffMins / 60);
+  if (hours < 24) return { text: `Due in ${hours}h`, overdue: false };
+  return { text: `Due in ${Math.round(hours / 24)}d`, overdue: false };
+}
 
 export function AttentionQueue({ items, onItemClick }: { items: AttentionItem[]; onItemClick?: (item: AttentionItem) => void }) {
   return (
@@ -11,19 +27,32 @@ export function AttentionQueue({ items, onItemClick }: { items: AttentionItem[];
       ) : (
         <ul className="max-h-80 divide-y divide-neutral-100 overflow-y-auto">
           {items.map((item) => {
-            const overdue = new Date(item.dueAt).getTime() < Date.now();
+            const urgency = urgencyLabel(item.dueAt);
             return (
               <li key={item.id}>
                 <button
                   type="button"
                   onClick={() => onItemClick?.(item)}
-                  className="flex w-full items-center justify-between gap-3 py-2 text-left hover:bg-neutral-50"
+                  className="flex w-full items-start gap-2.5 py-2 text-left hover:bg-neutral-50"
+                  data-testid={`attention-row-${item.id}`}
                 >
+                  {/* A severity dot, not a full-width colored pill — the row's own text carries the meaning. */}
+                  <span
+                    className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${urgency.overdue ? "bg-danger-500" : "bg-warning-500"}`}
+                    aria-hidden="true"
+                  />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm text-slate-900">{item.patientName}</span>
-                    <span className="block text-xs text-neutral-500">{item.journeyType} · {item.ownerName ?? "Unassigned"}</span>
+                    <span className="flex items-baseline justify-between gap-2">
+                      <span className="truncate text-sm font-medium text-slate-900">{item.patientName}</span>
+                      <span className={`shrink-0 text-[11px] tabular-nums font-medium ${urgency.overdue ? "text-danger-500" : "text-neutral-400"}`}>
+                        {urgency.text}
+                      </span>
+                    </span>
+                    <span className="block truncate text-xs text-neutral-500">
+                      {item.journeyType} · {item.ownerName ?? "Unassigned"}
+                    </span>
+                    <span className="block truncate text-xs text-neutral-600">{REASON_LABEL[item.reason]}</span>
                   </span>
-                  <Badge tone={overdue ? "danger" : "warning"}>{REASON_LABEL[item.reason]}</Badge>
                 </button>
               </li>
             );

@@ -61,11 +61,11 @@ export function SourcePerformanceTable({
 
   return (
     <Card className={compact ? "overflow-hidden p-4" : "overflow-x-auto p-4"}>
-      <SectionHeading title={compact ? "Top Sources by Revenue" : "Source / Campaign Performance"} />
+      <SectionHeading title={compact ? "Top Campaigns by Revenue" : "Source / Campaign Performance"} />
       <table className={compact ? "w-full text-left text-xs" : "w-full min-w-[480px] text-left text-xs"}>
         <thead>
           <tr className="text-neutral-500">
-            <th className="pb-1 font-medium">{compact ? "Source" : "Campaign"}</th>
+            <th className="pb-1 font-medium">Campaign</th>
             {columns.map((c) => (
               <th key={c.key} className="cursor-pointer pb-1 text-right font-medium hover:text-slate-900" onClick={() => toggleSort(c.key)}>
                 {c.label}{sortKey === c.key ? (desc ? " ↓" : " ↑") : ""}
@@ -78,10 +78,10 @@ export function SourcePerformanceTable({
             <tr key={row.campaignId ?? row.source} className="cursor-pointer hover:bg-neutral-50" onClick={() => onRowClick?.(row)}>
               <td className="py-1.5">
                 <span className="flex items-center gap-1.5">
-                  <span className="block truncate text-slate-900">{compact ? row.source : row.campaignName}</span>
+                  <span className={`block truncate text-slate-900 ${compact ? "max-w-[140px]" : "max-w-[220px]"}`}>{row.campaignName}</span>
                   <ConnectorModeBadge mode={row.connectorMode} />
                 </span>
-                {!compact && <span className="block text-[11px] text-neutral-400">{row.source}</span>}
+                <span className="block text-[11px] capitalize text-neutral-400">{row.source}</span>
               </td>
               {!compact && (
                 <>

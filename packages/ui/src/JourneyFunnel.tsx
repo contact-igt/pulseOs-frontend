@@ -34,6 +34,7 @@ export function JourneyFunnel({ stages, onStageClick, testId }: { stages: Journe
               <button
                 type="button"
                 onClick={() => onStageClick?.(stage.key)}
+                title={`${stage.label}: ${stage.count} patients (${pctOfFirst}% of enquiries)${dropOffPoints ? ` — ${dropOffPoints}pp drop-off from the previous stage` : ""}`}
                 className="flex w-full items-center gap-2.5 rounded px-1 py-1 text-left hover:bg-neutral-50 disabled:cursor-default disabled:hover:bg-transparent"
                 disabled={!onStageClick}
                 data-testid={`funnel-stage-${stage.key}`}
