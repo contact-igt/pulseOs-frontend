@@ -41,7 +41,7 @@ describe.skipIf(!DEMO_PASSWORD)("patients and journeys (integration)", () => {
     it("matches by name or phone, tenant-scoped, capped, ordered by name", async () => {
       const res = await app.inject({ method: "GET", url: "/patients/search?q=Priya", cookies: { pulseos_session: cookie } });
       expect(res.statusCode).toBe(200);
-      const rows = res.json() as { id: string; name: string; phone: string; currentJourneyType: string | null }[];
+      const rows = res.json() as { id: string; name: string; phone: string; currentJourneyType: string | null; currentStage: string | null }[];
       expect(rows.length).toBeGreaterThan(0);
       expect(rows.length).toBeLessThanOrEqual(8);
       expect(rows.every((r) => r.name.toLowerCase().includes("priya"))).toBe(true);
@@ -49,6 +49,8 @@ describe.skipIf(!DEMO_PASSWORD)("patients and journeys (integration)", () => {
         expect(typeof r.id).toBe("string");
         expect(typeof r.phone).toBe("string");
       }
+      // Priya Sharma has active journeys in seed data — stage should be a real value, not just present-but-null.
+      expect(rows.some((r) => r.currentStage !== null)).toBe(true);
     });
 
     it("matching on phone digits also finds the patient", async () => {

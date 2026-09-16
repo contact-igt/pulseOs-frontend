@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Bell, ChevronDown, LogOut, Menu, Search } from "lucide-react";
-import { QuickCreateMenu, type QuickCreateItem } from "@pulseos/ui";
+import { QuickCreateMenu, JOURNEY_STAGE_LABEL, type QuickCreateItem } from "@pulseos/ui";
 import type { SessionUser } from "@pulseos/types";
 import { api } from "@pulseos/api-client";
 import { useQuickCreate } from "./QuickCreateProvider";
@@ -115,6 +115,20 @@ export function TopBar({
   );
 }
 
+/** Wraps the first matching substring in a highlighted <mark> — case-insensitive, plain text otherwise. */
+function highlightMatch(text: string, query: string) {
+  if (!query) return text;
+  const idx = text.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return text;
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="rounded-sm bg-primary-100 text-primary-900">{text.slice(idx, idx + query.length)}</mark>
+      {text.slice(idx + query.length)}
+    </>
+  );
+}
+
 /**
  * Real debounced typeahead over /patients/search (never the full patient
  * directory), 2-char trigger, arrow/Enter/Escape keyboard nav, selecting a
@@ -209,19 +223,32 @@ function GlobalPatientSearch() {
           className="absolute right-0 top-full z-30 mt-1 max-h-80 w-72 overflow-y-auto rounded-lg border border-neutral-200 bg-white py-1 shadow-lg sm:w-80"
           data-testid="global-patient-search-results"
         >
-          {results.isFetching && rows.length === 0 && <li className="px-3 py-2 text-xs text-neutral-400">Searching…</li>}
-          {!results.isFetching && rows.length === 0 && <li className="px-3 py-2 text-xs text-neutral-400">No patients match “{trimmed}”.</li>}
+          {results.isFetching && rows.length === 0 && (
+            <li className="flex items-center gap-2 px-3 py-2 text-xs text-neutral-400">
+              <span className="h-3 w-3 animate-spin rounded-full border-2 border-neutral-300 border-t-primary-500" aria-hidden="true" />
+              Searching…
+            </li>
+          )}
+          {!results.isFetching && rows.length === 0 && <li className="px-3 py-2 text-xs text-neutral-400">No patients found.</li>}
           {rows.map((row, i) => (
             <li key={row.id} role="option" aria-selected={i === activeIndex}>
               <button
                 type="button"
                 onClick={() => selectRow(row.id)}
                 onMouseEnter={() => setActiveIndex(i)}
-                className={`flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-xs ${i === activeIndex ? "bg-primary-50" : "hover:bg-neutral-50"}`}
+                className={`flex w-full items-center gap-2 border-l-2 px-2.5 py-1.5 text-left text-xs ${i === activeIndex ? "border-primary-500 bg-primary-50" : "border-transparent hover:bg-neutral-50"}`}
                 data-testid={`global-search-result-${row.id}`}
               >
-                <span className="min-w-0 truncate font-medium text-slate-900">{row.name}</span>
-                <span className="shrink-0 text-neutral-400">{row.currentJourneyType ?? row.phone}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium text-slate-900">{highlightMatch(row.name, trimmed)}</span>
+                  <span className="block truncate text-[11px] text-neutral-400">{highlightMatch(row.phone, trimmed)}</span>
+                </span>
+                {row.currentJourneyType && (
+                  <span className="shrink-0 text-right text-[11px] text-neutral-400">
+                    <span className="block truncate">{row.currentJourneyType}</span>
+                    {row.currentStage && <span className="block text-neutral-300">{JOURNEY_STAGE_LABEL[row.currentStage] ?? row.currentStage}</span>}
+                  </span>
+                )}
               </button>
             </li>
           ))}

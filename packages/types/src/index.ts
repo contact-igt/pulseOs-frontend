@@ -323,6 +323,7 @@ export interface PatientSearchRow {
   name: string;
   phone: string;
   currentJourneyType: string | null;
+  currentStage: JourneyStage | null;
 }
 
 export interface JourneyCardVm {

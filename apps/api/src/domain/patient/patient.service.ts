@@ -70,17 +70,23 @@ export async function searchPatients(db: Db, tenantId: string, query: string, li
   if (rows.length === 0) return [];
 
   const journeyRows = await db
-    .select({ patientId: journeys.patientId, journeyType: journeys.journeyType, createdAt: journeys.createdAt })
+    .select({ patientId: journeys.patientId, journeyType: journeys.journeyType, stage: journeys.stage, createdAt: journeys.createdAt })
     .from(journeys)
     .where(inArray(journeys.patientId, rows.map((r) => r.id)));
 
-  const latestJourneyByPatient = new Map<string, { journeyType: string; createdAt: Date }>();
+  const latestJourneyByPatient = new Map<string, { journeyType: string; stage: (typeof journeyRows)[number]["stage"]; createdAt: Date }>();
   for (const j of journeyRows) {
     const existing = latestJourneyByPatient.get(j.patientId);
     if (!existing || j.createdAt > existing.createdAt) latestJourneyByPatient.set(j.patientId, j);
   }
 
-  return rows.map((r) => ({ id: r.id, name: r.name, phone: r.phone, currentJourneyType: latestJourneyByPatient.get(r.id)?.journeyType ?? null }));
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    phone: r.phone,
+    currentJourneyType: latestJourneyByPatient.get(r.id)?.journeyType ?? null,
+    currentStage: latestJourneyByPatient.get(r.id)?.stage ?? null,
+  }));
 }
 
 export interface PatientListFilters {
