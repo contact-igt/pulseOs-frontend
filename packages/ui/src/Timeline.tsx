@@ -3,7 +3,25 @@
 import { useState } from "react";
 import { CalendarCheck, MessageCircle, Stethoscope, ListChecks, Circle, type LucideIcon } from "lucide-react";
 import { Card, EmptyState, SectionHeading } from "./primitives";
-import { fmtDateTime } from "./format";
+import { fmtDate, fmtTime } from "./format";
+
+/** "Today" / "Yesterday" / "16 Sept" — the day-group header text. */
+function dayHeaderLabel(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diffDays = Math.round((startOfDay(now) - startOfDay(d)) / 86_400_000);
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  return fmtDate(iso);
+}
+
+/** Same calendar day, in local time — not a raw ISO-string prefix compare. */
+function isSameDay(a: string, b: string): boolean {
+  const da = new Date(a);
+  const db = new Date(b);
+  return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate();
+}
 
 export interface TimelineEventVm {
   id: string;
@@ -73,16 +91,22 @@ export function Timeline({ events }: { events: TimelineEventVm[] }) {
         <EmptyState message="No timeline events yet" />
       ) : (
         <ol className="space-y-4 border-l border-neutral-200 pl-4">
-          {visible.map((event) => {
+          {visible.map((event, i) => {
             const Icon = CATEGORY_ICON[event.category];
+            const showDayHeader = i === 0 || !isSameDay(event.occurredAt, visible[i - 1].occurredAt);
             return (
               <li key={event.id} className="relative">
-                <span className={`absolute -left-[27px] top-0 flex h-5 w-5 items-center justify-center rounded-full ${CATEGORY_DOT[event.category]}`}>
+                {showDayHeader && (
+                  <p className={`text-[11px] font-semibold uppercase tracking-wide text-neutral-400 ${i === 0 ? "mb-2" : "mb-2 mt-2"}`}>
+                    {dayHeaderLabel(event.occurredAt)}
+                  </p>
+                )}
+                <span className={`absolute -left-[27px] flex h-5 w-5 items-center justify-center rounded-full ${CATEGORY_DOT[event.category]}`} style={{ top: showDayHeader ? "1.75rem" : 0 }}>
                   <Icon size={12} strokeWidth={2} />
                 </span>
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="text-sm text-slate-900">{event.title}</span>
-                  <span className="shrink-0 text-[11px] text-neutral-400">{fmtDateTime(event.occurredAt)}</span>
+                  <span className="shrink-0 text-[11px] tabular-nums text-neutral-400">{fmtTime(event.occurredAt)}</span>
                 </div>
                 {event.description && <p className="mt-0.5 text-xs text-neutral-500">{event.description}</p>}
                 <span className="mt-0.5 block text-[11px] text-neutral-400">

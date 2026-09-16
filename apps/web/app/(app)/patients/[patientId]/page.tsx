@@ -4,10 +4,13 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
-import { Badge, Card, ErrorState, Skeleton, Timeline, JOURNEY_STAGE_LABEL, JOURNEY_STAGE_TONE } from "@pulseos/ui";
+import {
+  Badge, Card, ErrorState, Skeleton, Timeline,
+  JOURNEY_STAGE_LABEL, JOURNEY_STAGE_TONE, APPOINTMENT_STATUS_LABEL, TREATMENT_STATUS_LABEL,
+} from "@pulseos/ui";
 import { formatInr, formatMoneyOrDash, fmtDateTime as fmtDate } from "@pulseos/ui";
 import { BackLink } from "@/components/shell/BackLink";
-import type { JourneyCardVm } from "@pulseos/types";
+import type { AppointmentStatus, JourneyCardVm, JourneyStage, TreatmentStatus } from "@pulseos/types";
 
 function initials(name: string) {
   return name
@@ -16,6 +19,43 @@ function initials(name: string) {
     .slice(0, 2)
     .join("")
     .toUpperCase();
+}
+
+// Four checkpoints a coordinator actually thinks in, collapsed from the
+// finer-grained JourneyStage enum — "is this patient still pre-appointment,
+// booked, in consultation, or into treatment?" at a glance, no separate
+// funnel needed for a single journey.
+const MINI_FLOW_STEPS = ["Enquiry", "Appointment", "Consultation", "Treatment"] as const;
+const STAGE_CHECKPOINT: Partial<Record<JourneyStage, number>> = {
+  enquiry: 0, contacted: 0, booked: 1, attended: 1, consulted: 2, treatment_advised: 2, scheduled: 3, completed: 3,
+};
+
+function JourneyMiniFlow({ stage }: { stage: JourneyStage }) {
+  if (stage === "lost") return null;
+  const current = STAGE_CHECKPOINT[stage] ?? 0;
+  return (
+    <div className="mt-2.5 flex items-center" aria-label={`Progress: ${MINI_FLOW_STEPS[current]}`}>
+      {MINI_FLOW_STEPS.map((label, i) => {
+        const done = i < current;
+        const isCurrent = i === current;
+        return (
+          <div key={label} className="flex flex-1 items-center last:flex-none">
+            <div className="flex flex-col items-center gap-1">
+              <span
+                className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold ${
+                  done ? "bg-primary-500 text-white" : isCurrent ? "border-2 border-primary-500 bg-white text-primary-500" : "border border-neutral-300 bg-white text-neutral-300"
+                }`}
+              >
+                {done ? "✓" : ""}
+              </span>
+              <span className={`whitespace-nowrap text-[10px] ${isCurrent ? "font-medium text-slate-900" : "text-neutral-400"}`}>{label}</span>
+            </div>
+            {i < MINI_FLOW_STEPS.length - 1 && <span className={`mx-1 mb-3.5 h-px flex-1 ${done ? "bg-primary-500" : "bg-neutral-200"}`} />}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function JourneyCard({ journey, active, onClick }: { journey: JourneyCardVm; active: boolean; onClick: () => void }) {
@@ -29,18 +69,27 @@ function JourneyCard({ journey, active, onClick }: { journey: JourneyCardVm; act
         <span className="text-sm font-medium text-slate-900">{journey.journeyType}</span>
         <Badge tone={JOURNEY_STAGE_TONE[journey.stage] ?? "neutral"}>{JOURNEY_STAGE_LABEL[journey.stage] ?? journey.stage}</Badge>
       </div>
-      <dl className="mt-2 space-y-0.5 text-xs text-neutral-500">
+      <JourneyMiniFlow stage={journey.stage} />
+      <dl className="mt-3 space-y-0.5 text-xs text-neutral-500">
         <div className="flex justify-between"><dt>Owner</dt><dd>{journey.ownerName ?? "—"}</dd></div>
         <div className="flex justify-between"><dt>Doctor</dt><dd>{journey.doctorName ?? "—"}</dd></div>
         <div className="flex justify-between"><dt>Last interaction</dt><dd>{fmtDate(journey.lastInteractionAt)}</dd></div>
         <div className="flex justify-between"><dt>Next action</dt><dd>{fmtDate(journey.nextActionDueAt)}</dd></div>
         <div className="flex justify-between">
           <dt>Next appointment</dt>
-          <dd>{journey.appointmentTime ? `${fmtDate(journey.appointmentTime)} · ${journey.appointmentStatus}` : "—"}</dd>
+          <dd>
+            {journey.appointmentTime
+              ? `${fmtDate(journey.appointmentTime)} · ${APPOINTMENT_STATUS_LABEL[journey.appointmentStatus as AppointmentStatus] ?? journey.appointmentStatus}`
+              : "—"}
+          </dd>
         </div>
         <div className="flex justify-between">
           <dt>Treatment status</dt>
-          <dd>{journey.treatmentLabel ? `${journey.treatmentLabel} · ${journey.treatmentStatus}` : "—"}</dd>
+          <dd>
+            {journey.treatmentLabel
+              ? `${journey.treatmentLabel} · ${TREATMENT_STATUS_LABEL[journey.treatmentStatus as TreatmentStatus] ?? journey.treatmentStatus}`
+              : "—"}
+          </dd>
         </div>
       </dl>
     </button>
