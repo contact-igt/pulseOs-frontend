@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
 import { useRouter } from "next/navigation";
-import { Badge, ConfirmDialog, EmptyState, ErrorState, OverflowMenu, SectionHeading, Skeleton, useDialogFocus, relativeTime, fmtDate, fmtDateTime, JOURNEY_STAGE_LABEL } from "@pulseos/ui";
+import { Badge, ConfirmDialog, EmptyState, ErrorState, OverflowMenu, SectionHeading, Skeleton, useDialogFocus, relativeTime, fmtDate, fmtDateTime, fmtSmartDateTime, JOURNEY_STAGE_LABEL } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import { withFrom } from "@/components/shell/BackLink";
 import type { ConversationAutomationMode, ConversationAutomationPreference, ConversationChannel, ConversationDetail, OwnershipState } from "@pulseos/types";
@@ -504,16 +504,26 @@ function AiSchedulePanel({
           Configuration only — PulseOS has no live AI agent yet to act on this. Saving just records what should happen once one exists.
         </p>
       </div>
-      <select
-        value={mode}
-        onChange={(e) => setMode(e.target.value as ConversationAutomationMode)}
-        className="rounded border border-neutral-200 bg-white px-1.5 py-1 text-xs text-slate-700"
-        data-testid="automation-mode-select"
-      >
-        <option value="manual">Manual only</option>
-        <option value="ai_when_available">AI when available</option>
-        <option value="ai_scheduled">AI scheduled</option>
-      </select>
+      <div className="inline-flex rounded-lg border border-neutral-200 bg-white p-0.5" role="radiogroup" aria-label="AI scheduling preference" data-testid="automation-mode-select">
+        {(["manual", "ai_when_available", "ai_scheduled"] as ConversationAutomationMode[]).map((m) => (
+          <button
+            key={m}
+            type="button"
+            role="radio"
+            aria-checked={mode === m}
+            onClick={() => setMode(m)}
+            className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${mode === m ? "bg-primary-600 text-white" : "text-neutral-600 hover:bg-neutral-100"}`}
+            data-testid={`automation-mode-${m}`}
+          >
+            {AUTOMATION_MODE_LABEL[m]}
+          </button>
+        ))}
+      </div>
+      {current?.mode === "ai_scheduled" && current.scheduledStart && current.scheduledEnd && (
+        <p className="text-[11px] text-neutral-500">
+          Currently: {fmtSmartDateTime(current.scheduledStart)} → {fmtSmartDateTime(current.scheduledEnd)} ({current.timezone})
+        </p>
+      )}
       {mode === "ai_scheduled" && (
         <div className="flex flex-wrap items-center gap-2">
           <label className="flex items-center gap-1 text-[11px] text-neutral-500">
@@ -531,13 +541,16 @@ function AiSchedulePanel({
         </div>
       )}
       {error && <p className="text-[11px] text-danger-500">{error}</p>}
-      <div className="flex gap-2">
+      <div className="flex items-center gap-2">
         <button type="button" onClick={save} disabled={saving} className="rounded bg-primary-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-40" data-testid="save-automation">
           {saving ? "Saving…" : "Save"}
         </button>
         <button type="button" onClick={onCancel} className="rounded px-2.5 py-1 text-xs text-neutral-500 hover:bg-neutral-100">
           Cancel
         </button>
+        {mode !== "manual" && (
+          <span className="text-[10px] text-neutral-400">Automated replies require the AI runtime to be active.</span>
+        )}
       </div>
     </div>
   );

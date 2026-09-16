@@ -39,7 +39,7 @@ test.describe("Inbox — AI scheduling preference (config only)", () => {
     await expect(panel).toBeVisible();
     await expect(panel).toContainText("no live AI agent yet");
 
-    await page.getByTestId("automation-mode-select").selectOption("ai_scheduled");
+    await page.getByTestId("automation-mode-ai_scheduled").click();
     await expect(page.getByTestId("automation-start-input")).toBeVisible();
 
     // Save without a window — must show a validation error, not silently succeed.
@@ -59,7 +59,7 @@ test.describe("Inbox — AI scheduling preference (config only)", () => {
     // Revert so the seed conversation isn't left in a scheduled state for other specs.
     await page.getByTestId("conversation-more-actions").click();
     await page.getByRole("menuitem", { name: "Schedule AI…" }).click();
-    await page.getByTestId("automation-mode-select").selectOption("manual");
+    await page.getByTestId("automation-mode-manual").click();
     await page.getByTestId("save-automation").click();
     await expect(page.getByTestId("automation-mode-indicator")).toBeHidden();
   });
