@@ -6,6 +6,7 @@ import { listTreatments, updateTreatmentStatus } from "./treatment.service.js";
 const REASON_STATUS: Record<string, number> = {
   treatment_not_found: 404,
   invalid_transition: 409,
+  conflict: 409,
 };
 
 export async function treatmentRoutes(app: FastifyInstance) {

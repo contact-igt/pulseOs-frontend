@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "revenue_events_treatment_opportunity_unique" ON "revenue_events" USING btree ("treatment_opportunity_id");

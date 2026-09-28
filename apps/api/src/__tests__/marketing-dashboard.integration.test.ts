@@ -45,9 +45,15 @@ describe.skipIf(!DEMO_PASSWORD)("marketing → patient journey dashboard (integr
     expect(body.marketingSpend).toBe(liveSpend);
     // Includes the seeded "Meta – Cataract Awareness" campaign (₹18,000, deliberately
     // low-converting — see seed.ts) added to demonstrate Campaigns-page budget leakage.
-    // Unlike spend, no test attaches revenue events to campaigns synced outside the seed,
-    // so this stays a fixed seed-time constant.
-    expect(body.attributedRevenue).toBe(22_000 + 95_000 + 110_000 + 88_000);
+    // attributedRevenue is a live tenant-wide sum, not a fixed seed-time constant: completing
+    // a treatment now writes a real revenue_events row (the production write path this
+    // checkpoint added — see treatment.service.ts's updateTreatmentStatus), so other suites
+    // in this shared dev DB that complete treatments (e.g. post-care.integration.test.ts,
+    // treatment-revenue-event.integration.test.ts) legitimately add to this total. That's
+    // real, desired behavior — not something to suppress — so this only asserts the seeded
+    // floor rather than an exact seed-time number, keeping it correct regardless of suite
+    // run order or how much other revenue has been recorded elsewhere in the run.
+    expect(body.attributedRevenue).toBeGreaterThanOrEqual(22_000 + 95_000 + 110_000 + 88_000);
     // treatmentsCompleted is a live tenant-wide count, not a seed-time constant: other
     // suites in this shared dev DB (e.g. post-care.integration.test.ts) legitimately
     // complete additional treatments as part of what they're testing, and that's real,

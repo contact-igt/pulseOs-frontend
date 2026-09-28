@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db, queryClient } from "../db/client.js";
-import { campaignTouchpoints, conversionFeedbackEvents, journeys, patients, tasks, tenants, treatmentOpportunities, timelineEvents, users } from "../db/schema.js";
+import { campaignTouchpoints, conversionFeedbackEvents, journeys, patients, revenueEvents, tasks, tenants, treatmentOpportunities, timelineEvents, users } from "../db/schema.js";
 import { updateTreatmentStatus } from "../domain/treatment/treatment.service.js";
 import { recordTouchpoint } from "../domain/acquisition/attribution.service.js";
 import { googleAdsLeadFormsAdapter } from "../domain/acquisition/adapters/google-ads-lead-forms.js";
@@ -55,6 +55,11 @@ describe.skipIf(!DATABASE_URL)("Treatment Completed -> conversion feedback eligi
     await db.delete(conversionFeedbackEvents).where(eq(conversionFeedbackEvents.journeyId, journeyId));
     await db.delete(tasks).where(eq(tasks.journeyId, journeyId));
     await db.delete(timelineEvents).where(eq(timelineEvents.journeyId, journeyId));
+    // Completing treatmentA now also writes a revenue_events row (the
+    // production write path this checkpoint added) — must be deleted before
+    // the treatment_opportunities row it references, or the FK constraint
+    // rejects the delete below.
+    await db.delete(revenueEvents).where(eq(revenueEvents.journeyId, journeyId));
     await db.delete(treatmentOpportunities).where(eq(treatmentOpportunities.journeyId, journeyId));
     await db.delete(campaignTouchpoints).where(eq(campaignTouchpoints.journeyId, journeyId));
     await db.delete(journeys).where(eq(journeys.id, journeyId));
