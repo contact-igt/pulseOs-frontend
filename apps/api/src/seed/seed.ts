@@ -485,7 +485,10 @@ async function main() {
   // live" state for a growing clinic) precisely so Main Line stays the sole
   // active Runo endpoint and the seeded call below resolves deterministically
   // instead of demonstrating only the honest-null path.
-  const [mainLineEndpoint, fertilityLineEndpoint, whatsappEndpoint] = await db
+  // Fertility Line itself is never referenced after insertion — it exists
+  // purely so Main Line is the connector's sole ACTIVE endpoint (see comment
+  // above), not to be wired into a fixture directly.
+  const [mainLineEndpoint, , whatsappEndpoint] = await db
     .insert(communicationEndpoints)
     .values([
       {
