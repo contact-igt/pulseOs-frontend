@@ -233,7 +233,16 @@ export async function updateTreatmentStatus(
     // A completed treatment is the checkpoint-specified trigger point for
     // conversion feedback — this only ever builds a candidate record
     // (consent-gated, idempotent), never sends anything to a real provider.
-    await recordConversionFeedbackEvent(db, tenantId, existing.journeyId, "TREATMENT_COMPLETED", existing.estimatedValue, "INR");
+    // Best-effort, matching its own doc comment: the status transition and
+    // revenue event above are already durably committed by this point, so a
+    // failure here must never surface as if the completion itself failed —
+    // the caller would see a false 500 on an already-successful change with
+    // no way to tell (a retry would just hit "already completed").
+    try {
+      await recordConversionFeedbackEvent(db, tenantId, existing.journeyId, "TREATMENT_COMPLETED", existing.estimatedValue, "INR");
+    } catch (err) {
+      console.error(`recordConversionFeedbackEvent failed for treatment ${treatmentId} after completion was already committed`, err);
+    }
   }
 
   return { ok: true };
