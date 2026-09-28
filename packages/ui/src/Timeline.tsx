@@ -4,6 +4,9 @@ import { useState } from "react";
 import { CalendarCheck, MessageCircle, Stethoscope, ListChecks, Circle, type LucideIcon } from "lucide-react";
 import { Card, EmptyState, SectionHeading } from "./primitives";
 import { fmtDate, fmtTime } from "./format";
+import type { TimelineEventVm } from "@pulseos/types";
+
+export type { TimelineEventVm };
 
 /** "Today" / "Yesterday" / "16 Sept" — the day-group header text. */
 function dayHeaderLabel(iso: string): string {
@@ -21,16 +24,6 @@ function isSameDay(a: string, b: string): boolean {
   const da = new Date(a);
   const db = new Date(b);
   return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate();
-}
-
-export interface TimelineEventVm {
-  id: string;
-  eventType: string;
-  title: string;
-  description: string | null;
-  sourceChannel: string | null;
-  occurredAt: string;
-  category: "communication" | "appointments" | "clinical" | "tasks" | "other";
 }
 
 const CATEGORY_LABEL: Record<TimelineEventVm["category"], string> = {
@@ -75,7 +68,7 @@ export function Timeline({ events }: { events: TimelineEventVm[] }) {
   return (
     <Card className="p-4">
       <SectionHeading title="Timeline" subtitle={`${visible.length} events`} />
-      <div className="mb-3 flex gap-1">
+      <div className="mb-3 flex flex-wrap gap-1">
         {FILTERS.map((f) => (
           <button
             key={f.key}
@@ -112,6 +105,11 @@ export function Timeline({ events }: { events: TimelineEventVm[] }) {
                 <span className="mt-0.5 block text-[11px] text-neutral-400">
                   {CATEGORY_LABEL[event.category]}
                   {event.sourceChannel && ` · ${event.sourceChannel}`}
+                  {/* Which hospital line this call/WhatsApp message came in
+                      on — previously only visible on the separate Calls
+                      card, so scanning this cross-channel feed couldn't
+                      tell you that on its own. */}
+                  {event.endpointLabel && ` · ${event.endpointLabel}`}
                 </span>
               </li>
             );

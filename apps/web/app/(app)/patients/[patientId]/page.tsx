@@ -5,12 +5,14 @@ import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
 import {
-  Badge, Card, ErrorState, Skeleton, Timeline,
+  Badge, Card, ConnectorModeBadge, ErrorState, Skeleton, Timeline,
   JOURNEY_STAGE_LABEL, JOURNEY_STAGE_TONE, APPOINTMENT_STATUS_LABEL, TREATMENT_STATUS_LABEL,
+  CALL_STATUS_LABEL, CALL_STATUS_TONE,
 } from "@pulseos/ui";
-import { formatInr, formatMoneyOrDash, fmtDateTime as fmtDate } from "@pulseos/ui";
+import { formatInr, formatMoneyOrDash, fmtCallDuration, fmtDateTime as fmtDate, fmtSmartDateTime } from "@pulseos/ui";
+import { PhoneIncoming, PhoneMissed, PhoneOutgoing } from "lucide-react";
 import { BackLink } from "@/components/shell/BackLink";
-import type { AppointmentStatus, JourneyCardVm, JourneyStage, TreatmentStatus } from "@pulseos/types";
+import type { AppointmentStatus, CallVm, JourneyCardVm, JourneyStage, TreatmentStatus } from "@pulseos/types";
 
 function initials(name: string) {
   return name
@@ -75,11 +77,11 @@ function JourneyCard({ journey, active, onClick }: { journey: JourneyCardVm; act
       </div>
       <JourneyMiniFlow stage={journey.stage} />
       <dl className="mt-3 space-y-0.5 text-xs text-neutral-500">
-        <div className="flex justify-between"><dt>Owner</dt><dd>{journey.ownerName ?? "—"}</dd></div>
-        <div className="flex justify-between"><dt>Doctor</dt><dd>{journey.doctorName ?? "—"}</dd></div>
-        <div className="flex justify-between"><dt>Last interaction</dt><dd>{fmtDate(journey.lastInteractionAt)}</dd></div>
-        <div className="flex justify-between"><dt>Next action</dt><dd>{fmtDate(journey.nextActionDueAt)}</dd></div>
-        <div className="flex justify-between">
+        <div className="flex justify-between gap-3"><dt>Owner</dt><dd>{journey.ownerName ?? "—"}</dd></div>
+        <div className="flex justify-between gap-3"><dt>Doctor</dt><dd>{journey.doctorName ?? "—"}</dd></div>
+        <div className="flex justify-between gap-3"><dt>Last interaction</dt><dd>{fmtDate(journey.lastInteractionAt)}</dd></div>
+        <div className="flex justify-between gap-3"><dt>Next action</dt><dd>{fmtDate(journey.nextActionDueAt)}</dd></div>
+        <div className="flex justify-between gap-3">
           <dt>Next appointment</dt>
           <dd>
             {journey.appointmentTime
@@ -87,7 +89,7 @@ function JourneyCard({ journey, active, onClick }: { journey: JourneyCardVm; act
               : "—"}
           </dd>
         </div>
-        <div className="flex justify-between">
+        <div className="flex justify-between gap-3">
           <dt>Treatment status</dt>
           <dd>
             {journey.treatmentLabel
@@ -95,8 +97,71 @@ function JourneyCard({ journey, active, onClick }: { journey: JourneyCardVm; act
               : "—"}
           </dd>
         </div>
+        {/* Specialty custom fields (e.g. Ophthalmology's "Eye Concern") —
+            configured in Settings, captured on Add Lead, previously had no
+            display anywhere in the product once saved. */}
+        {journey.customFields.map((f) => (
+          <div key={f.label} className="flex justify-between gap-3">
+            <dt className="shrink-0">{f.label}</dt>
+            <dd className="truncate text-right">{f.value}</dd>
+          </div>
+        ))}
       </dl>
     </button>
+  );
+}
+
+const CALL_DIRECTION_ICON = { inbound: PhoneIncoming, outbound: PhoneOutgoing } as const;
+
+// The `calls` table (Runo webhook ingestion) has been writing real rows for
+// a while — this is the first UI that reads any of it. Deliberately its own
+// compact card rather than merged into the Timeline: a call is patient-level
+// (not always tied to the currently-selected journey), and cramming full
+// call detail into Timeline rows would defeat Timeline's own "concise, one
+// story" design. Recording is a plain link-out, not an inline player — an
+// embedded player/transcript view is real future scope (see the omnichannel
+// audit), not built this pass.
+function CallHistoryList({ calls }: { calls: CallVm[] }) {
+  if (calls.length === 0) return null;
+  return (
+    <Card className="p-4">
+      <div className="mb-0.5 flex items-center justify-between">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-400">Calls ({calls.length})</h2>
+      </div>
+      {/* This card is call-specific detail (duration, recording, connector
+          mode) that the Timeline deliberately keeps out of its own rows —
+          the same calls also appear there, interleaved chronologically with
+          WhatsApp, under the Communication filter. Named here so seeing a
+          call twice reads as "two levels of detail," not a duplicate. */}
+      <p className="mb-3 text-[11px] text-neutral-400">Chronological view, interleaved with WhatsApp, is in Timeline → Communication.</p>
+      <ul className="divide-y divide-neutral-100" data-testid="call-history-list">
+        {calls.map((call) => {
+          const Icon = call.status === "missed" ? PhoneMissed : CALL_DIRECTION_ICON[call.direction];
+          return (
+            <li key={call.id} className="flex items-start gap-2.5 py-2.5 text-sm" data-testid={`call-row-${call.id}`}>
+              <Icon size={15} className="mt-0.5 shrink-0 text-neutral-400" aria-hidden="true" />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Badge tone={CALL_STATUS_TONE[call.status]}>{CALL_STATUS_LABEL[call.status]}</Badge>
+                  <ConnectorModeBadge mode={call.connectorMode} />
+                  <span className="text-xs text-neutral-400">{fmtSmartDateTime(call.startedAt)}</span>
+                </div>
+                <p className="mt-1 text-xs text-neutral-500">
+                  {call.agentName ?? "Unknown agent"} · {fmtCallDuration(call.durationSeconds)}
+                  {call.disposition ? ` · ${call.disposition}` : ""}
+                  {call.endpointLabel ? ` · ${call.endpointLabel}` : ""}
+                </p>
+                {call.recordingUrl && (
+                  <a href={call.recordingUrl} target="_blank" rel="noreferrer" className="mt-1 inline-block text-xs text-primary-600 hover:underline">
+                    Recording
+                  </a>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
   );
 }
 
@@ -130,7 +195,7 @@ export default function Patient360Page() {
     return <ErrorState message="Could not load this patient." />;
   }
 
-  const { patient, journeys, acquisition } = patient360.data;
+  const { patient, journeys, calls, acquisition } = patient360.data;
 
   return (
     <div className="mx-auto max-w-6xl space-y-5" data-testid="patient-360">
@@ -190,6 +255,7 @@ export default function Patient360Page() {
               }}
             />
           ))}
+          <CallHistoryList calls={calls} />
         </div>
       </div>
 

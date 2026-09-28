@@ -289,13 +289,13 @@ export default function SettingsPage() {
                     <button type="button" onClick={() => setExpanded(expanded === s.key ? null : s.key)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
                       <span className="text-sm font-medium text-slate-900">{s.displayName}</span>
                       <Badge tone={s.enabled ? "success" : "neutral"}>{s.enabled ? "Enabled" : "Disabled"}</Badge>
-                      <span className="text-xs text-neutral-400">{s.fieldCount} custom field{s.fieldCount === 1 ? "" : "s"}</span>
+                      <span className="min-w-0 truncate text-xs text-neutral-400">{s.fieldCount} custom field{s.fieldCount === 1 ? "" : "s"}</span>
                     </button>
                   ) : (
                     <div className="flex min-w-0 flex-1 items-center gap-3 text-left">
                       <span className="text-sm font-medium text-slate-900">{s.displayName}</span>
                       <Badge tone={s.enabled ? "success" : "neutral"}>{s.enabled ? "Enabled" : "Disabled"}</Badge>
-                      <span className="text-xs text-neutral-400">{s.fieldCount} custom field{s.fieldCount === 1 ? "" : "s"}</span>
+                      <span className="min-w-0 truncate text-xs text-neutral-400">{s.fieldCount} custom field{s.fieldCount === 1 ? "" : "s"}</span>
                     </div>
                   )}
                   {canManage && (
