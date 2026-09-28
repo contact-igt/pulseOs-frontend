@@ -135,6 +135,12 @@ export default function MyWorkPage() {
     invalidate();
   }
 
+  async function assignToMe(id: string) {
+    if (!currentUserId) return;
+    await api.reassignTask(id, currentUserId);
+    invalidate();
+  }
+
   async function saveNote(id: string) {
     const notes = noteDraft[id];
     if (notes === undefined) return;
@@ -250,6 +256,11 @@ export default function MyWorkPage() {
 
                     {canManageTasks && task.status !== "completed" && (
                       <div className="flex shrink-0 items-center gap-1.5">
+                        {!task.assignedTo && (
+                          <button type="button" onClick={() => assignToMe(task.id)} className="rounded border border-primary-200 px-2 py-1 text-xs font-medium text-primary-700 hover:bg-primary-50" data-testid={`task-assign-me-${task.id}`}>
+                            Assign to me
+                          </button>
+                        )}
                         <button type="button" onClick={() => reschedule(task.id, 1)} className="rounded border border-neutral-200 px-2 py-1 text-xs text-neutral-600 hover:bg-neutral-50" data-testid={`task-reschedule-${task.id}`}>
                           +1 day
                         </button>
