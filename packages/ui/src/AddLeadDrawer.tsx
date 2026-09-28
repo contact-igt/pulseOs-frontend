@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type {
   CreateLeadInput,
   CreateLeadResult,
@@ -12,6 +12,7 @@ import type {
   TaskPriority,
   TaskType,
 } from "@pulseos/types";
+import { useDialogFocus } from "./useDialogFocus";
 
 const SOURCE_OPTIONS: { value: SourceChannel; label: string }[] = [
   { value: "meta", label: "Meta Ads" },
@@ -109,23 +110,7 @@ export function AddLeadDrawer({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (open) {
-      setForm(emptyForm(defaultSource));
-      setExistingPatient(null);
-      setPhoneChecked(false);
-      setFields([]);
-      setError(null);
-    }
-  }, [open, defaultSource]);
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    if (open) document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  const dialogRef = useDialogFocus<HTMLFormElement>(open, onClose);
 
   if (!open) return null;
 
@@ -184,6 +169,10 @@ export function AddLeadDrawer({
       onClose();
     } catch {
       setError("Could not create this lead. Check the required fields and try again.");
+      // See AddPatientDrawer: disabling the submit button on `submitting`
+      // blurs it to <body>, outside the dialog, which would let a failed
+      // submit silently escape the Tab trap. Pull focus back in.
+      dialogRef.current?.focus();
     } finally {
       setSubmitting(false);
     }
@@ -195,8 +184,10 @@ export function AddLeadDrawer({
     <div className="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true" aria-label="Add Lead">
       <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 bg-slate-900/30 transition-opacity duration-200" />
       <form
+        ref={dialogRef}
+        tabIndex={-1}
         onSubmit={handleSubmit}
-        className="relative flex h-full w-full max-w-lg flex-col overflow-hidden border-l border-neutral-200 bg-white shadow-xl transition-transform duration-200"
+        className="relative flex h-full w-full max-w-lg flex-col overflow-hidden border-l border-neutral-200 bg-white shadow-xl transition-transform duration-200 focus:outline-none"
         data-testid="add-lead-drawer"
       >
         <div className="flex items-start justify-between gap-2 border-b border-neutral-100 p-5">

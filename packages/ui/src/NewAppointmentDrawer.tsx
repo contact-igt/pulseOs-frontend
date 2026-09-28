@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { AppointmentRow, CreateAppointmentInput, JourneyCardVm, LookupOption, PatientListRow } from "@pulseos/types";
 import { JOURNEY_STAGE_LABEL } from "./status";
+import { useDialogFocus } from "./useDialogFocus";
 
 type PatientRef = Pick<PatientListRow, "id" | "name" | "phone">;
 
@@ -52,37 +53,22 @@ export function NewAppointmentDrawer({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // initialPatient's active journeys aren't known synchronously at mount
+  // (they're fetched), so this fetch still needs an effect — unlike the
+  // rest of the form's state, which is now correct from the very first
+  // render because the whole drawer only mounts while `open` is true (see
+  // QuickCreateProvider), giving every field a fresh initial value without
+  // a post-paint reset.
   useEffect(() => {
-    if (open) {
-      setSearch("");
-      setResults(null);
-      setPatient(initialPatient ?? null);
-      setJourneys([]);
-      setJourneyId("");
-      setBranchId("");
-      setDoctorId("");
-      setScheduledAt(defaultDateTime());
-      setReason("");
-      setError(null);
-    }
-  }, [open, initialPatient]);
-
-  useEffect(() => {
-    if (open && initialPatient) {
+    if (initialPatient) {
       onLoadPatientJourneys(initialPatient.id).then((rows) => {
         setJourneys(rows);
         setJourneyId(rows[0]?.id ?? "");
       });
     }
-  }, [open, initialPatient, onLoadPatientJourneys]);
+  }, [initialPatient, onLoadPatientJourneys]);
 
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    if (open) document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  const dialogRef = useDialogFocus<HTMLFormElement>(open, onClose);
 
   if (!open) return null;
 
@@ -117,6 +103,10 @@ export function NewAppointmentDrawer({
       onClose();
     } catch {
       setError("Could not book this appointment. Check the required fields and try again.");
+      // See AddPatientDrawer: disabling the submit button on `submitting`
+      // blurs it to <body>, outside the dialog, which would let a failed
+      // submit silently escape the Tab trap. Pull focus back in.
+      dialogRef.current?.focus();
     } finally {
       setSubmitting(false);
     }
@@ -125,7 +115,13 @@ export function NewAppointmentDrawer({
   return (
     <div className="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true" aria-label="New Appointment">
       <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 bg-slate-900/30 transition-opacity duration-200" />
-      <form onSubmit={handleSubmit} className="relative flex h-full w-full max-w-md flex-col overflow-hidden border-l border-neutral-200 bg-white shadow-xl" data-testid="new-appointment-drawer">
+      <form
+        ref={dialogRef}
+        tabIndex={-1}
+        onSubmit={handleSubmit}
+        className="relative flex h-full w-full max-w-md flex-col overflow-hidden border-l border-neutral-200 bg-white shadow-xl focus:outline-none"
+        data-testid="new-appointment-drawer"
+      >
         <div className="flex items-start justify-between gap-2 border-b border-neutral-100 p-5">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">New Appointment</h2>

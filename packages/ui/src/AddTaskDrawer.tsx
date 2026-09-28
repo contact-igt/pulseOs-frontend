@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { CreateTaskInput, LookupOption, PatientListRow, TaskPriority, TaskRow, TaskType } from "@pulseos/types";
+import { useDialogFocus } from "./useDialogFocus";
 
 const inputClass =
   "w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:ring-1 focus:ring-primary-500";
@@ -45,27 +46,7 @@ export function AddTaskDrawer({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (open) {
-      setSearch("");
-      setResults(null);
-      setPatient(initialPatient ?? null);
-      setType("CALLBACK");
-      setPriority("normal");
-      setAssignedTo("");
-      setDueAt(defaultDueAt());
-      setNotes("");
-      setError(null);
-    }
-  }, [open, initialPatient]);
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    if (open) document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  const dialogRef = useDialogFocus<HTMLFormElement>(open, onClose);
 
   if (!open) return null;
 
@@ -95,6 +76,10 @@ export function AddTaskDrawer({
       onClose();
     } catch {
       setError("Could not create this task. Check the required fields and try again.");
+      // See AddPatientDrawer: disabling the submit button on `submitting`
+      // blurs it to <body>, outside the dialog, which would let a failed
+      // submit silently escape the Tab trap. Pull focus back in.
+      dialogRef.current?.focus();
     } finally {
       setSubmitting(false);
     }
@@ -103,7 +88,13 @@ export function AddTaskDrawer({
   return (
     <div className="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true" aria-label="Add Task">
       <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 bg-slate-900/30 transition-opacity duration-200" />
-      <form onSubmit={handleSubmit} className="relative flex h-full w-full max-w-md flex-col overflow-hidden border-l border-neutral-200 bg-white shadow-xl" data-testid="add-task-drawer">
+      <form
+        ref={dialogRef}
+        tabIndex={-1}
+        onSubmit={handleSubmit}
+        className="relative flex h-full w-full max-w-md flex-col overflow-hidden border-l border-neutral-200 bg-white shadow-xl focus:outline-none"
+        data-testid="add-task-drawer"
+      >
         <div className="flex items-start justify-between gap-2 border-b border-neutral-100 p-5">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Add Task</h2>

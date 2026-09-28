@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { CreatePatientInput, CreatePatientResult, LookupOption } from "@pulseos/types";
+import { useDialogFocus } from "./useDialogFocus";
 
 const inputClass =
   "w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:ring-1 focus:ring-primary-500";
@@ -28,24 +29,7 @@ export function AddPatientDrawer({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (open) {
-      setName("");
-      setPhone("");
-      setEmail("");
-      setPreferredLanguage("English");
-      setBranchId("");
-      setError(null);
-    }
-  }, [open]);
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    if (open) document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  const dialogRef = useDialogFocus<HTMLFormElement>(open, onClose);
 
   if (!open) return null;
 
@@ -62,6 +46,13 @@ export function AddPatientDrawer({
       onClose();
     } catch {
       setError("Could not add this patient. Check the required fields and try again.");
+      // The submit button is disabled the instant `submitting` flips true
+      // (see `disabled={!canSubmit}` below), and a browser blurs whatever
+      // element it just disabled — sending focus to <body>, outside this
+      // dialog, where the Tab trap's boundary check never engages. Pull
+      // focus back into the dialog so a failed submit can't silently
+      // escape the trap.
+      dialogRef.current?.focus();
     } finally {
       setSubmitting(false);
     }
@@ -70,7 +61,13 @@ export function AddPatientDrawer({
   return (
     <div className="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true" aria-label="Add Patient">
       <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 bg-slate-900/30 transition-opacity duration-200" />
-      <form onSubmit={handleSubmit} className="relative flex h-full w-full max-w-md flex-col overflow-hidden border-l border-neutral-200 bg-white shadow-xl" data-testid="add-patient-drawer">
+      <form
+        ref={dialogRef}
+        tabIndex={-1}
+        onSubmit={handleSubmit}
+        className="relative flex h-full w-full max-w-md flex-col overflow-hidden border-l border-neutral-200 bg-white shadow-xl focus:outline-none"
+        data-testid="add-patient-drawer"
+      >
         <div className="flex items-start justify-between gap-2 border-b border-neutral-100 p-5">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Add Patient</h2>

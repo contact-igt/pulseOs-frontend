@@ -70,13 +70,13 @@ export function QuickCreateProvider({ role, children }: { role: Role; children: 
 
       {specialties.data && lookups.data && (
         <>
-          {canManageLeads && (
+          {canManageLeads && drawer.kind === "lead" && (
             <AddLeadDrawer
-              open={drawer.kind === "lead"}
+              open
               onClose={() => setDrawer({ kind: "none" })}
               specialties={specialties.data}
               lookups={lookups.data}
-              defaultSource={drawer.kind === "lead" ? drawer.source : undefined}
+              defaultSource={drawer.source}
               onPhoneLookup={api.leadPhoneLookup}
               onLoadCustomFields={api.specialtyFields}
               onSubmit={api.createLead}
@@ -84,17 +84,17 @@ export function QuickCreateProvider({ role, children }: { role: Role; children: 
             />
           )}
 
-          {canEditPatients && (
-            <AddPatientDrawer open={drawer.kind === "patient"} onClose={() => setDrawer({ kind: "none" })} branches={lookups.data.branches} onSubmit={api.createPatient} onCreated={invalidateAfterCreate} />
+          {canEditPatients && drawer.kind === "patient" && (
+            <AddPatientDrawer open onClose={() => setDrawer({ kind: "none" })} branches={lookups.data.branches} onSubmit={api.createPatient} onCreated={invalidateAfterCreate} />
           )}
 
-          {canManageAppointments && (
+          {canManageAppointments && drawer.kind === "appointment" && (
             <NewAppointmentDrawer
-              open={drawer.kind === "appointment"}
+              open
               onClose={() => setDrawer({ kind: "none" })}
               branches={lookups.data.branches}
               doctors={lookups.data.doctors}
-              initialPatient={drawer.kind === "appointment" ? drawer.patient : undefined}
+              initialPatient={drawer.patient}
               onSearchPatients={(q) => api.patients({ search: q })}
               onLoadPatientJourneys={async (patientId) => (await api.patient360(patientId)).journeys}
               onSubmit={api.createAppointment}
@@ -103,13 +103,13 @@ export function QuickCreateProvider({ role, children }: { role: Role; children: 
             />
           )}
 
-          {canManageTasks && (
+          {canManageTasks && drawer.kind === "task" && (
             <AddTaskDrawer
-              open={drawer.kind === "task"}
+              open
               onClose={() => setDrawer({ kind: "none" })}
               owners={lookups.data.owners}
-              initialPatient={drawer.kind === "task" ? drawer.patient : undefined}
-              initialJourneyId={drawer.kind === "task" ? drawer.journeyId : undefined}
+              initialPatient={drawer.patient}
+              initialJourneyId={drawer.journeyId}
               onSearchPatients={(q) => api.patients({ search: q })}
               onSubmit={api.createTask}
               onCreated={invalidateAfterCreate}
