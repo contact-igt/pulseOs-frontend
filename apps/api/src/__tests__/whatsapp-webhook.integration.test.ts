@@ -1,9 +1,10 @@
 import { createHmac } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { buildApp } from "../app.js";
 import { db, queryClient } from "../db/client.js";
-import { connectors } from "../db/schema.js";
+import { connectors, conversations, journeys, messages } from "../db/schema.js";
+import { findOrCreatePatientByPhone } from "../domain/patient/identity.service.js";
 import type { FastifyInstance } from "fastify";
 import type { ConnectorRow, ConversationRow } from "@pulseos/types";
 
@@ -15,7 +16,7 @@ function sign(rawBody: string): string {
   return "sha256=" + createHmac("sha256", APP_SECRET).update(rawBody, "utf8").digest("hex");
 }
 
-function metaMessagePayload(opts: { wamid: string; from: string; body: string; name?: string }) {
+function metaMessagePayload(opts: { wamid: string; from: string; body: string; name?: string; phoneNumberId?: string }) {
   return {
     object: "whatsapp_business_account",
     entry: [
@@ -25,7 +26,7 @@ function metaMessagePayload(opts: { wamid: string; from: string; body: string; n
           {
             field: "messages",
             value: {
-              metadata: { phone_number_id: "FIXTURE_PHONE_NUMBER_ID" },
+              metadata: { phone_number_id: opts.phoneNumberId ?? "FIXTURE_PHONE_NUMBER_ID" },
               contacts: [{ wa_id: opts.from, profile: { name: opts.name ?? "Test Contact" } }],
               messages: [{ id: opts.wamid, from: opts.from, timestamp: String(Math.floor(Date.now() / 1000)), type: "text", text: { body: opts.body } }],
             },
@@ -65,6 +66,7 @@ describe.skipIf(!DEMO_PASSWORD)("WhatsApp webhook (integration, fixture mode)", 
   let app: FastifyInstance;
   let adminCookie: string;
   let connectorId: string;
+  let tenantId: string;
 
   beforeAll(async () => {
     app = await buildApp();
@@ -73,6 +75,15 @@ describe.skipIf(!DEMO_PASSWORD)("WhatsApp webhook (integration, fixture mode)", 
     const list = await app.inject({ method: "GET", url: "/connectors", cookies: { pulseos_session: adminCookie } });
     const whatsapp = (list.json() as ConnectorRow[]).find((c) => c.provider === "whatsapp_meta_cloud");
     connectorId = whatsapp!.id;
+    const [connectorRow] = await db.select({ tenantId: connectors.tenantId }).from(connectors).where(eq(connectors.id, connectorId)).limit(1);
+    tenantId = connectorRow!.tenantId;
+
+    await app.inject({
+      method: "POST",
+      url: `/connectors/${connectorId}/endpoints`,
+      cookies: { pulseos_session: adminCookie },
+      payload: { type: "WHATSAPP", publicNumber: "+911234500000", providerRef: "FIXTURE_PHONE_NUMBER_ID", displayLabel: "Fixture WhatsApp Line" },
+    });
   });
 
   afterAll(async () => {
@@ -133,6 +144,131 @@ describe.skipIf(!DEMO_PASSWORD)("WhatsApp webhook (integration, fixture mode)", 
     expect(created).toBeTruthy();
     expect(created!.ownershipState).toBe("HUMAN_REQUIRED");
     expect(created!.lastMessage).toContain("IVF costs");
+    // The webhook payload's real metadata.phone_number_id ("FIXTURE_PHONE_NUMBER_ID")
+    // resolves to the CommunicationEndpoint created in beforeAll — proves the
+    // endpoint-resolution wiring, not just that the conversation exists.
+    expect(created!.endpointLabel).toBe("Fixture WhatsApp Line");
+  });
+
+  it("an inbound message on an unconfigured phone_number_id leaves endpointLabel null (no guessing)", async () => {
+    const wamid = `wamid.UNKNOWN_ENDPOINT_${Date.now()}`;
+    const from = `919${String(Date.now()).slice(-9)}`;
+    const payload = metaMessagePayload({ wamid, from, body: "message on an unregistered number", name: "No Endpoint Patient" });
+    (payload.entry[0]!.changes[0]!.value as { metadata: { phone_number_id: string } }).metadata.phone_number_id = "UNREGISTERED_PHONE_NUMBER_ID";
+    const rawBody = JSON.stringify(payload);
+
+    const res = await app.inject({
+      method: "POST",
+      url: `/webhooks/whatsapp/${connectorId}`,
+      payload: rawBody,
+      headers: { "content-type": "application/json", "x-hub-signature-256": sign(rawBody) },
+    });
+    expect(res.statusCode).toBe(200);
+
+    const conversations = await app.inject({ method: "GET", url: "/conversations?channel=WHATSAPP", cookies: { pulseos_session: adminCookie } });
+    const created = (conversations.json() as ConversationRow[]).find((c) => c.patientName === "No Endpoint Patient");
+    expect(created).toBeTruthy();
+    expect(created!.endpointLabel).toBeNull();
+  });
+
+  it("the SAME patient messaging two different configured hospital lines gets two separate conversations, not one merged thread", async () => {
+    const secondPhoneNumberId = `SECOND_FIXTURE_PHONE_NUMBER_ID_${Date.now()}`;
+    const secondEndpoint = await app.inject({
+      method: "POST",
+      url: `/connectors/${connectorId}/endpoints`,
+      cookies: { pulseos_session: adminCookie },
+      payload: { type: "WHATSAPP", publicNumber: "+919876500777", providerRef: secondPhoneNumberId, displayLabel: "Second Fixture Line" },
+    });
+    expect(secondEndpoint.statusCode).toBe(201);
+
+    // Same wa_id both times — externalThreadId alone would previously have
+    // merged these into one conversation, permanently mislabelling every
+    // later message with whichever line happened to arrive first.
+    const from = `919${String(Date.now()).slice(-9)}`;
+    const name = `Two Line Patient ${Date.now()}`;
+
+    const firstPayload = metaMessagePayload({ wamid: `wamid.TWOLINE_A_${Date.now()}`, from, body: "message on the main line", name });
+    const firstRawBody = JSON.stringify(firstPayload);
+    const firstRes = await app.inject({
+      method: "POST",
+      url: `/webhooks/whatsapp/${connectorId}`,
+      payload: firstRawBody,
+      headers: { "content-type": "application/json", "x-hub-signature-256": sign(firstRawBody) },
+    });
+    expect(firstRes.statusCode).toBe(200);
+
+    const secondPayload = metaMessagePayload({ wamid: `wamid.TWOLINE_B_${Date.now()}`, from, body: "message on the second line", name, phoneNumberId: secondPhoneNumberId });
+    const secondRawBody = JSON.stringify(secondPayload);
+    const secondRes = await app.inject({
+      method: "POST",
+      url: `/webhooks/whatsapp/${connectorId}`,
+      payload: secondRawBody,
+      headers: { "content-type": "application/json", "x-hub-signature-256": sign(secondRawBody) },
+    });
+    expect(secondRes.statusCode).toBe(200);
+
+    const conversationsRes = await app.inject({ method: "GET", url: "/conversations?channel=WHATSAPP", cookies: { pulseos_session: adminCookie } });
+    const matches = (conversationsRes.json() as ConversationRow[]).filter((c) => c.patientName === name);
+    expect(matches.length).toBe(2);
+    const labels = matches.map((c) => c.endpointLabel).sort();
+    expect(labels).toEqual(["Fixture WhatsApp Line", "Second Fixture Line"].sort());
+    expect(matches.find((c) => c.endpointLabel === "Fixture WhatsApp Line")!.lastMessage).toBe("message on the main line");
+    expect(matches.find((c) => c.endpointLabel === "Second Fixture Line")!.lastMessage).toBe("message on the second line");
+  });
+
+  it("a staff reply is sent from the conversation's own resolved line, not the connector's single default number", async () => {
+    const thirdPhoneNumberId = `THIRD_FIXTURE_PHONE_NUMBER_ID_${Date.now()}`;
+    const thirdEndpoint = await app.inject({
+      method: "POST",
+      url: `/connectors/${connectorId}/endpoints`,
+      cookies: { pulseos_session: adminCookie },
+      payload: { type: "WHATSAPP", publicNumber: "+919876500888", providerRef: thirdPhoneNumberId, displayLabel: "Third Fixture Line" },
+    });
+    expect(thirdEndpoint.statusCode).toBe(201);
+
+    const wamid = `wamid.SENDLINE_${Date.now()}`;
+    const from = `919${String(Date.now()).slice(-9)}`;
+    const payload = metaMessagePayload({ wamid, from, body: "inbound on the third line", name: "Send Line Patient", phoneNumberId: thirdPhoneNumberId });
+    const rawBody = JSON.stringify(payload);
+    const inboundRes = await app.inject({
+      method: "POST",
+      url: `/webhooks/whatsapp/${connectorId}`,
+      payload: rawBody,
+      headers: { "content-type": "application/json", "x-hub-signature-256": sign(rawBody) },
+    });
+    expect(inboundRes.statusCode).toBe(200);
+
+    const conversationsRes = await app.inject({ method: "GET", url: "/conversations?channel=WHATSAPP", cookies: { pulseos_session: adminCookie } });
+    const created = (conversationsRes.json() as ConversationRow[]).find((c) => c.patientName === "Send Line Patient");
+    expect(created!.endpointLabel).toBe("Third Fixture Line");
+
+    const send = await app.inject({
+      method: "POST",
+      url: `/conversations/${created!.id}/messages`,
+      cookies: { pulseos_session: adminCookie },
+      payload: { body: "reply that must go out on the third line" },
+    });
+    expect(send.statusCode).toBe(200);
+
+    // providerMessageId isn't exposed on the public Message VM by design
+    // (see the "status webhook" test above) — this is exactly why the fix
+    // needs a DB-level check: the fixture adapter now embeds the
+    // phoneNumberId it actually received, so this proves the real send path
+    // consulted the conversation's resolved endpoint, not the connector's
+    // configured default ("FIXTURE_PHONE_NUMBER_ID").
+    const [staffMessage] = await db
+      .select({ providerMessageId: messages.providerMessageId })
+      .from(messages)
+      .where(eq(messages.conversationId, created!.id))
+      .orderBy(messages.sentAt)
+      .limit(2)
+      .then((rows) => rows.slice(1));
+    // Precise prefix match, not a substring check: thirdPhoneNumberId itself
+    // contains "FIXTURE_PHONE_NUMBER_ID" as a substring, so a loose
+    // `.toContain` couldn't actually distinguish "used this line" from
+    // "used the connector's plain default" — the wrong-default id would be
+    // exactly "FIXTURE_WAMID_FIXTURE_PHONE_NUMBER_ID_...", not this one.
+    expect(staffMessage!.providerMessageId).toMatch(new RegExp(`^FIXTURE_WAMID_${thirdPhoneNumberId}_`));
   });
 
   it("a duplicate delivery of the same wamid is idempotent — no second message is created", async () => {
@@ -243,5 +379,124 @@ describe.skipIf(!DEMO_PASSWORD)("WhatsApp webhook (integration, fixture mode)", 
     });
     // No messaging adapter for "runo" — a safe no-op, not a crash or a 500.
     expect(res.statusCode).toBe(200);
+  });
+
+  // --- Journey linking (P0.2, central-platform-readiness-audit) -----------
+  // WhatsApp conversations previously never got a journeyId at all (write or
+  // update), permanently breaking Patient 360's per-journey Timeline filter
+  // for every WhatsApp message. Calls already resolve journeyId via
+  // "most-recent active journey wins," but that is NOT accurate enough to
+  // reuse verbatim for WhatsApp: a patient can have multiple concurrent
+  // active Journeys (the north star), and picking "most recent" would
+  // silently mislabel a thread's Timeline events under the wrong Journey.
+  // Today's schema has no deterministic tie-breaker between several active
+  // Journeys for one patient (Journey carries no branchId/specialty link to
+  // CommunicationEndpoint.branchId, and InboundMessageEvent carries no
+  // campaign/click-id context) — so with exactly one active Journey we
+  // auto-link it, and with zero or many we stay honestly unresolved
+  // (journeyId: null) rather than guess.
+  describe("Journey linking on WhatsApp conversations", () => {
+    async function insertJourney(patientId: string, stage: (typeof journeys.$inferInsert)["stage"] = "enquiry") {
+      const [journey] = await db
+        .insert(journeys)
+        .values({ tenantId, patientId, journeyType: "General Enquiry", source: "whatsapp", stage })
+        .returning();
+      return journey!;
+    }
+
+    async function conversationRowFor(patientId: string) {
+      const [row] = await db.select().from(conversations).where(and(eq(conversations.tenantId, tenantId), eq(conversations.patientId, patientId))).limit(1);
+      return row ?? null;
+    }
+
+    async function fireInbound(opts: { from: string; wamid: string; body: string; name: string }) {
+      const payload = metaMessagePayload(opts);
+      const rawBody = JSON.stringify(payload);
+      const res = await app.inject({
+        method: "POST",
+        url: `/webhooks/whatsapp/${connectorId}`,
+        payload: rawBody,
+        headers: { "content-type": "application/json", "x-hub-signature-256": sign(rawBody) },
+      });
+      expect(res.statusCode).toBe(200);
+    }
+
+    it("(a) a patient with exactly one active Journey gets it stamped on the new conversation, and it is visible under that Journey's own filtered Timeline", async () => {
+      const from = `919${String(Date.now()).slice(-9)}`;
+      const patient = await findOrCreatePatientByPhone(db, tenantId, from, "Journey Patient Single");
+      const journey = await insertJourney(patient.id);
+
+      await fireInbound({ from, wamid: `wamid.J_SINGLE_${Date.now()}`, body: "single active journey probe", name: "Journey Patient Single" });
+
+      const conv = await conversationRowFor(patient.id);
+      expect(conv).toBeTruthy();
+      expect(conv!.journeyId).toBe(journey.id);
+
+      const timelineAll = await app.inject({ method: "GET", url: `/patients/${patient.id}/timeline`, cookies: { pulseos_session: adminCookie } });
+      expect((timelineAll.json() as { eventType: string; description: string | null }[]).some((e) => e.eventType === "whatsapp_message" && e.description === "single active journey probe")).toBe(true);
+
+      // Patient 360's own per-journey filter — the exact thing the audit found broken.
+      const timelineFiltered = await app.inject({ method: "GET", url: `/patients/${patient.id}/timeline?journeyId=${journey.id}`, cookies: { pulseos_session: adminCookie } });
+      expect((timelineFiltered.json() as { eventType: string; description: string | null }[]).some((e) => e.eventType === "whatsapp_message" && e.description === "single active journey probe")).toBe(true);
+    });
+
+    it("(b) a patient with multiple active Journeys and no deterministic tie-breaker stays honestly unresolved (journeyId null), not 'most recent wins'", async () => {
+      const from = `919${String(Date.now()).slice(-9)}`;
+      const patient = await findOrCreatePatientByPhone(db, tenantId, from, "Journey Patient Multi");
+      const older = await insertJourney(patient.id, "enquiry");
+      const newer = await insertJourney(patient.id, "contacted");
+      expect(newer.createdAt.getTime()).toBeGreaterThanOrEqual(older.createdAt.getTime());
+
+      await fireInbound({ from, wamid: `wamid.J_MULTI_${Date.now()}`, body: "multi active journey probe", name: "Journey Patient Multi" });
+
+      const conv = await conversationRowFor(patient.id);
+      expect(conv).toBeTruthy();
+      expect(conv!.journeyId).toBeNull();
+    });
+
+    it("(c) a patient with zero active Journeys stays Patient-level (journeyId null), no crash", async () => {
+      const from = `919${String(Date.now()).slice(-9)}`;
+      await fireInbound({ from, wamid: `wamid.J_NONE_${Date.now()}`, body: "no journey probe", name: "Journey Patient None" });
+
+      const patient = await findOrCreatePatientByPhone(db, tenantId, from, "Journey Patient None");
+      const conv = await conversationRowFor(patient.id);
+      expect(conv).toBeTruthy();
+      expect(conv!.journeyId).toBeNull();
+    });
+
+    it("(d) a repeat webhook on an already-linked conversation never overwrites the already-set journeyId, even once a second active Journey appears", async () => {
+      const from = `919${String(Date.now()).slice(-9)}`;
+      const patient = await findOrCreatePatientByPhone(db, tenantId, from, "Journey Patient Repeat");
+      const first = await insertJourney(patient.id, "enquiry");
+
+      await fireInbound({ from, wamid: `wamid.J_REPEAT_A_${Date.now()}`, body: "first message, one active journey", name: "Journey Patient Repeat" });
+      const convAfterFirst = await conversationRowFor(patient.id);
+      expect(convAfterFirst!.journeyId).toBe(first.id);
+
+      // A second active Journey now exists for the same patient — this must
+      // NOT cause the existing link to be reassigned to "most recent" or
+      // reset to null; the established thread's link is itself the
+      // strongest available evidence.
+      await insertJourney(patient.id, "contacted");
+
+      await fireInbound({ from, wamid: `wamid.J_REPEAT_B_${Date.now()}`, body: "second message, now two active journeys", name: "Journey Patient Repeat" });
+      const convAfterSecond = await conversationRowFor(patient.id);
+      expect(convAfterSecond!.journeyId).toBe(first.id);
+    });
+
+    it("(e) an existing conversation created with no active Journey is backfilled once exactly one active Journey later appears, but not before", async () => {
+      const from = `919${String(Date.now()).slice(-9)}`;
+      await fireInbound({ from, wamid: `wamid.J_BACKFILL_A_${Date.now()}`, body: "first message, no journey yet", name: "Journey Patient Backfill" });
+
+      const patient = await findOrCreatePatientByPhone(db, tenantId, from, "Journey Patient Backfill");
+      const convBefore = await conversationRowFor(patient.id);
+      expect(convBefore!.journeyId).toBeNull();
+
+      const journey = await insertJourney(patient.id, "enquiry");
+
+      await fireInbound({ from, wamid: `wamid.J_BACKFILL_B_${Date.now()}`, body: "second message, one active journey now exists", name: "Journey Patient Backfill" });
+      const convAfter = await conversationRowFor(patient.id);
+      expect(convAfter!.journeyId).toBe(journey.id);
+    });
   });
 });
