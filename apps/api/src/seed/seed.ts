@@ -1,11 +1,12 @@
 import "dotenv/config";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db, queryClient } from "../db/client.js";
 import {
   appointments,
   branches,
   calls,
   campaignTouchpoints,
+  communicationEndpoints,
   connectorEvents,
   connectors,
   connectorSecrets,
@@ -350,6 +351,7 @@ async function main() {
   await db.delete(marketingCampaigns);
   await db.delete(patients);
   await db.delete(users);
+  await db.delete(communicationEndpoints);
   await db.delete(branches);
   await db.delete(connectorSecrets);
   await db.delete(gbpPerformanceMetrics);
@@ -472,6 +474,41 @@ async function main() {
     },
   ]);
 
+  // Communication endpoints — the N-hospital-numbers-per-1-connector layer
+  // (communication-endpoint.service.ts). "Main Line" and "Fertility Line"
+  // are both real Runo phone lines, but Runo's real API never reports which
+  // line took a call (confirmed against their live OpenAPI spec) — an
+  // inbound call can only be auto-stamped with an endpoint when
+  // getSoleActiveEndpointForConnector finds EXACTLY ONE active endpoint on
+  // that connector. Fertility Line is seeded isActive: false (configured,
+  // pending activation — a realistic "just added a second line, not yet
+  // live" state for a growing clinic) precisely so Main Line stays the sole
+  // active Runo endpoint and the seeded call below resolves deterministically
+  // instead of demonstrating only the honest-null path.
+  const [mainLineEndpoint, fertilityLineEndpoint, whatsappEndpoint] = await db
+    .insert(communicationEndpoints)
+    .values([
+      {
+        tenantId: tenant.id, connectorId: runoConnector.id, branchId: branchA.id,
+        type: "PHONE", provider: runoConnector.provider, publicNumber: "+91 80 4012 3456",
+        providerRef: "MAIN-LINE", displayLabel: "Main Line", isActive: true,
+      },
+      {
+        tenantId: tenant.id, connectorId: runoConnector.id, branchId: null,
+        type: "PHONE", provider: runoConnector.provider, publicNumber: "+91 80 4012 3457",
+        providerRef: "FERTILITY-LINE", displayLabel: "Fertility Line", isActive: false,
+      },
+      {
+        // providerRef intentionally matches whatsappConnector.configuration.phoneNumberId
+        // above — resolveEndpointByProviderRef only ever exact-matches a real
+        // inbound webhook's metadata.phone_number_id against this column.
+        tenantId: tenant.id, connectorId: whatsappConnector.id, branchId: null,
+        type: "WHATSAPP", provider: whatsappConnector.provider, publicNumber: "+91 98450 12345",
+        providerRef: "FIXTURE_PHONE_NUMBER_ID", displayLabel: "WhatsApp — Main Line", isActive: true,
+      },
+    ])
+    .returning();
+
   const passwordHash = await hashPassword(DEMO_PASSWORD);
 
   const [admin, doctorMeera, doctorArjun, frontDesk, coordinator] = await db
@@ -532,6 +569,10 @@ async function main() {
   const doctorByKey = { meera: doctorMeera, arjun: doctorArjun };
 
   const timelineRows: (typeof timelineEvents.$inferInsert)[] = [];
+  // Journey id for each JOURNEY_CONFIGS entry, same index — lets the
+  // omnichannel fixtures below reference a specific seeded Journey (e.g.
+  // "Sneha Reddy's sole active Journey") without a second lookup query.
+  const journeyIds: string[] = [];
 
   for (const config of JOURNEY_CONFIGS) {
     const patient = patientRows[config.patientIdx];
@@ -550,6 +591,7 @@ async function main() {
         createdAt: daysFromNow(config.createdOffsetDays),
       })
       .returning();
+    journeyIds.push(journey.id);
 
     timelineRows.push({
       tenantId: tenant.id, patientId: patient.id, journeyId: journey.id,
@@ -679,6 +721,12 @@ async function main() {
     },
   ]);
 
+  // Conversation row for each CONVERSATION_CONFIGS entry, same index — the
+  // omnichannel fixtures below update Vikram Kumar's existing WhatsApp
+  // conversation (index 2) in place rather than inserting a second, dishonest
+  // thread for a patient who only has one real WhatsApp wa_id.
+  const conversationRows: (typeof conversations.$inferSelect)[] = [];
+
   for (const config of CONVERSATION_CONFIGS) {
     const patient = patientRows[config.patientIdx];
     const assignedTo = config.assignedTo === "coordinator" ? coordinator.id : config.assignedTo === "frontDesk" ? frontDesk.id : null;
@@ -688,6 +736,7 @@ async function main() {
       .insert(conversations)
       .values({ tenantId: tenant.id, patientId: patient.id, channel: config.channel, ownershipState: config.ownershipState, assignedTo, lastMessageAt })
       .returning();
+    conversationRows.push(conversation);
 
     await db.insert(messages).values(
       config.messages.map((m) => ({
@@ -701,6 +750,128 @@ async function main() {
       })),
     );
   }
+
+  // ---------------------------------------------------------------------
+  // Omnichannel fixtures (Group T/V follow-up): calls + WhatsApp threads
+  // shaped to match exactly what persistInboundCall() / processInbound-
+  // WhatsAppMessage() would have produced through the real webhook path —
+  // hand-inserted here (seed data, never a live provider event) rather than
+  // invoked through those services, but honest about their resolution
+  // outcomes rather than forcing a link the real logic wouldn't produce.
+  // ---------------------------------------------------------------------
+
+  // Sneha Reddy (idx 2) has exactly one active Journey ("Fertility", Meta,
+  // stage "contacted") — the deterministic case for BOTH endpoint
+  // resolution (Runo's sole active endpoint, Main Line) and WhatsApp
+  // Journey-linking (single active Journey, auto-linked).
+  const [snehaCall] = await db
+    .insert(calls)
+    .values({
+      tenantId: tenant.id,
+      connectorId: runoConnector.id,
+      communicationEndpointId: mainLineEndpoint.id,
+      patientId: patientRows[2].id,
+      journeyId: journeyIds[2],
+      externalCallId: "runo-fixture-call-001",
+      direction: "inbound",
+      phone: patientRows[2].phone,
+      status: "completed",
+      durationSeconds: 214,
+      disposition: null,
+      agentName: "Rohan Das",
+      startedAt: minutesAgo(184),
+      endedAt: minutesAgo(180),
+      metadata: { seedFixture: true },
+    })
+    .returning();
+  timelineRows.push({
+    tenantId: tenant.id, patientId: patientRows[2].id, journeyId: journeyIds[2],
+    actorType: "system", eventType: "call_logged", title: "Call completed · Rohan Das",
+    occurredAt: minutesAgo(180), relatedEntityType: "call", relatedEntityId: snehaCall.id,
+  });
+
+  // Ishita Singh (idx 6) — a missed inbound call. status: "missed" mirrors
+  // callStatusEnum exactly, and the task below matches createMissedCallTask()
+  // in call-webhook.service.ts field for field (reason: "missed_follow_up",
+  // type CALLBACK, priority high, assigned to the Journey's own owner).
+  const [ishitaCall] = await db
+    .insert(calls)
+    .values({
+      tenantId: tenant.id,
+      connectorId: runoConnector.id,
+      communicationEndpointId: mainLineEndpoint.id,
+      patientId: patientRows[6].id,
+      journeyId: journeyIds[6],
+      externalCallId: "runo-fixture-call-002",
+      direction: "inbound",
+      phone: patientRows[6].phone,
+      status: "missed",
+      durationSeconds: 0,
+      disposition: null,
+      agentName: null,
+      startedAt: minutesAgo(305),
+      endedAt: minutesAgo(305),
+      metadata: { seedFixture: true },
+    })
+    .returning();
+  timelineRows.push({
+    tenantId: tenant.id, patientId: patientRows[6].id, journeyId: journeyIds[6],
+    actorType: "system", eventType: "call_logged", title: "Call missed",
+    occurredAt: minutesAgo(305), relatedEntityType: "call", relatedEntityId: ishitaCall.id,
+  });
+  await db.insert(tasks).values({
+    tenantId: tenant.id, patientId: patientRows[6].id, journeyId: journeyIds[6],
+    assignedTo: coordinator.id, // Ishita's Journey owner (patientIdx 6 is even -> coordinator, same rule as the JOURNEY_CONFIGS loop above)
+    reason: "missed_follow_up", type: "CALLBACK", priority: "high", status: "pending",
+    dueAt: daysFromNow(0, 18), notes: "Missed call — call back to complete this enquiry",
+    createdBy: admin.id,
+  });
+
+  // WhatsApp Journey-linking — the deterministic case: Sneha Reddy's single
+  // active Journey gets auto-linked, same as resolveJourneyForNewConversation
+  // in whatsapp-webhook.service.ts would produce for her wa_id.
+  const snehaWaId = (patientRows[2].phoneE164 ?? patientRows[2].phone).replace("+", "");
+  const [snehaConversation] = await db
+    .insert(conversations)
+    .values({
+      tenantId: tenant.id, patientId: patientRows[2].id, channel: "WHATSAPP", ownershipState: "AI_ACTIVE",
+      connectorId: whatsappConnector.id, externalThreadId: snehaWaId, communicationEndpointId: whatsappEndpoint.id,
+      journeyId: journeyIds[2], lastMessageAt: minutesAgo(40),
+    })
+    .returning();
+  await db.insert(messages).values([
+    {
+      tenantId: tenant.id, conversationId: snehaConversation.id, senderType: "patient",
+      body: "Hi, I wanted to check the next steps after my consultation.",
+      sentAt: minutesAgo(45), readAt: minutesAgo(43),
+      connectorId: whatsappConnector.id, providerMessageId: "wamid.fixture-sneha-001",
+    },
+    {
+      tenantId: tenant.id, conversationId: snehaConversation.id, senderType: "ai",
+      body: "Hi Sneha! Our coordinator will share your treatment plan shortly — anything specific you'd like to know now?",
+      sentAt: minutesAgo(40), readAt: minutesAgo(40),
+      connectorId: whatsappConnector.id, providerMessageId: "wamid.fixture-sneha-002",
+    },
+  ]);
+
+  // WhatsApp Journey-linking — the honest ambiguous case: Vikram Kumar
+  // (idx 1) genuinely has two concurrent active Journeys ("Fertility", Meta,
+  // stage "enquiry" and "General OPD", walk-in, stage "attended" — Patient !=
+  // Journey, the product's own north star). No deterministic tie-breaker
+  // exists for this today (see whatsapp-webhook.service.ts's own comment on
+  // resolveJourneyForNewConversation), so journeyId correctly stays null —
+  // updating his existing WhatsApp conversation (from CONVERSATION_CONFIGS
+  // above) in place with connector/endpoint metadata rather than forcing a
+  // link the real resolution logic would never produce.
+  const vikramWaId = (patientRows[1].phoneE164 ?? patientRows[1].phone).replace("+", "");
+  await db
+    .update(conversations)
+    .set({ connectorId: whatsappConnector.id, externalThreadId: vikramWaId, communicationEndpointId: whatsappEndpoint.id })
+    .where(eq(conversations.id, conversationRows[2].id));
+  await db
+    .update(messages)
+    .set({ connectorId: whatsappConnector.id, providerMessageId: "wamid.fixture-vikram-001" })
+    .where(and(eq(messages.conversationId, conversationRows[2].id), eq(messages.senderType, "patient")));
 
   if (timelineRows.length > 0) {
     await db.insert(timelineEvents).values(timelineRows);
@@ -780,8 +951,15 @@ async function main() {
   });
 
   console.log("Seed complete.");
-  console.log(`Conversations: ${CONVERSATION_CONFIGS.length}`);
+  console.log(`Conversations: ${CONVERSATION_CONFIGS.length + 1} (+1 omnichannel WhatsApp fixture for Sneha Reddy)`);
   console.log("Connectors: WhatsApp (fixture, connected), Runo (fixture, connected), Superfone/Exotel (not configured)");
+  console.log(
+    `Communication endpoints: Main Line (Runo, active), Fertility Line (Runo, pending activation), WhatsApp — Main Line (active)`,
+  );
+  console.log(
+    "Omnichannel demo: Sneha Reddy = resolved call (Main Line) + auto-linked WhatsApp Journey (deterministic); " +
+      "Ishita Singh = missed call -> missed_follow_up task; Vikram Kumar = WhatsApp thread honestly left Journey-unlinked (2 concurrent active Journeys, ambiguous)",
+  );
   console.log(`Tenant: ${tenant.name} (${tenant.id})`);
   console.log(`Campaigns: Meta ₹48,000 · Google ₹75,000 · Website ₹15,000`);
   console.log(`Journeys: ${JOURNEY_CONFIGS.length}, Patients: ${patientRows.length}`);
