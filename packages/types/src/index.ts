@@ -42,6 +42,7 @@ export type Permission =
   | "MANAGE_TASKS"
   | "VIEW_INTEGRATIONS"
   | "MANAGE_INTEGRATIONS"
+  | "VIEW_COMMUNICATION_ENDPOINTS"
   | "MANAGE_LEADS"
   | "MANAGE_SPECIALTIES";
 
@@ -50,21 +51,21 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "VIEW_ADMIN_COMMAND_CENTRE", "VIEW_PATIENTS", "EDIT_PATIENTS", "VIEW_JOURNEYS", "MANAGE_JOURNEYS",
     "VIEW_APPOINTMENTS", "MANAGE_APPOINTMENTS", "RECORD_CONSULTATION_OUTCOME", "VIEW_TREATMENT", "MANAGE_TREATMENT",
     "VIEW_REVENUE", "VIEW_MARKETING", "VIEW_INBOX", "MANAGE_INBOX", "VIEW_TASKS", "MANAGE_TASKS",
-    "VIEW_INTEGRATIONS", "MANAGE_INTEGRATIONS", "MANAGE_LEADS", "MANAGE_SPECIALTIES",
+    "VIEW_INTEGRATIONS", "MANAGE_INTEGRATIONS", "VIEW_COMMUNICATION_ENDPOINTS", "MANAGE_LEADS", "MANAGE_SPECIALTIES",
   ],
   HOSPITAL_ADMIN: [
     "VIEW_ADMIN_COMMAND_CENTRE", "VIEW_PATIENTS", "EDIT_PATIENTS", "VIEW_JOURNEYS", "MANAGE_JOURNEYS",
     "VIEW_APPOINTMENTS", "MANAGE_APPOINTMENTS", "VIEW_TREATMENT", "MANAGE_TREATMENT",
     "VIEW_REVENUE", "VIEW_MARKETING", "VIEW_INBOX", "MANAGE_INBOX", "VIEW_TASKS", "MANAGE_TASKS",
-    "VIEW_INTEGRATIONS", "MANAGE_INTEGRATIONS", "MANAGE_LEADS", "MANAGE_SPECIALTIES",
+    "VIEW_INTEGRATIONS", "MANAGE_INTEGRATIONS", "VIEW_COMMUNICATION_ENDPOINTS", "MANAGE_LEADS", "MANAGE_SPECIALTIES",
   ],
   FRONT_DESK: [
     "VIEW_PATIENTS", "EDIT_PATIENTS", "VIEW_JOURNEYS", "VIEW_APPOINTMENTS", "MANAGE_APPOINTMENTS",
-    "VIEW_INBOX", "MANAGE_INBOX", "VIEW_TASKS", "MANAGE_TASKS", "MANAGE_LEADS",
+    "VIEW_INBOX", "MANAGE_INBOX", "VIEW_TASKS", "MANAGE_TASKS", "VIEW_COMMUNICATION_ENDPOINTS", "MANAGE_LEADS",
   ],
   PATIENT_COORDINATOR: [
     "VIEW_PATIENTS", "EDIT_PATIENTS", "VIEW_JOURNEYS", "MANAGE_JOURNEYS", "VIEW_APPOINTMENTS", "MANAGE_APPOINTMENTS",
-    "VIEW_TREATMENT", "MANAGE_TREATMENT", "VIEW_REVENUE", "VIEW_INBOX", "MANAGE_INBOX", "VIEW_TASKS", "MANAGE_TASKS", "MANAGE_LEADS",
+    "VIEW_TREATMENT", "MANAGE_TREATMENT", "VIEW_REVENUE", "VIEW_INBOX", "MANAGE_INBOX", "VIEW_TASKS", "MANAGE_TASKS", "VIEW_COMMUNICATION_ENDPOINTS", "MANAGE_LEADS",
   ],
   DOCTOR: [
     "VIEW_DOCTOR_COMMAND_CENTRE", "VIEW_PATIENTS", "VIEW_JOURNEYS", "VIEW_APPOINTMENTS",
@@ -326,6 +327,11 @@ export interface PatientSearchRow {
   currentStage: JourneyStage | null;
 }
 
+export interface JourneyCustomFieldVm {
+  label: string;
+  value: string;
+}
+
 export interface JourneyCardVm {
   id: string;
   journeyType: string;
@@ -339,6 +345,64 @@ export interface JourneyCardVm {
   treatmentStatus: string | null;
   treatmentLabel: string | null;
   lastInteractionAt: string | null;
+  /** Specialty custom field values captured for this journey (e.g. "Eye
+   * Concern: Cataract" for Ophthalmology) — includes values whose field
+   * definition has since been archived, so a historical record is never
+   * lost from view just because Settings later retired that field. */
+  customFields: JourneyCustomFieldVm[];
+}
+
+export type CallDirection = "inbound" | "outbound";
+export type CallStatus = "completed" | "missed" | "no_answer" | "busy" | "failed";
+
+// A telephony connector (Runo today) has been writing real call records
+// since its webhook was built, but until now nothing ever read them back —
+// no API route existed at all. Deliberately a flat read-model, not the
+// `calls` table's raw shape: no tenantId/connectorId (irrelevant once
+// scoped to a patient), no raw provider metadata (that stays server-side).
+export interface CallVm {
+  id: string;
+  journeyId: string | null;
+  provider: string;
+  connectorMode: ConnectorMode;
+  direction: CallDirection;
+  phone: string;
+  status: CallStatus;
+  durationSeconds: number | null;
+  recordingUrl: string | null;
+  disposition: string | null;
+  agentName: string | null;
+  startedAt: string | null;
+  endedAt: string | null;
+  // Best-effort only: Runo's real API never tells you which hospital line a
+  // call used (confirmed against their live OpenAPI spec) — this resolves
+  // only when the connector has exactly one configured CommunicationEndpoint
+  // (an unambiguous default), never guessed among several. Null otherwise.
+  endpointLabel: string | null;
+}
+
+// Previously defined three times (apps/api/src/domain/timeline/timeline.service.ts,
+// packages/api-client, packages/ui/src/Timeline.tsx) — genuinely identical
+// copies that had already drifted once (relatedEntityType/relatedEntityId
+// existed on the DB row and were set by treatment/call event writers, but
+// none of the three copies exposed them, so a Timeline event could point at
+// its own source row and nothing could ever follow that pointer).
+export interface TimelineEventVm {
+  id: string;
+  eventType: string;
+  title: string;
+  description: string | null;
+  sourceChannel: string | null;
+  occurredAt: string;
+  category: "communication" | "appointments" | "clinical" | "tasks" | "other";
+  relatedEntityType: string | null;
+  relatedEntityId: string | null;
+  // Which hospital phone/WhatsApp line this communication event happened on
+  // — resolved from the same communicationEndpointId already stamped on the
+  // related `calls`/`conversations` row (see CallVm.endpointLabel), never a
+  // fresh guess. Null whenever that row has no resolved endpoint, or the
+  // event isn't a call/conversation at all.
+  endpointLabel: string | null;
 }
 
 export interface Patient360 {
@@ -350,6 +414,7 @@ export interface Patient360 {
     branchName: string | null;
   };
   journeys: JourneyCardVm[];
+  calls: CallVm[];
   acquisition: {
     source: SourceChannel | null;
     campaignName: string | null;
@@ -397,7 +462,17 @@ export interface JourneysSummary {
 export type TaskType = "CALLBACK" | "FOLLOW_UP" | "APPOINTMENT_CONFIRMATION" | "NO_SHOW_RECOVERY" | "TREATMENT_DECISION" | "POST_CARE" | "RECALL" | "OTHER";
 export type TaskPriority = "normal" | "high";
 export type TaskStatus = "pending" | "in_progress" | "completed" | "cancelled";
-export type TaskView = "today" | "overdue" | "upcoming" | "completed";
+// "unassigned" is the team-attention surface for system-generated tasks that
+// had no journey owner at creation time (assignedTo null) — visible only to
+// MANAGE_TASKS roles (task.routes.ts forces a VIEW_TASKS-only caller's
+// assignedTo to themselves regardless of view, which combined with this
+// view's "assignedTo IS NULL" condition always yields an empty result for
+// them, never a tenant-wide unassigned queue).
+export type TaskView = "today" | "overdue" | "upcoming" | "completed" | "unassigned";
+// Why a task exists — distinct from `type` (what action it is). Written by
+// the specific service that creates each kind of task; "manual_task" is the
+// DB default for anything created without an explicit reason.
+export type TaskReason = "overdue_callback" | "missed_follow_up" | "no_show" | "high_intent_uncontacted" | "treatment_decision_pending" | "manual_task" | "new_lead";
 
 export interface TaskRow {
   id: string;
@@ -410,6 +485,7 @@ export interface TaskRow {
   type: TaskType;
   priority: TaskPriority;
   status: TaskStatus;
+  reason: TaskReason;
   notes: string | null;
   dueAt: string;
   completedAt: string | null;
@@ -422,6 +498,9 @@ export interface TaskCounts {
   today: number;
   upcoming: number;
   completed: number;
+  // Tenant-wide unassigned actionable tasks — only computed for callers with
+  // MANAGE_TASKS (see task.routes.ts); omitted (undefined) for everyone else.
+  unassigned?: number;
 }
 
 export interface CreateTaskInput {
@@ -535,6 +614,11 @@ export interface ConversationRow {
   unreadCount: number;
   ownerName: string | null;
   ownershipState: OwnershipState;
+  // Which hospital WhatsApp number this thread came in on — resolved from the
+  // real per-message `metadata.phone_number_id` Meta sends (see
+  // CommunicationEndpointVm) — null when unresolved (no matching endpoint
+  // configured yet) or for non-WhatsApp channels.
+  endpointLabel: string | null;
 }
 
 export interface MessageRow {
@@ -647,6 +731,44 @@ export interface ConnectorDetail {
   connector: ConnectorRow;
   configuration: Record<string, unknown> | null;
   recentEvents: ConnectorEventRow[];
+}
+
+export type CommunicationEndpointType = "PHONE" | "WHATSAPP";
+
+// The N-hospital-numbers-per-1-connector layer (a WABA can hold many
+// phone_number_ids; a Runo integration can cover several SIM lines) — see
+// docs/superpowers/specs/2026-09-22-pulseos-omnichannel-implementation-contract.md
+// for the full design. `providerRef` is provider-verified for WhatsApp
+// (Meta's own phone_number_id, present on every webhook) but only a
+// manual/admin-assigned label for Runo, which never exposes which line a
+// call used — never silently treated as provider-confirmed for Runo.
+export interface CommunicationEndpointVm {
+  id: string;
+  connectorId: string;
+  connectorProvider: string;
+  branchId: string | null;
+  branchName: string | null;
+  type: CommunicationEndpointType;
+  provider: string;
+  publicNumber: string;
+  providerRef: string;
+  displayLabel: string;
+  isActive: boolean;
+}
+
+export interface CreateCommunicationEndpointInput {
+  connectorId: string;
+  branchId?: string | null;
+  type: CommunicationEndpointType;
+  publicNumber: string;
+  providerRef: string;
+  displayLabel: string;
+}
+
+export interface UpdateCommunicationEndpointInput {
+  branchId?: string | null;
+  displayLabel?: string;
+  isActive?: boolean;
 }
 
 // ---------------------------------------------------------------------------

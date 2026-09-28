@@ -35,6 +35,16 @@ export async function taskRoutes(app: FastifyInstance) {
     // to read another staff member's (PHI-adjacent) task notes. Gated off the
     // MANAGE_TASKS permission itself, not a role-name check, so it stays
     // correct if the permission matrix changes later.
+    //
+    // This same override also gates the `unassigned` view (the team-attention
+    // queue for system-generated tasks with no journey owner): listTasks ANDs
+    // `assignedTo` together with the view condition, and the `unassigned`
+    // view's condition is `assignedTo IS NULL` — so a non-MANAGE_TASKS caller
+    // forced to `assignedTo = <their own id>` can never match a row that is
+    // simultaneously NULL, and always gets an empty result, never the
+    // tenant-wide unassigned queue. No separate gate is needed for that view;
+    // it composes automatically from this one override (see
+    // tasks.integration.test.ts's "unassigned view" describe block for proof).
     const canManageTasks = hasPermission(request.sessionUser!.role, "MANAGE_TASKS");
     const assignedTo = canManageTasks ? query.assignedTo : request.sessionUser!.id;
     return listTasks(app.db, tenantId, { view: query.view, assignedTo, patientId: query.patientId, reason: query.reason });
@@ -45,7 +55,8 @@ export async function taskRoutes(app: FastifyInstance) {
   app.get("/tasks/counts", async (request) => {
     const tenantId = request.sessionUser!.tenantId;
     const userId = request.sessionUser!.id;
-    return getTaskCounts(app.db, tenantId, userId);
+    const canManageTasks = hasPermission(request.sessionUser!.role, "MANAGE_TASKS");
+    return getTaskCounts(app.db, tenantId, userId, canManageTasks);
   });
 
   app.post("/tasks", { preHandler: requirePermission("MANAGE_TASKS") }, async (request) => {

@@ -1,7 +1,7 @@
-import { and, eq, gte, lt, or, sql } from "drizzle-orm";
+import { and, eq, gte, isNull, lt, or, sql } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { journeys, patients, tasks, timelineEvents, users } from "../../db/schema.js";
-import type { CreateTaskInput, TaskCounts, TaskRow, TaskView } from "@pulseos/types";
+import type { CreateTaskInput, TaskCounts, TaskReason, TaskRow, TaskView } from "@pulseos/types";
 
 function todayRange() {
   const start = new Date();
@@ -14,12 +14,12 @@ function todayRange() {
 function toRow(r: {
   id: string; patientId: string; patientName: string; journeyId: string | null; journeyType: string | null;
   assignedTo: string | null; assignedToName: string | null; type: TaskRow["type"]; priority: TaskRow["priority"];
-  status: TaskRow["status"]; notes: string | null; dueAt: Date; completedAt: Date | null; createdAt: Date;
+  status: TaskRow["status"]; reason: TaskRow["reason"]; notes: string | null; dueAt: Date; completedAt: Date | null; createdAt: Date;
 }): TaskRow {
   return {
     id: r.id, patientId: r.patientId, patientName: r.patientName, journeyId: r.journeyId, journeyType: r.journeyType,
     assignedTo: r.assignedTo, assignedToName: r.assignedToName, type: r.type, priority: r.priority, status: r.status,
-    notes: r.notes, dueAt: r.dueAt.toISOString(), completedAt: r.completedAt ? r.completedAt.toISOString() : null,
+    reason: r.reason, notes: r.notes, dueAt: r.dueAt.toISOString(), completedAt: r.completedAt ? r.completedAt.toISOString() : null,
     createdAt: r.createdAt.toISOString(),
   };
 }
@@ -28,6 +28,7 @@ export interface TaskFilters {
   view?: TaskView;
   assignedTo?: string;
   patientId?: string;
+  reason?: TaskReason;
 }
 
 export async function listTasks(db: Db, tenantId: string, filters: TaskFilters): Promise<TaskRow[]> {
@@ -43,14 +44,16 @@ export async function listTasks(db: Db, tenantId: string, filters: TaskFilters):
           ? and(or(eq(tasks.status, "pending"), eq(tasks.status, "in_progress")), gte(tasks.dueAt, end))
           : filters.view === "completed"
             ? eq(tasks.status, "completed")
-            : undefined;
+            : filters.view === "unassigned"
+              ? and(isNull(tasks.assignedTo), or(eq(tasks.status, "pending"), eq(tasks.status, "in_progress")))
+              : undefined;
 
   const rows = await db
     .select({
       id: tasks.id, patientId: tasks.patientId, patientName: patients.name,
       journeyId: tasks.journeyId, journeyType: journeys.journeyType,
       assignedTo: tasks.assignedTo, assignedToName: users.name,
-      type: tasks.type, priority: tasks.priority, status: tasks.status, notes: tasks.notes,
+      type: tasks.type, priority: tasks.priority, status: tasks.status, reason: tasks.reason, notes: tasks.notes,
       dueAt: tasks.dueAt, completedAt: tasks.completedAt, createdAt: tasks.createdAt,
     })
     .from(tasks)
@@ -63,6 +66,7 @@ export async function listTasks(db: Db, tenantId: string, filters: TaskFilters):
         viewCondition,
         filters.assignedTo ? eq(tasks.assignedTo, filters.assignedTo) : undefined,
         filters.patientId ? eq(tasks.patientId, filters.patientId) : undefined,
+        filters.reason ? eq(tasks.reason, filters.reason) : undefined,
       ),
     )
     .orderBy(tasks.dueAt);
@@ -75,8 +79,14 @@ export async function listTasks(db: Db, tenantId: string, filters: TaskFilters):
  * exact view-condition logic (today/overdue/upcoming/completed) via
  * COUNT(*) FILTER instead of four separate round trips. Scoped to the
  * caller's own assignment — never an arbitrary assignedTo override.
+ *
+ * `unassigned` is a second, tenant-wide query (never scoped to `userId` —
+ * unassigned tasks by definition have no owner) and is only computed when
+ * `canManageTasks` is true, matching the same MANAGE_TASKS gate that
+ * task.routes.ts applies to the `unassigned` view itself — a VIEW_TASKS-only
+ * caller (e.g. Doctor) gets `unassigned: undefined`, never a tenant count.
  */
-export async function getTaskCounts(db: Db, tenantId: string, userId: string): Promise<TaskCounts> {
+export async function getTaskCounts(db: Db, tenantId: string, userId: string, canManageTasks: boolean): Promise<TaskCounts> {
   const { start, end } = todayRange();
   const now = new Date();
 
@@ -96,12 +106,22 @@ export async function getTaskCounts(db: Db, tenantId: string, userId: string): P
     .from(tasks)
     .where(and(eq(tasks.tenantId, tenantId), eq(tasks.assignedTo, userId)));
 
+  let unassigned: number | undefined;
+  if (canManageTasks) {
+    const [urow] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(tasks)
+      .where(and(eq(tasks.tenantId, tenantId), isNull(tasks.assignedTo), or(eq(tasks.status, "pending"), eq(tasks.status, "in_progress"))));
+    unassigned = Number(urow.count);
+  }
+
   return {
     mine: Number(row.mine),
     overdue: Number(row.overdue),
     today: Number(row.today),
     upcoming: Number(row.upcoming),
     completed: Number(row.completed),
+    unassigned,
   };
 }
 
@@ -164,7 +184,7 @@ export async function getTaskById(db: Db, tenantId: string, taskId: string): Pro
       id: tasks.id, patientId: tasks.patientId, patientName: patients.name,
       journeyId: tasks.journeyId, journeyType: journeys.journeyType,
       assignedTo: tasks.assignedTo, assignedToName: users.name,
-      type: tasks.type, priority: tasks.priority, status: tasks.status, notes: tasks.notes,
+      type: tasks.type, priority: tasks.priority, status: tasks.status, reason: tasks.reason, notes: tasks.notes,
       dueAt: tasks.dueAt, completedAt: tasks.completedAt, createdAt: tasks.createdAt,
     })
     .from(tasks)

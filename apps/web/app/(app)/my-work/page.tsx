@@ -4,18 +4,34 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { api } from "@pulseos/api-client";
-import { Badge, Button, Card, EmptyState, ErrorState, Skeleton, fmtDateTime as fmtDate, urgencyLabel } from "@pulseos/ui";
+import { Badge, Button, Card, EmptyState, ErrorState, Skeleton, TASK_REASON_LABEL, TASK_REASON_TONE, fmtDateTime as fmtDate, urgencyLabel } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import { withFrom } from "@/components/shell/BackLink";
 import { hasPermission } from "@pulseos/types";
-import type { TaskRow, TaskStatus, TaskType, TaskView } from "@pulseos/types";
+import type { TaskReason, TaskRow, TaskStatus, TaskType, TaskView } from "@pulseos/types";
 
 const TABS: { key: TaskView | "mine"; label: string }[] = [
   { key: "mine", label: "My Work" },
   { key: "today", label: "Today" },
   { key: "overdue", label: "Overdue" },
   { key: "upcoming", label: "Upcoming" },
+  { key: "unassigned", label: "Unassigned" },
   { key: "completed", label: "Completed" },
+];
+
+// Secondary filter row: WHY a task exists, layered on top of the date tabs
+// above (which filter WHEN it's due) — the two AND together. "Follow-ups"
+// folds three reasons together since they're all "needs a call" variants;
+// `reasons: []` means "no reason filter", i.e. the default "All" pill.
+// Never label the new_lead group "New Leads" in user-facing copy — CLAUDE.md
+// reserves "Lead" for technical/admin contexts; "enquiry" is the north-star
+// term for a brand-new, not-yet-contacted patient touchpoint.
+const REASON_GROUPS: { key: string; label: string; reasons: TaskReason[] }[] = [
+  { key: "all", label: "All", reasons: [] },
+  { key: "new_lead", label: "New Enquiries", reasons: ["new_lead"] },
+  { key: "follow_up", label: "Follow-ups", reasons: ["overdue_callback", "treatment_decision_pending", "high_intent_uncontacted"] },
+  { key: "missed_follow_up", label: "Missed Calls", reasons: ["missed_follow_up"] },
+  { key: "no_show", label: "No-Shows", reasons: ["no_show"] },
 ];
 
 const TYPE_LABEL: Record<TaskType, string> = {
@@ -46,6 +62,7 @@ export default function MyWorkPage() {
   const queryClient = useQueryClient();
   const quickCreate = useQuickCreate();
   const [tab, setTab] = useState<(typeof TABS)[number]["key"]>("mine");
+  const [reasonKey, setReasonKey] = useState<(typeof REASON_GROUPS)[number]["key"]>("all");
   const [noteDraft, setNoteDraft] = useState<Record<string, string>>({});
 
   const session = useQuery({ queryKey: ["session"], queryFn: api.session });
@@ -54,10 +71,31 @@ export default function MyWorkPage() {
   // has only the weaker VIEW_TASKS) — mirrored here only to avoid showing
   // dead controls, never as the actual authorization boundary.
   const canManageTasks = !!session.data && hasPermission(session.data.user.role, "MANAGE_TASKS");
+  // "Unassigned" is a team-attention queue (tenant-wide, owner-less system
+  // tasks), not a personal view — gate it out of the visible tab list for a
+  // VIEW_TASKS-only role (e.g. Doctor). The API independently enforces this
+  // too (a non-MANAGE_TASKS caller's assignedTo is forced server-side, which
+  // always yields an empty result for this view), so this is UI polish only,
+  // never the authorization boundary.
+  const visibleTabs = TABS.filter((t) => t.key !== "unassigned" || canManageTasks);
+  // If session permissions load in without MANAGE_TASKS while "unassigned"
+  // is still selected (e.g. stale tab state), fall back to "mine" for the
+  // query itself — belt-and-suspenders alongside the server-side gate, which
+  // is the real authorization boundary either way.
+  const effectiveTab = tab === "unassigned" && !canManageTasks ? "mine" : tab;
 
   const tasks = useQuery({
-    queryKey: ["tasks", tab, currentUserId],
-    queryFn: () => api.tasks(tab === "mine" ? { assignedTo: currentUserId } : { view: tab, assignedTo: currentUserId }),
+    queryKey: ["tasks", effectiveTab, currentUserId],
+    // "Unassigned" is tenant-wide by definition — never force it down to the
+    // caller's own assignments the way every other tab does.
+    queryFn: () =>
+      api.tasks(
+        effectiveTab === "mine"
+          ? { assignedTo: currentUserId }
+          : effectiveTab === "unassigned"
+            ? { view: "unassigned" }
+            : { view: effectiveTab, assignedTo: currentUserId },
+      ),
     enabled: !!currentUserId,
   });
 
@@ -66,6 +104,18 @@ export default function MyWorkPage() {
     queryFn: api.taskCounts,
     enabled: !!currentUserId,
   });
+
+  // Reason grouping is derived client-side from the already-fetched date-tab
+  // list rather than a second round trip per pill — "My Work" queues are a
+  // single telecaller's own tasks (small), and this keeps switching pills
+  // instant with no extra loading state.
+  const activeReasons = REASON_GROUPS.find((g) => g.key === reasonKey)?.reasons ?? [];
+  const visibleTasks = tasks.data && activeReasons.length > 0 ? tasks.data.filter((t) => activeReasons.includes(t.reason)) : tasks.data;
+  const reasonCounts: Record<string, number> = { all: tasks.data?.length ?? 0 };
+  for (const group of REASON_GROUPS) {
+    if (group.reasons.length === 0) continue;
+    reasonCounts[group.key] = tasks.data?.filter((t) => group.reasons.includes(t.reason)).length ?? 0;
+  }
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: ["tasks"] });
@@ -108,14 +158,14 @@ export default function MyWorkPage() {
       )}
 
       <div className="flex flex-wrap gap-1 rounded border border-neutral-200 bg-white p-1" role="tablist">
-        {TABS.map((t) => (
+        {visibleTabs.map((t) => (
           <button
             key={t.key}
             type="button"
             role="tab"
-            aria-selected={tab === t.key}
+            aria-selected={effectiveTab === t.key}
             onClick={() => setTab(t.key)}
-            className={`flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition ${tab === t.key ? "bg-primary-50 text-primary-700" : "text-neutral-500 hover:bg-neutral-100"}`}
+            className={`flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition ${effectiveTab === t.key ? "bg-primary-50 text-primary-700" : "text-neutral-500 hover:bg-neutral-100"}`}
             data-testid={`my-work-tab-${t.key}`}
           >
             {t.label}
@@ -128,10 +178,31 @@ export default function MyWorkPage() {
         ))}
       </div>
 
+      <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Filter by reason">
+        {REASON_GROUPS.map((g) => (
+          <button
+            key={g.key}
+            type="button"
+            role="tab"
+            aria-selected={reasonKey === g.key}
+            onClick={() => setReasonKey(g.key)}
+            className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition ${reasonKey === g.key ? "border-primary-200 bg-primary-50 text-primary-700" : "border-neutral-200 bg-white text-neutral-500 hover:bg-neutral-50"}`}
+            data-testid={`my-work-reason-${g.key}`}
+          >
+            {g.label}
+            {tasks.data && (
+              <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-normal tabular-nums text-neutral-500" data-testid={`my-work-reason-count-${g.key}`}>
+                {reasonCounts[g.key]}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
       <Card className="p-0">
         {(tasks.isLoading || session.isLoading) && <div className="space-y-2 p-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-14" />)}</div>}
         {tasks.isError && <div className="p-4"><ErrorState message="Could not load tasks." /></div>}
-        {tasks.data && tasks.data.length === 0 && (
+        {visibleTasks && visibleTasks.length === 0 && (
           <div className="p-8">
             <EmptyState message="You're all caught up." />
             {canManageTasks && (
@@ -143,9 +214,9 @@ export default function MyWorkPage() {
             )}
           </div>
         )}
-        {tasks.data && tasks.data.length > 0 && (
+        {visibleTasks && visibleTasks.length > 0 && (
           <ul className="divide-y divide-neutral-100" data-testid="my-work-task-list">
-            {tasks.data.map((task) => {
+            {visibleTasks.map((task) => {
               const overdue = isOverdue(task);
               const urgency = task.status === "pending" ? urgencyLabel(task.dueAt) : null;
               return (
@@ -166,6 +237,7 @@ export default function MyWorkPage() {
                       <span className="ml-2 text-xs text-neutral-500">{task.journeyType ?? "General"}</span>
                       <div className="mt-1 flex flex-wrap items-center gap-1.5">
                         <Badge tone={STATUS_TONE[task.status]}>{TYPE_LABEL[task.type]}</Badge>
+                        <Badge tone={TASK_REASON_TONE[task.reason]}>{TASK_REASON_LABEL[task.reason]}</Badge>
                         {task.priority === "high" && <Badge tone="warning">High priority</Badge>}
                         <span className={`text-xs tabular-nums ${overdue ? "font-medium text-danger-500" : "text-neutral-500"}`}>
                           {urgency ? urgency.text : `Due ${fmtDate(task.dueAt)}`}

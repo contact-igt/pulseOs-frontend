@@ -314,4 +314,105 @@ describe.skipIf(!DEMO_PASSWORD)("tasks / follow-ups / my work (integration)", ()
       expect((spoofed.json() as TaskRow[]).map((t) => t.id)).not.toContain(otherTask.id);
     });
   });
+
+  // Follow-on to the security fix above: system-generated tasks (missed-call
+  // callbacks, post-care, recall, treatment-decision-pending, new-lead
+  // contact) can be created with `assignedTo: null` when no journey owner
+  // exists yet. Those must not become operationally invisible — they need an
+  // intentional "team attention" surface, restricted to the same MANAGE_TASKS
+  // roles that already have full tenant-wide task visibility (front desk,
+  // coordinator, admin), never a tenant-wide queue for a VIEW_TASKS-only role.
+  describe("GET /tasks?view=unassigned — team-attention queue for owner-less system tasks", () => {
+    let unassignedTaskId: string;
+
+    beforeAll(async () => {
+      // Created without `assignedTo` — createTask defaults it to null, the
+      // same shape call-webhook.service.ts / treatment.service.ts produce
+      // when no journey owner exists yet.
+      const created = await app.inject({
+        method: "POST",
+        url: "/tasks",
+        cookies: { pulseos_session: coordinatorCookie },
+        payload: {
+          patientId: somePatientId,
+          journeyId: someJourneyId,
+          type: "CALLBACK",
+          notes: "Unassigned regression fixture",
+          dueAt: new Date(Date.now() + 86400000).toISOString(),
+        },
+      });
+      expect(created.statusCode).toBe(200);
+      const task = created.json() as TaskRow;
+      expect(task.assignedTo).toBeNull();
+      unassignedTaskId = task.id;
+    });
+
+    it("(a) a MANAGE_TASKS role (coordinator) sees the unassigned pending task in the unassigned view", async () => {
+      const res = await app.inject({ method: "GET", url: "/tasks?view=unassigned", cookies: { pulseos_session: coordinatorCookie } });
+      expect(res.statusCode).toBe(200);
+      const rowsList = res.json() as TaskRow[];
+      expect(rowsList.map((t) => t.id)).toContain(unassignedTaskId);
+      expect(rowsList.every((t) => t.assignedTo === null)).toBe(true);
+      expect(rowsList.every((t) => t.status === "pending" || t.status === "in_progress")).toBe(true);
+    });
+
+    it("(b) a completed task never appears in the unassigned view, even if it was never assigned", async () => {
+      const create = await app.inject({
+        method: "POST",
+        url: "/tasks",
+        cookies: { pulseos_session: coordinatorCookie },
+        payload: { patientId: somePatientId, journeyId: someJourneyId, type: "CALLBACK", dueAt: new Date(Date.now() + 86400000).toISOString() },
+      });
+      const task = create.json() as TaskRow;
+      expect(task.assignedTo).toBeNull();
+
+      const complete = await app.inject({ method: "PATCH", url: `/tasks/${task.id}/complete`, cookies: { pulseos_session: coordinatorCookie } });
+      expect(complete.statusCode).toBe(200);
+
+      const res = await app.inject({ method: "GET", url: "/tasks?view=unassigned", cookies: { pulseos_session: coordinatorCookie } });
+      const rowsList = res.json() as TaskRow[];
+      expect(rowsList.map((t) => t.id)).not.toContain(task.id);
+    });
+
+    it("(c) a VIEW_TASKS-only doctor requesting the unassigned view gets an empty/own-only result, never the tenant-wide unassigned queue (no bypass)", async () => {
+      const res = await app.inject({ method: "GET", url: "/tasks?view=unassigned", cookies: { pulseos_session: doctorCookie } });
+      expect(res.statusCode).toBe(200);
+      const rowsList = res.json() as TaskRow[];
+      // The doctor's server-forced assignedTo (their own id) can never equal
+      // NULL, so this must always be empty — proving the override composes
+      // safely with the new view's `assignedTo IS NULL` condition.
+      expect(rowsList).toEqual([]);
+      expect(rowsList.map((t) => t.id)).not.toContain(unassignedTaskId);
+    });
+
+    it("(d) a VIEW_TASKS-only doctor cannot bypass the unassigned gate with a spoofed assignedTo query param either", async () => {
+      const res = await app.inject({ method: "GET", url: `/tasks?view=unassigned&assignedTo=${coordinatorId}`, cookies: { pulseos_session: doctorCookie } });
+      expect(res.statusCode).toBe(200);
+      const rowsList = res.json() as TaskRow[];
+      expect(rowsList).toEqual([]);
+    });
+
+    it("(e) tenant isolation holds for the unassigned view: an unassigned task from another tenant is never returned", async () => {
+      const [otherTenant] = await db.insert(tenants).values({ name: "Cross-Tenant Unassigned Test Hospital" }).returning();
+      const [otherPatient] = await db.insert(patients).values({ tenantId: otherTenant.id, name: "Other Tenant Patient (Unassigned)", phone: "+919876500098" }).returning();
+      const [otherTask] = await db.insert(tasks).values({ tenantId: otherTenant.id, patientId: otherPatient.id, type: "CALLBACK", dueAt: new Date(Date.now() + 86400000) }).returning();
+      expect(otherTask.assignedTo).toBeNull();
+
+      const coordinatorList = await app.inject({ method: "GET", url: "/tasks?view=unassigned", cookies: { pulseos_session: coordinatorCookie } });
+      expect((coordinatorList.json() as TaskRow[]).map((t) => t.id)).not.toContain(otherTask.id);
+    });
+
+    it("(f) task counts expose a tenant-wide `unassigned` number for a MANAGE_TASKS role but omit it for a VIEW_TASKS-only doctor", async () => {
+      const coordinatorCounts = await app.inject({ method: "GET", url: "/tasks/counts", cookies: { pulseos_session: coordinatorCookie } });
+      expect(coordinatorCounts.statusCode).toBe(200);
+      const cCounts = coordinatorCounts.json() as { unassigned?: number };
+      expect(typeof cCounts.unassigned).toBe("number");
+      expect(cCounts.unassigned).toBeGreaterThan(0);
+
+      const doctorCounts = await app.inject({ method: "GET", url: "/tasks/counts", cookies: { pulseos_session: doctorCookie } });
+      expect(doctorCounts.statusCode).toBe(200);
+      const dCounts = doctorCounts.json() as { unassigned?: number };
+      expect(dCounts.unassigned).toBeUndefined();
+    });
+  });
 });
