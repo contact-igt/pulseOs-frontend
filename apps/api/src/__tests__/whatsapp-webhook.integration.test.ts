@@ -516,5 +516,25 @@ describe.skipIf(!DEMO_PASSWORD)("WhatsApp webhook (integration, fixture mode)", 
       const convAfter = await conversationRowFor(patient.id);
       expect(convAfter!.journeyId).toBe(journey.id);
     });
+
+    it("(f) two concurrent redeliveries backfilling the same unlinked conversation never leave it linked to two different Journeys, and both requests succeed cleanly", async () => {
+      const from = `919${String(Date.now()).slice(-9)}`;
+      await fireInbound({ from, wamid: `wamid.J_RACE_A_${Date.now()}`, body: "first message, no journey yet", name: "Journey Patient Race" });
+      const patient = await findOrCreatePatientByPhone(db, tenantId, from, "Journey Patient Race");
+      const journey = await insertJourney(patient.id, "enquiry");
+
+      // Fire two redeliveries "concurrently" (not awaited sequentially) for
+      // the same already-existing, still-unlinked conversation — both should
+      // resolve to the same single active Journey and land without error,
+      // proving the compare-and-swap UPDATE doesn't throw or corrupt state
+      // when two requests race the same backfill.
+      await Promise.all([
+        fireInbound({ from, wamid: `wamid.J_RACE_B_${Date.now()}`, body: "second message, racing the backfill", name: "Journey Patient Race" }),
+        fireInbound({ from, wamid: `wamid.J_RACE_C_${Date.now()}`, body: "third message, racing the backfill too", name: "Journey Patient Race" }),
+      ]);
+
+      const convAfter = await conversationRowFor(patient.id);
+      expect(convAfter!.journeyId).toBe(journey.id);
+    });
   });
 });

@@ -65,8 +65,21 @@ async function findOrCreateConversation(
     if (!existing.journeyId) {
       const resolvedJourneyId = await resolveJourneyForNewConversation(db, tenantId, patientId);
       if (resolvedJourneyId) {
-        const [updated] = await db.update(conversations).set({ journeyId: resolvedJourneyId }).where(eq(conversations.id, existing.id)).returning();
-        return updated!;
+        // Compare-and-swap: re-guard on journeyId still being null at UPDATE
+        // time, not just at the SELECT above. Two concurrent deliveries for
+        // the same still-unlinked conversation (e.g. a provider redelivery)
+        // could otherwise both resolve independently and race on the write —
+        // this makes only the first one actually land; the second affects
+        // zero rows and falls through to the re-fetch below, same pattern as
+        // treatment.service.ts's conditional status-transition UPDATE.
+        const [updated] = await db
+          .update(conversations)
+          .set({ journeyId: resolvedJourneyId })
+          .where(and(eq(conversations.id, existing.id), isNull(conversations.journeyId)))
+          .returning();
+        if (updated) return updated;
+        const [refetched] = await db.select().from(conversations).where(eq(conversations.id, existing.id)).limit(1);
+        return refetched!;
       }
     }
     return existing;
