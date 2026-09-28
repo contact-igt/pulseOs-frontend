@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import type { CreateTaskInput, TaskView } from "@pulseos/types";
+import type { CreateTaskInput, TaskReason, TaskView } from "@pulseos/types";
+import { hasPermission } from "@pulseos/types";
 import { requirePermission } from "../auth/permission.middleware.js";
 import {
   addTaskNote,
@@ -26,8 +27,17 @@ export async function taskRoutes(app: FastifyInstance) {
 
   app.get("/tasks", async (request) => {
     const tenantId = request.sessionUser!.tenantId;
-    const query = request.query as { view?: TaskView; assignedTo?: string; patientId?: string };
-    return listTasks(app.db, tenantId, { view: query.view, assignedTo: query.assignedTo, patientId: query.patientId });
+    const query = request.query as { view?: TaskView; assignedTo?: string; patientId?: string; reason?: TaskReason };
+    // A caller without MANAGE_TASKS (e.g. Doctor: VIEW_TASKS only) gets a
+    // narrower capability than the tenant-wide task queue — server-side,
+    // never UI-only. Force their assignedTo to themselves regardless of what
+    // the query string asks for, so a spoofed `assignedTo` can never be used
+    // to read another staff member's (PHI-adjacent) task notes. Gated off the
+    // MANAGE_TASKS permission itself, not a role-name check, so it stays
+    // correct if the permission matrix changes later.
+    const canManageTasks = hasPermission(request.sessionUser!.role, "MANAGE_TASKS");
+    const assignedTo = canManageTasks ? query.assignedTo : request.sessionUser!.id;
+    return listTasks(app.db, tenantId, { view: query.view, assignedTo, patientId: query.patientId, reason: query.reason });
   });
 
   // Registered ahead of nothing conflicting — "/tasks/:id/..." mutation

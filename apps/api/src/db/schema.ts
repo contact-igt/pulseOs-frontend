@@ -334,6 +334,12 @@ export const revenueEvents = pgTable("revenue_events", {
 }, (t) => ({
   tenantIdx: index("revenue_events_tenant_idx").on(t.tenantId),
   journeyIdx: index("revenue_events_journey_idx").on(t.journeyId),
+  // A treatment produces at most one completion-revenue-event. treatmentOpportunityId
+  // is nullable (a revenue event need not always be tied to a treatment), and a plain
+  // unique index treats NULLs as distinct — so this only constrains the non-null case,
+  // exactly the invariant we need. Defense-in-depth alongside the application-level
+  // conditional-update guard in treatment.service.ts's updateTreatmentStatus.
+  treatmentOpportunityUnique: uniqueIndex("revenue_events_treatment_opportunity_unique").on(t.treatmentOpportunityId),
 }));
 
 export const actorTypeEnum = pgEnum("actor_type", ["system", "ai", "user"]);

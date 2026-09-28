@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { buildApp } from "../app.js";
-import { queryClient } from "../db/client.js";
+import { db, queryClient } from "../db/client.js";
+import { patients, tasks, tenants } from "../db/schema.js";
 import type { FastifyInstance } from "fastify";
 import type { JourneyListRow, SessionUser, TaskRow } from "@pulseos/types";
 
@@ -15,19 +16,31 @@ describe.skipIf(!DEMO_PASSWORD)("tasks / follow-ups / my work (integration)", ()
   let app: FastifyInstance;
   let coordinatorCookie: string;
   let doctorCookie: string;
+  let doctor2Cookie: string;
   let somePatientId: string;
   let someJourneyId: string;
+  let doctorId: string;
+  let doctor2Id: string;
+  let coordinatorId: string;
 
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
     coordinatorCookie = await loginAs(app, "coordinator@pulseos.local");
     doctorCookie = await loginAs(app, "doctor@pulseos.local");
+    doctor2Cookie = await loginAs(app, "doctor2@pulseos.local");
 
     const journeys = await app.inject({ method: "GET", url: "/journeys", cookies: { pulseos_session: coordinatorCookie } });
     const rows = journeys.json() as JourneyListRow[];
     somePatientId = rows[0].patientId;
     someJourneyId = rows[0].id;
+
+    const doctorSession = await app.inject({ method: "GET", url: "/auth/session", cookies: { pulseos_session: doctorCookie } });
+    doctorId = (doctorSession.json() as { user: SessionUser }).user.id;
+    const doctor2Session = await app.inject({ method: "GET", url: "/auth/session", cookies: { pulseos_session: doctor2Cookie } });
+    doctor2Id = (doctor2Session.json() as { user: SessionUser }).user.id;
+    const coordinatorSession = await app.inject({ method: "GET", url: "/auth/session", cookies: { pulseos_session: coordinatorCookie } });
+    coordinatorId = (coordinatorSession.json() as { user: SessionUser }).user.id;
   });
 
   afterAll(async () => {
@@ -210,5 +223,95 @@ describe.skipIf(!DEMO_PASSWORD)("tasks / follow-ups / my work (integration)", ()
       expect(row.nextActionDueAt === null || typeof row.nextActionDueAt === "string").toBe(true);
       expect(typeof row.lastActivityAt).toBe("string");
     }
+  });
+
+  // Regression coverage for the audit finding: GET /tasks was gated only by
+  // VIEW_TASKS with zero additional scoping, so a Doctor (VIEW_TASKS but not
+  // MANAGE_TASKS) could read every other staff member's tasks — including
+  // PHI-adjacent task notes — tenant-wide, and could pass an arbitrary
+  // `assignedTo` query param straight through. The fix scopes any caller
+  // without MANAGE_TASKS to their own assignments server-side, while callers
+  // with MANAGE_TASKS (Coordinator/Front Desk/Admin) keep the existing
+  // full-tenant view unchanged.
+  describe("GET /tasks scoping — VIEW_TASKS-only vs MANAGE_TASKS (security fix)", () => {
+    let doctor2OwnTaskId: string;
+
+    beforeAll(async () => {
+      // A task assigned to a *different* doctor, with a PHI-adjacent note — the
+      // "another staff member's unrelated task" a VIEW_TASKS-only caller must
+      // never be able to read, whether via the unscoped list or a spoofed
+      // assignedTo param.
+      const created = await app.inject({
+        method: "POST",
+        url: "/tasks",
+        cookies: { pulseos_session: coordinatorCookie },
+        payload: {
+          patientId: somePatientId,
+          journeyId: someJourneyId,
+          type: "CALLBACK",
+          notes: "Confidential: patient disclosed condition X to Dr. Nair",
+          dueAt: new Date(Date.now() + 86400000).toISOString(),
+          assignedTo: doctor2Id,
+        },
+      });
+      doctor2OwnTaskId = (created.json() as TaskRow).id;
+
+      // The first doctor also gets a task of their own, to prove self-visibility stays intact.
+      await app.inject({
+        method: "POST",
+        url: "/tasks",
+        cookies: { pulseos_session: coordinatorCookie },
+        payload: { patientId: somePatientId, journeyId: someJourneyId, type: "CALLBACK", dueAt: new Date(Date.now() + 86400000).toISOString(), assignedTo: doctorId },
+      });
+    });
+
+    it("(a) a VIEW_TASKS-only doctor sees their own assigned tasks", async () => {
+      const res = await app.inject({ method: "GET", url: "/tasks", cookies: { pulseos_session: doctorCookie } });
+      expect(res.statusCode).toBe(200);
+      const rowsList = res.json() as TaskRow[];
+      expect(rowsList.length).toBeGreaterThan(0);
+      expect(rowsList.every((t) => t.assignedTo === doctorId)).toBe(true);
+    });
+
+    it("(b) a MANAGE_TASKS role (coordinator) still sees the full tenant task queue, unchanged", async () => {
+      const res = await app.inject({ method: "GET", url: "/tasks", cookies: { pulseos_session: coordinatorCookie } });
+      expect(res.statusCode).toBe(200);
+      const rowsList = res.json() as TaskRow[];
+      expect(rowsList.map((t) => t.id)).toContain(doctor2OwnTaskId);
+      // proves the coordinator's view is not scoped down to only their own assignments
+      expect(rowsList.some((t) => t.assignedTo !== coordinatorId)).toBe(true);
+    });
+
+    it("(c) a VIEW_TASKS-only doctor cannot see another staff member's task via the unscoped list", async () => {
+      const res = await app.inject({ method: "GET", url: "/tasks", cookies: { pulseos_session: doctorCookie } });
+      const rowsList = res.json() as TaskRow[];
+      expect(rowsList.map((t) => t.id)).not.toContain(doctor2OwnTaskId);
+    });
+
+    it("(c) a VIEW_TASKS-only doctor cannot bypass scoping with a spoofed assignedTo query param, a direct API call the UI would never send", async () => {
+      const res = await app.inject({ method: "GET", url: `/tasks?assignedTo=${doctor2Id}`, cookies: { pulseos_session: doctorCookie } });
+      expect(res.statusCode).toBe(200);
+      const rowsList = res.json() as TaskRow[];
+      expect(rowsList.map((t) => t.id)).not.toContain(doctor2OwnTaskId);
+      // the server overrides the spoofed assignedTo back to the caller's own id
+      expect(rowsList.every((t) => t.assignedTo === doctorId)).toBe(true);
+    });
+
+    it("(d) cross-tenant isolation holds: a task from another tenant is never returned to any caller in this tenant, even via a spoofed direct API bypass", async () => {
+      const [otherTenant] = await db.insert(tenants).values({ name: "Cross-Tenant Isolation Test Hospital" }).returning();
+      const [otherPatient] = await db.insert(patients).values({ tenantId: otherTenant.id, name: "Other Tenant Patient", phone: "+919876500099" }).returning();
+      const [otherTask] = await db.insert(tasks).values({ tenantId: otherTenant.id, patientId: otherPatient.id, type: "CALLBACK", dueAt: new Date(Date.now() + 86400000) }).returning();
+
+      const coordinatorList = await app.inject({ method: "GET", url: "/tasks", cookies: { pulseos_session: coordinatorCookie } });
+      expect((coordinatorList.json() as TaskRow[]).map((t) => t.id)).not.toContain(otherTask.id);
+
+      const doctorList = await app.inject({ method: "GET", url: "/tasks", cookies: { pulseos_session: doctorCookie } });
+      expect((doctorList.json() as TaskRow[]).map((t) => t.id)).not.toContain(otherTask.id);
+
+      // (e) direct bypass attempt: a raw crafted query the UI would never send, requesting
+      // the other tenant's patient — must not leak it either, tenantId scoping always wins.
+      const spoofed = await app.inject({ method: "GET", url: `/tasks?assignedTo=${doctorId}&patientId=${otherPatient.id}`, cookies: { pulseos_session: doctorCookie } });
+      expect((spoofed.json() as TaskRow[]).map((t) => t.id)).not.toContain(otherTask.id);
+    });
   });
 });
