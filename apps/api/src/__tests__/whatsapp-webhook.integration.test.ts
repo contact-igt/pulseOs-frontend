@@ -67,6 +67,16 @@ describe.skipIf(!DEMO_PASSWORD)("WhatsApp webhook (integration, fixture mode)", 
   let adminCookie: string;
   let connectorId: string;
   let tenantId: string;
+  // The connector's own fixture configuration.phoneNumberId is
+  // "FIXTURE_PHONE_NUMBER_ID" (see metaMessagePayload's default below), so a
+  // CommunicationEndpoint with that exact providerRef is what real inbound
+  // resolution matches against. Demo seed data (apps/api/src/seed/seed.ts)
+  // now legitimately creates a permanent endpoint with that same providerRef
+  // ("WhatsApp — Main Line") for exactly the same reason — so this suite
+  // reads whatever endpoint already resolves for that providerRef instead of
+  // assuming it always creates a fresh one with a hardcoded label; the two
+  // creators are not in conflict, they just can't both own the row.
+  let mainLineLabel: string;
 
   beforeAll(async () => {
     app = await buildApp();
@@ -78,12 +88,20 @@ describe.skipIf(!DEMO_PASSWORD)("WhatsApp webhook (integration, fixture mode)", 
     const [connectorRow] = await db.select({ tenantId: connectors.tenantId }).from(connectors).where(eq(connectors.id, connectorId)).limit(1);
     tenantId = connectorRow!.tenantId;
 
-    await app.inject({
-      method: "POST",
-      url: `/connectors/${connectorId}/endpoints`,
-      cookies: { pulseos_session: adminCookie },
-      payload: { type: "WHATSAPP", publicNumber: "+911234500000", providerRef: "FIXTURE_PHONE_NUMBER_ID", displayLabel: "Fixture WhatsApp Line" },
-    });
+    const existing = await app.inject({ method: "GET", url: `/connectors/${connectorId}/endpoints`, cookies: { pulseos_session: adminCookie } });
+    const existingMainLine = (existing.json() as { providerRef: string; displayLabel: string }[]).find((e) => e.providerRef === "FIXTURE_PHONE_NUMBER_ID");
+    if (existingMainLine) {
+      mainLineLabel = existingMainLine.displayLabel;
+    } else {
+      const created = await app.inject({
+        method: "POST",
+        url: `/connectors/${connectorId}/endpoints`,
+        cookies: { pulseos_session: adminCookie },
+        payload: { type: "WHATSAPP", publicNumber: "+911234500000", providerRef: "FIXTURE_PHONE_NUMBER_ID", displayLabel: "Fixture WhatsApp Line" },
+      });
+      expect(created.statusCode).toBe(201);
+      mainLineLabel = "Fixture WhatsApp Line";
+    }
   });
 
   afterAll(async () => {
@@ -145,9 +163,9 @@ describe.skipIf(!DEMO_PASSWORD)("WhatsApp webhook (integration, fixture mode)", 
     expect(created!.ownershipState).toBe("HUMAN_REQUIRED");
     expect(created!.lastMessage).toContain("IVF costs");
     // The webhook payload's real metadata.phone_number_id ("FIXTURE_PHONE_NUMBER_ID")
-    // resolves to the CommunicationEndpoint created in beforeAll — proves the
-    // endpoint-resolution wiring, not just that the conversation exists.
-    expect(created!.endpointLabel).toBe("Fixture WhatsApp Line");
+    // resolves to the CommunicationEndpoint resolved/created in beforeAll —
+    // proves the endpoint-resolution wiring, not just that the conversation exists.
+    expect(created!.endpointLabel).toBe(mainLineLabel);
   });
 
   it("an inbound message on an unconfigured phone_number_id leaves endpointLabel null (no guessing)", async () => {
@@ -211,8 +229,8 @@ describe.skipIf(!DEMO_PASSWORD)("WhatsApp webhook (integration, fixture mode)", 
     const matches = (conversationsRes.json() as ConversationRow[]).filter((c) => c.patientName === name);
     expect(matches.length).toBe(2);
     const labels = matches.map((c) => c.endpointLabel).sort();
-    expect(labels).toEqual(["Fixture WhatsApp Line", "Second Fixture Line"].sort());
-    expect(matches.find((c) => c.endpointLabel === "Fixture WhatsApp Line")!.lastMessage).toBe("message on the main line");
+    expect(labels).toEqual([mainLineLabel, "Second Fixture Line"].sort());
+    expect(matches.find((c) => c.endpointLabel === mainLineLabel)!.lastMessage).toBe("message on the main line");
     expect(matches.find((c) => c.endpointLabel === "Second Fixture Line")!.lastMessage).toBe("message on the second line");
   });
 
