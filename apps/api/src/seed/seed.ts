@@ -853,6 +853,16 @@ async function main() {
       connectorId: whatsappConnector.id, providerMessageId: "wamid.fixture-sneha-002",
     },
   ]);
+  // Matches processInboundWhatsAppMessage's own Timeline write exactly —
+  // without this, Patient 360's Timeline (which reads timelineEvents, not
+  // conversations directly) would never show the WhatsApp interaction at all.
+  timelineRows.push({
+    tenantId: tenant.id, patientId: patientRows[2].id, journeyId: journeyIds[2],
+    actorType: "system", eventType: "whatsapp_message", title: "WhatsApp message received",
+    description: "Hi, I wanted to check the next steps after my consultation.",
+    sourceChannel: "whatsapp", occurredAt: minutesAgo(45),
+    relatedEntityType: "conversation", relatedEntityId: snehaConversation.id,
+  });
 
   // WhatsApp Journey-linking — the honest ambiguous case: Vikram Kumar
   // (idx 1) genuinely has two concurrent active Journeys ("Fertility", Meta,
