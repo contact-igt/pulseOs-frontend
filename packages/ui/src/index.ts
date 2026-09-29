@@ -1,4 +1,5 @@
 export * from "./primitives";
+export * from "./Brand";
 export * from "./format";
 export * from "./status";
 export * from "./MetricStrip";

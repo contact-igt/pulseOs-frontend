@@ -4,20 +4,13 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@pulseos/api-client";
 import type { Role } from "@pulseos/types";
-import { ChevronDown, CircleGauge, Eye, EyeOff, HeartPulse, TrendingUp, UsersRound } from "lucide-react";
+import { ChevronDown, Eye, EyeOff } from "lucide-react";
+import { PulseLockup } from "@pulseos/ui";
 import { ROLE_HOME } from "../../components/shell/nav";
 
-const BENEFITS = [
-  { icon: UsersRound, title: "Acquire", body: "Capture enquiries from every channel." },
-  { icon: CircleGauge, title: "Convert", body: "Turn enquiries into appointments and consultations." },
-  { icon: TrendingUp, title: "Grow", body: "Improve treatment conversion and follow-up." },
-];
-
-const STATS = [
-  { value: "10K+", label: "Patients" },
-  { value: "25+", label: "Clinics" },
-  { value: "98%", label: "Satisfaction" },
-];
+// The operational loop PulseOS connects — descriptive only. No invented
+// numbers or customer claims on this screen.
+const JOURNEY_STEPS = ["Enquiry", "Appointment", "Consultation", "Treatment", "Follow-up"];
 
 // Development-only one-click sign-in — entirely absent outside local
 // development, not just hidden: /auth/dev-login/roles is a 404 (the route
@@ -143,61 +136,51 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen app-canvas">
-      {/* Brand canvas — desktop only */}
-      <div className="relative hidden w-[62%] overflow-hidden bg-gradient-to-br from-primary-700 via-primary-600 to-primary-800 lg:flex lg:flex-col lg:justify-between lg:p-12">
-        {/* subtle abstract decoration */}
-        <svg className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.14]" viewBox="0 0 800 900" fill="none" aria-hidden="true">
-          <circle cx="680" cy="120" r="220" stroke="white" strokeWidth="1" />
-          <circle cx="680" cy="120" r="320" stroke="white" strokeWidth="1" />
-          <circle cx="60" cy="820" r="180" stroke="white" strokeWidth="1" />
-          <path d="M0 700 Q 400 600 800 720" stroke="white" strokeWidth="1" />
+    <main className="app-shell flex min-h-screen">
+      {/* Brand canvas — desktop only. Same blue family as the app sidebar. */}
+      <div className="app-login-visual relative hidden w-[58%] overflow-hidden lg:flex lg:flex-col lg:justify-between lg:p-12" data-testid="login-visual">
+        {/* Quiet connective linework, low opacity: rings echo the mark's nodes. */}
+        <svg className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.10]" viewBox="0 0 800 900" fill="none" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+          <circle cx="700" cy="140" r="200" stroke="white" strokeWidth="1" />
+          <circle cx="700" cy="140" r="300" stroke="white" strokeWidth="1" />
+          <circle cx="700" cy="140" r="400" stroke="white" strokeWidth="1" />
         </svg>
 
-        <div className="relative flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/15">
-            <HeartPulse size={18} className="text-white" strokeWidth={2.25} />
-          </span>
-          <span className="text-lg font-semibold tracking-tight text-white">PulseOS</span>
+        <div className="relative">
+          <PulseLockup tone="onBlue" size={34} />
         </div>
 
-        <div className="relative max-w-md">
-          <h1 className="text-[34px] font-semibold leading-[1.15] text-white">One view of every patient journey.</h1>
-          <p className="mt-3 text-sm text-primary-100">From enquiry to consultation, treatment and follow-up.</p>
+        <div className="relative max-w-lg">
+          <h1 className="text-balance text-[36px] font-semibold leading-[1.12] tracking-tight text-white">Every patient, one continuous journey.</h1>
+          <p className="mt-4 max-w-md text-[15px] leading-relaxed text-primary-100">
+            Know where every patient came from, what happened next, what needs attention, and what revenue was generated.
+          </p>
 
-          <div className="mt-10 grid grid-cols-3 gap-4">
-            {BENEFITS.map((b) => (
-              <div key={b.title}>
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/10">
-                  <b.icon size={17} className="text-white" strokeWidth={2} />
-                </span>
-                <p className="mt-2.5 text-sm font-medium text-white">{b.title}</p>
-                <p className="mt-0.5 text-xs leading-snug text-primary-100">{b.body}</p>
-              </div>
+          <ol className="relative mt-12 grid max-w-lg grid-cols-5" aria-label="The patient journey PulseOS connects">
+            <span className="pointer-events-none absolute left-[10%] right-[10%] top-[7px] h-px bg-white/30" aria-hidden="true" />
+            {JOURNEY_STEPS.map((step, i) => (
+              <li key={step} className="relative flex flex-col items-center text-center">
+                <span
+                  className={`relative h-[15px] w-[15px] rounded-full ring-4 ring-primary-600 ${i === JOURNEY_STEPS.length - 1 ? "bg-accent-300" : "bg-white"}`}
+                  aria-hidden="true"
+                />
+                <span className="mt-3 text-xs font-medium text-primary-100">{step}</span>
+              </li>
             ))}
-          </div>
+          </ol>
         </div>
 
-        <div className="relative flex items-center gap-8">
-          {STATS.map((s) => (
-            <div key={s.label}>
-              <span className="block text-2xl font-semibold text-white">{s.value}</span>
-              <span className="block text-xs text-primary-100">{s.label}</span>
-            </div>
-          ))}
-        </div>
+        <p className="relative text-xs text-primary-200">Patient engagement and revenue intelligence for hospitals.</p>
       </div>
 
       {/* Auth panel */}
-      <div className="flex flex-1 items-center justify-center px-6 py-12">
-        <div className="w-full max-w-sm">
-          <div className="mb-8 flex items-center gap-2 lg:hidden">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-600">
-              <HeartPulse size={18} className="text-white" strokeWidth={2.25} />
-            </span>
-            <span className="text-lg font-semibold tracking-tight text-primary-700">PulseOS</span>
+      <div className="flex flex-1 items-center justify-center px-4 py-10 sm:px-6">
+        <div className="w-full max-w-[400px]">
+          <div className="mb-6 lg:hidden">
+            <PulseLockup tone="onWhite" size={32} />
           </div>
 
+          <div className="rounded-panel border border-line bg-white p-6 shadow-glass sm:p-8">
           <h2 className="text-xl font-semibold text-slate-900">Welcome back</h2>
           <p className="mt-1 text-sm text-neutral-500">Sign in to your PulseOS account</p>
 
@@ -212,7 +195,7 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-lg border border-neutral-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                className="w-full h-11 rounded-control border border-line-strong bg-white px-3.5 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/25"
                 autoComplete="email"
               />
             </div>
@@ -227,13 +210,13 @@ export default function LoginPage() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-lg border border-neutral-300 bg-white px-3.5 py-2.5 pr-10 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:ring-1 focus:ring-primary-500"
+                  className="w-full h-11 rounded-control border border-line-strong bg-white px-3.5 pr-11 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-500/25"
                   autoComplete="current-password"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
-                  className="absolute inset-y-0 right-0 flex items-center px-3 text-neutral-400 hover:text-neutral-600"
+                  className="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-lg text-neutral-500 hover:text-neutral-700"
                   aria-label={showPassword ? "Hide password" : "Show password"}
                   tabIndex={-1}
                 >
@@ -261,7 +244,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="flex w-full items-center justify-center rounded-lg bg-primary-600 px-3 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-primary-700 disabled:opacity-60"
+              className="flex h-11 w-full items-center justify-center rounded-control bg-primary-600 px-3 text-sm font-semibold text-white transition hover:bg-primary-700 disabled:opacity-60"
             >
               {loading ? "Signing in…" : "Sign in"}
             </button>
@@ -269,7 +252,9 @@ export default function LoginPage() {
 
           <DevLoginBlock />
 
-          <p className="mt-6 text-center text-xs text-neutral-600">Need help? Contact your administrator.</p>
+          </div>
+
+          <p className="mt-5 text-center text-xs text-neutral-600">Need help? Contact your administrator.</p>
         </div>
       </div>
     </main>

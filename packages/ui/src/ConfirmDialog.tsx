@@ -35,11 +35,11 @@ export function ConfirmDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="alertdialog" aria-modal="true" aria-label={title}>
-      <button type="button" aria-label="Cancel" onClick={onCancel} className="absolute inset-0 bg-slate-900/40 motion-reduce:transition-none" />
+      <button type="button" aria-label="Cancel" onClick={onCancel} className="drawer-backdrop absolute inset-0 bg-slate-900/40" />
       <div
         ref={dialogRef}
         tabIndex={-1}
-        className="relative w-full max-w-sm rounded-xl border border-neutral-200 bg-white p-5 shadow-xl focus:outline-none"
+        className="dialog-panel relative w-full max-w-sm rounded-panel p-5 focus:outline-none"
         data-testid="confirm-dialog"
       >
         <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
@@ -48,7 +48,7 @@ export function ConfirmDialog({
           <button
             type="button"
             onClick={onCancel}
-            className="rounded border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
+            className="rounded-control border border-line-strong bg-white px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
             data-testid="confirm-dialog-cancel"
           >
             {cancelLabel}
@@ -56,7 +56,7 @@ export function ConfirmDialog({
           <button
             type="button"
             onClick={onConfirm}
-            className={`rounded px-3 py-1.5 text-xs font-medium text-white ${danger ? "bg-danger-500 hover:bg-danger-700" : "bg-primary-600 hover:bg-primary-700"}`}
+            className={`rounded-control px-3 py-1.5 text-xs font-medium text-white ${danger ? "bg-danger-500 hover:bg-danger-700" : "bg-primary-600 hover:bg-primary-700"}`}
             data-testid="confirm-dialog-confirm"
           >
             {confirmLabel}

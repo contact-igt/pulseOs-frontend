@@ -21,6 +21,7 @@ export function KpiStripSection({ data, onSegmentClick }: { data: TodayStrip; on
   return (
     <MetricStrip
       testId="kpi-strip"
+      anchorKey="attributedRevenue"
       cells={KPIS.map((kpi) => ({
         key: String(kpi.key),
         label: kpi.label,

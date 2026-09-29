@@ -91,4 +91,24 @@ test.describe("Blue finish screenshot loop", () => {
     await devLogin(page, "PATIENT_COORDINATOR");
     await shot(page, "25-my-work-mobile");
   });
+
+  // Opt-in viewport matrix (SHOT_MATRIX=1): login, Command Centre, Leads and
+  // Patient 360 at the five layout-relevant widths. Output: <set>/m-<w>-<page>.png
+  test("shell viewport matrix", async ({ page }) => {
+    test.skip(!process.env.SHOT_MATRIX, "set SHOT_MATRIX=1 to capture the viewport matrix");
+    const sizes = [[1440, 900], [1280, 800], [1024, 768], [768, 1024], [390, 844]] as const;
+    for (const [w, h] of sizes) {
+      await page.context().clearCookies();
+      await page.setViewportSize({ width: w, height: h });
+      await page.goto("/login");
+      await shot(page, `m-${w}-login`);
+      await devLogin(page, "HOSPITAL_ADMIN");
+      await shot(page, `m-${w}-command-centre`);
+      await page.goto("/leads");
+      await shot(page, `m-${w}-leads`);
+      await openPatient(page, "Geetha Bhat");
+      await shot(page, `m-${w}-patient-360`);
+    }
+  });
+
 });

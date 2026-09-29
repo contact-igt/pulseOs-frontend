@@ -2,17 +2,19 @@
 
 @source "../../../packages/ui/src/**/*.{ts,tsx}";
 
+/* Keep in sync with packages/design-tokens/src/colors.ts (a vitest contract
+   test in that package fails when the two drift). */
 @theme {
-  --color-primary-50: #eef4fc;
-  --color-primary-100: #d9e8f9;
-  --color-primary-200: #b3d1f3;
-  --color-primary-300: #7fb2ea;
-  --color-primary-400: #4a8fdc;
-  --color-primary-500: #2569c7;
-  --color-primary-600: #1a52a3;
-  --color-primary-700: #163f7d;
-  --color-primary-800: #142f5c;
-  --color-primary-900: #0f2140;
+  --color-primary-50: #f4faff;
+  --color-primary-100: #e5f3ff;
+  --color-primary-200: #c9e5ff;
+  --color-primary-300: #9dd0ff;
+  --color-primary-400: #3b9cff;
+  --color-primary-500: #1685f8;
+  --color-primary-600: #0873dd;
+  --color-primary-700: #075fbc;
+  --color-primary-800: #074c9b;
+  --color-primary-900: #063b79;
 
   --color-accent-100: #d7f5f2;
   --color-accent-300: #8fe3da;
@@ -20,20 +22,20 @@
   --color-accent-700: #1c8a80;
 
   --color-neutral-0: #ffffff;
-  --color-neutral-50: #f6f8fb;
-  --color-neutral-100: #eef2f7;
-  --color-neutral-200: #dde5ee;
-  --color-neutral-300: #c3d0dd;
-  --color-neutral-400: #97a8ba;
-  --color-neutral-500: #71829d;
-  --color-neutral-600: #52627a;
-  --color-neutral-700: #3a4759;
-  --color-neutral-800: #26303f;
-  --color-neutral-900: #161d29;
+  --color-neutral-50: #f6fafe;
+  --color-neutral-100: #edf4fb;
+  --color-neutral-200: #dce7f3;
+  --color-neutral-300: #c3d3e4;
+  --color-neutral-400: #98adc3;
+  --color-neutral-500: #5c728a;
+  --color-neutral-600: #4a6078;
+  --color-neutral-700: #34485e;
+  --color-neutral-800: #22344a;
+  --color-neutral-900: #102a43;
 
-  --color-slate-500: #52627a;
-  --color-slate-700: #2c3648;
-  --color-slate-900: #131a26;
+  --color-slate-500: #4a6078;
+  --color-slate-700: #243b53;
+  --color-slate-900: #102a43;
 
   --color-warning-100: #fdf1d8;
   --color-warning-500: #c98a1f;
@@ -43,46 +45,283 @@
   --color-danger-500: #c14634;
   --color-danger-700: #8f2f22;
 
-  /* No chart-indigo/chart-violet — the palette stays cobalt/teal/amber/slate,
-     never purple, per the design direction's explicit "AI/automation is
-     never purple" rule. Multi-segment charts needing a 4th/5th hue reach
-     for --color-primary-300/700/800 or --color-neutral-600 instead. */
-  --color-canvas-top: #f5f9fe;
-  --color-canvas-mid: #eaf2fc;
-  --color-canvas-bottom: #e3edf9;
+  /* No chart-indigo/chart-violet — the palette stays azure/teal/amber/slate,
+     never purple. Multi-segment charts needing a 4th/5th hue reach for
+     --color-primary-300/700/800 or --color-neutral-600 instead. */
+  --color-canvas-base: #eef7ff;
+  --color-canvas-bright: #f8fcff;
 
-  --color-chart-blue: #2569c7;
+  --color-chart-blue: #1685f8;
   --color-chart-teal: #2bb8ab;
   --color-chart-amber: #c98a1f;
+
+  /* Semantic roles — prefer these in new components (bg-brand, bg-surface,
+     border-line, text-ink, text-ink-2, rounded-card, shadow-panel). */
+  --color-brand: #0873dd;
+  --color-brand-deep: #074c9b;
+  --color-brand-soft: #e5f3ff;
+  --color-surface: #ffffff;
+  --color-surface-elevated: #ffffff;
+  --color-surface-muted: #f4faff;
+  --color-surface-info: #eaf5ff;
+  --color-surface-glass: rgba(255, 255, 255, 0.66);
+  --color-surface-glass-strong: rgba(255, 255, 255, 0.82);
+  --color-line: rgba(63, 146, 229, 0.18);
+  --color-line-strong: #b5c9df;
+  --color-glass-border: rgba(255, 255, 255, 0.64);
+  --color-ink: #102a43;
+  --color-ink-2: #5c728a;
+  --color-focus-ring: #1685f8;
+
+  /* Radius hierarchy: shell 20, large panel 16, card 14, control 10, chip 8. */
+  --radius-shell: 1.25rem;
+  --radius-panel: 1rem;
+  --radius-card: 0.875rem;
+  --radius-control: 0.625rem;
+  --radius-chip: 0.5rem;
+
+  /* Shadows are tokens — no ad-hoc per-page shadows. */
+  --shadow-glass: 0 10px 30px rgba(34, 91, 145, 0.1);
+  --shadow-panel: 0 3px 10px rgba(35, 74, 113, 0.05);
+}
+
+:root {
+  --glass-blur: blur(18px) saturate(140%);
+
+  /* ---- Light pale-blue glass navigation over a bright pale-blue canvas ---- */
+  /* Ambient environment: pale sky at the top-left, cyan and cobalt diffusion at
+     the periphery, an icy near-white centre. CSS gradients only. */
+  --ambient:
+    radial-gradient(60% 52% at 0% 0%, rgb(84 170 255 / 0.55), transparent 70%),
+    radial-gradient(48% 52% at 100% 0%, rgb(40 190 235 / 0.30), transparent 70%),
+    radial-gradient(62% 58% at 100% 100%, rgb(22 120 240 / 0.34), transparent 72%),
+    radial-gradient(52% 50% at 0% 100%, rgb(59 156 255 / 0.30), transparent 70%),
+    linear-gradient(180deg, #dcecff 0%, #eff7ff 36%, #f8fcff 58%, #dbeaff 100%);
+
+  --nav-bg: rgb(255 255 255 / 0.62);
+  --nav-bg-mobile: rgb(247 251 255 / 0.98);
+  --nav-bg-image: linear-gradient(180deg, rgb(255 255 255 / 0.5), rgb(255 255 255 / 0) 45%);
+  --nav-border: rgb(255 255 255 / 0.7);
+  --nav-shadow: var(--shadow-glass), inset 1px 1px 0 rgb(255 255 255 / 0.75);
+  --nav-ink: #102a43;
+  --nav-ink-2: #46607a;
+  --nav-divider: rgb(63 146 229 / 0.16);
+  --nav-hover: rgb(22 133 248 / 0.09);
+  --nav-active-bg: rgb(255 255 255 / 0.94);
+  --nav-active-border: rgb(63 146 229 / 0.3);
+  --nav-active-ink: #074c9b;
+  --nav-active-icon: #0873dd;
+  --nav-active-shadow: 0 2px 8px rgb(34 91 145 / 0.14);
+  --nav-focus: #1685f8;
+  --nav-avatar-bg: #e5f3ff;
+  --nav-avatar-ink: #074c9b;
+
 }
 
 /* --font-sans is injected by next/font (apps/web/app/layout.tsx) on <html>
    via its `variable` option — do not redeclare it here, that previously
    shadowed the actually-loaded Inter with a never-fetched string fallback. */
 body {
-  background: var(--color-neutral-50);
+  background: var(--color-canvas-base);
   color: var(--color-slate-900);
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
 * {
   transition-duration: 120ms;
 }
 
-/* Blue finish — level 0 of the surface hierarchy. Pure CSS gradients on the
-   scrolling <main> box (default background-attachment, so nothing repaints on
-   scroll and there is no fixed-background jank on mobile). One soft cobalt
-   bloom at the lower-right edge over a vertical near-white -> light-blue wash;
-   white cards and tables sit on top untouched. */
-.app-canvas {
-  background-color: var(--color-canvas-mid);
-  background-image:
-    radial-gradient(55% 40% at 100% 100%, rgb(37 105 199 / 0.08), transparent 72%),
-    linear-gradient(180deg, var(--color-canvas-top) 0%, var(--color-canvas-mid) 55%, var(--color-canvas-bottom) 100%);
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
 
-/* Sidebar: confident blue-navy, one vertical wash between existing tokens. */
-.app-sidebar {
-  background-color: var(--color-primary-800);
-  background-image: linear-gradient(180deg, var(--color-primary-700) 0%, var(--color-primary-800) 55%, var(--color-primary-900) 100%);
+/* One consistent keyboard focus indicator. In the base layer so any utility
+   (or a component's own focus style) still wins. */
+@layer base {
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--color-focus-ring);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* ------------------------------------------------------------------
+     THE glass material. Structural chrome only: navigation, top bar,
+     search, floating filters, segmented controls, popovers, dialog and
+     drawer chrome. Tables, charts and forms stay solid white.
+     Only a few large backdrop-filter surfaces exist on screen at once.
+     ------------------------------------------------------------------ */
+  .glass,
+  .glass-strong {
+    border: 1px solid var(--color-glass-border);
+    box-shadow: var(--shadow-glass), inset 1px 1px 0 rgb(255 255 255 / 0.7);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+  }
+  .glass {
+    background-color: var(--color-surface-glass);
+  }
+  .glass-strong {
+    background-color: var(--color-surface-glass-strong);
+  }
+  /* Small controls (search pill, select, icon buttons): the translucent
+     material without a backdrop filter — cheap, and reads as glass on the
+     ambient background. */
+  .glass-control {
+    background-color: rgb(255 255 255 / 0.72);
+    border: 1px solid var(--color-glass-border);
+    box-shadow: inset 1px 1px 0 rgb(255 255 255 / 0.7), 0 1px 2px rgb(35 74 113 / 0.06);
+  }
+
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .glass {
+      background-color: rgb(250 253 255 / 0.93);
+    }
+    .glass-strong {
+      background-color: rgb(250 253 255 / 0.97);
+    }
+  }
+  /* Phones: no backdrop blur (cost + legibility) — near-solid instead. */
+  @media (max-width: 767px) {
+    .glass,
+    .glass-strong {
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+      background-color: rgb(250 253 255 / 0.95);
+    }
+  }
+
+  /* ---- Ambient environment behind the whole app (layout wrapper + login) ---- */
+  .app-shell {
+    background-color: var(--color-canvas-base);
+    background-image: var(--ambient);
+  }
+  @media (max-width: 767px) {
+    /* Fewer gradient layers on phones. */
+    .app-shell {
+      background-image:
+        radial-gradient(70% 40% at 0% 0%, rgb(105 181 255 / 0.4), transparent 70%),
+        linear-gradient(180deg, #e8f4ff 0%, #f6fbff 60%, #e8f3ff 100%);
+    }
+  }
+
+  /* ---- Navigation rail (theme comes from the --nav-* variables above) ---- */
+  .app-sidebar {
+    background-color: var(--nav-bg);
+    background-image: var(--nav-bg-image);
+    border: 1px solid var(--nav-border);
+    box-shadow: var(--nav-shadow);
+    color: var(--nav-ink);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+  }
+  @media (max-width: 1023px) {
+    /* The drawer covers content edge-to-edge: opaque enough to read on any page. */
+    .app-sidebar {
+      background-color: var(--nav-bg-mobile);
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
+  }
+  .nav-divider {
+    border-color: var(--nav-divider);
+  }
+  .nav-group-label {
+    color: var(--nav-ink-2);
+  }
+  .nav-link {
+    color: var(--nav-ink);
+    border: 1px solid transparent;
+    transition-property: background-color, color, border-color, box-shadow;
+  }
+  .nav-link:hover {
+    background-color: var(--nav-hover);
+  }
+  .nav-link:focus-visible {
+    outline: 2px solid var(--nav-focus);
+    outline-offset: 1px;
+  }
+  .nav-link[aria-current="page"] {
+    background-color: var(--nav-active-bg);
+    border-color: var(--nav-active-border);
+    color: var(--nav-active-ink);
+    box-shadow: var(--nav-active-shadow);
+  }
+  .nav-link[aria-current="page"] .nav-icon {
+    color: var(--nav-active-icon);
+  }
+  .nav-secondary {
+    color: var(--nav-ink-2);
+  }
+  .nav-avatar {
+    background-color: var(--nav-avatar-bg);
+    color: var(--nav-avatar-ink);
+    border: 1px solid var(--nav-active-border);
+  }
+
+  /* ---- Drawer / dialog chrome: glass shell, near-solid body so forms stay crisp ---- */
+  .drawer-panel,
+  .dialog-panel {
+    background-color: rgb(250 253 255 / 0.97);
+    border: 1px solid var(--color-glass-border);
+    box-shadow: var(--shadow-glass), inset 1px 1px 0 rgb(255 255 255 / 0.7);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+  }
+  .drawer-panel {
+    border-right: 0;
+    border-top-width: 0;
+    border-bottom-width: 0;
+    animation: drawer-in 200ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+  @media (min-width: 768px) {
+    .drawer-panel {
+      border-radius: var(--radius-shell) 0 0 var(--radius-shell);
+    }
+  }
+  .dialog-panel {
+    animation: dialog-in 160ms ease-out both;
+  }
+  @media (max-width: 767px) {
+    .drawer-panel,
+    .dialog-panel {
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+      background-color: rgb(250 253 255 / 0.99);
+    }
+  }
+  .drawer-backdrop {
+    animation: fade-in 200ms ease-out both;
+  }
+  @keyframes drawer-in {
+    from { opacity: 0; transform: translateX(16px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes dialog-in {
+    from { opacity: 0; transform: translateY(6px) scale(0.985); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .drawer-panel, .dialog-panel, .drawer-backdrop { animation: none; }
+  }
+
+  /* ---- Login: deep azure brand panel (same blue family as the app) ---- */
+  .app-login-visual {
+    background-color: var(--color-primary-800);
+    background-image:
+      radial-gradient(70% 60% at 90% 8%, rgb(56 189 230 / 0.28), transparent 70%),
+      radial-gradient(60% 50% at 0% 100%, rgb(22 133 248 / 0.3), transparent 70%),
+      linear-gradient(155deg, #0873dd 0%, #075fbc 38%, #063b79 100%);
+  }
 }

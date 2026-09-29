@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api } from "@pulseos/api-client";
+import { PulseMark } from "@pulseos/ui";
 import { Sidebar } from "../../components/shell/Sidebar";
 import { TopBar } from "../../components/shell/TopBar";
 import { QuickCreateProvider } from "../../components/shell/QuickCreateProvider";
@@ -67,7 +68,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   if (isLoading) {
-    return <div className="flex h-screen items-center justify-center text-sm text-neutral-400">Loading PulseOS…</div>;
+    return (
+      <div className="app-shell flex h-screen flex-col items-center justify-center gap-3 text-sm text-ink-2">
+        <PulseMark size={36} />
+        <span>Loading PulseOS…</span>
+      </div>
+    );
   }
 
   if (!data) return null;
@@ -88,11 +94,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <QuickCreateProvider role={data.user.role}>
-      <div className="flex h-dvh overflow-hidden">
+      {/* Ambient layered-gradient environment (.app-shell) behind a floating glass
+          nav rail + glass top bar. The TopBar is absolutely positioned over the
+          scrolling <main>, so content passes beneath the glass. */}
+      <div className="app-shell flex h-dvh overflow-hidden">
         <Sidebar user={data.user} open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="relative flex min-w-0 flex-1 flex-col">
           <TopBar user={data.user} title={meta.title} subtitle={meta.subtitle} onMenuClick={() => setMobileNavOpen((v) => !v)} />
-          <main className="flex-1 overflow-x-hidden overflow-y-auto app-canvas p-4 sm:p-6">{children}</main>
+          <main className="flex-1 overflow-x-hidden overflow-y-auto p-4 pt-20 lg:p-6 lg:pl-3 lg:pt-[6.25rem]">{children}</main>
         </div>
       </div>
     </QuickCreateProvider>

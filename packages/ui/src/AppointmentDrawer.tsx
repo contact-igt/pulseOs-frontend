@@ -65,16 +65,16 @@ export function AppointmentDrawer({
         type="button"
         aria-label="Close"
         onClick={onClose}
-        className="absolute inset-0 bg-slate-900/30 transition-opacity duration-200 motion-reduce:transition-none"
+        className="absolute inset-0 drawer-backdrop bg-slate-900/30"
       />
       <div
         ref={dialogRef}
         tabIndex={-1}
-        className="relative flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-neutral-200 bg-white shadow-xl transition-transform duration-200 motion-reduce:transition-none focus:outline-none"
+        className="relative flex h-full w-full max-w-md flex-col overflow-y-auto drawer-panel focus:outline-none"
         data-testid="appointment-drawer"
       >
         {/* Header */}
-        <div className="border-b border-neutral-100 p-5">
+        <div className="border-b border-line p-5">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <h2 className="truncate text-lg font-semibold text-slate-900">{row.patientName}</h2>
@@ -90,7 +90,7 @@ export function AppointmentDrawer({
         </div>
 
         {/* Appointment details */}
-        <div className="border-b border-neutral-100 p-5">
+        <div className="border-b border-line p-5">
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">Appointment Details</h3>
           <dl className="space-y-1.5 text-sm">
             <div className="flex justify-between"><dt className="text-neutral-500">Date &amp; time</dt><dd className="text-slate-900">{fmtDateTime(row.scheduledAt)}</dd></div>
@@ -100,7 +100,7 @@ export function AppointmentDrawer({
         </div>
 
         {/* Recent activity */}
-        <div className="flex-1 border-b border-neutral-100 p-5">
+        <div className="flex-1 border-b border-line p-5">
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">Recent Activity</h3>
           {!recentEvents || recentEvents.length === 0 ? (
             <p className="text-xs text-neutral-400">No recent activity on this journey.</p>
@@ -125,7 +125,7 @@ export function AppointmentDrawer({
 
         {/* Actions */}
         {!readOnly && (
-        <div className="sticky bottom-0 space-y-2 border-t border-neutral-100 bg-white p-4">
+        <div className="sticky bottom-0 space-y-2 border-t border-line bg-white/90 p-4">
           {rescheduling ? (
             <div className="space-y-2">
               <input
@@ -142,11 +142,11 @@ export function AppointmentDrawer({
                     onReschedule(row, new Date(newDateTime).toISOString());
                     setRescheduling(false);
                   }}
-                  className="flex-1 rounded bg-primary-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-primary-700 disabled:opacity-40"
+                  className="flex-1 rounded-control bg-primary-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-primary-700 disabled:opacity-40"
                 >
                   Save new time
                 </button>
-                <button type="button" onClick={() => setRescheduling(false)} className="rounded border border-neutral-200 px-3 py-2 text-xs text-neutral-600 hover:bg-neutral-50">
+                <button type="button" onClick={() => setRescheduling(false)} className="rounded-control border border-line-strong px-3 py-2 text-xs text-neutral-600 hover:bg-neutral-50">
                   Cancel
                 </button>
               </div>
@@ -157,7 +157,7 @@ export function AppointmentDrawer({
                 <button
                   type="button"
                   onClick={() => onComplete(row)}
-                  className="w-full rounded bg-primary-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-primary-700"
+                  className="w-full rounded-control bg-primary-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-primary-700"
                   data-testid="drawer-action-complete"
                 >
                   Complete Consultation
@@ -167,7 +167,7 @@ export function AppointmentDrawer({
                 <button
                   type="button"
                   onClick={() => onAction(row, primary.action)}
-                  className="w-full rounded bg-primary-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-primary-700"
+                  className="w-full rounded-control bg-primary-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-primary-700"
                   data-testid={`drawer-action-${primary.action}`}
                 >
                   {primary.label}
@@ -179,7 +179,7 @@ export function AppointmentDrawer({
                   <button
                     type="button"
                     onClick={() => setRescheduling(true)}
-                    className="flex-1 rounded border border-neutral-200 px-3 py-2 text-xs font-medium text-neutral-600 transition hover:bg-neutral-50"
+                    className="flex-1 rounded-control border border-line-strong px-3 py-2 text-xs font-medium text-neutral-600 transition hover:bg-neutral-50"
                     data-testid="drawer-action-reschedule"
                   >
                     Reschedule
@@ -189,7 +189,7 @@ export function AppointmentDrawer({
                   <button
                     type="button"
                     onClick={() => onAction(row, "mark_no_show")}
-                    className="flex-1 rounded border border-danger-100 px-3 py-2 text-xs font-medium text-danger-700 transition hover:bg-danger-100"
+                    className="flex-1 rounded-control border border-danger-100 px-3 py-2 text-xs font-medium text-danger-700 transition hover:bg-danger-100"
                     data-testid="drawer-action-no-show"
                   >
                     No-show
@@ -199,7 +199,7 @@ export function AppointmentDrawer({
                   <button
                     type="button"
                     onClick={() => setConfirmingCancel(true)}
-                    className="flex-1 rounded border border-danger-100 px-3 py-2 text-xs font-medium text-danger-700 transition hover:bg-danger-100"
+                    className="flex-1 rounded-control border border-danger-100 px-3 py-2 text-xs font-medium text-danger-700 transition hover:bg-danger-100"
                     data-testid="drawer-action-cancel"
                   >
                     Cancel

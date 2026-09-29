@@ -46,24 +46,25 @@ export function TopBar({
   }
 
   return (
-    <header className="flex h-16 shrink-0 items-center justify-between gap-4 border-b border-neutral-200 bg-white px-4 sm:px-6">
+    <header className="glass-strong absolute inset-x-0 top-0 z-20 flex h-16 items-center justify-between gap-3 px-3 max-lg:rounded-none max-lg:border-x-0 max-lg:border-t-0 sm:gap-4 sm:px-5 lg:right-3 lg:top-3 lg:rounded-panel">
       <div className="flex min-w-0 items-center gap-2">
         <button
           type="button"
           onClick={onMenuClick}
-          className="-ml-1 shrink-0 rounded p-2.5 text-neutral-500 transition hover:bg-neutral-100 hover:text-slate-900 lg:hidden"
+          className="-ml-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-control text-neutral-600 transition hover:bg-white/70 hover:text-slate-900 lg:hidden"
           title="Open menu"
           data-testid="mobile-menu-button"
         >
           <Menu size={20} />
         </button>
         <div className="min-w-0">
-          <h1 className="truncate text-base font-semibold text-slate-900">{title}</h1>
-          {subtitle && <p className="truncate text-xs text-neutral-500">{subtitle}</p>}
+          <h1 className="truncate text-[15px] font-semibold tracking-tight text-ink sm:text-base">{title}</h1>
+          {/* Subtitle is secondary: hidden on small screens so the title is never squeezed to an ellipsis. */}
+          {subtitle && <p className="hidden truncate text-xs text-ink-2 sm:block">{subtitle}</p>}
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex shrink-0 items-center gap-2 sm:gap-3">
         <div className="hidden sm:block">
           <GlobalPatientSearch />
         </div>
@@ -75,7 +76,7 @@ export function TopBar({
         <button
           type="button"
           disabled
-          className="cursor-not-allowed rounded p-1.5 text-neutral-300"
+          className="glass-control hidden h-9 w-9 cursor-not-allowed items-center justify-center rounded-control text-neutral-400 sm:inline-flex"
           title="Notifications — coming soon"
           aria-label="Notifications — coming soon"
           data-testid="notifications-button"
@@ -87,11 +88,11 @@ export function TopBar({
           <button
             type="button"
             onClick={() => setProfileOpen((v) => !v)}
-            className="flex items-center gap-1.5 rounded px-1.5 py-1 text-left transition hover:bg-neutral-100"
+            className="glass-control flex h-9 items-center gap-1.5 rounded-control px-1.5 text-left transition hover:bg-white"
             data-testid="profile-menu-trigger"
           >
             {/* Narrow screens show initials: the full name wrapped to two lines and squeezed the page title. */}
-            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary-100 text-xs font-semibold text-primary-700 sm:hidden" aria-hidden="true">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-100 text-xs font-semibold text-primary-700 sm:hidden" aria-hidden="true">
               {initials(user.name)}
             </span>
             <span className="hidden text-sm text-slate-900 sm:inline">{user.name}</span>
@@ -99,7 +100,7 @@ export function TopBar({
             <ChevronDown size={14} className="text-neutral-400" />
           </button>
           {profileOpen && (
-            <div className="absolute right-0 top-full z-10 mt-1 w-52 rounded border border-neutral-200 bg-white py-1 shadow-sm">
+            <div className="glass-strong absolute right-0 top-full z-10 mt-1.5 w-52 rounded-card py-1">
               <div className="border-b border-neutral-100 px-3 py-2">
                 <p className="text-xs font-medium text-slate-900">{ROLE_LABEL[user.role]}</p>
                 {user.branchName && <p className="text-xs text-neutral-500">{user.branchName}</p>}
@@ -200,7 +201,7 @@ function GlobalPatientSearch() {
 
   return (
     <div className="relative" ref={containerRef}>
-      <div className="flex items-center gap-1.5 rounded border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 focus-within:border-primary-300">
+      <div className="glass-control flex h-9 items-center gap-1.5 rounded-control px-2.5 transition focus-within:border-primary-400 focus-within:bg-white">
         <Search size={16} className="text-neutral-400" />
         <input
           type="text"
@@ -226,7 +227,7 @@ function GlobalPatientSearch() {
         <ul
           id="global-patient-search-results"
           role="listbox"
-          className="absolute right-0 top-full z-30 mt-1 max-h-80 w-72 overflow-y-auto rounded-lg border border-neutral-200 bg-white py-1 shadow-lg sm:w-80"
+          className="glass-strong absolute right-0 top-full z-30 mt-1.5 max-h-80 w-72 overflow-y-auto rounded-card py-1 sm:w-80"
           data-testid="global-patient-search-results"
         >
           {results.isFetching && rows.length === 0 && (

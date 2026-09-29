@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  BarChart3,
   CalendarCheck,
   GitBranch,
   Inbox,
@@ -15,9 +14,9 @@ import {
   Stethoscope,
   UserPlus,
   Users,
-  UsersRound,
   type LucideIcon,
 } from "lucide-react";
+import { PulseLockup } from "@pulseos/ui";
 import type { SessionUser } from "@pulseos/types";
 import { initials, navForRole } from "./nav";
 
@@ -30,8 +29,6 @@ const ICONS: Record<string, LucideIcon> = {
   Stethoscope,
   Inbox,
   Megaphone,
-  BarChart3,
-  UsersRound,
   Plug,
   Settings,
   UserPlus,
@@ -48,83 +45,69 @@ const ROLE_LABEL: Record<string, string> = {
 
 export function Sidebar({ user, open = false, onClose }: { user: SessionUser; open?: boolean; onClose?: () => void }) {
   const pathname = usePathname();
-  const groups = navForRole(user.role);
+  // Unbuilt destinations are hidden, not shown greyed out: no dead navigation.
+  const groups = navForRole(user.role)
+    .map((group) => ({ ...group, items: group.items.filter((item) => item.implemented) }))
+    .filter((group) => group.items.length > 0);
 
   return (
     <>
       {open && (
         <div
-          className="fixed inset-y-0 left-56 right-0 z-30 bg-slate-900/40 lg:hidden"
+          className="fixed inset-y-0 right-0 left-[min(18rem,86vw)] z-30 bg-slate-900/30 lg:hidden"
           onClick={onClose}
           data-testid="sidebar-backdrop"
         />
       )}
       <nav
-        className={`fixed inset-y-0 left-0 z-40 flex h-dvh w-56 shrink-0 flex-col app-sidebar transition-[transform,visibility] duration-200 lg:static lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex h-dvh w-72 max-w-[86vw] shrink-0 flex-col app-sidebar transition-[transform,visibility] duration-200 max-lg:rounded-r-shell lg:static lg:m-3 lg:h-[calc(100dvh-1.5rem)] lg:w-56 lg:translate-x-0 lg:rounded-shell ${
           // Closed on small screens: off-canvas AND out of the tab order / a11y tree.
           open ? "translate-x-0" : "-translate-x-full max-lg:invisible"
         }`}
         data-testid="sidebar"
       >
-      <div className="flex h-16 items-center border-b border-white/10 px-4">
-        <span className="text-base font-semibold tracking-tight text-white">PulseOS</span>
-      </div>
+        <div className="nav-divider flex h-16 shrink-0 items-center border-b px-4" data-testid="sidebar-brand">
+          <PulseLockup tone="onWhite" size={28} />
+        </div>
 
-      <div className="flex-1 space-y-4 overflow-y-auto px-3 py-4">
-        {groups.map((group) => (
-          <div key={group.label}>
-            <p className="px-2 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-primary-200">{group.label}</p>
-            <ul className="space-y-0.5">
-              {group.items.map((item) => {
-                const active = pathname === item.href;
-                const Icon = ICONS[item.icon] ?? LayoutDashboard;
-                return (
-                  <li key={item.href}>
-                    {item.implemented ? (
+        <div className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
+          {groups.map((group) => (
+            <div key={group.label}>
+              <p className="nav-group-label px-2.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em]">{group.label}</p>
+              <ul className="space-y-0.5">
+                {group.items.map((item) => {
+                  const active = pathname === item.href;
+                  const Icon = ICONS[item.icon] ?? LayoutDashboard;
+                  return (
+                    <li key={item.href}>
                       <Link
                         href={item.href}
                         onClick={onClose}
                         aria-current={active ? "page" : undefined}
-                        className={`flex items-center gap-2.5 rounded px-2 py-2.5 text-sm transition focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-white lg:py-1.5 ${
-                          active ? "bg-white/12 font-medium text-white shadow-[inset_2px_0_0_var(--color-accent-300)]" : "text-primary-100 hover:bg-white/8 hover:text-white"
-                        }`}
+                        className={`nav-link flex items-center gap-2.5 rounded-control px-2.5 py-3 text-[13px] lg:py-1.5 ${active ? "font-semibold" : "font-medium"}`}
                         data-testid={`nav-${item.href}`}
                       >
-                        <Icon size={18} strokeWidth={2} />
+                        <Icon size={17} strokeWidth={active ? 2.25 : 2} className="nav-icon shrink-0" />
                         {item.label}
                       </Link>
-                    ) : (
-                      <span
-                        aria-disabled="true"
-                        className="flex cursor-not-allowed items-center gap-2.5 rounded px-2 py-2.5 text-sm text-primary-300/70 lg:py-1.5"
-                        title="Not built yet"
-                        data-testid={`nav-disabled-${item.href}`}
-                      >
-                        <Icon size={18} strokeWidth={2} />
-                        {item.label}
-                        <span className="sr-only"> (coming soon)</span>
-                      </span>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        ))}
-      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </div>
 
-      <div className="flex items-center gap-2.5 border-t border-white/10 px-3 py-3">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/15 text-xs font-semibold text-white">
-          {initials(user.name)}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium text-white">{user.name}</span>
-          <span className="block truncate text-xs text-primary-200">
-            {ROLE_LABEL[user.role]}
-            {user.branchName ? ` · ${user.branchName}` : ""}
+        <div className="nav-divider flex shrink-0 items-center gap-2.5 border-t px-3 py-3">
+          <span className="nav-avatar flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold">{initials(user.name)}</span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[13px] font-medium">{user.name}</span>
+            <span className="nav-secondary block truncate text-xs">
+              {ROLE_LABEL[user.role]}
+              {user.branchName ? ` · ${user.branchName}` : ""}
+            </span>
           </span>
-        </span>
-      </div>
+        </div>
       </nav>
     </>
   );

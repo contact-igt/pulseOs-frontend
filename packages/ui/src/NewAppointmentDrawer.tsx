@@ -114,15 +114,15 @@ export function NewAppointmentDrawer({
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true" aria-label="New Appointment">
-      <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 bg-slate-900/30 transition-opacity duration-200" />
+      <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 drawer-backdrop bg-slate-900/30" />
       <form
         ref={dialogRef}
         tabIndex={-1}
         onSubmit={handleSubmit}
-        className="relative flex h-full w-full max-w-md flex-col overflow-hidden border-l border-neutral-200 bg-white shadow-xl focus:outline-none"
+        className="relative flex h-full w-full max-w-md flex-col overflow-hidden drawer-panel focus:outline-none"
         data-testid="new-appointment-drawer"
       >
-        <div className="flex items-start justify-between gap-2 border-b border-neutral-100 p-5">
+        <div className="flex items-start justify-between gap-2 border-b border-line p-5">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">New Appointment</h2>
             <p className="mt-0.5 text-xs text-neutral-500">Book a visit for an existing patient and journey.</p>
@@ -253,11 +253,11 @@ export function NewAppointmentDrawer({
           )}
         </div>
 
-        <div className="sticky bottom-0 flex gap-2 border-t border-neutral-100 bg-white p-4">
-          <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-neutral-200 px-3 py-2.5 text-sm font-medium text-neutral-600 transition hover:bg-neutral-50">
+        <div className="sticky bottom-0 flex gap-2 border-t border-line bg-white/90 p-4">
+          <button type="button" onClick={onClose} className="flex-1 rounded-control border border-line-strong px-3 py-2.5 text-sm font-medium text-neutral-600 transition hover:bg-neutral-50">
             Cancel
           </button>
-          <button type="submit" disabled={!canSubmit} className="flex-1 rounded-lg bg-primary-600 px-3 py-2.5 text-sm font-medium text-white transition hover:bg-primary-700 disabled:opacity-40" data-testid="new-appointment-submit">
+          <button type="submit" disabled={!canSubmit} className="flex-1 rounded-control bg-primary-600 px-3 py-2.5 text-sm font-medium text-white transition hover:bg-primary-700 disabled:opacity-40" data-testid="new-appointment-submit">
             {submitting ? "Booking…" : "Book Appointment"}
           </button>
         </div>

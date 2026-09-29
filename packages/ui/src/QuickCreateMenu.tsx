@@ -35,7 +35,7 @@ export function QuickCreateMenu({ items }: { items: QuickCreateItem[] }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1 rounded-lg bg-primary-600 px-2.5 py-1.5 text-xs font-medium text-white transition hover:bg-primary-700"
+        className="flex h-9 items-center gap-1 rounded-control bg-primary-600 px-3 text-xs font-semibold text-white transition hover:bg-primary-700"
         aria-haspopup="menu"
         aria-expanded={open}
         data-testid="quick-create-button"
@@ -44,7 +44,7 @@ export function QuickCreateMenu({ items }: { items: QuickCreateItem[] }) {
         Create
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-lg border border-neutral-200 bg-white py-1 shadow-lg" role="menu" data-testid="quick-create-menu">
+        <div className="glass-strong absolute right-0 top-full z-20 mt-1.5 w-44 rounded-card py-1" role="menu" data-testid="quick-create-menu">
           {items.map((item) => (
             <button
               key={item.key}
