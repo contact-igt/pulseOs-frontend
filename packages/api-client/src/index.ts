@@ -1,4 +1,15 @@
 import type {
+  AnalyticsCampaigns,
+  AnalyticsFilterOptions,
+  AnalyticsFlow,
+  AnalyticsFunnel,
+  AnalyticsQuery,
+  AnalyticsRevenue,
+  AnalyticsServices,
+  AnalyticsSummary,
+  AnalyticsTeam,
+  LeadsBySourceResponse,
+  SourceConversionResponse,
   AppointmentAction,
   AppointmentRow,
   AppointmentStatus,
@@ -249,6 +260,18 @@ export const api = {
   campaignPerformance: (filters: CampaignFilters = {}) => request<CampaignPerformanceRow[]>(`/campaigns/performance${toQuery({ ...filters })}`),
   marketingEfficiency: (filters: CampaignFilters = {}) => request<MarketingEfficiencySummary>(`/campaigns/marketing-efficiency${toQuery({ ...filters })}`),
   campaignSpendAtRisk: () => request<SpendAtRisk>("/campaigns/spend-at-risk"),
+
+  // Analytics workspace — every call takes the same AnalyticsQuery so all panels agree.
+  analyticsSummary: (q: AnalyticsQuery = {}) => request<AnalyticsSummary>(`/analytics/summary${toQuery({ ...q })}`),
+  analyticsLeads: (q: AnalyticsQuery = {}) => request<LeadsBySourceResponse>(`/analytics/leads${toQuery({ ...q })}`),
+  analyticsFunnel: (q: AnalyticsQuery = {}) => request<AnalyticsFunnel>(`/analytics/funnel${toQuery({ ...q })}`),
+  analyticsSourceConversion: (q: AnalyticsQuery = {}) => request<SourceConversionResponse>(`/analytics/source-conversion${toQuery({ ...q })}`),
+  analyticsRevenue: (q: AnalyticsQuery = {}) => request<AnalyticsRevenue>(`/analytics/revenue${toQuery({ ...q })}`),
+  analyticsCampaigns: (q: AnalyticsQuery = {}) => request<AnalyticsCampaigns>(`/analytics/campaigns${toQuery({ ...q })}`),
+  analyticsServices: (q: AnalyticsQuery = {}) => request<AnalyticsServices>(`/analytics/services${toQuery({ ...q })}`),
+  analyticsFlow: (q: AnalyticsQuery = {}) => request<AnalyticsFlow>(`/analytics/flow${toQuery({ ...q })}`),
+  analyticsTeam: (q: AnalyticsQuery = {}) => request<AnalyticsTeam>(`/analytics/team${toQuery({ ...q })}`),
+  analyticsFilterOptions: () => request<AnalyticsFilterOptions>("/analytics/filter-options"),
 };
 
 export { ApiError };

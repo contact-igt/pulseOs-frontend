@@ -2,10 +2,14 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api } from "@pulseos/api-client";
 import {
+  AnalyticsPanel,
   AttentionQueue,
+  ChartSkeleton,
+  DailySourceChart,
   ErrorState,
   ExecutiveStripSection,
   FilterBar,
@@ -52,6 +56,11 @@ export default function CommandCentrePage() {
   const serviceMix = useQuery({ queryKey: ["dashboard", "service-mix", { branchId: filters.branchId }], queryFn: () => api.serviceMix({ branchId: filters.branchId }) });
   const team = useQuery({ queryKey: ["dashboard", "team", filters], queryFn: () => api.team(filters) });
   const branchDoctor = useQuery({ queryKey: ["dashboard", "branch-doctor", filters], queryFn: () => api.branchDoctor(filters) });
+
+  const dailyLeads = useQuery({
+    queryKey: ["analytics", "leads", { range: "14d", branchId: filters.branchId, service: filters.journeyType }],
+    queryFn: () => api.analyticsLeads({ range: "14d", branchId: filters.branchId, service: filters.journeyType }),
+  });
 
   const doctors = branchDoctor.data?.filter((r) => r.kind === "doctor");
 
@@ -138,6 +147,25 @@ export default function CommandCentrePage() {
           )}
         </div>
       </div>
+
+      <AnalyticsPanel
+        title="Enquiries by source"
+        question="Last 14 days — which sources brought patients in each day?"
+        testId="cc-daily-source"
+        actions={
+          <Link href="/analytics" className="text-xs font-medium text-primary-700 hover:underline" data-testid="view-analytics-link">
+            View Analytics →
+          </Link>
+        }
+      >
+        {dailyLeads.isLoading ? (
+          <ChartSkeleton height={150} />
+        ) : dailyLeads.isError ? (
+          <ErrorState message="Could not load enquiries by source." />
+        ) : (
+          dailyLeads.data && <DailySourceChart data={dailyLeads.data} height={150} compact />
+        )}
+      </AnalyticsPanel>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] xl:gap-5">
         {serviceMix.isLoading ? (

@@ -22,6 +22,7 @@ const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   "/integrations": { title: "Integrations", subtitle: "Connected providers and their health" },
   "/leads": { title: "Leads", subtitle: "Track every enquiry from source to appointment" },
   "/campaigns": { title: "Campaigns / Sources", subtitle: "Where spend turns into treatment revenue" },
+  "/analytics": { title: "Analytics", subtitle: "Historical trends, comparisons and drill-downs" },
   "/settings": { title: "Settings", subtitle: "Specialties, custom fields and hospital configuration" },
 };
 

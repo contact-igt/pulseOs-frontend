@@ -51,7 +51,7 @@ const FULL_NAV: NavGroup[] = [
     label: "Growth",
     items: [
       { label: "Campaigns / Sources", href: "/campaigns", icon: "Megaphone", implemented: true, permission: "VIEW_MARKETING" },
-      { label: "Analytics", href: "/analytics", icon: "BarChart3", implemented: false },
+      { label: "Analytics", href: "/analytics", icon: "BarChart3", implemented: true, permission: "VIEW_MARKETING" },
     ],
   },
   {

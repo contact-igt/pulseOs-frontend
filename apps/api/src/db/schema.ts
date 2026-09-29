@@ -8,6 +8,10 @@ export const tenants = pgTable("tenants", {
   // ISO 3166-1 alpha-2 region used as the default country context when
   // normalizing a phone number to E.164 with no other signal available.
   defaultPhoneRegion: text("default_phone_region").notNull().default("IN"),
+  // IANA timezone of the hospital. Every analytics day/week bucket ("which day
+  // did this enquiry arrive on?") is grouped in this zone, not UTC or the
+  // server clock, so a 23:30 IST enquiry lands on its own calendar day.
+  timezone: text("timezone").notNull().default("Asia/Kolkata"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

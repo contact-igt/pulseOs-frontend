@@ -1068,3 +1068,255 @@ export interface CampaignFilters {
   dateFrom?: string;
   dateTo?: string;
 }
+
+// ---------------------------------------------------------------------------
+// Analytics workspace (/analytics) — historical, comparative, filter-driven.
+// One AnalyticsQuery scopes every endpoint so every panel agrees.
+// ---------------------------------------------------------------------------
+
+export type AnalyticsRangePreset = "7d" | "14d" | "30d" | "90d" | "custom";
+
+export interface AnalyticsQuery {
+  range?: AnalyticsRangePreset;
+  /** Inclusive local (hospital-timezone) dates YYYY-MM-DD, used when range = "custom". */
+  from?: string;
+  to?: string;
+  branchId?: string;
+  /** Service line = journey type, e.g. "Cataract". */
+  service?: string;
+  source?: SourceChannel;
+  campaignId?: string;
+}
+
+export type AnalyticsGranularity = "day" | "week";
+
+export interface AnalyticsPeriod {
+  preset: AnalyticsRangePreset;
+  /** Inclusive first / last local day, YYYY-MM-DD, in `timezone`. */
+  from: string;
+  to: string;
+  days: number;
+  /** The immediately preceding period of the same length. */
+  previousFrom: string;
+  previousTo: string;
+  /** IANA zone every bucket is grouped in (tenants.timezone). */
+  timezone: string;
+  /** The tenant-local day at request time. A bucket containing it is still in progress. */
+  today: string;
+}
+
+/** One chart bucket: a local day, or a 7-day block anchored at the period start (last block may be partial). */
+export interface AnalyticsBucket {
+  /** First local day of the bucket, YYYY-MM-DD. */
+  key: string;
+  /** Last local day inside both the bucket and the period. */
+  to: string;
+  days: number;
+  partial: boolean;
+}
+
+export interface LeadsBucket extends AnalyticsBucket {
+  total: number;
+  bySource: Partial<Record<SourceChannel, number>>;
+  /** Leads in the same-offset bucket of the previous period; null when it has no counterpart. */
+  previousTotal: number | null;
+}
+
+export interface LeadsBySourceResponse {
+  period: AnalyticsPeriod;
+  granularity: AnalyticsGranularity;
+  /** Only sources that occur in the period, in canonical order. */
+  sources: SourceChannel[];
+  buckets: LeadsBucket[];
+  total: number;
+  previousTotal: number;
+}
+
+export interface AnalyticsSummary {
+  period: AnalyticsPeriod;
+  leads: number;
+  previousLeads: number;
+  /** Leads that reached at least the appointment-booked stage. */
+  appointments: number;
+  appointmentRate: number | null;
+  revenue: number;
+  previousRevenue: number;
+  /** Campaign spend pro-rated across the period (spend is stored as a campaign total). */
+  spend: number;
+  /** Revenue from journeys attributed to a campaign. */
+  attributedRevenue: number;
+  roas: number | null;
+  costPerLead: number | null;
+  treatmentsCompleted: number;
+}
+
+export interface AnalyticsFunnelStage {
+  key: ConversionStageKey;
+  label: string;
+  /** Journeys that reached this stage or beyond (each journey counted once, at its furthest stage). */
+  count: number;
+  /** count / leads at Enquiry. */
+  pctOfLeads: number | null;
+  /** count / previous stage's count. */
+  conversionFromPrevious: number | null;
+  /** previous stage count - this count. */
+  dropOff: number;
+}
+
+export interface AnalyticsFunnel {
+  period: AnalyticsPeriod;
+  stages: AnalyticsFunnelStage[];
+  /** Journeys currently lost; the stage they were lost from is not stored. */
+  lost: number;
+}
+
+export interface AnalyticsRatio {
+  numerator: number;
+  denominator: number;
+  rate: number | null;
+}
+
+export interface SourceConversionRow {
+  source: SourceChannel;
+  leads: number;
+  toAppointment: AnalyticsRatio;
+  toConsultation: AnalyticsRatio;
+  toTreatment: AnalyticsRatio;
+}
+
+export interface SourceConversionResponse {
+  period: AnalyticsPeriod;
+  rows: SourceConversionRow[];
+}
+
+export interface AnalyticsRevenueBucket extends AnalyticsBucket {
+  revenue: number;
+  events: number;
+}
+
+export interface RevenueBySource {
+  source: SourceChannel;
+  spend: number;
+  attributedRevenue: number;
+  roas: number | null;
+}
+
+export interface RevenueByService {
+  service: string;
+  revenue: number;
+}
+
+export interface RevenueEventRow {
+  id: string;
+  journeyId: string;
+  /** Local day, YYYY-MM-DD. */
+  day: string;
+  amount: number;
+  type: "consultation_fee" | "treatment_payment" | "other";
+  service: string;
+  source: SourceChannel;
+}
+
+export interface AnalyticsRevenue {
+  period: AnalyticsPeriod;
+  granularity: AnalyticsGranularity;
+  buckets: AnalyticsRevenueBucket[];
+  total: number;
+  events: number;
+  previousTotal: number;
+  spend: number;
+  attributedRevenue: number;
+  roas: number | null;
+  bySource: RevenueBySource[];
+  byService: RevenueByService[];
+  recent: RevenueEventRow[];
+}
+
+export interface AnalyticsCampaignRow {
+  campaignId: string;
+  campaignName: string;
+  source: SourceChannel;
+  /** Pro-rated across the period. */
+  spend: number;
+  leads: number;
+  appointments: number;
+  /** Journeys whose treatment is completed. */
+  treatments: number;
+  revenue: number;
+  roas: number | null;
+  costPerLead: number | null;
+}
+
+export interface AnalyticsCampaigns {
+  period: AnalyticsPeriod;
+  rows: AnalyticsCampaignRow[];
+  /** Leads / revenue with no campaign attribution (walk-in, referral, organic...). */
+  unattributed: { leads: number; revenue: number };
+}
+
+export interface AnalyticsServiceRow {
+  service: string;
+  leads: number;
+  appointments: number;
+  consultations: number;
+  treatmentsAdvised: number;
+  treatmentsCompleted: number;
+  revenue: number;
+  /** Leads per bucket across the period (sparkline). */
+  trend: number[];
+}
+
+export interface AnalyticsServices {
+  period: AnalyticsPeriod;
+  granularity: AnalyticsGranularity;
+  rows: AnalyticsServiceRow[];
+}
+
+export type AnalyticsFlowKind = "source" | "service" | "outcome";
+
+export interface AnalyticsFlowNode {
+  id: string;
+  label: string;
+  kind: AnalyticsFlowKind;
+}
+
+export interface AnalyticsFlowLink {
+  source: string;
+  target: string;
+  value: number;
+}
+
+export interface AnalyticsFlow {
+  period: AnalyticsPeriod;
+  nodes: AnalyticsFlowNode[];
+  /** source -> service line and service line -> outcome edges; every journey appears once in each layer. */
+  links: AnalyticsFlowLink[];
+  /** source -> outcome edges (each journey once) — the staged view "where does each source end up?". */
+  sourceOutcomes: AnalyticsFlowLink[];
+  total: number;
+}
+
+export interface AnalyticsTeamRow {
+  /** null = journeys with no owner. */
+  userId: string | null;
+  name: string;
+  role: Role | null;
+  assignedJourneys: number;
+  appointmentsBooked: number;
+  conversion: AnalyticsRatio;
+  followUpsCompleted: number;
+  /** Snapshot at request time, not period-bound. */
+  openTasks: number;
+  overdueTasks: number;
+}
+
+export interface AnalyticsTeam {
+  period: AnalyticsPeriod;
+  rows: AnalyticsTeamRow[];
+}
+
+export interface AnalyticsFilterOptions {
+  services: string[];
+  sources: SourceChannel[];
+  campaigns: { id: string; name: string; source: SourceChannel }[];
+}

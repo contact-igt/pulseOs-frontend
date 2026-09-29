@@ -165,7 +165,7 @@ export interface DemoContext {
 }
 
 export async function createDemoTenant(name: string) {
-  const [tenant] = await db.insert(tenants).values({ name }).returning();
+  const [tenant] = await db.insert(tenants).values({ name, timezone: "Asia/Kolkata" }).returning();
   return tenant;
 }
 
