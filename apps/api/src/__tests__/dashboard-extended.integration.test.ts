@@ -18,7 +18,7 @@ describe.skipIf(!DEMO_PASSWORD)("extended dashboard aggregations (integration)",
     const login = await app.inject({
       method: "POST",
       url: "/auth/login",
-      payload: { email: "admin@pulseos.local", password: DEMO_PASSWORD },
+      payload: { email: "gyn.admin@pulseos.local", password: DEMO_PASSWORD },
     });
     cookie = login.cookies.find((c) => c.name === "pulseos_session")!.value;
   });
@@ -88,7 +88,7 @@ describe.skipIf(!DEMO_PASSWORD)("extended dashboard aggregations (integration)",
     const login = await app.inject({
       method: "POST",
       url: "/auth/login",
-      payload: { email: "doctor@pulseos.local", password: DEMO_PASSWORD },
+      payload: { email: "gyn.doctor@pulseos.local", password: DEMO_PASSWORD },
     });
     const doctorCookie = login.cookies.find((c) => c.name === "pulseos_session")!.value;
 

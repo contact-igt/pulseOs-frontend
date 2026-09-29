@@ -20,10 +20,10 @@ describe.skipIf(!DEMO_PASSWORD)("role permission enforcement (integration)", () 
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
-    adminCookie = await loginAs(app, "admin@pulseos.local");
-    doctorCookie = await loginAs(app, "doctor@pulseos.local");
-    frontDeskCookie = await loginAs(app, "frontdesk@pulseos.local");
-    coordinatorCookie = await loginAs(app, "coordinator@pulseos.local");
+    adminCookie = await loginAs(app, "gyn.admin@pulseos.local");
+    doctorCookie = await loginAs(app, "gyn.doctor@pulseos.local");
+    frontDeskCookie = await loginAs(app, "gyn.frontdesk@pulseos.local");
+    coordinatorCookie = await loginAs(app, "gyn.coordinator@pulseos.local");
   });
 
   afterAll(async () => {

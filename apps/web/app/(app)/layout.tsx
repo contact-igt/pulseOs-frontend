@@ -88,11 +88,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <QuickCreateProvider role={data.user.role}>
-      <div className="flex h-screen overflow-hidden">
+      <div className="flex h-dvh overflow-hidden">
         <Sidebar user={data.user} open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
         <div className="flex min-w-0 flex-1 flex-col">
           <TopBar user={data.user} title={meta.title} subtitle={meta.subtitle} onMenuClick={() => setMobileNavOpen((v) => !v)} />
-          <main className="flex-1 overflow-x-hidden overflow-y-auto bg-neutral-50 p-4 sm:p-6">{children}</main>
+          <main className="flex-1 overflow-x-hidden overflow-y-auto app-canvas p-4 sm:p-6">{children}</main>
         </div>
       </div>
     </QuickCreateProvider>

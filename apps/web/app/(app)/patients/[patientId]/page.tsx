@@ -243,7 +243,7 @@ export default function Patient360Page() {
         </div>
 
         <div className="space-y-3 lg:order-2">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-400">Journeys ({journeys.length})</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-600">Journeys ({journeys.length})</h2>
           {journeys.map((j) => (
             <JourneyCard
               key={j.id}
@@ -260,7 +260,7 @@ export default function Patient360Page() {
       </div>
 
       {/* Acquisition / revenue: subordinate, below the operational section */}
-      <div className="rounded-xl border border-neutral-100 bg-neutral-50 p-4">
+      <div className="rounded-xl border border-neutral-200 bg-white p-4">
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-400">Acquisition &amp; revenue</h2>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
           <div>

@@ -65,7 +65,7 @@ describe.skipIf(!DEMO_PASSWORD)("Inbox conversation list — filter by communica
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
-    adminCookie = await loginAs(app, "admin@pulseos.local");
+    adminCookie = await loginAs(app, "gyn.admin@pulseos.local");
 
     const list = await app.inject({ method: "GET", url: "/connectors", cookies: { pulseos_session: adminCookie } });
     const whatsapp = (list.json() as ConnectorRow[]).find((c) => c.provider === "whatsapp_meta_cloud");

@@ -38,7 +38,7 @@ export function BackLink({ fallback, fallbackLabel }: { fallback: string; fallba
   return (
     <Link
       href={resolved.href}
-      className="mb-1 inline-flex w-fit items-center gap-0.5 text-xs font-medium text-neutral-500 transition hover:text-primary-700"
+      className="mb-1 inline-flex w-fit items-center gap-0.5 text-xs font-medium text-neutral-600 transition hover:text-primary-700"
     >
       <ChevronLeft size={14} />
       {resolved.label}

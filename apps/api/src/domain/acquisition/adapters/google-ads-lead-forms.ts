@@ -108,8 +108,8 @@ export const googleAdsLeadFormsAdapter: AcquisitionProviderAdapter = {
   async syncCampaigns(config, secrets): Promise<CampaignSyncRecord[]> {
     if (config.mode === "fixture") {
       return [
-        { externalCampaignId: "FIXTURE_GOOGLE_CAMPAIGN_1", externalAccountId: "fixture-customer-id", name: "Fixture Google – IVF Search", source: "google", spendAmount: 18000, currency: "INR", startDate: new Date("2026-08-01T00:00:00Z"), endDate: null, status: "active" },
-        { externalCampaignId: "FIXTURE_GOOGLE_CAMPAIGN_2", externalAccountId: "fixture-customer-id", name: "Fixture Google – Fertility Display", source: "google", spendAmount: 6000, currency: "INR", startDate: new Date("2026-08-10T00:00:00Z"), endDate: null, status: "paused" },
+        { externalCampaignId: "FIXTURE_GOOGLE_CAMPAIGN_1", externalAccountId: "fixture-customer-id", name: "Fixture Google – Search", source: "google", spendAmount: 18000, currency: "INR", startDate: new Date("2026-08-01T00:00:00Z"), endDate: null, status: "active" },
+        { externalCampaignId: "FIXTURE_GOOGLE_CAMPAIGN_2", externalAccountId: "fixture-customer-id", name: "Fixture Google – Display", source: "google", spendAmount: 6000, currency: "INR", startDate: new Date("2026-08-10T00:00:00Z"), endDate: null, status: "paused" },
       ];
     }
 

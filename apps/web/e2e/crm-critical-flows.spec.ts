@@ -18,7 +18,7 @@ test.describe("CRM critical business flows", () => {
   test.skip(!DEMO_PASSWORD, "DEMO_PASSWORD must be set to run this suite");
 
   test("FLOW 1: Admin creates a new lead end to end — appears in Leads, Patient 360, and Timeline", async ({ page }) => {
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
     await page.goto("/leads");
     await expect(page.getByTestId("leads-page")).toBeVisible();
 
@@ -63,7 +63,7 @@ test.describe("CRM critical business flows", () => {
   });
 
   test("FLOW 2: Add Lead with a phone that matches an existing patient warns and creates a new Journey, not a duplicate Patient", async ({ page }) => {
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
 
     const phone = uniquePhone();
     const patientName = `E2E Flow Two Patient ${phone}`;
@@ -73,7 +73,7 @@ test.describe("CRM critical business flows", () => {
     await page.getByTestId("add-lead-button").click();
     await page.getByTestId("lead-phone-input").fill(phone);
     await page.locator("#lead-name").fill(patientName);
-    await page.getByTestId("lead-specialty-select").selectOption("GENERAL_OPD");
+    await page.getByTestId("lead-specialty-select").selectOption("GYNECOLOGY");
     const branchSelect = page.locator("#lead-branch");
     const firstBranchValue = await branchSelect.locator("option").nth(1).getAttribute("value");
     await branchSelect.selectOption(firstBranchValue!);
@@ -89,7 +89,7 @@ test.describe("CRM critical business flows", () => {
     await expect(page.getByTestId("existing-patient-banner")).toContainText("Existing patient found");
     await expect(page.getByTestId("existing-patient-banner")).toContainText(patientName);
 
-    await page.getByTestId("lead-specialty-select").selectOption("OPHTHALMOLOGY");
+    await page.getByTestId("lead-specialty-select").selectOption("FERTILITY");
     await branchSelect.selectOption(firstBranchValue!);
     await page.locator("#lead-source").selectOption("meta");
     await page.getByTestId("add-lead-submit").click();
@@ -120,7 +120,7 @@ test.describe("CRM critical business flows", () => {
     // each Quick Create drawer while its kind is active, so every open is a
     // fresh component instance with correct initial state from the first
     // paint, and there is no delayed reset effect left to race against.
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
     await page.goto("/leads");
     await expect(page.getByTestId("leads-page")).toBeVisible();
 
@@ -162,13 +162,13 @@ test.describe("CRM critical business flows", () => {
   });
 
   test("FLOW 6: Campaigns page filters by specialty and source, showing Spend → Lead → Treatment → Revenue for the seeded weak campaign", async ({ page }) => {
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
     await page.goto("/campaigns");
     await expect(page.getByTestId("campaigns-page")).toBeVisible();
     await expect(page.getByText("Marketing Efficiency")).toBeVisible();
 
-    await page.getByTestId("campaigns-specialty-filter").selectOption("OPHTHALMOLOGY");
-    await expect(page.getByText("Meta – Cataract Awareness")).toBeVisible();
+    await page.getByTestId("campaigns-specialty-filter").selectOption("GYNECOLOGY");
+    await expect(page.getByText("Meta – Antenatal Care Awareness")).toBeVisible();
     await expect(page.getByTestId(/campaign-row-/).first()).toBeVisible();
   });
 });

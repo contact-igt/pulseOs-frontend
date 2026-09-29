@@ -26,7 +26,7 @@ test.describe("Session 4 final visual pass screenshots", () => {
 
     // My Work — Overdue tab: left accent + tinted row + "Xd overdue" text,
     // the strongest semantic cue, no longer conflated with the type badge.
-    await login(page, "coordinator@pulseos.local");
+    await login(page, "gyn.coordinator@pulseos.local");
     await page.goto("/my-work");
     await page.getByTestId("my-work-tab-overdue").click();
     await expect(page.getByTestId("my-work-task-list")).toBeVisible();
@@ -47,7 +47,7 @@ test.describe("Session 4 final visual pass screenshots", () => {
     // Command Centre — Attention/SLA severity-dot redesign + success-toned
     // KPI/status where applicable.
     await page.goto("/command-centre");
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
     await page.goto("/command-centre");
     await expect(page.getByTestId("command-centre")).toBeVisible();
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "36-command-centre-attention-redesign.png") });

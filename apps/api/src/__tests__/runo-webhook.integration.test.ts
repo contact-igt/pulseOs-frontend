@@ -5,6 +5,9 @@ import type { FastifyInstance } from "fastify";
 import type { ConnectorRow, Patient360 } from "@pulseos/types";
 
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD;
+
+// Endpoint providerRefs are unique per connector and never cleaned up, so fixed values would 409 on the second run against the same DB.
+const RUN = Date.now().toString(36);
 const SHARED_SECRET = "pulseos-fixture-runo-secret";
 
 function runoCallPayload(opts: { callId: string; phone: string; status?: string; disposition?: string | null; name?: string | null }) {
@@ -36,7 +39,7 @@ describe.skipIf(!DEMO_PASSWORD)("Runo webhook (integration, fixture mode)", () =
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
-    adminCookie = await loginAs(app, "admin@pulseos.local");
+    adminCookie = await loginAs(app, "gyn.admin@pulseos.local");
     const list = await app.inject({ method: "GET", url: "/connectors", cookies: { pulseos_session: adminCookie } });
     const runo = (list.json() as ConnectorRow[]).find((c) => c.provider === "runo");
     connectorId = runo!.id;
@@ -193,7 +196,7 @@ describe.skipIf(!DEMO_PASSWORD)("Runo webhook (integration, fixture mode)", () =
       method: "POST",
       url: `/connectors/${connectorId}/endpoints`,
       cookies: { pulseos_session: adminCookie },
-      payload: { type: "PHONE", publicNumber: "+919100099001", providerRef: "runo-sole-line", displayLabel: "Runo Sole Line" },
+      payload: { type: "PHONE", publicNumber: "+919100099001", providerRef: `runo-sole-line-${RUN}`, displayLabel: "Runo Sole Line" },
     });
     expect(created.statusCode).toBe(201);
 
@@ -218,7 +221,7 @@ describe.skipIf(!DEMO_PASSWORD)("Runo webhook (integration, fixture mode)", () =
       method: "POST",
       url: `/connectors/${connectorId}/endpoints`,
       cookies: { pulseos_session: adminCookie },
-      payload: { type: "PHONE", publicNumber: "+919100099002", providerRef: "runo-second-line", displayLabel: "Runo Second Line" },
+      payload: { type: "PHONE", publicNumber: "+919100099002", providerRef: `runo-second-line-${RUN}`, displayLabel: "Runo Second Line" },
     });
     expect(second.statusCode).toBe(201);
 

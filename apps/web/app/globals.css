@@ -47,6 +47,10 @@
      never purple, per the design direction's explicit "AI/automation is
      never purple" rule. Multi-segment charts needing a 4th/5th hue reach
      for --color-primary-300/700/800 or --color-neutral-600 instead. */
+  --color-canvas-top: #f5f9fe;
+  --color-canvas-mid: #eaf2fc;
+  --color-canvas-bottom: #e3edf9;
+
   --color-chart-blue: #2569c7;
   --color-chart-teal: #2bb8ab;
   --color-chart-amber: #c98a1f;
@@ -63,4 +67,22 @@ body {
 
 * {
   transition-duration: 120ms;
+}
+
+/* Blue finish — level 0 of the surface hierarchy. Pure CSS gradients on the
+   scrolling <main> box (default background-attachment, so nothing repaints on
+   scroll and there is no fixed-background jank on mobile). One soft cobalt
+   bloom at the lower-right edge over a vertical near-white -> light-blue wash;
+   white cards and tables sit on top untouched. */
+.app-canvas {
+  background-color: var(--color-canvas-mid);
+  background-image:
+    radial-gradient(55% 40% at 100% 100%, rgb(37 105 199 / 0.08), transparent 72%),
+    linear-gradient(180deg, var(--color-canvas-top) 0%, var(--color-canvas-mid) 55%, var(--color-canvas-bottom) 100%);
+}
+
+/* Sidebar: confident blue-navy, one vertical wash between existing tokens. */
+.app-sidebar {
+  background-color: var(--color-primary-800);
+  background-image: linear-gradient(180deg, var(--color-primary-700) 0%, var(--color-primary-800) 55%, var(--color-primary-900) 100%);
 }

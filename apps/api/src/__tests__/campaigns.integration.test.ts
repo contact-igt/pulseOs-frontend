@@ -19,8 +19,8 @@ describe.skipIf(!DEMO_PASSWORD)("campaigns / marketing efficiency (integration)"
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
-    adminCookie = await loginAs(app, "admin@pulseos.local");
-    doctorCookie = await loginAs(app, "doctor@pulseos.local");
+    adminCookie = await loginAs(app, "gyn.admin@pulseos.local");
+    doctorCookie = await loginAs(app, "gyn.doctor@pulseos.local");
   });
 
   afterAll(async () => {
@@ -49,15 +49,15 @@ describe.skipIf(!DEMO_PASSWORD)("campaigns / marketing efficiency (integration)"
   it("a manually-seeded campaign (never synced from a provider) reports connectorMode: null — never implies real synced spend", async () => {
     const res = await app.inject({ method: "GET", url: "/campaigns/performance", cookies: { pulseos_session: adminCookie } });
     const rows = res.json() as CampaignPerformanceRow[];
-    const cataract = rows.find((r) => r.campaignName === "Meta – Cataract Awareness");
-    expect(cataract).toBeDefined();
-    expect(cataract!.connectorMode).toBeNull();
+    const antenatal = rows.find((r) => r.campaignName === "Meta – Antenatal Care Awareness");
+    expect(antenatal).toBeDefined();
+    expect(antenatal!.connectorMode).toBeNull();
   });
 
   it("a single campaign fetched by campaignId filter returns exactly that one row, for the Campaign Detail page header", async () => {
     const all = await app.inject({ method: "GET", url: "/campaigns/performance", cookies: { pulseos_session: adminCookie } });
     const allRows = all.json() as CampaignPerformanceRow[];
-    const target = allRows.find((r) => r.campaignName === "Meta – Cataract Awareness")!;
+    const target = allRows.find((r) => r.campaignName === "Meta – Antenatal Care Awareness")!;
     const res = await app.inject({ method: "GET", url: `/campaigns/performance?campaignId=${target.campaignId}`, cookies: { pulseos_session: adminCookie } });
     expect(res.statusCode).toBe(200);
     const rows = res.json() as CampaignPerformanceRow[];
@@ -67,14 +67,14 @@ describe.skipIf(!DEMO_PASSWORD)("campaigns / marketing efficiency (integration)"
 
   it("Campaign Detail's Attribution/Journey list — /journeys?campaignId returns exactly the journeys counted as leads for that campaign, each linkable to Patient 360", async () => {
     const all = await app.inject({ method: "GET", url: "/campaigns/performance", cookies: { pulseos_session: adminCookie } });
-    const target = (all.json() as CampaignPerformanceRow[]).find((r) => r.campaignName === "Meta – Cataract Awareness")!;
+    const target = (all.json() as CampaignPerformanceRow[]).find((r) => r.campaignName === "Meta – Antenatal Care Awareness")!;
     const res = await app.inject({ method: "GET", url: `/journeys?campaignId=${target.campaignId}`, cookies: { pulseos_session: adminCookie } });
     expect(res.statusCode).toBe(200);
     const rows = res.json() as { id: string; patientId: string; campaignName: string | null }[];
     expect(rows.length).toBe(target.leads);
     for (const row of rows) {
       expect(row.patientId).toBeTruthy();
-      expect(row.campaignName).toBe("Meta – Cataract Awareness");
+      expect(row.campaignName).toBe("Meta – Antenatal Care Awareness");
     }
   });
 
@@ -104,25 +104,25 @@ describe.skipIf(!DEMO_PASSWORD)("campaigns / marketing efficiency (integration)"
     expect(totalLeadsFiltered).toBe(totalLeadsUnfiltered);
   });
 
-  it("filters campaign performance by specialty — the seeded Cataract campaign's Ophthalmology leads are isolated from its other traffic", async () => {
-    const res = await app.inject({ method: "GET", url: "/campaigns/performance?specialtyKey=OPHTHALMOLOGY", cookies: { pulseos_session: adminCookie } });
+  it("filters campaign performance by specialty — the seeded Antenatal campaign's Gynecology leads are isolated from other specialties' traffic", async () => {
+    const res = await app.inject({ method: "GET", url: "/campaigns/performance?specialtyKey=GYNECOLOGY", cookies: { pulseos_session: adminCookie } });
     expect(res.statusCode).toBe(200);
     const rows = res.json() as CampaignPerformanceRow[];
-    const cataract = rows.find((r) => r.campaignName === "Meta – Cataract Awareness");
-    expect(cataract).toBeDefined();
-    expect(cataract!.leads).toBeGreaterThan(0);
-    expect(cataract!.specialtyKey).toBe("OPHTHALMOLOGY");
+    const antenatal = rows.find((r) => r.campaignName === "Meta – Antenatal Care Awareness");
+    expect(antenatal).toBeDefined();
+    expect(antenatal!.leads).toBeGreaterThan(0);
+    expect(antenatal!.specialtyKey).toBe("GYNECOLOGY");
   });
 
   it("the weak seeded campaign shows real leakage: leads without matching treatment revenue", async () => {
     const res = await app.inject({ method: "GET", url: "/campaigns/performance", cookies: { pulseos_session: adminCookie } });
     const rows = res.json() as CampaignPerformanceRow[];
-    const cataract = rows.find((r) => r.campaignName === "Meta – Cataract Awareness");
-    expect(cataract).toBeDefined();
-    expect(cataract!.spend).toBe(18_000);
-    expect(cataract!.treatmentCompleted).toBe(0);
-    expect(cataract!.revenue).toBe(0);
-    expect(cataract!.roas).toBe(0); // spend > 0, revenue 0 → a real, finite 0×, never Infinity/NaN
+    const antenatal = rows.find((r) => r.campaignName === "Meta – Antenatal Care Awareness");
+    expect(antenatal).toBeDefined();
+    expect(antenatal!.spend).toBe(18_000);
+    expect(antenatal!.treatmentCompleted).toBe(0);
+    expect(antenatal!.revenue).toBe(0);
+    expect(antenatal!.roas).toBe(0); // spend > 0, revenue 0 → a real, finite 0×, never Infinity/NaN
   });
 
   it("marketing efficiency summary aggregates spend/leads/revenue with guarded ratios", async () => {

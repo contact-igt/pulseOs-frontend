@@ -85,7 +85,7 @@ export default function CampaignsPage() {
       </div>
 
       <section>
-        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">Marketing Efficiency</h2>
+        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-600">Marketing Efficiency</h2>
         {efficiency.isLoading && <div className="grid grid-cols-3 gap-2 lg:grid-cols-6">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-16" />)}</div>}
         {efficiency.isError && <ErrorState message="Could not load marketing efficiency." />}
         {efficiency.data && (
@@ -103,7 +103,7 @@ export default function CampaignsPage() {
               ]}
             />
             {/* Secondary: derived cost/volume detail — same data, deliberately smaller and quieter than the primary row. */}
-            <div className="grid grid-cols-2 gap-2 rounded-lg border border-neutral-100 bg-neutral-50 px-4 py-2.5 sm:grid-cols-4" data-testid="marketing-efficiency-secondary">
+            <div className="grid grid-cols-2 gap-2 rounded-lg border border-neutral-200 bg-white px-4 py-2.5 sm:grid-cols-4" data-testid="marketing-efficiency-secondary">
               {[
                 { key: "consultations", label: "Consultations", value: efficiency.data.consultations },
                 { key: "cpl", label: "Cost / Lead", value: formatMoneyOrDash(efficiency.data.cpl) },

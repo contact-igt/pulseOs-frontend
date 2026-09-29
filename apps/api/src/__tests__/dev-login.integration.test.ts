@@ -75,10 +75,10 @@ describe.skipIf(!DEMO_PASSWORD)("Dev Login (integration)", () => {
   });
 
   it.each([
-    ["HOSPITAL_ADMIN", "admin@pulseos.local"],
-    ["DOCTOR", "doctor@pulseos.local"],
-    ["FRONT_DESK", "frontdesk@pulseos.local"],
-    ["PATIENT_COORDINATOR", "coordinator@pulseos.local"],
+    ["HOSPITAL_ADMIN", "gyn.admin@pulseos.local"],
+    ["DOCTOR", "gyn.doctor@pulseos.local"],
+    ["FRONT_DESK", "gyn.frontdesk@pulseos.local"],
+    ["PATIENT_COORDINATOR", "gyn.coordinator@pulseos.local"],
   ])("logs in as %s and returns a real, working session cookie for %s", async (role, expectedEmail) => {
     const app = await buildWithEnv({ NODE_ENV: "test", ENABLE_DEV_LOGIN: "true" });
     apps.push(app);

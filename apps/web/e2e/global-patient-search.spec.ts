@@ -19,7 +19,7 @@ test.describe("Global patient search", () => {
 
   test("debounces below 2 chars, shows a dropdown at 2+, and Enter opens Patient 360", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
 
     const search = page.getByTestId("global-patient-search");
     await search.fill("p");
@@ -45,7 +45,7 @@ test.describe("Global patient search", () => {
 
   test("Escape closes the dropdown without navigating", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
 
     const search = page.getByTestId("global-patient-search");
     await search.fill("pri");

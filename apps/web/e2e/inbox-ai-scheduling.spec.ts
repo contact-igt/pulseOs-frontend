@@ -19,7 +19,7 @@ test.describe("Inbox — AI scheduling preference (config only)", () => {
 
   test("one primary action + More menu, and Schedule AI saves a config-only preference", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await login(page, "coordinator@pulseos.local");
+    await login(page, "gyn.coordinator@pulseos.local");
     await page.goto("/inbox");
     await expect(page.getByTestId("inbox-page")).toBeVisible();
 

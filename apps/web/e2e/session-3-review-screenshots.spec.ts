@@ -24,7 +24,7 @@ test.describe("Session 3 review screenshots", () => {
     await page.setViewportSize({ width: 1440, height: 900 });
 
     // My Work — compact quiet tab count badges.
-    await login(page, "coordinator@pulseos.local");
+    await login(page, "gyn.coordinator@pulseos.local");
     await page.goto("/my-work");
     await expect(page.getByTestId("my-work-page")).toBeVisible();
     await expect(page.getByTestId("my-work-tab-count-mine")).toBeVisible();
@@ -55,7 +55,7 @@ test.describe("Session 3 review screenshots", () => {
 
     // Global patient search — debounced dropdown with a live result.
     await page.goto("/command-centre");
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
     await page.goto("/command-centre");
     await expect(page.getByTestId("command-centre")).toBeVisible();
     await page.getByTestId("global-patient-search").fill("pri");

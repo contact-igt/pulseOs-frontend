@@ -21,7 +21,7 @@ test.describe("Admin Command Centre", () => {
     page.on("pageerror", (err) => consoleErrors.push(err.message));
 
     await page.setViewportSize({ width: 1440, height: 900 });
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
 
     await expect(page.getByTestId("command-centre")).toBeVisible();
     await expect(page.getByTestId("kpi-strip")).toBeVisible();
@@ -63,7 +63,7 @@ test.describe("Doctor Command Centre", () => {
     page.on("pageerror", (err) => consoleErrors.push(err.message));
 
     await page.setViewportSize({ width: 1440, height: 900 });
-    await login(page, "doctor@pulseos.local");
+    await login(page, "gyn.doctor@pulseos.local");
 
     await expect(page.getByTestId("doctor-home")).toBeVisible();
     await expect(page.getByTestId("doctor-kpi-strip")).toBeVisible();

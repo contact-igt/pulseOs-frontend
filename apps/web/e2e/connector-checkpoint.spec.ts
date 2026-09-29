@@ -24,7 +24,7 @@ test.describe("Communication connectors checkpoint (Group Y)", () => {
 
   test("FLOW 1/2/3 end-to-end against fixture providers + all 8 required screenshots", async ({ page, request }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
     await expect(page.getByTestId("command-centre")).toBeVisible();
 
     // ---- Integrations UI ----
@@ -91,7 +91,7 @@ test.describe("Communication connectors checkpoint (Group Y)", () => {
     expect(runoRes.ok()).toBeTruthy();
 
     // ---- FLOW 3: Ownership — coordinator claims the new conversation ----
-    await login(page, "coordinator@pulseos.local");
+    await login(page, "gyn.coordinator@pulseos.local");
     await page.goto("/inbox");
     await expect(page.getByTestId("inbox-page")).toBeVisible();
     await expect(page.getByText("E2E Fixture Patient").first()).toBeVisible({ timeout: 10_000 });
@@ -106,7 +106,7 @@ test.describe("Communication connectors checkpoint (Group Y)", () => {
 
     // Human reply — no fake AI response.
     await page.getByPlaceholder("Type a message…").fill("Thanks for reaching out — happy to help with that.");
-    await page.getByRole("button", { name: "Send" }).click();
+    await page.getByRole("button", { name: "Send", exact: true }).click();
     await expect(conversationDetail.getByText("Thanks for reaching out — happy to help")).toBeVisible();
 
     // ---- Patient 360 communication Timeline ----
@@ -127,12 +127,12 @@ test.describe("Communication connectors checkpoint (Group Y)", () => {
     // logged in as coordinator here now correctly redirects away before the
     // page renders). Re-login as admin for this one screenshot rather than
     // pretend a role that can't reach the page took it.
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
     await page.goto("/integrations");
     await expect(page.getByTestId("integrations-page")).toBeVisible();
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "07-integrations-tablet.png"), fullPage: true });
 
-    await login(page, "coordinator@pulseos.local");
+    await login(page, "gyn.coordinator@pulseos.local");
     await page.goto("/inbox");
     await expect(page.getByTestId("inbox-page")).toBeVisible();
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "08-inbox-tablet.png"), fullPage: true });

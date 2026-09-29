@@ -8,6 +8,7 @@ import { QuickCreateMenu, JOURNEY_STAGE_LABEL, type QuickCreateItem } from "@pul
 import type { SessionUser } from "@pulseos/types";
 import { api } from "@pulseos/api-client";
 import { useQuickCreate } from "./QuickCreateProvider";
+import { initials } from "./nav";
 
 const ROLE_LABEL: Record<string, string> = {
   SUPER_ADMIN: "Super Admin",
@@ -50,7 +51,7 @@ export function TopBar({
         <button
           type="button"
           onClick={onMenuClick}
-          className="-ml-1 shrink-0 rounded p-1.5 text-neutral-500 transition hover:bg-neutral-100 hover:text-slate-900 lg:hidden"
+          className="-ml-1 shrink-0 rounded p-2.5 text-neutral-500 transition hover:bg-neutral-100 hover:text-slate-900 lg:hidden"
           title="Open menu"
           data-testid="mobile-menu-button"
         >
@@ -89,7 +90,12 @@ export function TopBar({
             className="flex items-center gap-1.5 rounded px-1.5 py-1 text-left transition hover:bg-neutral-100"
             data-testid="profile-menu-trigger"
           >
-            <span className="text-sm text-slate-900">{user.name}</span>
+            {/* Narrow screens show initials: the full name wrapped to two lines and squeezed the page title. */}
+            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary-100 text-xs font-semibold text-primary-700 sm:hidden" aria-hidden="true">
+              {initials(user.name)}
+            </span>
+            <span className="hidden text-sm text-slate-900 sm:inline">{user.name}</span>
+            <span className="sr-only sm:hidden">{user.name}</span>
             <ChevronDown size={14} className="text-neutral-400" />
           </button>
           {profileOpen && (

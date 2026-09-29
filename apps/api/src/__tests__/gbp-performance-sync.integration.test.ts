@@ -20,7 +20,7 @@ describe.skipIf(!DEMO_PASSWORD)("Google Business Profile performance sync (Group
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
-    const login = await app.inject({ method: "POST", url: "/auth/login", payload: { email: "admin@pulseos.local", password: DEMO_PASSWORD } });
+    const login = await app.inject({ method: "POST", url: "/auth/login", payload: { email: "gyn.admin@pulseos.local", password: DEMO_PASSWORD } });
     adminCookie = login.cookies.find((c) => c.name === "pulseos_session")!.value;
     const list = await app.inject({ method: "GET", url: "/connectors", cookies: { pulseos_session: adminCookie } });
     gbpConnectorId = (list.json() as ConnectorRow[]).find((c) => c.provider === "google_business_profile")!.id;

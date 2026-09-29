@@ -19,7 +19,7 @@ describe.skipIf(!DEMO_PASSWORD)("marketing → patient journey dashboard (integr
     const login = await app.inject({
       method: "POST",
       url: "/auth/login",
-      payload: { email: "admin@pulseos.local", password: DEMO_PASSWORD },
+      payload: { email: "gyn.admin@pulseos.local", password: DEMO_PASSWORD },
     });
     cookie = login.cookies.find((c) => c.name === "pulseos_session")!.value;
   });
@@ -43,7 +43,7 @@ describe.skipIf(!DEMO_PASSWORD)("marketing → patient journey dashboard (integr
     const performance = await app.inject({ method: "GET", url: "/campaigns/performance", cookies: { pulseos_session: cookie } });
     const liveSpend = (performance.json() as { spend: number }[]).reduce((sum, r) => sum + r.spend, 0);
     expect(body.marketingSpend).toBe(liveSpend);
-    // Includes the seeded "Meta – Cataract Awareness" campaign (₹18,000, deliberately
+    // Includes the seeded "Meta – Antenatal Care Awareness" campaign (₹18,000, deliberately
     // low-converting — see seed.ts) added to demonstrate Campaigns-page budget leakage.
     // attributedRevenue is a live tenant-wide sum, not a fixed seed-time constant: completing
     // a treatment now writes a real revenue_events row (the production write path this

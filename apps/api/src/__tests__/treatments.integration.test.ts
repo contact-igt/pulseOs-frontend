@@ -19,8 +19,8 @@ describe.skipIf(!DEMO_PASSWORD)("treatments (integration)", () => {
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
-    coordinatorCookie = await loginAs(app, "coordinator@pulseos.local");
-    frontDeskCookie = await loginAs(app, "frontdesk@pulseos.local");
+    coordinatorCookie = await loginAs(app, "gyn.coordinator@pulseos.local");
+    frontDeskCookie = await loginAs(app, "gyn.frontdesk@pulseos.local");
   });
 
   afterAll(async () => {

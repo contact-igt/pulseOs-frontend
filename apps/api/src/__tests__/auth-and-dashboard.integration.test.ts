@@ -25,7 +25,7 @@ describe.skipIf(!DEMO_PASSWORD)("auth + admin dashboard (integration)", () => {
     const res = await app.inject({
       method: "POST",
       url: "/auth/login",
-      payload: { email: "admin@pulseos.local", password: "definitely-wrong" },
+      payload: { email: "gyn.admin@pulseos.local", password: "definitely-wrong" },
     });
     expect(res.statusCode).toBe(401);
   });
@@ -34,7 +34,7 @@ describe.skipIf(!DEMO_PASSWORD)("auth + admin dashboard (integration)", () => {
     const login = await app.inject({
       method: "POST",
       url: "/auth/login",
-      payload: { email: "admin@pulseos.local", password: DEMO_PASSWORD },
+      payload: { email: "gyn.admin@pulseos.local", password: DEMO_PASSWORD },
     });
     expect(login.statusCode).toBe(200);
     const cookie = login.cookies.find((c) => c.name === "pulseos_session");
@@ -60,7 +60,7 @@ describe.skipIf(!DEMO_PASSWORD)("auth + admin dashboard (integration)", () => {
     const login = await app.inject({
       method: "POST",
       url: "/auth/login",
-      payload: { email: "admin@pulseos.local", password: DEMO_PASSWORD },
+      payload: { email: "gyn.admin@pulseos.local", password: DEMO_PASSWORD },
     });
     const cookie = login.cookies.find((c) => c.name === "pulseos_session")!;
 
@@ -76,7 +76,7 @@ describe.skipIf(!DEMO_PASSWORD)("auth + admin dashboard (integration)", () => {
     const login = await app.inject({
       method: "POST",
       url: "/auth/login",
-      payload: { email: "admin@pulseos.local", password: DEMO_PASSWORD },
+      payload: { email: "gyn.admin@pulseos.local", password: DEMO_PASSWORD },
     });
     const cookie = login.cookies.find((c) => c.name === "pulseos_session")!;
 

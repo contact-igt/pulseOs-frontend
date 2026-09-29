@@ -130,7 +130,9 @@ export const api = {
    * apps/api/src/domain/auth/auth.routes.ts::devLoginEnabled. Callers treat
    * that 404 as "feature unavailable here", not an error to surface. */
   devLoginRoles: () => request<{ role: Role; label: string }[]>("/auth/dev-login/roles"),
-  devLogin: (role: Role) => request<{ user: SessionUser }>("/auth/dev-login", { method: "POST", body: JSON.stringify({ role }) }),
+  devLoginEnvironments: () => request<{ key: string; label: string }[]>("/auth/dev-login/environments"),
+  devLogin: (role: Role, environment?: string) =>
+    request<{ user: SessionUser }>("/auth/dev-login", { method: "POST", body: JSON.stringify({ role, environment }) }),
   branches: () => request<Branch[]>("/branches"),
   journeyTypes: () => request<string[]>("/journey-types"),
   today: (f: DashboardQuery = {}) => request<TodayStrip>(`/dashboard/today${qs(f)}`),

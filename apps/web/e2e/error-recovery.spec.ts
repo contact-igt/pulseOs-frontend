@@ -18,26 +18,26 @@ test.describe("Error recovery on API failure", () => {
   test.skip(!DEMO_PASSWORD, "DEMO_PASSWORD must be set");
 
   test("Settings specialty editor: a failed save shows an inline error and keeps the typed value", async ({ page }) => {
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
     await page.goto("/settings");
     await expect(page.getByTestId("settings-page")).toBeVisible();
     await page.getByRole("button", { name: "Edit" }).first().click();
 
-    await page.route("**/specialties/GENERAL_OPD", (route) => {
+    await page.route("**/specialties/GYNECOLOGY", (route) => {
       if (route.request().method() === "PATCH") return route.abort("failed");
       return route.continue();
     });
 
     const input = page.getByTestId("specialty-display-label");
-    await input.fill("General OPD Edited");
+    await input.fill("Gynecology Edited");
     await input.blur();
 
     await expect(page.getByTestId("specialty-save-error")).toBeVisible();
-    await expect(input).toHaveValue("General OPD Edited");
+    await expect(input).toHaveValue("Gynecology Edited");
   });
 
   test("Add Lead drawer: a failed submit shows an inline error, keeps the form open, and preserves entered fields", async ({ page }) => {
-    await login(page, "coordinator@pulseos.local");
+    await login(page, "gyn.coordinator@pulseos.local");
     await page.goto("/leads");
     await expect(page.getByTestId("leads-page")).toBeVisible();
 

@@ -26,9 +26,9 @@ describe.skipIf(!DEMO_PASSWORD)("leads (integration)", () => {
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
-    adminCookie = await loginAs(app, "admin@pulseos.local");
-    coordinatorCookie = await loginAs(app, "coordinator@pulseos.local");
-    doctorCookie = await loginAs(app, "doctor@pulseos.local");
+    adminCookie = await loginAs(app, "gyn.admin@pulseos.local");
+    coordinatorCookie = await loginAs(app, "gyn.coordinator@pulseos.local");
+    doctorCookie = await loginAs(app, "gyn.doctor@pulseos.local");
 
     const lookups = await app.inject({ method: "GET", url: "/lookups", cookies: { pulseos_session: adminCookie } });
     branchId = (lookups.json() as Lookups).branches[0].id;
@@ -83,7 +83,7 @@ describe.skipIf(!DEMO_PASSWORD)("leads (integration)", () => {
       method: "POST",
       url: "/leads",
       cookies: { pulseos_session: coordinatorCookie },
-      payload: { name: "Duplicate Check Patient", phone, specialtyKey: "GENERAL_OPD", branchId, source: "website", journeyType: "General Consultation" },
+      payload: { name: "Duplicate Check Patient", phone, specialtyKey: "GYNECOLOGY", branchId, source: "website", journeyType: "Gynecology Consultation" },
     });
     const firstResult = first.json() as CreateLeadResult;
     expect(firstResult.isNewPatient).toBe(true);
@@ -92,7 +92,7 @@ describe.skipIf(!DEMO_PASSWORD)("leads (integration)", () => {
       method: "POST",
       url: "/leads",
       cookies: { pulseos_session: coordinatorCookie },
-      payload: { name: "Duplicate Check Patient", phone, specialtyKey: "OPHTHALMOLOGY", branchId, source: "walk_in", journeyType: "Eye Care" },
+      payload: { name: "Duplicate Check Patient", phone, specialtyKey: "FERTILITY", branchId, source: "walk_in", journeyType: "Fertility" },
     });
     expect(second.statusCode).toBe(201);
     const secondResult = second.json() as CreateLeadResult;
@@ -110,7 +110,7 @@ describe.skipIf(!DEMO_PASSWORD)("leads (integration)", () => {
       method: "POST",
       url: "/leads",
       cookies: { pulseos_session: coordinatorCookie },
-      payload: { name: "Format Check", phone: bare, specialtyKey: "GENERAL_OPD", branchId, source: "phone", journeyType: "General Consultation" },
+      payload: { name: "Format Check", phone: bare, specialtyKey: "GYNECOLOGY", branchId, source: "phone", journeyType: "Gynecology Consultation" },
     });
     const firstResult = first.json() as CreateLeadResult;
 
@@ -118,7 +118,7 @@ describe.skipIf(!DEMO_PASSWORD)("leads (integration)", () => {
       method: "POST",
       url: "/leads",
       cookies: { pulseos_session: coordinatorCookie },
-      payload: { name: "Format Check", phone: formatted, specialtyKey: "GENERAL_OPD", branchId, source: "phone", journeyType: "General Consultation" },
+      payload: { name: "Format Check", phone: formatted, specialtyKey: "GYNECOLOGY", branchId, source: "phone", journeyType: "Gynecology Consultation" },
     });
     const secondResult = second.json() as CreateLeadResult;
 
@@ -135,11 +135,11 @@ describe.skipIf(!DEMO_PASSWORD)("leads (integration)", () => {
       payload: {
         name: "Custom Field Check",
         phone,
-        specialtyKey: "OPHTHALMOLOGY",
+        specialtyKey: "FERTILITY",
         branchId,
         source: "meta",
-        journeyType: "Eye Care",
-        customFieldValues: { eye_concern: "Blurred vision", laterality: "Both", cataract_interest: true },
+        journeyType: "Fertility",
+        customFieldValues: { trying_duration: "2 years", previous_fertility_treatment: false, ivf_interest: true },
       },
     });
     expect(res.statusCode).toBe(201);
@@ -147,14 +147,14 @@ describe.skipIf(!DEMO_PASSWORD)("leads (integration)", () => {
 
     const leads = await app.inject({ method: "GET", url: "/leads", cookies: { pulseos_session: coordinatorCookie } });
     const lead = (leads.json() as LeadRow[]).find((l) => l.id === result.journeyId);
-    expect(lead?.specialtyKey).toBe("OPHTHALMOLOGY");
-    expect(lead?.specialtyLabel).toBe("Ophthalmology");
+    expect(lead?.specialtyKey).toBe("FERTILITY");
+    expect(lead?.specialtyLabel).toBe("Fertility / IVF");
   });
 
   it("a specialty's required custom field blocks lead creation until a value is provided", async () => {
     const create = await app.inject({
       method: "POST",
-      url: "/specialties/GENERAL_OPD/fields",
+      url: "/specialties/GYNECOLOGY/fields",
       cookies: { pulseos_session: adminCookie },
       payload: { key: "referral_reason", label: "Referral reason", fieldType: "TEXT", required: true },
     });
@@ -167,7 +167,7 @@ describe.skipIf(!DEMO_PASSWORD)("leads (integration)", () => {
         method: "POST",
         url: "/leads",
         cookies: { pulseos_session: coordinatorCookie },
-        payload: { name: "Required Field Check", phone, specialtyKey: "GENERAL_OPD", branchId, source: "website", journeyType: "General Consultation" },
+        payload: { name: "Required Field Check", phone, specialtyKey: "GYNECOLOGY", branchId, source: "website", journeyType: "Gynecology Consultation" },
       });
       expect(missing.statusCode).toBe(422);
       expect(missing.json()).toMatchObject({ error: "missing_required_fields", fields: ["referral_reason"] });
@@ -179,10 +179,10 @@ describe.skipIf(!DEMO_PASSWORD)("leads (integration)", () => {
         payload: {
           name: "Required Field Check",
           phone,
-          specialtyKey: "GENERAL_OPD",
+          specialtyKey: "GYNECOLOGY",
           branchId,
           source: "website",
-          journeyType: "General Consultation",
+          journeyType: "Gynecology Consultation",
           customFieldValues: { referral_reason: "GP referral" },
         },
       });
@@ -200,7 +200,7 @@ describe.skipIf(!DEMO_PASSWORD)("leads (integration)", () => {
       url: "/leads",
       cookies: { pulseos_session: coordinatorCookie },
       payload: {
-        name: "Follow Up Check", phone, specialtyKey: "GENERAL_OPD", branchId, source: "referral", journeyType: "General Consultation",
+        name: "Follow Up Check", phone, specialtyKey: "GYNECOLOGY", branchId, source: "referral", journeyType: "Gynecology Consultation",
         followUp: { type: "CALLBACK", dueAt },
       },
     });
@@ -217,7 +217,7 @@ describe.skipIf(!DEMO_PASSWORD)("leads (integration)", () => {
       method: "POST",
       url: "/leads",
       cookies: { pulseos_session: coordinatorCookie },
-      payload: { name: "Walk-in Check", phone, specialtyKey: "GENERAL_OPD", branchId, source: "walk_in", journeyType: "General Consultation" },
+      payload: { name: "Walk-in Check", phone, specialtyKey: "GYNECOLOGY", branchId, source: "walk_in", journeyType: "Gynecology Consultation" },
     });
     expect(res.statusCode).toBe(201);
   });
@@ -228,7 +228,7 @@ describe.skipIf(!DEMO_PASSWORD)("leads (integration)", () => {
       method: "POST",
       url: "/leads",
       cookies: { pulseos_session: coordinatorCookie },
-      payload: { name: "Phone Enquiry Check", phone, specialtyKey: "GENERAL_OPD", branchId, source: "phone", journeyType: "General Consultation", notes: "Captured from an incoming call." },
+      payload: { name: "Phone Enquiry Check", phone, specialtyKey: "GYNECOLOGY", branchId, source: "phone", journeyType: "Gynecology Consultation", notes: "Captured from an incoming call." },
     });
     expect(res.statusCode).toBe(201);
     const result = res.json() as CreateLeadResult;
@@ -244,7 +244,7 @@ describe.skipIf(!DEMO_PASSWORD)("leads (integration)", () => {
       method: "POST",
       url: "/leads",
       cookies: { pulseos_session: coordinatorCookie },
-      payload: { name: "Lookup Check", phone, specialtyKey: "GENERAL_OPD", branchId, source: "website", journeyType: "General Consultation" },
+      payload: { name: "Lookup Check", phone, specialtyKey: "GYNECOLOGY", branchId, source: "website", journeyType: "Gynecology Consultation" },
     });
 
     const lookup = await app.inject({ method: "POST", url: "/leads/lookup", cookies: { pulseos_session: coordinatorCookie }, payload: { phone } });

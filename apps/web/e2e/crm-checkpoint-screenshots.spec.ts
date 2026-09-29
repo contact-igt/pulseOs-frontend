@@ -21,7 +21,7 @@ test.describe("CRM + specialty + marketing-efficiency checkpoint screenshots", (
 
   test("captures the required checkpoint screenshot set", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
 
     // 01 — Leads page
     await page.goto("/leads");
@@ -53,8 +53,8 @@ test.describe("CRM + specialty + marketing-efficiency checkpoint screenshots", (
     await shot(page, "05-campaigns-page.png");
     await shot(page, "07-marketing-efficiency.png");
 
-    await page.getByTestId("campaigns-specialty-filter").selectOption("OPHTHALMOLOGY");
-    await expect(page.getByText("Meta – Cataract Awareness")).toBeVisible();
+    await page.getByTestId("campaigns-specialty-filter").selectOption("GYNECOLOGY");
+    await expect(page.getByText("Meta – Antenatal Care Awareness")).toBeVisible();
     await shot(page, "06-campaign-specialty-filter.png");
 
     // 08/09 — Specialties settings + fields expanded
@@ -62,13 +62,13 @@ test.describe("CRM + specialty + marketing-efficiency checkpoint screenshots", (
     await expect(page.getByTestId("settings-page")).toBeVisible();
     await shot(page, "08-specialties-settings.png");
 
-    await page.getByTestId("specialty-toggle-OPHTHALMOLOGY").waitFor();
+    await page.getByTestId("specialty-toggle-FERTILITY").waitFor();
     const editButtons = page.getByRole("button", { name: "Edit" });
-    await editButtons.nth(3).click(); // Ophthalmology row
+    await editButtons.nth(1).click(); // Fertility row
     // Field labels render inside an uncontrolled <input defaultValue>, so their
     // text is a form-control value, never matchable by getByText — use the
     // row's own testid instead.
-    await expect(page.getByTestId("field-row-eye_concern")).toBeVisible();
+    await expect(page.getByTestId("field-row-trying_duration")).toBeVisible();
     await shot(page, "09-specialty-fields.png");
 
     // 10 — Add Patient
@@ -114,15 +114,15 @@ test.describe("CRM + specialty + marketing-efficiency checkpoint screenshots", (
     await expect(page.getByTestId("command-centre")).toBeVisible();
     await shot(page, "16-admin.png");
 
-    await login(page, "frontdesk@pulseos.local");
+    await login(page, "gyn.frontdesk@pulseos.local");
     await expect(page.getByTestId("front-desk-page")).toBeVisible();
     await shot(page, "17-front-desk.png");
 
-    await login(page, "coordinator@pulseos.local");
+    await login(page, "gyn.coordinator@pulseos.local");
     await expect(page.getByTestId("my-work-page")).toBeVisible();
     await shot(page, "18-my-work.png");
 
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
     await page.goto("/patients");
     await expect(page.getByTestId("patients-page")).toBeVisible();
     await shot(page, "19-patients.png");

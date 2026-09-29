@@ -32,7 +32,7 @@ test.describe("Brain review screenshot package", () => {
     await shot(page, "01-login.png");
 
     // 02 — Command Centre (Hospital Admin)
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
     await expect(page.getByTestId("command-centre")).toBeVisible();
     await shot(page, "02-command-centre.png");
 
@@ -64,22 +64,22 @@ test.describe("Brain review screenshot package", () => {
     await shot(page, "07-journeys.png");
 
     // 08 — Doctor Home
-    await login(page, "doctor@pulseos.local");
+    await login(page, "gyn.doctor@pulseos.local");
     await expect(page.getByTestId("doctor-home")).toBeVisible();
     await shot(page, "08-doctor.png");
 
     // 09 — Front Desk
-    await login(page, "frontdesk@pulseos.local");
+    await login(page, "gyn.frontdesk@pulseos.local");
     await expect(page.getByTestId("front-desk-page")).toBeVisible();
     await shot(page, "09-front-desk.png");
 
     // 10 — My Work
-    await login(page, "coordinator@pulseos.local");
+    await login(page, "gyn.coordinator@pulseos.local");
     await expect(page.getByTestId("my-work-page")).toBeVisible();
     await shot(page, "10-my-work.png");
 
     // Back to admin for the rest of the desktop set.
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
 
     // 11 — Appointments
     await page.goto("/appointments");

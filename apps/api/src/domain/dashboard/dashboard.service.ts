@@ -152,6 +152,11 @@ async function getStageReachedCounts(db: Db, tenantId: string, filters: Dashboar
   CONVERSION_STAGES.forEach((s, idx) => {
     reached.set(s.key, perStageCounts.slice(idx).reduce((sum, c) => sum + c, 0));
   });
+  // "lost" is not a funnel stage, but every lost journey began as an enquiry —
+  // it counts at the top so Enquiry equals total journeys (and the Enquiries
+  // KPI). No furthest-stage history is stored, so it is never credited to a
+  // later stage.
+  reached.set("enquiry", (reached.get("enquiry") ?? 0) + (counts.get("lost") ?? 0));
   return reached;
 }
 

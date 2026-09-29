@@ -19,8 +19,8 @@ describe.skipIf(!DEMO_PASSWORD)("inbox / conversations (integration)", () => {
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
-    coordinatorCookie = await loginAs(app, "coordinator@pulseos.local");
-    doctorCookie = await loginAs(app, "doctor@pulseos.local");
+    coordinatorCookie = await loginAs(app, "gyn.coordinator@pulseos.local");
+    doctorCookie = await loginAs(app, "gyn.doctor@pulseos.local");
   });
 
   afterAll(async () => {

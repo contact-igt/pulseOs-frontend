@@ -30,7 +30,7 @@ describe.skipIf(!DEMO_PASSWORD)("appointment state machine — server-side trans
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
-    frontDeskCookie = await loginAs(app, "frontdesk@pulseos.local");
+    frontDeskCookie = await loginAs(app, "gyn.frontdesk@pulseos.local");
   });
 
   afterAll(async () => {

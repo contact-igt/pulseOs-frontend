@@ -392,6 +392,7 @@ export function AddLeadDrawer({
                     {field.fieldType === "BOOLEAN" ? (
                       <label className="flex items-center gap-2 rounded-lg border border-neutral-200 px-3 py-2 text-sm text-slate-700">
                         <input
+                          id={`field-${field.id}`}
                           type="checkbox"
                           checked={!!form.customFieldValues[field.key]}
                           onChange={(e) => setCustomField(field.key, e.target.checked)}

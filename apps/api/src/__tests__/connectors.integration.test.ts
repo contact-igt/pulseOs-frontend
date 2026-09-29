@@ -19,8 +19,8 @@ describe.skipIf(!DEMO_PASSWORD)("connectors (integration)", () => {
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
-    adminCookie = await loginAs(app, "admin@pulseos.local");
-    frontDeskCookie = await loginAs(app, "frontdesk@pulseos.local");
+    adminCookie = await loginAs(app, "gyn.admin@pulseos.local");
+    frontDeskCookie = await loginAs(app, "gyn.frontdesk@pulseos.local");
   });
 
   afterAll(async () => {

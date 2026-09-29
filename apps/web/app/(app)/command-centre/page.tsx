@@ -73,7 +73,7 @@ export default function CommandCentrePage() {
         {/* Every cell here is scoped to today — explicit so it never reads as
             contradicting the funnel/campaign panels below, which cover the
             selected filter's full range, not just today. */}
-        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-neutral-400">Today</p>
+        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-neutral-600">Today</p>
         {today.isLoading && <div className="grid grid-cols-3 gap-2 lg:grid-cols-6">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-16" />)}</div>}
         {today.isError && <ErrorState message="Could not load today's summary." />}
         {today.data && <KpiStripSection data={today.data} onSegmentClick={(key) => router.push(`/patients?filter=${String(key)}`)} />}

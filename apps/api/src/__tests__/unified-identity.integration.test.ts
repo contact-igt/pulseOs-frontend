@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { buildApp } from "../app.js";
 import { db, queryClient } from "../db/client.js";
-import { connectors, patients } from "../db/schema.js";
+import { patients } from "../db/schema.js";
 import type { FastifyInstance } from "fastify";
 import type { ConnectorRow, CreateLeadResult, CreatePatientResult, Lookups } from "@pulseos/types";
 
@@ -57,7 +57,7 @@ describe.skipIf(!DEMO_PASSWORD)("unified identity resolution across entry points
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
-    adminCookie = await loginAs(app, "admin@pulseos.local");
+    adminCookie = await loginAs(app, "gyn.admin@pulseos.local");
 
     const lookups = await app.inject({ method: "GET", url: "/lookups", cookies: { pulseos_session: adminCookie } });
     branchId = (lookups.json() as Lookups).branches[0].id;
@@ -66,8 +66,9 @@ describe.skipIf(!DEMO_PASSWORD)("unified identity resolution across entry points
     const whatsapp = (list.json() as ConnectorRow[]).find((c) => c.provider === "whatsapp_meta_cloud")!;
     whatsappConnectorId = whatsapp.id;
 
-    const [connector] = await db.select({ tenantId: connectors.tenantId }).from(connectors).where(eq(connectors.provider, "whatsapp_meta_cloud")).limit(1);
-    tenantId = connector.tenantId;
+    // Tenant comes from the session, never a global connector lookup — more than one tenant owns a WhatsApp connector.
+    const session = await app.inject({ method: "GET", url: "/auth/session", cookies: { pulseos_session: adminCookie } });
+    tenantId = (session.json() as { user: { tenantId: string } }).user.tenantId;
   });
 
   afterAll(async () => {
@@ -100,10 +101,10 @@ describe.skipIf(!DEMO_PASSWORD)("unified identity resolution across entry points
       payload: {
         name: "Unified Identity Test Subject (lead form)",
         phone: formatB,
-        specialtyKey: "GENERAL_OPD",
+        specialtyKey: "GYNECOLOGY",
         branchId,
         source: "website",
-        journeyType: "General Consultation",
+        journeyType: "Gynecology Consultation",
       },
     });
     expect(leadRes.statusCode).toBe(201);

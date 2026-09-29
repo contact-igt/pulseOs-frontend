@@ -58,7 +58,7 @@ Source images (as attached to chat, not stored in this repo):
   integrations; noted as a known, deliberate gap.
 
 ### 02 Admin Command Centre
-- Sidebar: white, grouped sections (MAIN/PATIENTS/OPERATIONS/GROWTH/SYSTEM),
+- Sidebar: white (SUPERSEDED 2026-09-29 by the Blue Finish — now blue-navy `.app-sidebar`), grouped sections (MAIN/PATIENTS/OPERATIONS/GROWTH/SYSTEM),
   active item = light-blue pill + bold blue text. **This already matches**
   our current Sidebar — confirmed via fresh screenshot, not assumed.
 - KPI strip: 6 connected cells, each with a trend delta (▲/▼ %, colored).
@@ -124,7 +124,7 @@ directly at narrow widths)
   Existing mobile-drawer sidebar pattern from the last pass stands.
 
 ## Non-goals confirmed by comparison
-- Do not switch the sidebar to dark navy — the reference's white/light
+- (SUPERSEDED 2026-09-29: the Blue Finish deliberately moved the sidebar to blue-navy and tinted the page canvas; content surfaces stay white.) Previously: do not switch the sidebar to dark navy — the reference's white/light
   sidebar is what we already have.
 - Do not add Google OAuth, new backend modules, or new attribution logic
   (explicitly out of scope per the completion-loop brief).

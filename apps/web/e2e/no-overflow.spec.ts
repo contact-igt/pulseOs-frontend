@@ -15,10 +15,10 @@ async function overflowX(page: import("@playwright/test").Page) {
 }
 
 const PAGES_BY_ROLE: { email: string; paths: string[] }[] = [
-  { email: "admin@pulseos.local", paths: ["/command-centre", "/patients", "/journeys"] },
-  { email: "frontdesk@pulseos.local", paths: ["/front-desk", "/appointments"] },
-  { email: "coordinator@pulseos.local", paths: ["/my-work", "/treatments", "/inbox"] },
-  { email: "doctor@pulseos.local", paths: ["/doctor-home"] },
+  { email: "gyn.admin@pulseos.local", paths: ["/command-centre", "/patients", "/journeys"] },
+  { email: "gyn.frontdesk@pulseos.local", paths: ["/front-desk", "/appointments"] },
+  { email: "gyn.coordinator@pulseos.local", paths: ["/my-work", "/treatments", "/inbox"] },
+  { email: "gyn.doctor@pulseos.local", paths: ["/doctor-home"] },
 ];
 
 test.describe("No horizontal overflow", () => {
@@ -48,7 +48,7 @@ test.describe("No horizontal overflow", () => {
 
   test("mobile: sidebar is off-canvas by default and opens via the hamburger button", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
 
     const sidebar = page.getByTestId("sidebar");
     await expect(sidebar).not.toBeInViewport();

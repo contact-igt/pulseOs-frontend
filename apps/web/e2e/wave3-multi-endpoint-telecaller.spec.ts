@@ -31,7 +31,7 @@ test.describe("Wave 3 — multi-endpoint attribution + telecaller reason filters
 
   test("a second configured WhatsApp line is attributed correctly across Integrations, Inbox, and Patient 360", async ({ page, request }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
 
     const cookieHeader = (cookies: { name: string; value: string }[]) => cookies.map((c) => `${c.name}=${c.value}`).join("; ");
     const connectorsRes = await request.get(`${API_BASE}/connectors`, { headers: { cookie: cookieHeader(await page.context().cookies()) } });
@@ -105,7 +105,7 @@ test.describe("Wave 3 — multi-endpoint attribution + telecaller reason filters
 
   test("a missed call creates a reason-tagged follow-up task, and the My Work reason pills correctly filter to it", async ({ page, request }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
     const cookieHeader = (cookies: { name: string; value: string }[]) => cookies.map((c) => `${c.name}=${c.value}`).join("; ");
 
     const connectorsRes = await request.get(`${API_BASE}/connectors`, { headers: { cookie: cookieHeader(await page.context().cookies()) } });
@@ -147,7 +147,7 @@ test.describe("Wave 3 — multi-endpoint attribution + telecaller reason filters
     // UI proof: the reason-pill mechanism on My Work (this pass's own
     // build) correctly isolates missed-call follow-ups from every other
     // reason, using the coordinator's real seeded workload.
-    await login(page, "coordinator@pulseos.local");
+    await login(page, "gyn.coordinator@pulseos.local");
     await page.goto("/my-work");
     await expect(page.getByTestId("my-work-page")).toBeVisible();
     await page.getByTestId("my-work-reason-missed_follow_up").click();

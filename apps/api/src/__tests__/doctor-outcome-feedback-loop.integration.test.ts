@@ -23,16 +23,16 @@ describe.skipIf(!DEMO_PASSWORD)("doctor outcome -> journey -> dashboard feedback
     app = await buildApp();
     await app.ready();
 
-    const adminLogin = await app.inject({ method: "POST", url: "/auth/login", payload: { email: "admin@pulseos.local", password: DEMO_PASSWORD } });
+    const adminLogin = await app.inject({ method: "POST", url: "/auth/login", payload: { email: "gyn.admin@pulseos.local", password: DEMO_PASSWORD } });
     adminCookie = adminLogin.cookies.find((c) => c.name === "pulseos_session")!.value;
 
-    const doctorLogin = await app.inject({ method: "POST", url: "/auth/login", payload: { email: "doctor@pulseos.local", password: DEMO_PASSWORD } });
+    const doctorLogin = await app.inject({ method: "POST", url: "/auth/login", payload: { email: "gyn.doctor@pulseos.local", password: DEMO_PASSWORD } });
     doctorCookie = doctorLogin.cookies.find((c) => c.name === "pulseos_session")!.value;
 
     // Set up a fresh completed-but-no-outcome-yet appointment on a real seeded journey,
     // so this test doesn't depend on which exact seeded rows already have outcomes.
     const [tenant] = await db.select().from(tenants).limit(1);
-    const [doctor] = await db.select().from(users).where(eq(users.email, "doctor@pulseos.local")).limit(1);
+    const [doctor] = await db.select().from(users).where(eq(users.email, "gyn.doctor@pulseos.local")).limit(1);
     const [branch] = await db.select().from(branches).where(eq(branches.tenantId, tenant.id)).limit(1);
     const [someJourney] = await db.select().from(journeys).where(eq(journeys.tenantId, tenant.id)).limit(1);
     testJourneyId = someJourney.id;

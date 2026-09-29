@@ -26,9 +26,9 @@ describe.skipIf(!DEMO_PASSWORD)("tasks / follow-ups / my work (integration)", ()
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
-    coordinatorCookie = await loginAs(app, "coordinator@pulseos.local");
-    doctorCookie = await loginAs(app, "doctor@pulseos.local");
-    doctor2Cookie = await loginAs(app, "doctor2@pulseos.local");
+    coordinatorCookie = await loginAs(app, "gyn.coordinator@pulseos.local");
+    doctorCookie = await loginAs(app, "gyn.doctor@pulseos.local");
+    doctor2Cookie = await loginAs(app, "gyn.doctor2@pulseos.local");
 
     const journeys = await app.inject({ method: "GET", url: "/journeys", cookies: { pulseos_session: coordinatorCookie } });
     const rows = journeys.json() as JourneyListRow[];

@@ -26,8 +26,8 @@ describe.skipIf(!DEMO_PASSWORD)("specialty configuration (integration)", () => {
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
-    adminCookie = await loginAs(app, "admin@pulseos.local");
-    coordinatorCookie = await loginAs(app, "coordinator@pulseos.local");
+    adminCookie = await loginAs(app, "gyn.admin@pulseos.local");
+    coordinatorCookie = await loginAs(app, "gyn.coordinator@pulseos.local");
     const lookups = await app.inject({ method: "GET", url: "/lookups", cookies: { pulseos_session: adminCookie } });
     branchId = (lookups.json() as { branches: { id: string }[] }).branches[0].id;
   });
@@ -69,24 +69,24 @@ describe.skipIf(!DEMO_PASSWORD)("specialty configuration (integration)", () => {
 
   it("Hospital Admin can disable a specialty and it drops out of the enabled list", async () => {
     const before = await app.inject({ method: "GET", url: "/specialties", cookies: { pulseos_session: adminCookie } });
-    expect((before.json() as SpecialtyTemplateVm[]).map((s) => s.key)).toContain("PAEDIATRICS");
+    expect((before.json() as SpecialtyTemplateVm[]).map((s) => s.key)).toContain("FERTILITY");
 
-    const patch = await app.inject({ method: "PATCH", url: "/specialties/PAEDIATRICS", cookies: { pulseos_session: adminCookie }, payload: { enabled: false } });
+    const patch = await app.inject({ method: "PATCH", url: "/specialties/FERTILITY", cookies: { pulseos_session: adminCookie }, payload: { enabled: false } });
     expect(patch.statusCode).toBe(200);
 
     const after = await app.inject({ method: "GET", url: "/specialties", cookies: { pulseos_session: adminCookie } });
-    expect((after.json() as SpecialtyTemplateVm[]).map((s) => s.key)).not.toContain("PAEDIATRICS");
+    expect((after.json() as SpecialtyTemplateVm[]).map((s) => s.key)).not.toContain("FERTILITY");
 
     // Re-enable so it doesn't leak into other tests / demo state.
-    await app.inject({ method: "PATCH", url: "/specialties/PAEDIATRICS", cookies: { pulseos_session: adminCookie }, payload: { enabled: true } });
+    await app.inject({ method: "PATCH", url: "/specialties/FERTILITY", cookies: { pulseos_session: adminCookie }, payload: { enabled: true } });
     const restored = await app.inject({ method: "GET", url: "/specialties", cookies: { pulseos_session: adminCookie } });
-    expect((restored.json() as SpecialtyTemplateVm[]).map((s) => s.key)).toContain("PAEDIATRICS");
+    expect((restored.json() as SpecialtyTemplateVm[]).map((s) => s.key)).toContain("FERTILITY");
   });
 
   it("Hospital Admin can add a custom field to a specialty and it appears via the Add-Lead-facing endpoint", async () => {
     const create = await app.inject({
       method: "POST",
-      url: "/specialties/PAEDIATRICS/fields",
+      url: "/specialties/FERTILITY/fields",
       cookies: { pulseos_session: adminCookie },
       payload: { key: "allergy_notes", label: "Allergy notes", fieldType: "TEXT" },
     });
@@ -94,37 +94,37 @@ describe.skipIf(!DEMO_PASSWORD)("specialty configuration (integration)", () => {
     const field = create.json() as CustomFieldDefinitionVm;
     expect(field.archived).toBe(false);
 
-    const activeFields = await app.inject({ method: "GET", url: "/specialties/PAEDIATRICS/fields", cookies: { pulseos_session: coordinatorCookie } });
+    const activeFields = await app.inject({ method: "GET", url: "/specialties/FERTILITY/fields", cookies: { pulseos_session: coordinatorCookie } });
     expect((activeFields.json() as CustomFieldDefinitionVm[]).map((f) => f.key)).toContain("allergy_notes");
 
     const archive = await app.inject({ method: "PATCH", url: `/specialties/fields/${field.id}`, cookies: { pulseos_session: adminCookie }, payload: { archived: true } });
     expect(archive.statusCode).toBe(200);
 
-    const afterArchive = await app.inject({ method: "GET", url: "/specialties/PAEDIATRICS/fields", cookies: { pulseos_session: coordinatorCookie } });
+    const afterArchive = await app.inject({ method: "GET", url: "/specialties/FERTILITY/fields", cookies: { pulseos_session: coordinatorCookie } });
     expect((afterArchive.json() as CustomFieldDefinitionVm[]).map((f) => f.key)).not.toContain("allergy_notes");
   });
 
   it("Hospital Admin can edit a specialty's display label and default Journey type — historical value restored after", async () => {
-    const before = await app.inject({ method: "GET", url: "/specialties/PAEDIATRICS", cookies: { pulseos_session: adminCookie } });
+    const before = await app.inject({ method: "GET", url: "/specialties/FERTILITY", cookies: { pulseos_session: adminCookie } });
     const original = before.json() as SpecialtyDetailVm;
 
     try {
       const patch = await app.inject({
         method: "PATCH",
-        url: "/specialties/PAEDIATRICS",
+        url: "/specialties/FERTILITY",
         cookies: { pulseos_session: adminCookie },
-        payload: { displayName: "Paediatrics & Child Health", defaultJourneyType: "Child Wellness" },
+        payload: { displayName: "Fertility & IVF Care", defaultJourneyType: "Child Wellness" },
       });
       expect(patch.statusCode).toBe(200);
 
-      const after = await app.inject({ method: "GET", url: "/specialties/PAEDIATRICS", cookies: { pulseos_session: adminCookie } });
+      const after = await app.inject({ method: "GET", url: "/specialties/FERTILITY", cookies: { pulseos_session: adminCookie } });
       const updated = after.json() as SpecialtyDetailVm;
-      expect(updated.displayName).toBe("Paediatrics & Child Health");
+      expect(updated.displayName).toBe("Fertility & IVF Care");
       expect(updated.defaultJourneyType).toBe("Child Wellness");
     } finally {
       await app.inject({
         method: "PATCH",
-        url: "/specialties/PAEDIATRICS",
+        url: "/specialties/FERTILITY",
         cookies: { pulseos_session: adminCookie },
         payload: { displayName: original.displayName, defaultJourneyType: original.defaultJourneyType },
       });
@@ -154,7 +154,7 @@ describe.skipIf(!DEMO_PASSWORD)("specialty configuration (integration)", () => {
   it("a SELECT field's options can be created and later edited, and both persist", async () => {
     const create = await app.inject({
       method: "POST",
-      url: "/specialties/GENERAL_OPD/fields",
+      url: "/specialties/GYNECOLOGY/fields",
       cookies: { pulseos_session: adminCookie },
       payload: { key: "referral_source", label: "Referral source", fieldType: "SELECT", options: ["Doctor", "Family"] },
     });
@@ -170,7 +170,7 @@ describe.skipIf(!DEMO_PASSWORD)("specialty configuration (integration)", () => {
     });
     expect(edit.statusCode).toBe(200);
 
-    const detail = await app.inject({ method: "GET", url: "/specialties/GENERAL_OPD", cookies: { pulseos_session: adminCookie } });
+    const detail = await app.inject({ method: "GET", url: "/specialties/GYNECOLOGY", cookies: { pulseos_session: adminCookie } });
     const persisted = (detail.json() as SpecialtyDetailVm).fields.find((f) => f.id === field.id);
     expect(persisted?.options).toEqual(["Doctor", "Family", "Online ad"]);
 
@@ -180,7 +180,7 @@ describe.skipIf(!DEMO_PASSWORD)("specialty configuration (integration)", () => {
   it("archiving a field preserves values already recorded against it on existing journeys — no cascade delete", async () => {
     const create = await app.inject({
       method: "POST",
-      url: "/specialties/GENERAL_OPD/fields",
+      url: "/specialties/GYNECOLOGY/fields",
       cookies: { pulseos_session: adminCookie },
       payload: { key: "insurance_provider", label: "Insurance provider", fieldType: "TEXT" },
     });
@@ -193,10 +193,10 @@ describe.skipIf(!DEMO_PASSWORD)("specialty configuration (integration)", () => {
       payload: {
         name: "Archive History Check",
         phone: uniquePhone(),
-        specialtyKey: "GENERAL_OPD",
+        specialtyKey: "GYNECOLOGY",
         branchId,
         source: "website",
-        journeyType: "General Consultation",
+        journeyType: "Gynecology Consultation",
         customFieldValues: { insurance_provider: "Star Health" },
       },
     });
@@ -215,7 +215,7 @@ describe.skipIf(!DEMO_PASSWORD)("specialty configuration (integration)", () => {
     expect(valueRow).toBeDefined();
     expect(valueRow.value).toBe("Star Health");
 
-    const activeFields = await app.inject({ method: "GET", url: "/specialties/GENERAL_OPD/fields", cookies: { pulseos_session: coordinatorCookie } });
+    const activeFields = await app.inject({ method: "GET", url: "/specialties/GYNECOLOGY/fields", cookies: { pulseos_session: coordinatorCookie } });
     expect((activeFields.json() as CustomFieldDefinitionVm[]).map((f) => f.key)).not.toContain("insurance_provider");
 
     // After archiving: the historical value must still show on Patient 360
@@ -234,13 +234,13 @@ describe.skipIf(!DEMO_PASSWORD)("specialty configuration (integration)", () => {
   it("FLOW 5: enabling a field makes it appear for Add Lead, archiving it makes it disappear again", async () => {
     const create = await app.inject({
       method: "POST",
-      url: "/specialties/OPHTHALMOLOGY/fields",
+      url: "/specialties/FERTILITY/fields",
       cookies: { pulseos_session: adminCookie },
       payload: { key: "referred_by", label: "Referred by", fieldType: "TEXT" },
     });
     const field = create.json() as CustomFieldDefinitionVm;
 
-    const fields = await app.inject({ method: "GET", url: "/specialties/OPHTHALMOLOGY/fields", cookies: { pulseos_session: coordinatorCookie } });
+    const fields = await app.inject({ method: "GET", url: "/specialties/FERTILITY/fields", cookies: { pulseos_session: coordinatorCookie } });
     expect((fields.json() as CustomFieldDefinitionVm[]).some((f) => f.key === "referred_by")).toBe(true);
 
     await app.inject({ method: "PATCH", url: `/specialties/fields/${field.id}`, cookies: { pulseos_session: adminCookie }, payload: { archived: true } });

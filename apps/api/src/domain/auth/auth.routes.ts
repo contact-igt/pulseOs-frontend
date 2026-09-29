@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { loginByRole, loginWithPassword, revokeSession } from "./auth.service.js";
-import type { Role } from "@pulseos/types";
+import { DEFAULT_DEMO_ENVIRONMENT, DEMO_ENVIRONMENTS, DEMO_LOGIN_ROLES, type DemoEnvironmentKey } from "./demo-environments.js";
 
 const loginBody = z.object({
   email: z.string().email(),
@@ -9,16 +9,6 @@ const loginBody = z.object({
 });
 
 const SESSION_COOKIE = "pulseos_session";
-
-// Every role Dev Login can offer, in the order shown to the developer — only
-// roles with an actual seeded demo account belong here (there's no seeded
-// SUPER_ADMIN, so it's deliberately absent, not just filtered at runtime).
-const DEV_LOGIN_ROLES: { role: Role; label: string }[] = [
-  { role: "HOSPITAL_ADMIN", label: "Hospital Admin" },
-  { role: "DOCTOR", label: "Doctor" },
-  { role: "FRONT_DESK", label: "Front Desk" },
-  { role: "PATIENT_COORDINATOR", label: "Patient Coordinator" },
-];
 
 // Evaluated once, at route-registration time (buildApp), not per-request —
 // so in production, or with the flag off, these routes don't exist at all
@@ -31,6 +21,7 @@ function devLoginEnabled(): boolean {
 
 const devLoginBody = z.object({
   role: z.enum(["SUPER_ADMIN", "HOSPITAL_ADMIN", "FRONT_DESK", "PATIENT_COORDINATOR", "DOCTOR"]),
+  environment: z.enum(DEMO_ENVIRONMENTS.map((e) => e.key) as [DemoEnvironmentKey, ...DemoEnvironmentKey[]]).optional(),
 });
 
 function setSessionCookie(reply: import("fastify").FastifyReply, sessionId: string, expiresAt: Date) {
@@ -64,7 +55,13 @@ export async function authRoutes(app: FastifyInstance) {
   // opted into outside production, never merely permission-gated.
   if (devLoginEnabled()) {
     app.get("/auth/dev-login/roles", async (_request, reply) => {
-      return reply.send(DEV_LOGIN_ROLES);
+      // Only roles with an actual seeded demo account belong here (there's
+      // no seeded SUPER_ADMIN, so it's deliberately absent).
+      return reply.send(DEMO_LOGIN_ROLES.map(({ role, label }) => ({ role, label })));
+    });
+
+    app.get("/auth/dev-login/environments", async (_request, reply) => {
+      return reply.send(DEMO_ENVIRONMENTS.map(({ key, label }) => ({ key, label })));
     });
 
     app.post("/auth/dev-login", async (request, reply) => {
@@ -73,7 +70,7 @@ export async function authRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: "invalid_request" });
       }
 
-      const result = await loginByRole(app.db, parsed.data.role);
+      const result = await loginByRole(app.db, parsed.data.role, parsed.data.environment ?? DEFAULT_DEMO_ENVIRONMENT);
       if (!result.ok) {
         return reply.status(404).send({ error: result.reason });
       }

@@ -45,6 +45,13 @@ export const colors = {
     500: "#c14634",
     700: "#8f2f22",
   },
+  // Environmental canvas behind the white content surfaces: near-white at the
+  // top, a light cool-blue tint toward the lower edge. Cards stay white.
+  canvas: {
+    top: "#f5f9fe",
+    mid: "#eaf2fc",
+    bottom: "#e3edf9",
+  },
   chart: {
     blue: "#2569c7",
     teal: "#2bb8ab",

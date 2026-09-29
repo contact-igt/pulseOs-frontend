@@ -25,7 +25,7 @@ describe.skipIf(!DEMO_PASSWORD)("post-care / recall (integration)", () => {
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
-    coordinatorCookie = await loginAs(app, "coordinator@pulseos.local");
+    coordinatorCookie = await loginAs(app, "gyn.coordinator@pulseos.local");
   });
 
   afterAll(async () => {

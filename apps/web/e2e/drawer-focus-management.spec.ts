@@ -33,7 +33,7 @@ test.describe("Drawer focus management", () => {
 
   test("Inbox patient-context drawer traps focus and returns it to the trigger on Escape", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await login(page, "coordinator@pulseos.local");
+    await login(page, "gyn.coordinator@pulseos.local");
     await page.goto("/inbox");
     await expect(page.getByTestId("inbox-page")).toBeVisible();
 
@@ -53,7 +53,7 @@ test.describe("Drawer focus management", () => {
 
   test("Appointment Drawer traps focus and returns it to the row that opened it, on Escape", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
     await page.goto("/appointments");
     await expect(page.getByTestId("appointments-page")).toBeVisible();
 
@@ -72,7 +72,7 @@ test.describe("Drawer focus management", () => {
 
   test("Appointment Drawer closes on backdrop click", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
     await page.goto("/appointments");
     await expect(page.getByTestId("appointments-page")).toBeVisible();
 
@@ -107,7 +107,7 @@ test.describe("Drawer focus management", () => {
   for (const d of quickCreateDrawers) {
     test(`${d.name} drawer traps focus, keeps Tab inside, and returns focus to the trigger on Escape`, async ({ page }) => {
       await page.setViewportSize({ width: 1440, height: 900 });
-      await login(page, "admin@pulseos.local");
+      await login(page, "gyn.admin@pulseos.local");
       await page.goto(d.path);
       await expect(page.getByTestId(d.pageTestId)).toBeVisible();
 
@@ -149,7 +149,7 @@ test.describe("Drawer focus management", () => {
     // stands in for the class of bug (the trap logic is shared via
     // useDialogFocus, not reimplemented per drawer).
     await page.setViewportSize({ width: 1440, height: 900 });
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
 
     // Force the create-patient call to fail so the drawer's catch block
     // sets its error state and renders the role="alert" banner.
@@ -195,7 +195,7 @@ test.describe("Drawer focus management", () => {
 
   test("Add Lead drawer traps focus and returns it to the trigger at mobile viewport", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
     await page.goto("/leads");
     await expect(page.getByTestId("leads-page")).toBeVisible();
 

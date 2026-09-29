@@ -10,7 +10,7 @@ const ARTIFACTS_DIR = path.resolve(__dirname, "../../../review-artifacts/brain-r
 
 async function login(page: Page) {
   await page.goto("/login");
-  await page.getByLabel("Email").fill("admin@pulseos.local");
+  await page.getByLabel("Email").fill("gyn.admin@pulseos.local");
   await page.getByLabel("Password", { exact: true }).fill(DEMO_PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL(/command-centre/);

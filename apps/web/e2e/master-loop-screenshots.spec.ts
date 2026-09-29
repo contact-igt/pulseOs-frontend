@@ -33,7 +33,7 @@ test.describe("Master visual reconstruction loop — required screenshot set", (
 
     // 03-06 — Admin at 1440 / 1280 / tablet / mobile
     await page.setViewportSize({ width: 1440, height: 900 });
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
     await expect(page.getByTestId("command-centre")).toBeVisible();
     await shot(page, "03-admin-1440.png");
 
@@ -58,22 +58,22 @@ test.describe("Master visual reconstruction loop — required screenshot set", (
     await page.getByTestId("journey-health-radial").screenshot({ path: path.join(ARTIFACTS_DIR, "24-journey-health.png") });
 
     // 07 — Doctor Home
-    await login(page, "doctor@pulseos.local");
+    await login(page, "gyn.doctor@pulseos.local");
     await expect(page.getByTestId("doctor-home")).toBeVisible();
     await shot(page, "07-doctor-home.png");
 
     // 08 — Front Desk
-    await login(page, "frontdesk@pulseos.local");
+    await login(page, "gyn.frontdesk@pulseos.local");
     await expect(page.getByTestId("front-desk-page")).toBeVisible();
     await shot(page, "08-front-desk.png");
 
     // 09 — My Work
-    await login(page, "coordinator@pulseos.local");
+    await login(page, "gyn.coordinator@pulseos.local");
     await expect(page.getByTestId("my-work-page")).toBeVisible();
     await shot(page, "09-my-work.png");
 
     // 10 — Patients
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
     await page.goto("/patients");
     await expect(page.getByTestId("patients-page")).toBeVisible();
     await shot(page, "10-patients.png");

@@ -13,7 +13,7 @@ test.describe("Marketing → Patient Journey critical path", () => {
   test.skip(!DEMO_PASSWORD, "DEMO_PASSWORD must be set to run this suite");
 
   test("admin login shows the Command Centre with real spend and revenue", async ({ page }) => {
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
     await expect(page).toHaveURL(/\/command-centre/);
     await expect(page.getByText("Attributed revenue")).toBeVisible();
     await expect(page.getByText("Spend At Risk").first()).toBeVisible();
@@ -22,15 +22,15 @@ test.describe("Marketing → Patient Journey critical path", () => {
   });
 
   test("clicking a Spend At Risk category drills into filtered Patients", async ({ page }) => {
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
     await page.getByTestId("spend-risk-high_intent_uncontacted").click();
     await expect(page).toHaveURL(/\/patients\?filter=high_intent_uncontacted/);
     await expect(page.getByTestId("patients-page")).toBeVisible();
   });
 
   test("opening a journey reaches Patient 360 with acquisition context and multiple journeys", async ({ page }) => {
-    await login(page, "admin@pulseos.local");
-    await page.goto("/patients?search=Priya");
+    await login(page, "gyn.admin@pulseos.local");
+    await page.goto("/patients?q=Priya");
     await page.getByText("Priya Sharma").first().click();
     await expect(page).toHaveURL(/\/patients\//);
     await expect(page.getByTestId("patient-360")).toBeVisible();
@@ -39,7 +39,7 @@ test.describe("Marketing → Patient Journey critical path", () => {
   });
 
   test("doctor records a consultation outcome and it feeds the admin dashboard", async ({ page, request }) => {
-    await login(page, "doctor@pulseos.local");
+    await login(page, "gyn.doctor@pulseos.local");
     await expect(page).toHaveURL(/\/doctor-home/);
 
     const awaitingCard = page.getByText("Awaiting outcome").locator("..").locator("..");
@@ -54,7 +54,7 @@ test.describe("Marketing → Patient Journey critical path", () => {
 
     // Verify server-side: the outcome is now real, persisted data (not a UI-only change).
     const loginRes = await request.post(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4310"}/auth/login`, {
-      data: { email: "admin@pulseos.local", password: DEMO_PASSWORD },
+      data: { email: "gyn.admin@pulseos.local", password: DEMO_PASSWORD },
     });
     expect(loginRes.ok()).toBeTruthy();
   });

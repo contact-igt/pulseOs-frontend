@@ -14,7 +14,7 @@ describe.skipIf(!DEMO_PASSWORD)("patients and journeys (integration)", () => {
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
-    const login = await app.inject({ method: "POST", url: "/auth/login", payload: { email: "admin@pulseos.local", password: DEMO_PASSWORD } });
+    const login = await app.inject({ method: "POST", url: "/auth/login", payload: { email: "gyn.admin@pulseos.local", password: DEMO_PASSWORD } });
     cookie = login.cookies.find((c) => c.name === "pulseos_session")!.value;
   });
 

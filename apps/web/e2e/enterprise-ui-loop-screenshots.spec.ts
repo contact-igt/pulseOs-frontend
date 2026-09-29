@@ -29,7 +29,7 @@ test.describe("Enterprise UI loop screenshot package", () => {
     await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "01-login.png") });
 
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
 
     // 02 Shell / 03 Command Centre
     await page.goto("/command-centre");
@@ -118,7 +118,7 @@ test.describe("Enterprise UI loop screenshot package", () => {
     await page.keyboard.press("Escape");
 
     // 10/11 My Work (coordinator — has assigned tasks, shows overdue emphasis)
-    await login(page, "coordinator@pulseos.local");
+    await login(page, "gyn.coordinator@pulseos.local");
     await page.goto("/my-work");
     await expect(page.getByTestId("my-work-page")).toBeVisible();
     await page.getByTestId("my-work-tab-overdue").click();
@@ -126,7 +126,7 @@ test.describe("Enterprise UI loop screenshot package", () => {
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "10-my-work-overdue.png") });
 
     // Doctor Home
-    await login(page, "doctor@pulseos.local");
+    await login(page, "gyn.doctor@pulseos.local");
     await page.goto("/doctor-home");
     await expect(page.getByTestId("doctor-home")).toBeVisible();
     await expect(page.getByText("Today's Patient Queue")).toBeVisible();
@@ -134,7 +134,7 @@ test.describe("Enterprise UI loop screenshot package", () => {
   });
 
   test("flagship responsive checks — Command Centre / Patient 360 / Inbox at 1280/1024/768/390", async ({ page }) => {
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
     const viewports = [
       { name: "1280", width: 1280, height: 800 },
       { name: "1024", width: 1024, height: 768 },

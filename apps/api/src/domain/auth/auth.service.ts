@@ -1,8 +1,9 @@
 import { hash, verify } from "@node-rs/argon2";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { users, sessions, tenants, branches } from "../../db/schema.js";
 import type { Role } from "@pulseos/types";
+import { DEFAULT_DEMO_ENVIRONMENT, DEMO_ENVIRONMENTS, demoEmailForRole, type DemoEnvironmentKey } from "./demo-environments.js";
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 12;
 
@@ -58,8 +59,20 @@ export async function loginWithPassword(db: Db, email: string, password: string)
 // decides whether this is even reachable. No password check: it exists
 // specifically to skip typing one, for a fixed, non-secret set of seeded
 // demo accounts, never a real credential.
-export async function loginByRole(db: Db, role: Role) {
-  const [user] = await db.select().from(users).where(eq(users.role, role)).limit(1);
+export async function loginByRole(db: Db, role: Role, environment: DemoEnvironmentKey = DEFAULT_DEMO_ENVIRONMENT) {
+  // Resolved to the environment's own seeded user: email AND tenant must both
+  // match. Email alone is only unique per tenant, and "first user with this
+  // role" would pick a user from an arbitrary tenant.
+  const email = demoEmailForRole(environment, role);
+  const tenantName = DEMO_ENVIRONMENTS.find((e) => e.key === environment)?.tenantName;
+  if (!email || !tenantName) return { ok: false as const, reason: "no_seeded_user_for_role" as const };
+  const [row] = await db
+    .select({ user: users })
+    .from(users)
+    .innerJoin(tenants, eq(users.tenantId, tenants.id))
+    .where(and(eq(users.email, email), eq(tenants.name, tenantName)))
+    .limit(1);
+  const user = row?.user;
   if (!user) return { ok: false as const, reason: "no_seeded_user_for_role" as const };
   return createSessionFor(db, user);
 }

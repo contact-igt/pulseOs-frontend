@@ -6,6 +6,11 @@ import type { ConnectorRow, CommunicationEndpointVm } from "@pulseos/types";
 
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD;
 
+// Endpoint providerRefs are unique per connector and never cleaned up, so fixed values would 409 on the second run against the same DB.
+const RUN = Date.now().toString(36);
+const MAIN_REF = `main-reception-line-${RUN}`;
+const WA_REF = `phone-number-id-fertility-${RUN}`;
+
 async function loginAs(app: FastifyInstance, email: string): Promise<string> {
   const res = await app.inject({ method: "POST", url: "/auth/login", payload: { email, password: DEMO_PASSWORD } });
   return res.cookies.find((c) => c.name === "pulseos_session")!.value;
@@ -24,9 +29,9 @@ describe.skipIf(!DEMO_PASSWORD)("communication endpoints (integration)", () => {
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
-    adminCookie = await loginAs(app, "admin@pulseos.local");
-    frontDeskCookie = await loginAs(app, "frontdesk@pulseos.local");
-    doctorCookie = await loginAs(app, "doctor@pulseos.local");
+    adminCookie = await loginAs(app, "gyn.admin@pulseos.local");
+    frontDeskCookie = await loginAs(app, "gyn.frontdesk@pulseos.local");
+    doctorCookie = await loginAs(app, "gyn.doctor@pulseos.local");
 
     const connectorList = await app.inject({ method: "GET", url: "/connectors", cookies: { pulseos_session: adminCookie } });
     const connectors = connectorList.json() as ConnectorRow[];
@@ -80,7 +85,7 @@ describe.skipIf(!DEMO_PASSWORD)("communication endpoints (integration)", () => {
       method: "POST",
       url: `/connectors/${runoConnectorId}/endpoints`,
       cookies: { pulseos_session: adminCookie },
-      payload: { branchId: branchAId, type: "PHONE", publicNumber: "+919100000011", providerRef: "main-reception-line", displayLabel: "Main Reception" },
+      payload: { branchId: branchAId, type: "PHONE", publicNumber: "+919100000011", providerRef: MAIN_REF, displayLabel: "Main Reception" },
     });
     expect(phoneRes.statusCode).toBe(201);
     const phoneEndpoint = phoneRes.json() as CommunicationEndpointVm;
@@ -94,7 +99,7 @@ describe.skipIf(!DEMO_PASSWORD)("communication endpoints (integration)", () => {
       method: "POST",
       url: `/connectors/${whatsappConnectorId}/endpoints`,
       cookies: { pulseos_session: adminCookie },
-      payload: { branchId: branchBId, type: "WHATSAPP", publicNumber: "+919100000012", providerRef: "phone-number-id-fertility", displayLabel: "Fertility Line" },
+      payload: { branchId: branchBId, type: "WHATSAPP", publicNumber: "+919100000012", providerRef: WA_REF, displayLabel: "Fertility Line" },
     });
     expect(waRes.statusCode).toBe(201);
     const waEndpoint = waRes.json() as CommunicationEndpointVm;
@@ -123,7 +128,7 @@ describe.skipIf(!DEMO_PASSWORD)("communication endpoints (integration)", () => {
       method: "POST",
       url: `/connectors/${runoConnectorId}/endpoints`,
       cookies: { pulseos_session: adminCookie },
-      payload: { type: "PHONE", publicNumber: "+919100000013", providerRef: "main-reception-line", displayLabel: "Duplicate" },
+      payload: { type: "PHONE", publicNumber: "+919100000013", providerRef: MAIN_REF, displayLabel: "Duplicate" },
     });
     expect(res.statusCode).toBe(409);
     expect(res.json().error).toBe("provider_ref_already_exists");
@@ -143,12 +148,12 @@ describe.skipIf(!DEMO_PASSWORD)("communication endpoints (integration)", () => {
   it("resolves an endpoint by connector + providerRef", async () => {
     const res = await app.inject({
       method: "GET",
-      url: `/connectors/${runoConnectorId}/endpoints/resolve?providerRef=main-reception-line`,
+      url: `/connectors/${runoConnectorId}/endpoints/resolve?providerRef=${MAIN_REF}`,
       cookies: { pulseos_session: adminCookie },
     });
     expect(res.statusCode).toBe(200);
     const endpoint = res.json() as CommunicationEndpointVm;
-    expect(endpoint.providerRef).toBe("main-reception-line");
+    expect(endpoint.providerRef).toBe(MAIN_REF);
     expect(endpoint.connectorId).toBe(runoConnectorId);
   });
 

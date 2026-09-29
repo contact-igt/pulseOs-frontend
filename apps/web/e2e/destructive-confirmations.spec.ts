@@ -21,7 +21,7 @@ test.describe("Destructive-action confirmations", () => {
 
   test("Cancel Appointment requires confirmation with real consequence copy, and Keep appointment aborts it", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
     await page.goto("/appointments");
     await expect(page.getByTestId("appointments-page")).toBeVisible();
     await page.getByTestId("appointments-tab-upcoming").click();
@@ -44,7 +44,7 @@ test.describe("Destructive-action confirmations", () => {
 
   test("Decline Treatment requires confirmation naming the patient, treatment and value", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
     await page.goto("/treatments");
     await expect(page.getByTestId("treatments-page")).toBeVisible();
 
@@ -62,7 +62,7 @@ test.describe("Destructive-action confirmations", () => {
 
   test("Archive field requires confirmation stating historical values are kept", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
     await page.goto("/settings");
     await expect(page.getByTestId("settings-page")).toBeVisible();
 

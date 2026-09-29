@@ -194,8 +194,8 @@ export const metaLeadAdsAdapter: AcquisitionProviderAdapter = {
   async syncCampaigns(config, secrets): Promise<CampaignSyncRecord[]> {
     if (config.mode === "fixture") {
       return [
-        { externalCampaignId: "FIXTURE_META_CAMPAIGN_1", externalAccountId: "act_fixture", name: "Fixture Meta – Fertility Awareness", source: "meta", spendAmount: 12000, currency: "INR", startDate: new Date("2026-08-01T00:00:00Z"), endDate: null, status: "active" },
-        { externalCampaignId: "FIXTURE_META_CAMPAIGN_2", externalAccountId: "act_fixture", name: "Fixture Meta – IVF Retargeting", source: "meta", spendAmount: 8000, currency: "INR", startDate: new Date("2026-08-15T00:00:00Z"), endDate: null, status: "paused" },
+        { externalCampaignId: "FIXTURE_META_CAMPAIGN_1", externalAccountId: "act_fixture", name: "Fixture Meta – Awareness", source: "meta", spendAmount: 12000, currency: "INR", startDate: new Date("2026-08-01T00:00:00Z"), endDate: null, status: "active" },
+        { externalCampaignId: "FIXTURE_META_CAMPAIGN_2", externalAccountId: "act_fixture", name: "Fixture Meta – Retargeting", source: "meta", spendAmount: 8000, currency: "INR", startDate: new Date("2026-08-15T00:00:00Z"), endDate: null, status: "paused" },
       ];
     }
 

@@ -20,8 +20,8 @@ describe.skipIf(!DEMO_PASSWORD)("appointments / front desk (integration)", () =>
   beforeAll(async () => {
     app = await buildApp();
     await app.ready();
-    frontDeskCookie = await loginAs(app, "frontdesk@pulseos.local");
-    doctorCookie = await loginAs(app, "doctor@pulseos.local");
+    frontDeskCookie = await loginAs(app, "gyn.frontdesk@pulseos.local");
+    doctorCookie = await loginAs(app, "gyn.doctor@pulseos.local");
 
     const res = await app.inject({ method: "GET", url: "/appointments", cookies: { pulseos_session: frontDeskCookie } });
     const rows = res.json() as AppointmentRow[];

@@ -136,3 +136,13 @@ export function pathAllowedForRole(role: Role, pathname: string): boolean {
   const items = navForRole(role).flatMap((group) => group.items);
   return items.some((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
 }
+
+/** Up to two initials for an avatar, e.g. "Meghna Kapoor" -> "MK". */
+export function initials(name: string): string {
+  return name
+    .split(" ")
+    .map((p) => p[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}

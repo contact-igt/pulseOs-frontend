@@ -156,79 +156,24 @@ export async function updateCustomField(db: Db, tenantId: string, fieldId: strin
 }
 
 // ---------------------------------------------------------------------------
-// Default specialty templates — idempotent seed helper, also usable to
-// backfill a tenant that predates this feature.
+// Specialty definitions are data (see gynecology.templates.ts and
+// ophthalmology.templates.ts) — this installs any set of them for a tenant.
 // ---------------------------------------------------------------------------
 
-export const DEFAULT_SPECIALTIES: {
+export interface SpecialtyDefinition {
   key: string;
   displayName: string;
   defaultJourneyType: string;
   sortOrder: number;
   fields: CreateCustomFieldInput[];
-}[] = [
-  {
-    key: "GENERAL_OPD",
-    displayName: "General OPD",
-    defaultJourneyType: "General Consultation",
-    sortOrder: 0,
-    fields: [],
-  },
-  {
-    key: "GYNECOLOGY",
-    displayName: "Gynecology / Maternity",
-    defaultJourneyType: "Pregnancy Care",
-    sortOrder: 1,
-    fields: [
-      { key: "pregnancy_status", label: "Pregnancy status", fieldType: "BOOLEAN" },
-      { key: "gestational_week", label: "Gestational week", fieldType: "NUMBER" },
-      { key: "edd", label: "EDD", fieldType: "DATE" },
-      { key: "high_risk_status", label: "High-risk status", fieldType: "BOOLEAN" },
-      { key: "previous_c_section", label: "Previous C-section", fieldType: "BOOLEAN" },
-    ],
-  },
-  {
-    key: "FERTILITY",
-    displayName: "Fertility / IVF",
-    defaultJourneyType: "Fertility",
-    sortOrder: 2,
-    fields: [
-      { key: "trying_duration", label: "Trying duration", fieldType: "TEXT" },
-      { key: "previous_fertility_treatment", label: "Previous fertility treatment", fieldType: "BOOLEAN" },
-      { key: "ivf_interest", label: "IVF interest", fieldType: "BOOLEAN" },
-      { key: "treatment_stage", label: "Treatment stage", fieldType: "SELECT", options: ["Evaluation", "IUI", "IVF", "Follow-up"] },
-    ],
-  },
-  {
-    key: "OPHTHALMOLOGY",
-    displayName: "Ophthalmology",
-    defaultJourneyType: "Eye Care",
-    sortOrder: 3,
-    fields: [
-      { key: "eye_concern", label: "Eye concern", fieldType: "TEXT" },
-      { key: "laterality", label: "Laterality", fieldType: "SELECT", options: ["Left", "Right", "Both"] },
-      { key: "cataract_interest", label: "Cataract interest", fieldType: "BOOLEAN" },
-      { key: "lasik_interest", label: "LASIK interest", fieldType: "BOOLEAN" },
-    ],
-  },
-  {
-    key: "PAEDIATRICS",
-    displayName: "Paediatrics",
-    defaultJourneyType: "Paediatrics",
-    sortOrder: 4,
-    fields: [
-      { key: "child_age", label: "Child age", fieldType: "NUMBER" },
-      { key: "concern", label: "Concern", fieldType: "TEXT" },
-      { key: "vaccination_due", label: "Vaccination due", fieldType: "BOOLEAN" },
-    ],
-  },
-];
+}
 
-export async function ensureDefaultSpecialties(db: Db, tenantId: string): Promise<void> {
+/** Idempotently installs the given specialty definitions for a tenant (existing keys are left untouched). */
+export async function ensureSpecialties(db: Db, tenantId: string, definitions: SpecialtyDefinition[]): Promise<void> {
   const existing = await db.select({ key: specialtyTemplates.key }).from(specialtyTemplates).where(eq(specialtyTemplates.tenantId, tenantId));
   const existingKeys = new Set(existing.map((e) => e.key));
 
-  for (const spec of DEFAULT_SPECIALTIES) {
+  for (const spec of definitions) {
     if (existingKeys.has(spec.key)) continue;
 
     await db.insert(specialtyTemplates).values({
@@ -255,3 +200,4 @@ export async function ensureDefaultSpecialties(db: Db, tenantId: string): Promis
     }
   }
 }
+

@@ -26,7 +26,7 @@ test.describe("UI refinement v2 — after screenshots", () => {
     await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "01-login-1440.png") });
 
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
 
     await page.goto("/command-centre");
     await expect(page.getByTestId("command-centre")).toBeVisible();
@@ -90,13 +90,13 @@ test.describe("UI refinement v2 — after screenshots", () => {
     await expect(page.getByTestId("settings-page")).toBeVisible();
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "20-settings-1440.png") });
 
-    await login(page, "coordinator@pulseos.local");
+    await login(page, "gyn.coordinator@pulseos.local");
     await page.goto("/my-work");
     await expect(page.getByTestId("my-work-page")).toBeVisible();
     await expect(page.getByTestId("my-work-task-list")).toBeVisible();
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "11-my-work-1440.png") });
 
-    await login(page, "doctor@pulseos.local");
+    await login(page, "gyn.doctor@pulseos.local");
     await page.goto("/doctor-home");
     await expect(page.getByTestId("doctor-home")).toBeVisible();
     await expect(page.getByText("Today's Patient Queue")).toBeVisible();
@@ -104,7 +104,7 @@ test.describe("UI refinement v2 — after screenshots", () => {
   });
 
   test("command centre responsive: 1280 / 1024", async ({ page }) => {
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
     for (const vp of [
       { name: "1280", width: 1280, height: 800 },
       { name: "1024", width: 1024, height: 768 },
@@ -117,7 +117,7 @@ test.describe("UI refinement v2 — after screenshots", () => {
   });
 
   test("mobile/tablet critical set", async ({ page }) => {
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
 
     await page.setViewportSize({ width: 768, height: 1024 });
     await page.goto("/command-centre");

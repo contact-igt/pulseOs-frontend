@@ -22,7 +22,7 @@ test.describe("Final review screenshots", () => {
     await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "00-login-desktop.png"), fullPage: true });
 
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
     await expect(page.getByTestId("command-centre")).toBeVisible();
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "01-admin-command-centre.png"), fullPage: true });
 
@@ -53,7 +53,7 @@ test.describe("Final review screenshots", () => {
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "12-patient-360-tablet.png"), fullPage: true });
     await page.setViewportSize({ width: 1440, height: 900 });
 
-    await login(page, "frontdesk@pulseos.local");
+    await login(page, "gyn.frontdesk@pulseos.local");
     await expect(page.getByTestId("front-desk-page")).toBeVisible();
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "02-front-desk.png"), fullPage: true });
 
@@ -61,7 +61,7 @@ test.describe("Final review screenshots", () => {
     await expect(page.getByTestId("appointments-page")).toBeVisible();
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "08-appointments.png"), fullPage: true });
 
-    await login(page, "coordinator@pulseos.local");
+    await login(page, "gyn.coordinator@pulseos.local");
     await expect(page.getByTestId("my-work-page")).toBeVisible();
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "03-coordinator-my-work.png"), fullPage: true });
 
@@ -73,11 +73,11 @@ test.describe("Final review screenshots", () => {
     await expect(page.getByTestId("inbox-page")).toBeVisible();
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "10-inbox.png"), fullPage: true });
 
-    await login(page, "doctor@pulseos.local");
+    await login(page, "gyn.doctor@pulseos.local");
     await expect(page.getByTestId("doctor-home")).toBeVisible();
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "04-doctor-home.png"), fullPage: true });
 
-    await login(page, "admin@pulseos.local");
+    await login(page, "gyn.admin@pulseos.local");
     await page.goto("/integrations");
     await expect(page.getByTestId("integrations-page")).toBeVisible();
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "13-integrations.png"), fullPage: true });
