@@ -14,6 +14,7 @@ function todayRange() {
 export interface AppointmentFilters {
   branchId?: string;
   doctorId?: string;
+  journeyId?: string;
   status?: AppointmentStatus;
   date?: string;
   search?: string;
@@ -64,6 +65,7 @@ async function selectAppointments(db: Db, tenantId: string, filters: Appointment
         eq(appointments.tenantId, tenantId),
         filters.branchId ? eq(appointments.branchId, filters.branchId) : undefined,
         filters.doctorId ? eq(appointments.doctorUserId, filters.doctorId) : undefined,
+        filters.journeyId ? eq(appointments.journeyId, filters.journeyId) : undefined,
         filters.status ? eq(appointments.status, filters.status) : undefined,
         dayClause,
       ),

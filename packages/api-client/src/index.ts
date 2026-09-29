@@ -5,13 +5,14 @@ import type {
   AttentionItem,
   Branch,
   BranchDoctorRow,
+  ServiceMixRow,
   CampaignFilters,
   CampaignPerformanceRow,
   FrontDeskDashboard,
   CommunicationEndpointVm,
   ConnectorDetail,
   ConnectorRow,
-  ConsultationOutcomeValue,
+  RecordOutcomeInput,
   ConversationAutomationMode,
   ConversationAutomationPreference,
   ConversationChannel,
@@ -29,6 +30,8 @@ import type {
   CustomFieldDefinitionVm,
   DoctorDashboard,
   ExecutiveStrip,
+  BulkAssignJourneyOwnerResult,
+  JourneyDetailVm,
   JourneyHealth,
   JourneyListRow,
   JourneysSummary,
@@ -58,6 +61,8 @@ import type {
   TaskView,
   TeamWorkloadRow,
   TodayStrip,
+  TreatmentDefinitionVm,
+  TreatmentFilters,
   TreatmentRow,
   TreatmentStatus,
   UpdateCommunicationEndpointInput,
@@ -103,6 +108,8 @@ export interface JourneyFilters {
   branchId?: string;
   stage?: string;
   ownerId?: string;
+  /** Server-side owner filter: "mine" (session user), "unassigned", or a user id. */
+  owner?: "mine" | "unassigned" | (string & {});
   doctorId?: string;
 }
 
@@ -147,6 +154,7 @@ export const api = {
   marketing: () => request<MarketingSourceRow[]>("/dashboard/marketing"),
   team: (f: DashboardQuery = {}) => request<TeamWorkloadRow[]>(`/dashboard/team${qs(f)}`),
   branchDoctor: (f: DashboardQuery = {}) => request<BranchDoctorRow[]>(`/dashboard/branch-doctor${qs(f)}`),
+  serviceMix: (f: DashboardQuery = {}) => request<ServiceMixRow[]>(`/dashboard/service-mix${qs(f)}`),
   doctorDashboard: () => request<DoctorDashboard>("/dashboard/doctor"),
   patients: (filters: PatientListFilters = {}) => request<PatientListRow[]>(`/patients${toQuery({ ...filters })}`),
   searchPatients: (q: string) => request<PatientSearchRow[]>(`/patients/search${toQuery({ q })}`),
@@ -155,7 +163,14 @@ export const api = {
   patientTimeline: (id: string, journeyId?: string) => request<TimelineEventVm[]>(`/patients/${id}/timeline${toQuery({ journeyId })}`),
   journeys: (filters: JourneyFilters = {}) => request<JourneyListRow[]>(`/journeys${toQuery({ ...filters })}`),
   journeysSummary: () => request<JourneysSummary>("/journeys/summary"),
-  recordOutcome: (appointmentId: string, input: { outcome: ConsultationOutcomeValue; notes?: string; treatmentLabel?: string; estimatedValue?: number }) =>
+  journeyDetail: (id: string) => request<JourneyDetailVm>(`/journeys/${id}`),
+  /** null unassigns. 403 without MANAGE_JOURNEYS; 404 unknown/other-tenant journey; 422 assignee not in this tenant. Returns the updated detail. */
+  assignJourneyOwner: (id: string, ownerUserId: string | null) =>
+    request<JourneyDetailVm>(`/journeys/${id}/owner`, { method: "PATCH", body: JSON.stringify({ ownerUserId }) }),
+  /** 1..100 journeys, all-or-nothing (any out-of-tenant id rejects the whole request). */
+  assignJourneyOwnerBulk: (journeyIds: string[], ownerUserId: string | null) =>
+    request<BulkAssignJourneyOwnerResult>("/journeys/owner", { method: "POST", body: JSON.stringify({ journeyIds, ownerUserId }) }),
+  recordOutcome: (appointmentId: string, input: Omit<RecordOutcomeInput, "appointmentId">) =>
     request<{ ok: true }>(`/appointments/${appointmentId}/outcome`, { method: "POST", body: JSON.stringify(input) }),
   lookups: () => request<Lookups>("/lookups"),
   tasks: (filters: { view?: TaskView; assignedTo?: string; patientId?: string; reason?: TaskReason } = {}) =>
@@ -174,7 +189,8 @@ export const api = {
   completeAppointment: (id: string) => request<{ ok: true }>(`/appointments/${id}/complete`, { method: "PATCH", body: JSON.stringify({}) }),
   rescheduleAppointment: (id: string, scheduledAt: string) =>
     request<{ ok: true }>(`/appointments/${id}/reschedule`, { method: "PATCH", body: JSON.stringify({ scheduledAt }) }),
-  treatments: (filters: { status?: TreatmentStatus; ownerId?: string } = {}) => request<TreatmentRow[]>(`/treatments${toQuery({ ...filters })}`),
+  treatments: (filters: TreatmentFilters = {}) => request<TreatmentRow[]>(`/treatments${toQuery({ ...filters })}`),
+  treatmentCatalog: (specialtyKey?: string) => request<TreatmentDefinitionVm[]>(`/treatment-catalog${toQuery({ specialtyKey })}`),
   updateTreatmentStatus: (id: string, status: TreatmentStatus, plannedDate?: string) =>
     request<{ ok: true }>(`/treatments/${id}/status`, { method: "PATCH", body: JSON.stringify({ status, plannedDate }) }),
   conversations: (filters: { channel?: ConversationChannel; ownershipState?: OwnershipState; search?: string; communicationEndpointId?: string } = {}) =>
@@ -209,7 +225,7 @@ export const api = {
     request<CommunicationEndpointVm>(`/connectors/${connectorId}/endpoints/${endpointId}`, { method: "PATCH", body: JSON.stringify(input) }),
 
   // Leads (CRM-2/3/4)
-  leads: (filters: { status?: LeadStatus; specialtyKey?: string; source?: string } = {}) => request<LeadRow[]>(`/leads${toQuery({ ...filters })}`),
+  leads: (filters: { status?: LeadStatus; specialtyKey?: string; source?: string; owner?: "mine" | "unassigned" | (string & {}) } = {}) => request<LeadRow[]>(`/leads${toQuery({ ...filters })}`),
   leadsSummary: () => request<LeadsSummary>("/leads/summary"),
   leadPhoneLookup: (phone: string) => request<LeadPhoneLookupResult>("/leads/lookup", { method: "POST", body: JSON.stringify({ phone }) }),
   createLead: (input: CreateLeadInput) => request<CreateLeadResult>("/leads", { method: "POST", body: JSON.stringify(input) }),

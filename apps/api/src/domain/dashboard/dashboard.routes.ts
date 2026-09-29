@@ -8,6 +8,7 @@ import {
   getJourneyHealth,
   getMarketingSources,
   getPatientFlow,
+  getServiceMix,
   getSourcePerformance,
   getSpendAtRisk,
   getSpendAtRiskByReason,
@@ -96,5 +97,10 @@ export async function dashboardRoutes(app: FastifyInstance) {
   app.get("/dashboard/branch-doctor", async (request) => {
     const tenantId = request.sessionUser!.tenantId;
     return getBranchDoctorPerformance(app.db, tenantId, dashboardFilters(request));
+  });
+
+  app.get("/dashboard/service-mix", async (request) => {
+    const tenantId = request.sessionUser!.tenantId;
+    return getServiceMix(app.db, tenantId, dashboardFilters(request));
   });
 }

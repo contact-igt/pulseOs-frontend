@@ -3,7 +3,8 @@ import { db } from "../../db/client.js";
 import { calls, conversations, journeys, marketingCampaigns, messages, tasks, timelineEvents } from "../../db/schema.js";
 import { recordTouchpoint } from "../../domain/acquisition/attribution.service.js";
 import { ensureSpecialties } from "../../domain/specialty/specialty.service.js";
-import { GYNECOLOGY_SPECIALTIES } from "../../domain/specialty/gynecology.templates.js";
+import { GYNECOLOGY_SPECIALTIES, GYNECOLOGY_TREATMENTS } from "../../domain/specialty/gynecology.templates.js";
+import { ensureTreatmentCatalog } from "../../domain/specialty/treatment-catalog.service.js";
 import { assertJourneyConfigsConsistent } from "./consistency.js";
 import {
   createDemoBranches,
@@ -90,7 +91,7 @@ export const JOURNEY_CONFIGS: DemoJourneyConfig[] = [
     contactedOffsetDays: -5, createdOffsetDays: -6,
     appt: { status: "completed", offsetDays: -2, doctor: "meera" },
     outcome: { value: "DECISION_PENDING", notes: "Discussing IVF cycle timing with partner" },
-    treatment: { label: "IVF Cycle 1", status: "DECISION_PENDING", estimatedValue: 300_00 },
+    treatment: { definitionKey: "IVF_CYCLE_1", status: "DECISION_PENDING", estimatedValue: 300_00 },
     task: { reason: "treatment_decision_pending", dueOffsetDays: -1 },
   },
   {
@@ -126,14 +127,14 @@ export const JOURNEY_CONFIGS: DemoJourneyConfig[] = [
     contactedOffsetDays: -6, createdOffsetDays: -7,
     appt: { status: "completed", offsetDays: -3, doctor: "meera" },
     outcome: { value: "TREATMENT_ADVISED" },
-    treatment: { label: "IUI Cycle", status: "ADVISED", estimatedValue: 25_000 },
+    treatment: { definitionKey: "IUI_CYCLE", status: "ADVISED", estimatedValue: 25_000 },
   },
   {
     patientIdx: 7, journeyType: "Fertility", specialtyKey: "FERTILITY", source: "meta", campaignKey: "meta", stage: "completed",
     contactedOffsetDays: -8, createdOffsetDays: -9,
     appt: { status: "completed", offsetDays: -6, doctor: "arjun" },
     outcome: { value: "TREATMENT_ADVISED" },
-    treatment: { label: "IUI Cycle", status: "COMPLETED", estimatedValue: 22_000 },
+    treatment: { definitionKey: "IUI_CYCLE", status: "COMPLETED", estimatedValue: 22_000 },
     revenueAmount: 22_000, revenueOffsetDays: -1,
   },
 
@@ -143,7 +144,7 @@ export const JOURNEY_CONFIGS: DemoJourneyConfig[] = [
     contactedOffsetDays: -2, createdOffsetDays: -3,
     appt: { status: "completed", offsetDays: -2, doctor: "meera" },
     outcome: { value: "TREATMENT_ADVISED" },
-    treatment: { label: "IVF Cycle 1", status: "DECISION_PENDING", estimatedValue: 60_000 },
+    treatment: { definitionKey: "IVF_CYCLE_1", status: "DECISION_PENDING", estimatedValue: 60_000 },
     task: { reason: "treatment_decision_pending", dueOffsetDays: -3 },
   },
   {
@@ -151,14 +152,14 @@ export const JOURNEY_CONFIGS: DemoJourneyConfig[] = [
     contactedOffsetDays: -4, createdOffsetDays: -5,
     appt: { status: "completed", offsetDays: -3, doctor: "arjun" },
     outcome: { value: "TREATMENT_ADVISED" },
-    treatment: { label: "IVF Cycle 1", status: "SCHEDULED", estimatedValue: 70_000, decisionOffsetDays: -1 },
+    treatment: { definitionKey: "IVF_CYCLE_1", status: "SCHEDULED", estimatedValue: 70_000, decisionOffsetDays: -1 },
   },
   {
     patientIdx: 10, journeyType: "Fertility", specialtyKey: "FERTILITY", source: "google", campaignKey: "google", stage: "completed",
     contactedOffsetDays: -11, createdOffsetDays: -12,
     appt: { status: "completed", offsetDays: -10, doctor: "meera" },
     outcome: { value: "TREATMENT_ADVISED" },
-    treatment: { label: "IVF Cycle 1", status: "COMPLETED", estimatedValue: 95_000 },
+    treatment: { definitionKey: "IVF_CYCLE_1", status: "COMPLETED", estimatedValue: 95_000 },
     revenueAmount: 95_000, revenueOffsetDays: -5,
   },
   {
@@ -166,7 +167,7 @@ export const JOURNEY_CONFIGS: DemoJourneyConfig[] = [
     contactedOffsetDays: -13, createdOffsetDays: -14,
     appt: { status: "completed", offsetDays: -12, doctor: "arjun" },
     outcome: { value: "TREATMENT_ADVISED" },
-    treatment: { label: "IVF Cycle 2", status: "COMPLETED", estimatedValue: 110_000 },
+    treatment: { definitionKey: "IVF_CYCLE_2", status: "COMPLETED", estimatedValue: 110_000 },
     revenueAmount: 110_000, revenueOffsetDays: -6,
   },
   {
@@ -174,7 +175,7 @@ export const JOURNEY_CONFIGS: DemoJourneyConfig[] = [
     contactedOffsetDays: -9, createdOffsetDays: -10,
     appt: { status: "completed", offsetDays: -8, doctor: "meera" },
     outcome: { value: "TREATMENT_ADVISED" },
-    treatment: { label: "IVF Cycle 1", status: "COMPLETED", estimatedValue: 88_000 },
+    treatment: { definitionKey: "IVF_CYCLE_1", status: "COMPLETED", estimatedValue: 88_000 },
     revenueAmount: 88_000, revenueOffsetDays: -4,
   },
 
@@ -243,6 +244,7 @@ export const JOURNEY_CONFIGS: DemoJourneyConfig[] = [
 export async function seedGynecologyTenant(passwordHash: string) {
   const tenant = await createDemoTenant("PulseOS Gynecology Demo");
   await ensureSpecialties(db, tenant.id, GYNECOLOGY_SPECIALTIES);
+  await ensureTreatmentCatalog(db, tenant.id, GYNECOLOGY_TREATMENTS);
 
   const branchByKey = await createDemoBranches(tenant.id, [
     { name: "Koramangala Centre", city: "Bengaluru" },
@@ -297,7 +299,7 @@ export async function seedGynecologyTenant(passwordHash: string) {
     .returning();
   const campaigns = { meta: metaCampaign, google: googleCampaign, website: websiteCampaign, metaAntenatal: metaAntenatalCampaign };
 
-  assertJourneyConfigsConsistent("gynecology", JOURNEY_CONFIGS, GYNECOLOGY_PATIENT_NAMES);
+  assertJourneyConfigsConsistent("gynecology", JOURNEY_CONFIGS, GYNECOLOGY_PATIENT_NAMES, new Set(GYNECOLOGY_TREATMENTS.map((t) => t.key)));
   const patientNames = GYNECOLOGY_PATIENT_NAMES;
   const patientRows = await createDemoPatients(tenant.id, branchByKey, patientNames, 800_000_000, ["Kannada", "Hindi", "English"]);
 

@@ -25,6 +25,7 @@ import type {
   JourneyHealthKey,
   MarketingSourceRow,
   PatientFlowCount,
+  ServiceMixRow,
   SourcePerformanceRow,
   SpendAtRisk,
   SpendAtRiskCategory,
@@ -240,6 +241,8 @@ export async function getAttentionQueue(db: Db, tenantId: string, filters: Dashb
   const rows = await db
     .select({
       id: tasks.id,
+      patientId: tasks.patientId,
+      journeyId: tasks.journeyId,
       patientName: patients.name,
       journeyType: journeys.journeyType,
       reason: tasks.reason,
@@ -256,6 +259,8 @@ export async function getAttentionQueue(db: Db, tenantId: string, filters: Dashb
 
   return rows.map((r) => ({
     id: r.id,
+    patientId: r.patientId,
+    journeyId: r.journeyId,
     patientName: r.patientName,
     journeyType: r.journeyType ?? "general",
     reason: r.reason as AttentionItem["reason"],
@@ -506,4 +511,60 @@ export async function getBranchDoctorPerformance(db: Db, tenantId: string, filte
     waitingLoad: waitingMap.get(r.doctorId) ?? 0,
     consultations: consultMap.get(r.doctorId) ?? 0,
   }));
+}
+
+const PIPELINE_TREATMENT_STATUSES = ["ADVISED", "DECISION_PENDING", "ACCEPTED", "SCHEDULED"] as const;
+
+/**
+ * Per service line (journey type): volume, pipeline and revenue side by side,
+ * so the Command Centre can show which services actually convert — three
+ * grouped queries, never one per service.
+ */
+export async function getServiceMix(db: Db, tenantId: string, filters: DashboardFilters = {}): Promise<ServiceMixRow[]> {
+  const branchClause = filters.branchId ? eq(patients.branchId, filters.branchId) : undefined;
+
+  const journeyRows = await db
+    .select({
+      service: journeys.journeyType,
+      total: count(),
+      active: sql<number>`count(*) filter (where ${journeys.stage} not in ('completed', 'lost'))`,
+    })
+    .from(journeys)
+    .innerJoin(patients, eq(journeys.patientId, patients.id))
+    .where(and(eq(journeys.tenantId, tenantId), branchClause))
+    .groupBy(journeys.journeyType);
+
+  const treatmentRows = await db
+    .select({
+      service: journeys.journeyType,
+      pipeline: sql<number>`count(*) filter (where ${inArray(treatmentOpportunities.status, [...PIPELINE_TREATMENT_STATUSES])})`,
+      completed: sql<number>`count(*) filter (where ${treatmentOpportunities.status} = 'COMPLETED')`,
+    })
+    .from(treatmentOpportunities)
+    .innerJoin(journeys, eq(treatmentOpportunities.journeyId, journeys.id))
+    .innerJoin(patients, eq(journeys.patientId, patients.id))
+    .where(and(eq(treatmentOpportunities.tenantId, tenantId), branchClause))
+    .groupBy(journeys.journeyType);
+
+  const revenueRows = await db
+    .select({ service: journeys.journeyType, total: sum(revenueEvents.amount) })
+    .from(revenueEvents)
+    .innerJoin(journeys, eq(revenueEvents.journeyId, journeys.id))
+    .innerJoin(patients, eq(journeys.patientId, patients.id))
+    .where(and(eq(revenueEvents.tenantId, tenantId), branchClause))
+    .groupBy(journeys.journeyType);
+
+  const treatmentsBy = new Map(treatmentRows.map((r) => [r.service, r]));
+  const revenueBy = new Map(revenueRows.map((r) => [r.service, Number(r.total ?? 0)]));
+
+  return journeyRows
+    .map((r) => ({
+      service: r.service,
+      journeys: r.total,
+      activeJourneys: Number(r.active),
+      treatmentsInPipeline: Number(treatmentsBy.get(r.service)?.pipeline ?? 0),
+      treatmentsCompleted: Number(treatmentsBy.get(r.service)?.completed ?? 0),
+      revenue: revenueBy.get(r.service) ?? 0,
+    }))
+    .sort((a, b) => b.revenue - a.revenue || b.journeys - a.journeys);
 }

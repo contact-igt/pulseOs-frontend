@@ -306,6 +306,9 @@ export const treatmentOpportunities = pgTable("treatment_opportunities", {
   journeyId: uuid("journey_id").notNull().references(() => journeys.id),
   consultationOutcomeId: uuid("consultation_outcome_id").references(() => consultationOutcomes.id),
   treatmentLabel: text("treatment_label").notNull(),
+  // Optional link to the tenant's treatment catalog (treatment_definitions). The label above stays the
+  // display text (and is all that free-text/legacy rows have); the FK is what groups/filters by procedure.
+  treatmentDefinitionId: uuid("treatment_definition_id").references(() => treatmentDefinitions.id),
   status: treatmentStatusEnum("status").notNull().default("ADVISED"),
   estimatedValue: integer("estimated_value").notNull().default(0),
   ownerUserId: uuid("owner_user_id").references(() => users.id),
@@ -316,6 +319,7 @@ export const treatmentOpportunities = pgTable("treatment_opportunities", {
 }, (t) => ({
   tenantIdx: index("treatment_opportunities_tenant_idx").on(t.tenantId),
   journeyIdx: index("treatment_opportunities_journey_idx").on(t.journeyId),
+  definitionIdx: index("treatment_opportunities_definition_idx").on(t.treatmentDefinitionId),
 }));
 
 export const revenueEventTypeEnum = pgEnum("revenue_event_type", ["consultation_fee", "treatment_payment", "other"]);
@@ -722,6 +726,28 @@ export const customFieldDefinitions = pgTable("custom_field_definitions", {
 }, (t) => ({
   tenantIdx: index("custom_field_definitions_tenant_idx").on(t.tenantId),
   specialtyIdx: index("custom_field_definitions_specialty_idx").on(t.tenantId, t.specialtyKey),
+}));
+
+// ---------------------------------------------------------------------------
+// Treatment catalog — the procedures a tenant offers (e.g. LASIK, PRK, CXL),
+// attached to a specialty by plain-text key exactly like custom_field_definitions.
+// Rows are never hard-deleted (toggle is_active) so historical treatments keep
+// their link. default_estimated_value is a demo/price-list hint, not billing.
+// ---------------------------------------------------------------------------
+
+export const treatmentDefinitions = pgTable("treatment_definitions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  specialtyKey: text("specialty_key").notNull(),
+  key: text("key").notNull(),
+  label: text("label").notNull(),
+  defaultEstimatedValue: integer("default_estimated_value"),
+  isActive: boolean("is_active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  tenantSpecialtyIdx: index("treatment_definitions_tenant_specialty_idx").on(t.tenantId, t.specialtyKey),
+  tenantKeyUnique: uniqueIndex("treatment_definitions_tenant_key_unique").on(t.tenantId, t.key),
 }));
 
 export const customFieldValues = pgTable("custom_field_values", {

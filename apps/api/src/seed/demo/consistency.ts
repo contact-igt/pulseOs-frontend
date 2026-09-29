@@ -23,8 +23,11 @@ const STAGES_BY_TREATMENT: Record<string, JourneyStageValue[]> = {
   LOST: ["lost"],
 };
 
-/** Human-readable contradictions in one journey config; empty when consistent. */
-export function journeyConfigProblems(config: DemoJourneyConfig): string[] {
+/**
+ * Human-readable contradictions in one journey config; empty when consistent.
+ * When the tenant's catalog keys are given, a treatment must reference one of them.
+ */
+export function journeyConfigProblems(config: DemoJourneyConfig, catalogKeys?: ReadonlySet<string>): string[] {
   const problems: string[] = [];
   const { stage } = config;
 
@@ -42,6 +45,9 @@ export function journeyConfigProblems(config: DemoJourneyConfig): string[] {
     const allowed = STAGES_BY_TREATMENT[config.treatment.status];
     if (!allowed.includes(stage)) problems.push(`treatment ${config.treatment.status} but stage is "${stage}" (expected ${allowed.join(" / ")})`);
   }
+  if (config.treatment && catalogKeys && !catalogKeys.has(config.treatment.definitionKey)) {
+    problems.push(`treatment "${config.treatment.definitionKey}" is not in the tenant treatment catalog`);
+  }
   if (config.revenueAmount && config.treatment?.status !== "COMPLETED") {
     problems.push("revenue recorded without a COMPLETED treatment");
   }
@@ -49,7 +55,7 @@ export function journeyConfigProblems(config: DemoJourneyConfig): string[] {
 }
 
 /** Throws with every problem across all configs, so a bad seed fails loudly instead of demoing a contradiction. */
-export function assertJourneyConfigsConsistent(label: string, configs: DemoJourneyConfig[], names: string[]): void {
-  const lines = configs.flatMap((c) => journeyConfigProblems(c).map((p) => `  ${label} #${c.patientIdx} ${names[c.patientIdx] ?? "?"} (${c.journeyType}): ${p}`));
+export function assertJourneyConfigsConsistent(label: string, configs: DemoJourneyConfig[], names: string[], catalogKeys?: ReadonlySet<string>): void {
+  const lines = configs.flatMap((c) => journeyConfigProblems(c, catalogKeys).map((p) => `  ${label} #${c.patientIdx} ${names[c.patientIdx] ?? "?"} (${c.journeyType}): ${p}`));
   if (lines.length > 0) throw new Error(`Inconsistent demo journeys:\n${lines.join("\n")}`);
 }

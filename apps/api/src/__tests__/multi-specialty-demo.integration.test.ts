@@ -135,10 +135,10 @@ describe.skipIf(!DEMO_PASSWORD)("multi-specialty demo tenants (integration)", ()
   });
 
   describe("specialty configuration drives Add Lead", () => {
-    it("the Ophthalmology tenant offers the four eye services plus General Eye Consultation — and no gynecology", async () => {
+    it("the Ophthalmology tenant offers the five eye services plus General Eye Consultation — and no gynecology", async () => {
       const list = await getJson<SpecialtyTemplateVm[]>(app, "/specialties", eye.coordinator);
       const keys = list.map((s) => s.key);
-      expect(keys).toEqual(expect.arrayContaining(["CATARACT", "OCULOPLASTY", "LASER_VISION_CORRECTION", "SQUINT", "GENERAL_EYE_CONSULTATION"]));
+      expect(keys).toEqual(expect.arrayContaining(["CATARACT", "OCULOPLASTY", "LASER_VISION_CORRECTION", "SQUINT", "KERATOCONUS", "GENERAL_EYE_CONSULTATION"]));
       expect(keys).not.toContain("GYNECOLOGY");
       expect(keys).not.toContain("FERTILITY");
       expect(list.find((s) => s.key === "LASER_VISION_CORRECTION")?.displayName).toBe("Laser Vision Correction");
@@ -167,6 +167,14 @@ describe.skipIf(!DEMO_PASSWORD)("multi-specialty demo tenants (integration)", ()
       expect(laser.find((f) => f.key === "lvc_eligible")?.options).toEqual(["Yes", "No", "Pending evaluation"]);
       const squint = await getJson<CustomFieldDefinitionVm[]>(app, "/specialties/SQUINT/fields", eye.coordinator);
       expect(squint.find((f) => f.key === "squint_previous_treatment")?.options).toEqual(["Glasses", "Patching", "Surgery", "None"]);
+    });
+
+    it("Keratoconus exposes coordinator-level fields only (recorded status, eye, history, screening, CXL advised)", async () => {
+      const kc = await getJson<CustomFieldDefinitionVm[]>(app, "/specialties/KERATOCONUS/fields", eye.coordinator);
+      expect(kc.find((f) => f.key === "keratoconus_status")?.options).toEqual(["Suspected", "Confirmed"]);
+      expect(kc.find((f) => f.key === "keratoconus_eye")?.options).toEqual(["Right", "Left", "Both"]);
+      for (const key of ["eye_rubbing_history", "topography_done", "cxl_advised"]) expect(kc.find((f) => f.key === key)?.options).toEqual(["Yes", "No"]);
+      expect(kc.map((f) => f.label)).toContain("Primary eye concern");
     });
 
     it("the Gynecology tenant has no fields for an eye specialty key — configuration never crosses tenants", async () => {
@@ -225,10 +233,36 @@ describe.skipIf(!DEMO_PASSWORD)("multi-specialty demo tenants (integration)", ()
       expect(byLabel("Ptosis Correction")[0]).toMatchObject({ patientName: "Kavitha Prakash", status: "SCHEDULED" });
       expect(byLabel("Ptosis Correction")[0].plannedDate).not.toBeNull();
       expect(byLabel("Cataract Surgery — Right Eye").some((t) => t.status === "DECISION_PENDING" && t.patientName === "Ramesh Hegde")).toBe(true);
-      expect(byLabel("Tear Duct Procedure")[0].status).toBe("COMPLETED");
-      expect(byLabel("Laser Vision Correction").map((t) => t.status)).toEqual(expect.arrayContaining(["COMPLETED", "DECLINED"]));
+      expect(byLabel("DCR / Tear Duct Procedure")[0].status).toBe("COMPLETED");
+      expect(byLabel("SMILE")[0].status).toBe("COMPLETED");
+      expect(byLabel("LASIK")[0].status).toBe("DECLINED");
       expect(byLabel("Squint Surgery").map((t) => t.status)).toEqual(expect.arrayContaining(["ACCEPTED", "DECISION_PENDING"]));
       expect([...new Set(treatments.map((t) => t.status))]).toEqual(expect.arrayContaining(["ADVISED", "DECISION_PENDING", "ACCEPTED", "SCHEDULED", "COMPLETED", "DECLINED"]));
+    });
+
+    it("every one of the eight ophthalmology procedures appears as a catalog-linked treatment", async () => {
+      const catalog = await getJson<{ id: string; key: string; label: string }[]>(app, "/treatment-catalog", eye.admin);
+      expect(catalog.map((c) => c.key).sort()).toEqual(["CATARACT_SURGERY", "CXL", "DCR", "LASIK", "PRK", "PTOSIS_CORRECTION", "SMILE", "SQUINT_SURGERY"]);
+      const treatments = await getJson<{ treatmentDefinitionId: string | null; treatmentLabel: string }[]>(app, "/treatments", eye.admin);
+      expect(treatments.every((t) => t.treatmentDefinitionId !== null)).toBe(true);
+      for (const def of catalog) expect(treatments.some((t) => t.treatmentDefinitionId === def.id), def.label).toBe(true);
+    });
+
+    it("has Keratoconus journeys: one advised CXL with a pending follow-up, one at enquiry", async () => {
+      const kc = eyeJourneys.filter((j) => j.journeyType === "Keratoconus");
+      expect(kc.length).toBeGreaterThanOrEqual(2);
+      const treatments = await getJson<{ patientName: string; treatmentLabel: string; status: string; journeyId: string }[]>(app, "/treatments", eye.admin);
+      const cxl = treatments.filter((t) => t.treatmentLabel.startsWith("Corneal Cross-Linking"));
+      expect(cxl.length).toBeGreaterThanOrEqual(1);
+      expect(cxl.some((t) => t.status === "ADVISED" && kc.some((j) => j.id === t.journeyId))).toBe(true);
+      const tasks = await getJson<TaskRow[]>(app, "/tasks", eye.admin);
+      const advisedPatient = kc.find((j) => cxl.some((t) => t.journeyId === j.id))!.patientId;
+      expect(tasks.some((t) => t.patientId === advisedPatient && t.status === "pending")).toBe(true);
+    });
+
+    it("a Laser Vision Correction patient is deciding on PRK (decision pending)", async () => {
+      const treatments = await getJson<{ patientName: string; treatmentLabel: string; status: string }[]>(app, "/treatments", eye.admin);
+      expect(treatments.some((t) => t.treatmentLabel === "PRK" && t.status === "DECISION_PENDING")).toBe(true);
     });
 
     it("follow-up tasks are specific to each eye service and sit with the right owner", async () => {

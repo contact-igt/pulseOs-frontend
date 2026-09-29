@@ -212,7 +212,7 @@ export async function listPatients(db: Db, tenantId: string, filters: PatientLis
 // BOOLEAN/SELECT/MULTI_SELECT/PHONE) decides its JS shape at write time, so
 // display formatting is generic over shape rather than re-deriving the
 // field's type here.
-function formatCustomFieldValue(value: unknown): string {
+export function formatCustomFieldValue(value: unknown): string {
   if (Array.isArray(value)) return value.length > 0 ? value.join(", ") : "—";
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (value === null || value === undefined || value === "") return "—";

@@ -1,7 +1,8 @@
 import { db } from "../../db/client.js";
 import { journeys, marketingCampaigns, tasks, timelineEvents } from "../../db/schema.js";
 import { ensureSpecialties } from "../../domain/specialty/specialty.service.js";
-import { OPHTHALMOLOGY_SPECIALTIES } from "../../domain/specialty/ophthalmology.templates.js";
+import { OPHTHALMOLOGY_SPECIALTIES, OPHTHALMOLOGY_TREATMENTS } from "../../domain/specialty/ophthalmology.templates.js";
+import { ensureTreatmentCatalog } from "../../domain/specialty/treatment-catalog.service.js";
 import { eq } from "drizzle-orm";
 import { assertJourneyConfigsConsistent } from "./consistency.js";
 import {
@@ -52,6 +53,8 @@ export const OPHTHALMOLOGY_PATIENT_NAMES = [
   "Aarav Deshpande", "Prakash Naidu", "Lalitha Krishnan", "Mohan Kumar", "Geetha Bhat", "Farhan Sheikh",
   "Divya Rao", "Sanjay Gowda", "Meera Pillai", "Anil Joshi", "Zoya Khan", "Harish Bhat",
   "Pallavi Nayak", "Rekha Shenoy", "Vinod Acharya", "Uma Sridhar", "Bhaskar Rao", "Sudha Hegde", "Chandan Kulkarni", "Arnav Prabhu", "Yashoda Rao",
+  // 27+: Laser (PRK decision) and Keratoconus stories
+  "Sneha Kamath", "Abhishek Nayak", "Tanvi Shetty", "Rohan Iyer",
 ];
 
 export const JOURNEY_CONFIGS: DemoJourneyConfig[] = [
@@ -61,7 +64,7 @@ export const JOURNEY_CONFIGS: DemoJourneyConfig[] = [
     contactedOffsetDays: -6, createdOffsetDays: -6,
     appt: { status: "completed", offsetDays: -2, hour: 10, doctor: "rajiv", reason: "Cataract consultation" },
     outcome: { value: "TREATMENT_ADVISED", notes: "Surgery advised for the right eye; patient wants to discuss with family." },
-    treatment: { label: "Cataract Surgery — Right Eye", status: "DECISION_PENDING", estimatedValue: 45_000, decisionOffsetDays: 3 },
+    treatment: { definitionKey: "CATARACT_SURGERY", label: "Cataract Surgery — Right Eye", status: "DECISION_PENDING", estimatedValue: 45_000, decisionOffsetDays: 3 },
     task: { reason: "treatment_decision_pending", dueOffsetDays: -1, notes: "Call back about the cataract surgery estimate and preferred dates" },
     fields: {
       ...eyeIntake({ concern: "Gradually worsening blurred vision", laterality: "Right", duration: "About 8 months", prevSurgery: "No", diabetes: "Yes", glasses: "Reading glasses" }),
@@ -118,7 +121,7 @@ export const JOURNEY_CONFIGS: DemoJourneyConfig[] = [
     contactedOffsetDays: -10, createdOffsetDays: -10,
     appt: { status: "completed", offsetDays: -7, hour: 11, doctor: "shalini", reason: "Oculoplasty consultation" },
     outcome: { value: "TREATMENT_ADVISED", notes: "Ptosis correction advised; patient accepted." },
-    treatment: { label: "Ptosis Correction", status: "SCHEDULED", estimatedValue: 55_000, decisionOffsetDays: -4, plannedOffsetDays: 5 },
+    treatment: { definitionKey: "PTOSIS_CORRECTION", status: "SCHEDULED", estimatedValue: 55_000, decisionOffsetDays: -4, plannedOffsetDays: 5 },
     task: { reason: "manual_task", type: "FOLLOW_UP", dueOffsetDays: 0, notes: "Ptosis procedure scheduled — confirm pre-procedure instructions and arrival time" },
     fields: {
       ...eyeIntake({ concern: "Drooping left upper eyelid", laterality: "Left", duration: "About 2 years", prevSurgery: "No", diabetes: "No", glasses: "None" }),
@@ -215,7 +218,7 @@ export const JOURNEY_CONFIGS: DemoJourneyConfig[] = [
     contactedOffsetDays: -5, createdOffsetDays: -6,
     appt: { status: "completed", offsetDays: -3, hour: 15, doctor: "shalini", reason: "Squint consultation" },
     outcome: { value: "TREATMENT_ADVISED", notes: "Surgical correction discussed; patient considering timing." },
-    treatment: { label: "Squint Surgery", status: "DECISION_PENDING", estimatedValue: 48_000, decisionOffsetDays: 4 },
+    treatment: { definitionKey: "SQUINT_SURGERY", status: "DECISION_PENDING", estimatedValue: 48_000, decisionOffsetDays: 4 },
     task: { reason: "treatment_decision_pending", dueOffsetDays: 0, notes: "Follow up on the squint surgery decision" },
     fields: {
       ...eyeIntake({ concern: "Outward turn of the left eye", laterality: "Left", duration: "Since childhood", prevSurgery: "No", diabetes: "No", glasses: "None" }),
@@ -229,7 +232,7 @@ export const JOURNEY_CONFIGS: DemoJourneyConfig[] = [
     contactedOffsetDays: -21, createdOffsetDays: -22,
     appt: { status: "completed", offsetDays: -20, hour: 10, doctor: "rajiv", reason: "Cataract consultation" },
     outcome: { value: "TREATMENT_ADVISED" },
-    treatment: { label: "Cataract Surgery — Left Eye", status: "COMPLETED", estimatedValue: 42_000 },
+    treatment: { definitionKey: "CATARACT_SURGERY", label: "Cataract Surgery — Left Eye", status: "COMPLETED", estimatedValue: 42_000 },
     revenueAmount: 42_000, revenueOffsetDays: -12,
     fields: {
       ...eyeIntake({ concern: "Cloudy vision in the left eye", laterality: "Left", duration: "1 year", prevSurgery: "No", diabetes: "Yes", glasses: "Reading glasses" }),
@@ -241,7 +244,7 @@ export const JOURNEY_CONFIGS: DemoJourneyConfig[] = [
     contactedOffsetDays: -14, createdOffsetDays: -15,
     appt: { status: "completed", offsetDays: -13, hour: 11, doctor: "rajiv", reason: "Cataract consultation" },
     outcome: { value: "TREATMENT_ADVISED" },
-    treatment: { label: "Cataract Surgery — Right Eye", status: "COMPLETED", estimatedValue: 48_000 },
+    treatment: { definitionKey: "CATARACT_SURGERY", label: "Cataract Surgery — Right Eye", status: "COMPLETED", estimatedValue: 48_000 },
     revenueAmount: 48_000, revenueOffsetDays: -9,
     fields: {
       ...eyeIntake({ concern: "Glare while driving at night", laterality: "Right", duration: "10 months", prevSurgery: "No", diabetes: "No", glasses: "Distance glasses" }),
@@ -255,7 +258,7 @@ export const JOURNEY_CONFIGS: DemoJourneyConfig[] = [
     contactedOffsetDays: -9, createdOffsetDays: -9,
     appt: { status: "completed", offsetDays: -6, hour: 12, doctor: "rajiv", reason: "Cataract consultation" },
     outcome: { value: "TREATMENT_ADVISED", notes: "Cataract surgery advised for the right eye." },
-    treatment: { label: "Cataract Surgery — Right Eye", status: "COMPLETED", estimatedValue: 40_000, decisionOffsetDays: -4 },
+    treatment: { definitionKey: "CATARACT_SURGERY", label: "Cataract Surgery — Right Eye", status: "COMPLETED", estimatedValue: 40_000, decisionOffsetDays: -4 },
     revenueAmount: 40_000, revenueOffsetDays: -2,
     fields: {
       ...eyeIntake({ concern: "Blurred vision, difficulty with night driving", laterality: "Both", duration: "About a year", prevSurgery: "No", diabetes: "No", glasses: "Progressive glasses" }),
@@ -289,7 +292,7 @@ export const JOURNEY_CONFIGS: DemoJourneyConfig[] = [
     contactedOffsetDays: -17, createdOffsetDays: -18,
     appt: { status: "completed", offsetDays: -15, hour: 9, doctor: "rajiv", reason: "Laser vision correction screening" },
     outcome: { value: "TREATMENT_ADVISED" },
-    treatment: { label: "Laser Vision Correction (SMILE)", status: "COMPLETED", estimatedValue: 96_000 },
+    treatment: { definitionKey: "SMILE", status: "COMPLETED", estimatedValue: 96_000 },
     revenueAmount: 96_000, revenueOffsetDays: -8,
     fields: {
       ...eyeIntake({ concern: "Wants freedom from glasses", laterality: "Both", duration: "Since teens", prevSurgery: "No", diabetes: "No", glasses: "Spectacles, daily" }),
@@ -301,7 +304,7 @@ export const JOURNEY_CONFIGS: DemoJourneyConfig[] = [
     contactedOffsetDays: -16, createdOffsetDays: -17,
     appt: { status: "completed", offsetDays: -14, hour: 14, doctor: "shalini", reason: "Oculoplasty consultation" },
     outcome: { value: "TREATMENT_ADVISED" },
-    treatment: { label: "Tear Duct Procedure", status: "COMPLETED", estimatedValue: 38_000 },
+    treatment: { definitionKey: "DCR", status: "COMPLETED", estimatedValue: 38_000 },
     revenueAmount: 38_000, revenueOffsetDays: -7,
     fields: {
       ...eyeIntake({ concern: "Persistent watering, occasional discharge", laterality: "Left", duration: "6 months", prevSurgery: "No", diabetes: "No", glasses: "None" }),
@@ -323,7 +326,7 @@ export const JOURNEY_CONFIGS: DemoJourneyConfig[] = [
     contactedOffsetDays: -8, createdOffsetDays: -9,
     appt: { status: "completed", offsetDays: -5, hour: 10, doctor: "shalini", reason: "Squint consultation (child)" },
     outcome: { value: "TREATMENT_ADVISED", notes: "Surgery advised; parents agreed." },
-    treatment: { label: "Squint Surgery", status: "ACCEPTED", estimatedValue: 45_000, decisionOffsetDays: -2 },
+    treatment: { definitionKey: "SQUINT_SURGERY", status: "ACCEPTED", estimatedValue: 45_000, decisionOffsetDays: -2 },
     task: { reason: "manual_task", type: "FOLLOW_UP", dueOffsetDays: 0, notes: "Squint surgery accepted — agree a surgery date with the parents" },
     fields: {
       ...eyeIntake({ concern: "Outward turn of the right eye (parent's report)", laterality: "Right", duration: "2 years", prevSurgery: "No", diabetes: "No", glasses: "Glasses and patching" }),
@@ -356,7 +359,7 @@ export const JOURNEY_CONFIGS: DemoJourneyConfig[] = [
     // Seen today, surgery advised, decision still open — Dr. Rajiv's "treatment follow-up" list.
     appt: { status: "completed", offsetDays: 0, hour: 11, doctor: "rajiv", reason: "Cataract consultation" },
     outcome: { value: "TREATMENT_ADVISED", notes: "Cataract surgery advised for the left eye." },
-    treatment: { label: "Cataract Surgery — Left Eye", status: "ADVISED", estimatedValue: 44_000 },
+    treatment: { definitionKey: "CATARACT_SURGERY", label: "Cataract Surgery — Left Eye", status: "ADVISED", estimatedValue: 44_000 },
     fields: {
       ...eyeIntake({ concern: "Blurred vision in the left eye", laterality: "Left", duration: "8 months", prevSurgery: "No", diabetes: "No", glasses: "Distance glasses" }),
       cataract_diagnosis: "Suspected", cataract_eye: "Left", cataract_surgery_advised: "No", cataract_surgery_interest: "Considering",
@@ -415,7 +418,7 @@ export const JOURNEY_CONFIGS: DemoJourneyConfig[] = [
     contactedOffsetDays: -19, createdOffsetDays: -20,
     appt: { status: "completed", offsetDays: -16, hour: 11, doctor: "shalini", reason: "Squint consultation (child)" },
     outcome: { value: "TREATMENT_ADVISED", notes: "Surgery advised; parents agreed." },
-    treatment: { label: "Squint Surgery", status: "COMPLETED", estimatedValue: 45_000, decisionOffsetDays: -14 },
+    treatment: { definitionKey: "SQUINT_SURGERY", status: "COMPLETED", estimatedValue: 45_000, decisionOffsetDays: -14 },
     revenueAmount: 45_000, revenueOffsetDays: -8,
     fields: {
       ...eyeIntake({ concern: "Inward turn of the left eye (parent's report)", laterality: "Left", duration: "3 years", prevSurgery: "No", diabetes: "No", glasses: "Glasses and patching" }),
@@ -427,7 +430,7 @@ export const JOURNEY_CONFIGS: DemoJourneyConfig[] = [
     contactedOffsetDays: -21, createdOffsetDays: -22,
     appt: { status: "completed", offsetDays: -18, hour: 10, doctor: "rajiv", reason: "Cataract consultation" },
     outcome: { value: "TREATMENT_ADVISED" },
-    treatment: { label: "Cataract Surgery — Right Eye", status: "COMPLETED", estimatedValue: 46_000, decisionOffsetDays: -15 },
+    treatment: { definitionKey: "CATARACT_SURGERY", label: "Cataract Surgery — Right Eye", status: "COMPLETED", estimatedValue: 46_000, decisionOffsetDays: -15 },
     revenueAmount: 46_000, revenueOffsetDays: -10,
     fields: {
       ...eyeIntake({ concern: "Difficulty seeing at night", laterality: "Right", duration: "1 year", prevSurgery: "No", diabetes: "Yes", glasses: "Distance glasses" }),
@@ -441,7 +444,7 @@ export const JOURNEY_CONFIGS: DemoJourneyConfig[] = [
     contactedOffsetDays: -12, createdOffsetDays: -13,
     appt: { status: "completed", offsetDays: -10, hour: 13, doctor: "rajiv", reason: "Laser vision correction screening" },
     outcome: { value: "TREATMENT_ADVISED" },
-    treatment: { label: "Laser Vision Correction (LASIK)", status: "DECLINED", estimatedValue: 90_000, decisionOffsetDays: -8 },
+    treatment: { definitionKey: "LASIK", status: "DECLINED", estimatedValue: 90_000, decisionOffsetDays: -8 },
     fields: {
       ...eyeIntake({ concern: "Wants to stop wearing glasses", laterality: "Both", duration: "Since school", prevSurgery: "No", diabetes: "No", glasses: "Spectacles, daily" }),
       lvc_interest: "LASIK", spectacle_power: "-5.00 / -4.50", lvc_contact_lens_use: "No", lvc_screening_completed: "Yes", lvc_eligible: "No",
@@ -452,6 +455,93 @@ export const JOURNEY_CONFIGS: DemoJourneyConfig[] = [
     contactedOffsetDays: -3, createdOffsetDays: -4,
     appt: { status: "cancelled", offsetDays: -1, hour: 15, doctor: "shalini", reason: "General eye consultation" },
     fields: eyeIntake({ concern: "Routine eye check", laterality: "Both", duration: "N/A", prevSurgery: "No", diabetes: "No", glasses: "Reading glasses" }),
+  },
+
+  // --- Laser Vision Correction: comparing LASIK / SMILE / PRK after screening ---
+  {
+    // Screening done; PRK is the option the doctor advised. The patient is still weighing it against
+    // LASIK and SMILE (cost, recovery time) — a decision-pending treatment with a counselling call due.
+    patientIdx: 27, journeyType: "Laser Vision Correction", specialtyKey: "LASER_VISION_CORRECTION", source: "google", campaignKey: "lasikGoogle", stage: "treatment_advised",
+    contactedOffsetDays: -8, createdOffsetDays: -8,
+    appt: { status: "completed", offsetDays: -3, hour: 12, doctor: "rajiv", reason: "Laser vision correction screening" },
+    outcome: { value: "TREATMENT_ADVISED", notes: "Screening completed. PRK advised as the suitable option; patient is comparing it with LASIK and SMILE before deciding." },
+    treatment: { definitionKey: "PRK", status: "DECISION_PENDING", estimatedValue: 68_000, decisionOffsetDays: 4 },
+    task: { reason: "treatment_decision_pending", dueOffsetDays: 0, notes: "Call to help compare LASIK, SMILE and PRK (cost and recovery time) and note the patient's preference" },
+    fields: {
+      ...eyeIntake({ concern: "Wants to reduce dependence on glasses; unsure which laser procedure", laterality: "Both", duration: "Since college", prevSurgery: "No", diabetes: "No", glasses: "Spectacles, daily" }),
+      lvc_interest: "Not sure", spectacle_power: "-2.00 / -1.75", lvc_contact_lens_use: "No", lvc_screening_completed: "Yes", lvc_eligible: "Yes",
+    },
+    interactions: [
+      {
+        kind: "call", direction: "inbound", status: "completed", durationSeconds: 205, daysAgo: 8, hour: 12, minute: 30, endpoint: "main", agent: "Deepa Nair",
+        summary: "Patient asked what the difference is between LASIK, SMILE and PRK and whether a screening is needed first.",
+        outcome: "Screening appointment booked.",
+      },
+      {
+        kind: "whatsapp", endpoint: "whatsapp",
+        messages: [
+          { sender: "staff", body: "Thank you for visiting today. We have noted that PRK was advised. Please take your time to compare it with LASIK and SMILE — we can walk you through the differences on a call.", daysAgo: 3, hour: 16, minute: 10 },
+          { sender: "patient", body: "Thanks. Could you tell me about the recovery time for each option?", daysAgo: 3, hour: 17, minute: 2 },
+        ],
+      },
+    ],
+  },
+
+  // --- Keratoconus: enquiry, screening and corneal cross-linking (CXL) ---
+  {
+    // Enquiry -> screening consultation -> CXL advised -> follow-up call pending.
+    patientIdx: 28, journeyType: "Keratoconus", specialtyKey: "KERATOCONUS", source: "google", campaignKey: "keratoconusGoogle", stage: "treatment_advised",
+    contactedOffsetDays: -9, createdOffsetDays: -9,
+    appt: { status: "completed", offsetDays: -4, hour: 11, doctor: "rajiv", reason: "Keratoconus screening consultation" },
+    outcome: { value: "TREATMENT_ADVISED", notes: "Corneal cross-linking (CXL) advised for the right eye; patient wants to discuss with family before booking." },
+    treatment: { definitionKey: "CXL", status: "ADVISED", estimatedValue: 34_000 },
+    task: { reason: "manual_task", type: "FOLLOW_UP", dueOffsetDays: 0, notes: "Follow up on the CXL advice — answer questions about the procedure and offer a date to book" },
+    fields: {
+      ...eyeIntake({ concern: "Vision keeps changing; spectacle power changes often", laterality: "Right", duration: "About 2 years", prevSurgery: "No", diabetes: "No", glasses: "Spectacles, frequently updated" }),
+      keratoconus_status: "Confirmed", keratoconus_eye: "Right", eye_rubbing_history: "Yes", topography_done: "Yes", cxl_advised: "Yes",
+    },
+    interactions: [
+      {
+        kind: "call", direction: "inbound", status: "completed", durationSeconds: 236, daysAgo: 9, hour: 15, minute: 5, endpoint: "main", agent: "Arun Kulkarni",
+        summary: "Patient was told by an optician that the cornea may need a specialist review and asked about keratoconus screening.",
+        outcome: "Screening consultation booked.",
+      },
+      {
+        kind: "whatsapp", endpoint: "whatsapp",
+        messages: [
+          { sender: "staff", body: "Your screening consultation is confirmed. Please bring your current glasses and any previous eye reports.", daysAgo: 8, hour: 10, minute: 15 },
+          { sender: "patient", body: "Will the screening take long? I have to arrange time off work.", daysAgo: 8, hour: 10, minute: 40 },
+          { sender: "staff", body: "Please plan for about two hours in case extra checks are needed. The team will confirm on the day.", daysAgo: 8, hour: 10, minute: 52 },
+        ],
+      },
+    ],
+  },
+  {
+    // Earliest stage: an enquiry that nobody has called yet.
+    patientIdx: 29, journeyType: "Keratoconus", specialtyKey: "KERATOCONUS", source: "website", campaignKey: "website", stage: "enquiry",
+    contactedOffsetDays: null, createdOffsetDays: -1,
+    task: { reason: "high_intent_uncontacted", dueOffsetDays: -1, notes: "Website enquiry about keratoconus screening for a teenager — call the parent to book a screening consultation" },
+    fields: {
+      ...eyeIntake({ concern: "Frequent change in glasses power; rubs eyes often (parent's report)", laterality: "Both", duration: "About a year", prevSurgery: "No", diabetes: "No", glasses: "Spectacles" }),
+      keratoconus_status: "Suspected", keratoconus_eye: "Both", eye_rubbing_history: "Yes", topography_done: "No", cxl_advised: "No",
+    },
+  },
+  {
+    // Screening booked, not yet attended.
+    patientIdx: 30, journeyType: "Keratoconus", specialtyKey: "KERATOCONUS", source: "google", campaignKey: "keratoconusGoogle", stage: "booked",
+    contactedOffsetDays: -2, createdOffsetDays: -3,
+    appt: { status: "confirmed", offsetDays: 2, hour: 11, doctor: "shalini", reason: "Keratoconus screening consultation" },
+    fields: {
+      ...eyeIntake({ concern: "Blurred, distorted vision in the left eye", laterality: "Left", duration: "Several months", prevSurgery: "No", diabetes: "No", glasses: "Spectacles" }),
+      keratoconus_status: "Suspected", keratoconus_eye: "Left", eye_rubbing_history: "No", topography_done: "No", cxl_advised: "No",
+    },
+    interactions: [
+      {
+        kind: "call", direction: "outbound", status: "completed", durationSeconds: 174, daysAgo: 2, hour: 11, minute: 20, endpoint: "main", agent: "Deepa Nair",
+        summary: "Called back after the enquiry form. Patient reports distorted vision in the left eye and wants a keratoconus screening.",
+        outcome: "Screening consultation booked.",
+      },
+    ],
   },
 ];
 
@@ -501,9 +591,10 @@ const CONVERSATION_CONFIGS: ConversationConfig[] = [
 ];
 
 export async function seedOphthalmologyTenant(passwordHash: string) {
-  assertJourneyConfigsConsistent("ophthalmology", JOURNEY_CONFIGS, OPHTHALMOLOGY_PATIENT_NAMES);
+  assertJourneyConfigsConsistent("ophthalmology", JOURNEY_CONFIGS, OPHTHALMOLOGY_PATIENT_NAMES, new Set(OPHTHALMOLOGY_TREATMENTS.map((t) => t.key)));
   const tenant = await createDemoTenant("PulseOS Ophthalmology Demo");
   await ensureSpecialties(db, tenant.id, OPHTHALMOLOGY_SPECIALTIES);
+  await ensureTreatmentCatalog(db, tenant.id, OPHTHALMOLOGY_TREATMENTS);
 
   const branchByKey = await createDemoBranches(tenant.id, [
     { name: "Indiranagar Eye Centre", city: "Bengaluru" },
@@ -545,6 +636,7 @@ export async function seedOphthalmologyTenant(passwordHash: string) {
     { key: "lasikMeta", source: "meta", name: "LASIK Awareness — Instagram / Meta", spendAmount: 18_000, days: -25 },
     { key: "ptosisMeta", source: "meta", name: "Ptosis / Oculoplasty Consultation — Meta", spendAmount: 20_000, days: -30 },
     { key: "squintMeta", source: "meta", name: "Squint Consultation — Meta", spendAmount: 16_000, days: -30 },
+    { key: "keratoconusGoogle", source: "google", name: "Keratoconus Screening & CXL — Google", spendAmount: 14_000, days: -30 },
     { key: "website", source: "website", name: "Website — Eye Care Enquiry Form", spendAmount: 8_000, days: -30 },
   ] as const;
   const campaignRows = await db

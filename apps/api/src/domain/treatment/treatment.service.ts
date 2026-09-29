@@ -2,7 +2,7 @@ import { and, eq, or } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { appointments, journeys, patients, revenueEvents, tasks, timelineEvents, treatmentOpportunities, users } from "../../db/schema.js";
 import { recordConversionFeedbackEvent } from "../acquisition/conversion-feedback.service.js";
-import type { TreatmentRow, TreatmentStatus } from "@pulseos/types";
+import type { TreatmentFilters, TreatmentRow, TreatmentStatus } from "@pulseos/types";
 
 // Postgres unique_violation SQLSTATE. Used to recognize a lost race against
 // the revenue_events_treatment_opportunity_unique index as "already recorded"
@@ -13,11 +13,6 @@ function isUniqueViolation(err: unknown): boolean {
   return typeof err === "object" && err !== null && "code" in err && (err as { code?: unknown }).code === POSTGRES_UNIQUE_VIOLATION;
 }
 
-export interface TreatmentFilters {
-  status?: TreatmentStatus;
-  ownerId?: string;
-}
-
 export async function listTreatments(db: Db, tenantId: string, filters: TreatmentFilters): Promise<TreatmentRow[]> {
   const rows = await db
     .select({
@@ -25,6 +20,8 @@ export async function listTreatments(db: Db, tenantId: string, filters: Treatmen
       patientId: treatmentOpportunities.patientId,
       patientName: patients.name,
       journeyId: treatmentOpportunities.journeyId,
+      service: journeys.journeyType,
+      treatmentDefinitionId: treatmentOpportunities.treatmentDefinitionId,
       treatmentLabel: treatmentOpportunities.treatmentLabel,
       estimatedValue: treatmentOpportunities.estimatedValue,
       status: treatmentOpportunities.status,
@@ -33,12 +30,15 @@ export async function listTreatments(db: Db, tenantId: string, filters: Treatmen
     })
     .from(treatmentOpportunities)
     .innerJoin(patients, eq(treatmentOpportunities.patientId, patients.id))
+    .innerJoin(journeys, eq(treatmentOpportunities.journeyId, journeys.id))
     .leftJoin(users, eq(treatmentOpportunities.ownerUserId, users.id))
     .where(
       and(
         eq(treatmentOpportunities.tenantId, tenantId),
         filters.status ? eq(treatmentOpportunities.status, filters.status) : undefined,
         filters.ownerId ? eq(treatmentOpportunities.ownerUserId, filters.ownerId) : undefined,
+        filters.treatmentDefinitionId ? eq(treatmentOpportunities.treatmentDefinitionId, filters.treatmentDefinitionId) : undefined,
+        filters.service ? eq(journeys.journeyType, filters.service) : undefined,
       ),
     )
     .orderBy(treatmentOpportunities.updatedAt);
@@ -47,17 +47,19 @@ export async function listTreatments(db: Db, tenantId: string, filters: Treatmen
   if (journeyIds.length === 0) return [];
 
   const doctorRows = await db
-    .select({ journeyId: appointments.journeyId, doctorName: users.name, scheduledAt: appointments.scheduledAt })
+    .select({ journeyId: appointments.journeyId, doctorId: appointments.doctorUserId, doctorName: users.name, scheduledAt: appointments.scheduledAt })
     .from(appointments)
     .leftJoin(users, eq(appointments.doctorUserId, users.id))
     .where(eq(appointments.tenantId, tenantId));
   const latestApptByJourney = new Map<string, Date>();
   const doctorByJourney = new Map<string, string | null>();
+  const doctorIdByJourney = new Map<string, string | null>();
   for (const d of doctorRows) {
     const existing = latestApptByJourney.get(d.journeyId);
     if (!existing || d.scheduledAt > existing) {
       latestApptByJourney.set(d.journeyId, d.scheduledAt);
       doctorByJourney.set(d.journeyId, d.doctorName);
+      doctorIdByJourney.set(d.journeyId, d.doctorId);
     }
   }
 
@@ -83,12 +85,17 @@ export async function listTreatments(db: Db, tenantId: string, filters: Treatmen
     if (!existing || t.occurredAt > existing) lastContactByJourney.set(t.journeyId, t.occurredAt);
   }
 
-  return rows.map((r) => ({
+  // "Doctor" is the one who last saw the journey (latest appointment) — the same rule the row's doctorName uses.
+  const visibleRows = filters.doctorId ? rows.filter((r) => doctorIdByJourney.get(r.journeyId) === filters.doctorId) : rows;
+
+  return visibleRows.map((r) => ({
     id: r.id,
     patientId: r.patientId,
     patientName: r.patientName,
     journeyId: r.journeyId,
     doctorName: doctorByJourney.get(r.journeyId) ?? null,
+    service: r.service,
+    treatmentDefinitionId: r.treatmentDefinitionId,
     treatmentLabel: r.treatmentLabel,
     estimatedValue: r.estimatedValue,
     status: r.status,

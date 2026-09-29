@@ -18,6 +18,7 @@ import { normalizePhone, resolveDefaultPhoneRegion } from "../patient/phone.js";
 import { resolveOrCreatePatient } from "../patient/identity.service.js";
 import { recordTouchpoint } from "../acquisition/attribution.service.js";
 import { createTask } from "../task/task.service.js";
+import type { OwnerFilter } from "../journey/journey.service.js";
 import type { CreateLeadInput, CreateLeadResult, LeadPhoneLookupResult, LeadRow, LeadStatus, LeadsSummary } from "@pulseos/types";
 
 export async function lookupPatientByPhone(db: Db, tenantId: string, rawPhone: string): Promise<LeadPhoneLookupResult> {
@@ -158,7 +159,7 @@ export interface LeadFilters {
   status?: LeadStatus;
   specialtyKey?: string;
   source?: string;
-  ownerId?: string;
+  owner?: OwnerFilter;
 }
 
 function isToday(d: Date): boolean {
@@ -178,6 +179,7 @@ async function buildLeadRows(db: Db, tenantId: string): Promise<LeadRow[]> {
       stage: journeys.stage,
       priority: journeys.priority,
       contactedAt: journeys.contactedAt,
+      ownerId: journeys.ownerUserId,
       createdAt: journeys.createdAt,
       ownerName: users.name,
     })
@@ -258,6 +260,7 @@ async function buildLeadRows(db: Db, tenantId: string): Promise<LeadRow[]> {
       campaignName: campaignId ? (campaignNameById.get(campaignId) ?? null) : null,
       stage: r.stage,
       leadStatus,
+      ownerId: r.ownerId,
       ownerName: r.ownerName,
       priority: r.priority,
       lastInteractionAt: (lastInteractionByJourney.get(r.id) ?? r.createdAt).toISOString(),
@@ -273,7 +276,8 @@ export async function listLeads(db: Db, tenantId: string, filters: LeadFilters):
   return rows
     .filter((r) => !filters.status || r.leadStatus === filters.status)
     .filter((r) => !filters.specialtyKey || r.specialtyKey === filters.specialtyKey)
-    .filter((r) => !filters.source || r.source === filters.source);
+    .filter((r) => !filters.source || r.source === filters.source)
+    .filter((r) => !filters.owner || (filters.owner.kind === "unassigned" ? r.ownerId === null : r.ownerId === filters.owner.userId));
 }
 
 export async function getLeadsSummary(db: Db, tenantId: string): Promise<LeadsSummary> {

@@ -9,6 +9,7 @@ import {
   updateCustomField,
   updateSpecialty,
 } from "./specialty.service.js";
+import { listActiveTreatmentDefinitions } from "./treatment-catalog.service.js";
 
 const REASON_STATUS: Record<string, number> = {
   specialty_not_found: 404,
@@ -49,6 +50,14 @@ export async function specialtyRoutes(app: FastifyInstance) {
     const tenantId = request.sessionUser!.tenantId;
     const { key } = request.params as { key: string };
     return listActiveFields(app.db, tenantId, key);
+  });
+
+  // The tenant's active treatment catalog — read by every role (a doctor picks from it when recording an
+  // outcome). ?specialtyKey= limits it to one service line. Always scoped to the session's tenant.
+  app.get("/treatment-catalog", async (request) => {
+    const tenantId = request.sessionUser!.tenantId;
+    const { specialtyKey } = request.query as { specialtyKey?: string };
+    return listActiveTreatmentDefinitions(app.db, tenantId, specialtyKey || undefined);
   });
 
   // Configuration changes are HOSPITAL_ADMIN/SUPER_ADMIN only.

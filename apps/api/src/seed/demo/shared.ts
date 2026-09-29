@@ -19,6 +19,7 @@ import {
   tasks,
   tenants,
   timelineEvents,
+  treatmentDefinitions,
   treatmentOpportunities,
   users,
   type SourceChannelDb,
@@ -134,7 +135,8 @@ export interface DemoJourneyConfig {
   /** `hour` applies to past/future days only — same-day (offsetDays 0) times come from the demo clock. */
   appt?: { status: AppointmentStatusValue; offsetDays: number; hour?: number; doctor: string; reason?: string };
   outcome?: { value: ConsultationOutcomeValue; notes?: string };
-  treatment?: { label: string; status: TreatmentStatusValue; estimatedValue: number; decisionOffsetDays?: number; plannedOffsetDays?: number };
+  /** definitionKey = key into the tenant's treatment catalog; label overrides the catalog label (e.g. "Cataract Surgery — Right Eye"). */
+  treatment?: { definitionKey: string; label?: string; status: TreatmentStatusValue; estimatedValue: number; decisionOffsetDays?: number; plannedOffsetDays?: number };
   revenueAmount?: number; // written as a revenue event when treatment status is COMPLETED
   revenueOffsetDays?: number;
   task?: { reason: TaskReasonValue; dueOffsetDays: number; notes?: string; type?: TaskTypeValue };
@@ -405,6 +407,7 @@ export async function seedJourneys(ctx: DemoContext, configs: DemoJourneyConfig[
 
   const defs = await db.select().from(customFieldDefinitions).where(eq(customFieldDefinitions.tenantId, ctx.tenantId));
   const defId = new Map(defs.map((d) => [`${d.specialtyKey}:${d.key}`, d.id]));
+  const catalog = new Map((await db.select().from(treatmentDefinitions).where(eq(treatmentDefinitions.tenantId, ctx.tenantId))).map((d) => [d.key, d]));
 
   for (const config of configs) {
     const patient = ctx.patients[config.patientIdx];
@@ -511,10 +514,13 @@ export async function seedJourneys(ctx: DemoContext, configs: DemoJourneyConfig[
 
     let treatmentId: string | null = null;
     if (config.treatment) {
+      const definition = catalog.get(config.treatment.definitionKey);
+      if (!definition) throw new Error(`seed: no treatment catalog entry "${config.treatment.definitionKey}" for tenant`);
+      const treatmentLabel = config.treatment.label ?? definition.label;
       const [treatment] = await db
         .insert(treatmentOpportunities)
         .values({
-          ...base, consultationOutcomeId: outcomeId, treatmentLabel: config.treatment.label, status: config.treatment.status,
+          ...base, consultationOutcomeId: outcomeId, treatmentLabel, treatmentDefinitionId: definition.id, status: config.treatment.status,
           estimatedValue: config.treatment.estimatedValue, ownerUserId: owner.id,
           decisionDate: config.treatment.decisionOffsetDays !== undefined ? daysFromNow(config.treatment.decisionOffsetDays) : null,
           plannedDate: config.treatment.plannedOffsetDays !== undefined ? daysFromNow(config.treatment.plannedOffsetDays) : null,
@@ -523,7 +529,7 @@ export async function seedJourneys(ctx: DemoContext, configs: DemoJourneyConfig[
       treatmentId = treatment.id;
       timelineRows.push({
         ...base, actorType: "system", eventType: "treatment_status_changed",
-        title: `Treatment "${config.treatment.label}" — ${config.treatment.status.replace(/_/g, " ").toLowerCase()}`,
+        title: `Treatment "${treatmentLabel}" — ${config.treatment.status.replace(/_/g, " ").toLowerCase()}`,
         occurredAt: treatmentEventTime(config, scheduledAt),
         relatedEntityType: "treatment_opportunity", relatedEntityId: treatment.id,
       });

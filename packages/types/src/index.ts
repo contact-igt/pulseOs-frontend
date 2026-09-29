@@ -134,7 +134,10 @@ export type AttentionReason =
   | "treatment_decision_pending";
 
 export interface AttentionItem {
+  /** The task id — not a patient id. Link through patientId/journeyId. */
   id: string;
+  patientId: string;
+  journeyId: string | null;
   patientName: string;
   journeyType: string;
   reason: AttentionReason;
@@ -235,6 +238,18 @@ export interface BranchDoctorRow {
   consultations: number;
 }
 
+/** One service line (journey type) — journeys, pipeline and revenue together. */
+export interface ServiceMixRow {
+  service: string;
+  journeys: number;
+  /** Not yet completed or lost. */
+  activeJourneys: number;
+  /** Advised, decision pending, accepted or scheduled. */
+  treatmentsInPipeline: number;
+  treatmentsCompleted: number;
+  revenue: number;
+}
+
 export interface DoctorNextPatient {
   appointmentId: string;
   patientName: string;
@@ -295,7 +310,10 @@ export interface RecordOutcomeInput {
   appointmentId: string;
   outcome: ConsultationOutcomeValue;
   notes?: string;
+  /** Free-text fallback; ignored (replaced by the catalog label) when treatmentDefinitionId is sent. */
   treatmentLabel?: string;
+  /** Catalog procedure (must be an active entry of the caller's tenant, else 422 invalid_treatment_definition). */
+  treatmentDefinitionId?: string;
   estimatedValue?: number;
 }
 
@@ -446,6 +464,69 @@ export interface JourneyListRow {
   treatmentValue: number;
 }
 
+export interface RevenueEventVm {
+  id: string;
+  amount: number;
+  currency: string;
+  type: "consultation_fee" | "treatment_payment" | "other";
+  occurredAt: string;
+  treatmentOpportunityId: string | null;
+}
+
+/**
+ * Journey Detail read-model (GET /journeys/:id). Journey-scoped: one Journey
+ * of a Patient, never the Patient's whole record (Patient != Journey).
+ *
+ * Visibility rules (all enforced server-side, see journey.routes.ts):
+ *  - `tasks` for a caller WITHOUT MANAGE_TASKS contains only tasks assigned to
+ *    that caller (task notes are PHI-adjacent).
+ *  - `treatments` is `null` without VIEW_TREATMENT; `revenue` is `null`
+ *    without VIEW_REVENUE. `null` means "not permitted", an empty result means
+ *    "none exist".
+ */
+export interface JourneyDetailVm {
+  patient: { id: string; name: string; phone: string; branchName: string | null };
+  journey: {
+    id: string;
+    journeyType: string;
+    stage: JourneyStage;
+    source: SourceChannel;
+    campaign: { id: string; name: string } | null;
+    owner: { id: string; name: string } | null;
+    doctorName: string | null;
+    createdAt: string;
+    lastInteractionAt: string;
+    /** Nearest-due open task on this journey (any assignee); type label + due date only, never notes. */
+    nextAction: { dueAt: string; label: string } | null;
+  };
+  customFields: JourneyCustomFieldVm[];
+  timeline: TimelineEventVm[];
+  tasks: TaskRow[];
+  appointments: AppointmentRow[];
+  treatments: TreatmentRow[] | null;
+  revenue: { total: number; events: RevenueEventVm[] } | null;
+}
+
+/** PATCH /journeys/:id/owner — null unassigns. */
+export interface AssignJourneyOwnerInput {
+  ownerUserId: string | null;
+}
+
+/** POST /journeys/owner — 1..100 journeys, all-or-nothing. */
+export interface BulkAssignJourneyOwnerInput {
+  journeyIds: string[];
+  ownerUserId: string | null;
+}
+
+export interface BulkAssignJourneyOwnerResult {
+  updatedCount: number;
+  journeyIds: string[];
+  owner: { id: string; name: string } | null;
+}
+
+/** `owner` list filter: the session user's own, unowned, or a specific user id. */
+export type OwnerFilterValue = "mine" | "unassigned" | (string & {});
+
 export interface JourneysSummary {
   activeJourneys: number;
   appointmentsPending: number;
@@ -575,12 +656,36 @@ export interface TreatmentRow {
   journeyId: string;
   doctorName: string | null;
   treatmentLabel: string;
+  /** Service line of the treatment's journey (journey type, e.g. "Laser Vision Correction"). Always set by GET /treatments. */
+  service?: string | null;
+  /** Catalog procedure this treatment is an instance of; null for free-text/legacy rows. Always set by GET /treatments. */
+  treatmentDefinitionId?: string | null;
   estimatedValue: number;
   status: TreatmentStatus;
   ownerName: string | null;
   nextActionDueAt: string | null;
   lastContactAt: string | null;
   plannedDate: string | null;
+}
+
+/** GET /treatments query. service = journey type; doctorId = doctor of the journey's latest appointment. */
+export interface TreatmentFilters {
+  status?: TreatmentStatus;
+  ownerId?: string;
+  doctorId?: string;
+  service?: string;
+  treatmentDefinitionId?: string;
+}
+
+/** One procedure in the tenant's treatment catalog (GET /treatment-catalog — active entries only). */
+export interface TreatmentDefinitionVm {
+  id: string;
+  specialtyKey: string;
+  key: string;
+  label: string;
+  /** Demo/price-list hint used when an outcome doesn't state a value; null = no default. */
+  defaultEstimatedValue: number | null;
+  sortOrder: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -844,6 +949,7 @@ export interface LeadRow {
   campaignName: string | null;
   stage: JourneyStage;
   leadStatus: LeadStatus;
+  ownerId: string | null;
   ownerName: string | null;
   priority: TaskPriority;
   lastInteractionAt: string | null;

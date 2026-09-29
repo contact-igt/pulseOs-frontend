@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requirePermission } from "../auth/permission.middleware.js";
+import { parseOwnerFilter } from "../journey/journey.service.js";
 import { createLead, getLeadsSummary, listLeads, lookupPatientByPhone } from "./lead.service.js";
 import type { LeadStatus } from "@pulseos/types";
 
@@ -33,10 +34,13 @@ const createLeadBody = z.object({
 export async function leadRoutes(app: FastifyInstance) {
   app.addHook("preHandler", requirePermission("MANAGE_LEADS"));
 
-  app.get("/leads", async (request) => {
+  app.get("/leads", async (request, reply) => {
     const tenantId = request.sessionUser!.tenantId;
-    const query = request.query as { status?: LeadStatus; specialtyKey?: string; source?: string };
-    return listLeads(app.db, tenantId, { status: query.status, specialtyKey: query.specialtyKey, source: query.source });
+    const query = request.query as { status?: LeadStatus; specialtyKey?: string; source?: string; owner?: string };
+    // owner = mine | unassigned | <userId>; "mine" is the SESSION user, never client-supplied.
+    const owner = parseOwnerFilter(query.owner, request.sessionUser!.id);
+    if (owner === "invalid") return reply.status(400).send({ error: "invalid_owner_filter" });
+    return listLeads(app.db, tenantId, { status: query.status, specialtyKey: query.specialtyKey, source: query.source, owner });
   });
 
   app.get("/leads/summary", async (request) => {

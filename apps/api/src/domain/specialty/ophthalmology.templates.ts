@@ -1,5 +1,6 @@
 import type { CreateCustomFieldInput } from "@pulseos/types";
 import type { SpecialtyDefinition } from "./specialty.service.js";
+import type { TreatmentDefinitionSeed } from "./treatment-catalog.service.js";
 
 // Ophthalmology is configured entirely through the generic specialty
 // template / custom-field mechanism — no ophthalmology-specific code exists
@@ -73,6 +74,32 @@ const SERVICE_LINES: ServiceLine[] = [
       { key: "squint_surgery_advised", label: "Surgery advised", fieldType: "SELECT", options: YES_NO },
     ],
   },
+  {
+    // Coordinator-level intake only: what staff recorded or the patient reported. No corneal
+    // measurements or grading — screening results live with the clinician, not in PulseOS.
+    key: "KERATOCONUS",
+    displayName: "Keratoconus",
+    fields: [
+      { key: "keratoconus_status", label: "Recorded keratoconus status", fieldType: "SELECT", options: ["Suspected", "Confirmed"] },
+      { key: "keratoconus_eye", label: "Eye", fieldType: "SELECT", options: LATERALITY },
+      { key: "eye_rubbing_history", label: "Eye-rubbing history (as reported)", fieldType: "SELECT", options: YES_NO },
+      { key: "topography_done", label: "Corneal screening (topography) done", fieldType: "SELECT", options: YES_NO },
+      { key: "cxl_advised", label: "Corneal cross-linking (CXL) advised", fieldType: "SELECT", options: YES_NO },
+    ],
+  },
+];
+
+// The procedures this hospital offers, per service line. default_estimated_value is a clearly-demo
+// INR figure, not a price list.
+export const OPHTHALMOLOGY_TREATMENTS: TreatmentDefinitionSeed[] = [
+  { specialtyKey: "CATARACT", key: "CATARACT_SURGERY", label: "Cataract Surgery", defaultEstimatedValue: 42_000, sortOrder: 0 },
+  { specialtyKey: "LASER_VISION_CORRECTION", key: "LASIK", label: "LASIK", defaultEstimatedValue: 90_000, sortOrder: 1 },
+  { specialtyKey: "LASER_VISION_CORRECTION", key: "SMILE", label: "SMILE", defaultEstimatedValue: 96_000, sortOrder: 2 },
+  { specialtyKey: "LASER_VISION_CORRECTION", key: "PRK", label: "PRK", defaultEstimatedValue: 70_000, sortOrder: 3 },
+  { specialtyKey: "KERATOCONUS", key: "CXL", label: "Corneal Cross-Linking (CXL)", defaultEstimatedValue: 32_000, sortOrder: 4 },
+  { specialtyKey: "OCULOPLASTY", key: "PTOSIS_CORRECTION", label: "Ptosis Correction", defaultEstimatedValue: 55_000, sortOrder: 5 },
+  { specialtyKey: "OCULOPLASTY", key: "DCR", label: "DCR / Tear Duct Procedure", defaultEstimatedValue: 38_000, sortOrder: 6 },
+  { specialtyKey: "SQUINT", key: "SQUINT_SURGERY", label: "Squint Surgery", defaultEstimatedValue: 45_000, sortOrder: 7 },
 ];
 
 export const OPHTHALMOLOGY_SPECIALTIES: SpecialtyDefinition[] = [

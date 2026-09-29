@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { appointments, consultationOutcomes, journeys, tasks, timelineEvents, treatmentOpportunities } from "../../db/schema.js";
 import type { ConsultationOutcomeValue } from "@pulseos/types";
+import { findActiveTreatmentDefinition } from "../specialty/treatment-catalog.service.js";
 
 export interface RecordOutcomeParams {
   tenantId: string;
@@ -10,6 +11,8 @@ export interface RecordOutcomeParams {
   outcome: ConsultationOutcomeValue;
   notes?: string;
   treatmentLabel?: string;
+  /** Catalog procedure; must be an active entry of params.tenantId's catalog. Wins over treatmentLabel. */
+  treatmentDefinitionId?: string;
   estimatedValue?: number;
 }
 
@@ -29,6 +32,10 @@ export async function recordConsultationOutcome(db: Db, params: RecordOutcomePar
     .where(and(eq(appointments.tenantId, params.tenantId), eq(appointments.id, params.appointmentId)))
     .limit(1);
   if (!appointment) return { ok: false as const, reason: "appointment_not_found" as const };
+
+  // Validated before anything is written: an unknown, inactive or other-tenant definition is a 422, never a partial outcome.
+  const definition = params.treatmentDefinitionId ? await findActiveTreatmentDefinition(db, params.tenantId, params.treatmentDefinitionId) : null;
+  if (params.treatmentDefinitionId && !definition) return { ok: false as const, reason: "invalid_treatment_definition" as const };
 
   const [existing] = await db
     .select({ id: consultationOutcomes.id })
@@ -65,9 +72,10 @@ export async function recordConsultationOutcome(db: Db, params: RecordOutcomePar
         patientId: appointment.patientId,
         journeyId: appointment.journeyId,
         consultationOutcomeId: outcome.id,
-        treatmentLabel: params.treatmentLabel ?? "Treatment",
+        treatmentLabel: definition?.label ?? params.treatmentLabel ?? "Treatment",
+        treatmentDefinitionId: definition?.id ?? null,
         status: params.outcome === "TREATMENT_ADVISED" ? "ADVISED" : "DECISION_PENDING",
-        estimatedValue: params.estimatedValue ?? 0,
+        estimatedValue: params.estimatedValue ?? definition?.defaultEstimatedValue ?? 0,
         ownerUserId: journey?.ownerUserId ?? null,
       })
       .returning();

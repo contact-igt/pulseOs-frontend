@@ -11,6 +11,7 @@ import {
   revenueEvents,
   conversionFeedbackEvents,
   treatmentOpportunities,
+  treatmentDefinitions,
   consultationOutcomes,
   tasks,
   campaignTouchpoints,
@@ -63,6 +64,7 @@ async function main() {
   await db.delete(revenueEvents);
   await db.delete(conversionFeedbackEvents);
   await db.delete(treatmentOpportunities);
+  await db.delete(treatmentDefinitions);
   await db.delete(consultationOutcomes);
   await db.delete(tasks);
   await db.delete(campaignTouchpoints);

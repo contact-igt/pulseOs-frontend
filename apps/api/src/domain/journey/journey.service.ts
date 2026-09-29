@@ -1,20 +1,51 @@
-import { and, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
+import { z } from "zod";
 import type { Db } from "../../db/client.js";
 import {
   appointments,
   branches,
   campaignTouchpoints,
+  customFieldDefinitions,
+  customFieldValues,
   journeys,
   marketingCampaigns,
   patients,
+  revenueEvents,
   tasks,
   timelineEvents,
   treatmentOpportunities,
   users,
 } from "../../db/schema.js";
 import { allocatedAcquisitionCost } from "../marketing/formulas.js";
-import type { JourneyListRow, JourneysSummary, SpendAtRiskCategoryKey } from "@pulseos/types";
+import { hasPermission } from "@pulseos/types";
+import type {
+  BulkAssignJourneyOwnerResult,
+  JourneyDetailVm,
+  JourneyListRow,
+  JourneysSummary,
+  Role,
+  SpendAtRiskCategoryKey,
+  TreatmentRow,
+} from "@pulseos/types";
 import { getSpendAtRisk, SPEND_AT_RISK_CATEGORIES } from "../dashboard/dashboard.service.js";
+import { listAppointments } from "../appointment/appointment.service.js";
+import { formatCustomFieldValue } from "../patient/patient.service.js";
+import { listTasks, getNextActionForJourney } from "../task/task.service.js";
+import { getPatientTimeline } from "../timeline/timeline.service.js";
+
+/**
+ * Server-side `owner` list filter shared by GET /journeys and GET /leads.
+ * "mine" is resolved from the SESSION user here, never from the client;
+ * anything else must be a user-id uuid (or the literal "unassigned").
+ */
+export type OwnerFilter = { kind: "user"; userId: string } | { kind: "unassigned" };
+
+export function parseOwnerFilter(raw: string | undefined, sessionUserId: string): OwnerFilter | undefined | "invalid" {
+  if (raw === undefined || raw === "") return undefined;
+  if (raw === "mine") return { kind: "user", userId: sessionUserId };
+  if (raw === "unassigned") return { kind: "unassigned" };
+  return z.string().uuid().safeParse(raw).success ? { kind: "user", userId: raw } : "invalid";
+}
 
 export interface JourneyFilters {
   source?: string;
@@ -22,6 +53,7 @@ export interface JourneyFilters {
   branchId?: string;
   stage?: string;
   ownerId?: string;
+  owner?: OwnerFilter;
   doctorId?: string;
   atRisk?: SpendAtRiskCategoryKey;
 }
@@ -49,6 +81,8 @@ export async function listJourneys(db: Db, tenantId: string, filters: JourneyFil
         filters.source ? eq(journeys.source, filters.source as (typeof journeys.source.enumValues)[number]) : undefined,
         filters.stage ? eq(journeys.stage, filters.stage as (typeof journeys.stage.enumValues)[number]) : undefined,
         filters.ownerId ? eq(journeys.ownerUserId, filters.ownerId) : undefined,
+        filters.owner?.kind === "user" ? eq(journeys.ownerUserId, filters.owner.userId) : undefined,
+        filters.owner?.kind === "unassigned" ? isNull(journeys.ownerUserId) : undefined,
         filters.branchId ? eq(patients.branchId, filters.branchId) : undefined,
       ),
     );
@@ -183,4 +217,245 @@ export async function getJourneysSummary(db: Db, tenantId: string): Promise<Jour
     revenueOpportunity: treatmentRows.reduce((sum, t) => sum + t.estimatedValue, 0),
     spendAtRisk: spendAtRisk.total,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Journey Detail (GET /journeys/:id) — journey-scoped read-model, composed
+// from the existing task / timeline / appointment / custom-field readers
+// rather than re-deriving them here.
+// ---------------------------------------------------------------------------
+
+export interface JourneyViewer {
+  id: string;
+  role: Role;
+}
+
+function nextActionLabel(type: string): string {
+  const words = type.replace(/_/g, " ").toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+export async function getJourneyDetail(db: Db, tenantId: string, journeyId: string, viewer: JourneyViewer): Promise<JourneyDetailVm | null> {
+  // Tenant-scoped in the WHERE clause itself: another tenant's id returns no
+  // row, exactly like a nonexistent id.
+  const [j] = await db
+    .select({
+      id: journeys.id,
+      patientId: journeys.patientId,
+      journeyType: journeys.journeyType,
+      stage: journeys.stage,
+      source: journeys.source,
+      createdAt: journeys.createdAt,
+      ownerUserId: journeys.ownerUserId,
+      ownerName: users.name,
+      patientName: patients.name,
+      patientPhone: patients.phone,
+      branchName: branches.name,
+    })
+    .from(journeys)
+    .innerJoin(patients, eq(journeys.patientId, patients.id))
+    .leftJoin(branches, eq(patients.branchId, branches.id))
+    .leftJoin(users, eq(journeys.ownerUserId, users.id))
+    .where(and(eq(journeys.tenantId, tenantId), eq(journeys.id, journeyId)))
+    .limit(1);
+  if (!j) return null;
+
+  const canManageTasks = hasPermission(viewer.role, "MANAGE_TASKS");
+  const canViewTasks = canManageTasks || hasPermission(viewer.role, "VIEW_TASKS");
+  const canViewTreatment = hasPermission(viewer.role, "VIEW_TREATMENT");
+  const canViewRevenue = hasPermission(viewer.role, "VIEW_REVENUE");
+
+  const [firstTouch] = await db
+    .select({ campaignId: campaignTouchpoints.campaignId })
+    .from(campaignTouchpoints)
+    .where(and(eq(campaignTouchpoints.tenantId, tenantId), eq(campaignTouchpoints.journeyId, journeyId), eq(campaignTouchpoints.touchType, "first_touch")))
+    .limit(1);
+  let campaign: { id: string; name: string } | null = null;
+  if (firstTouch?.campaignId) {
+    const [c] = await db
+      .select({ id: marketingCampaigns.id, name: marketingCampaigns.name })
+      .from(marketingCampaigns)
+      .where(and(eq(marketingCampaigns.tenantId, tenantId), eq(marketingCampaigns.id, firstTouch.campaignId)))
+      .limit(1);
+    campaign = c ?? null;
+  }
+
+  // Deliberately NOT filtered to archived = false — same rule as Patient 360's
+  // journey card: a value recorded while a field was active stays visible.
+  const customFieldRows = await db
+    .select({ label: customFieldDefinitions.label, value: customFieldValues.value })
+    .from(customFieldValues)
+    .innerJoin(customFieldDefinitions, eq(customFieldValues.fieldDefinitionId, customFieldDefinitions.id))
+    .where(and(eq(customFieldValues.tenantId, tenantId), eq(customFieldValues.journeyId, journeyId)))
+    .orderBy(asc(customFieldDefinitions.sortOrder));
+
+  const [timeline, taskRows, appointmentRows, nextTask] = await Promise.all([
+    getPatientTimeline(db, tenantId, j.patientId, journeyId),
+    canViewTasks
+      ? // Same rule as GET /tasks: without MANAGE_TASKS the caller only ever
+        // sees tasks assigned to themselves (task notes are PHI-adjacent).
+        listTasks(db, tenantId, { patientId: j.patientId, assignedTo: canManageTasks ? undefined : viewer.id })
+      : Promise.resolve([]),
+    listAppointments(db, tenantId, { journeyId }),
+    getNextActionForJourney(db, journeyId),
+  ]);
+  const journeyTasks = taskRows.filter((t) => t.journeyId === journeyId);
+
+  const latestAppointment = appointmentRows.length > 0 ? appointmentRows[appointmentRows.length - 1] : null; // ordered by scheduledAt asc
+  const doctorName = latestAppointment?.doctorName ?? null;
+  const lastInteractionAt = timeline.length > 0 ? timeline[timeline.length - 1].occurredAt : j.createdAt.toISOString();
+  const nextAction = nextTask ? { dueAt: nextTask.dueAt.toISOString(), label: nextActionLabel(nextTask.type) } : null;
+
+  let treatments: TreatmentRow[] | null = null;
+  if (canViewTreatment) {
+    const rows = await db
+      .select({
+        id: treatmentOpportunities.id,
+        treatmentLabel: treatmentOpportunities.treatmentLabel,
+        estimatedValue: treatmentOpportunities.estimatedValue,
+        status: treatmentOpportunities.status,
+        ownerName: users.name,
+        plannedDate: treatmentOpportunities.plannedDate,
+      })
+      .from(treatmentOpportunities)
+      .leftJoin(users, eq(treatmentOpportunities.ownerUserId, users.id))
+      .where(and(eq(treatmentOpportunities.tenantId, tenantId), eq(treatmentOpportunities.journeyId, journeyId)))
+      .orderBy(desc(treatmentOpportunities.createdAt));
+    treatments = rows.map((r) => ({
+      id: r.id,
+      patientId: j.patientId,
+      patientName: j.patientName,
+      journeyId,
+      doctorName,
+      treatmentLabel: r.treatmentLabel,
+      service: j.journeyType,
+      estimatedValue: r.estimatedValue,
+      status: r.status,
+      ownerName: r.ownerName,
+      nextActionDueAt: nextAction?.dueAt ?? null,
+      lastContactAt: lastInteractionAt,
+      plannedDate: r.plannedDate?.toISOString() ?? null,
+    }));
+  }
+
+  let revenue: JourneyDetailVm["revenue"] = null;
+  if (canViewRevenue) {
+    const rows = await db
+      .select()
+      .from(revenueEvents)
+      .where(and(eq(revenueEvents.tenantId, tenantId), eq(revenueEvents.journeyId, journeyId)))
+      .orderBy(desc(revenueEvents.occurredAt));
+    revenue = {
+      total: rows.reduce((sum, r) => sum + r.amount, 0),
+      events: rows.map((r) => ({
+        id: r.id,
+        amount: r.amount,
+        currency: r.currency,
+        type: r.type,
+        occurredAt: r.occurredAt.toISOString(),
+        treatmentOpportunityId: r.treatmentOpportunityId,
+      })),
+    };
+  }
+
+  return {
+    patient: { id: j.patientId, name: j.patientName, phone: j.patientPhone, branchName: j.branchName },
+    journey: {
+      id: j.id,
+      journeyType: j.journeyType,
+      stage: j.stage,
+      source: j.source,
+      campaign,
+      owner: j.ownerUserId ? { id: j.ownerUserId, name: j.ownerName ?? "" } : null,
+      doctorName,
+      createdAt: j.createdAt.toISOString(),
+      lastInteractionAt,
+      nextAction,
+    },
+    customFields: customFieldRows.map((f) => ({ label: f.label, value: formatCustomFieldValue(f.value) })),
+    timeline,
+    tasks: journeyTasks,
+    appointments: appointmentRows,
+    treatments,
+    revenue,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Journey owner allocation. Changes ONLY journeys.owner_user_id (+ one
+// timeline event per journey actually changed). Deliberately never touches
+// tasks: open tasks keep their own assignee, reassigning those stays an
+// explicit PATCH /tasks/:id/reassign.
+// ---------------------------------------------------------------------------
+
+export type AssignJourneyOwnerOutcome =
+  | ({ ok: true } & BulkAssignJourneyOwnerResult)
+  | { ok: false; reason: "journey_not_found" | "assignee_not_found" };
+
+export async function assignJourneyOwner(
+  db: Db,
+  tenantId: string,
+  actorId: string,
+  journeyIds: string[],
+  ownerUserId: string | null,
+): Promise<AssignJourneyOwnerOutcome> {
+  const uniqueIds = [...new Set(journeyIds)];
+  if (uniqueIds.length === 0) return { ok: false, reason: "journey_not_found" };
+
+  return db.transaction(async (tx): Promise<AssignJourneyOwnerOutcome> => {
+    // Row-locked so two concurrent reassignments can't both record the same "previous owner".
+    const rows = await tx
+      .select({ id: journeys.id, patientId: journeys.patientId, ownerUserId: journeys.ownerUserId })
+      .from(journeys)
+      .where(and(eq(journeys.tenantId, tenantId), inArray(journeys.id, uniqueIds)))
+      .for("update");
+    if (rows.length !== uniqueIds.length) return { ok: false, reason: "journey_not_found" };
+
+    let owner: { id: string; name: string } | null = null;
+    if (ownerUserId) {
+      const [u] = await tx
+        .select({ id: users.id, name: users.name })
+        .from(users)
+        .where(and(eq(users.tenantId, tenantId), eq(users.id, ownerUserId)))
+        .limit(1);
+      if (!u) return { ok: false, reason: "assignee_not_found" };
+      owner = u;
+    }
+
+    const previousOwnerIds = [...new Set(rows.map((r) => r.ownerUserId).filter((id): id is string => id !== null))];
+    const previousOwners = previousOwnerIds.length
+      ? await tx.select({ id: users.id, name: users.name }).from(users).where(and(eq(users.tenantId, tenantId), inArray(users.id, previousOwnerIds)))
+      : [];
+    const previousNameById = new Map(previousOwners.map((u) => [u.id, u.name]));
+
+    const changed = rows.filter((r) => r.ownerUserId !== ownerUserId);
+    if (changed.length > 0) {
+      await tx
+        .update(journeys)
+        .set({ ownerUserId })
+        .where(and(eq(journeys.tenantId, tenantId), inArray(journeys.id, changed.map((r) => r.id))));
+      await tx.insert(timelineEvents).values(
+        changed.map((r) => {
+          const previousName = r.ownerUserId ? (previousNameById.get(r.ownerUserId) ?? "another user") : null;
+          const title = owner
+            ? previousName
+              ? `Journey owner changed from ${previousName} to ${owner.name}`
+              : `Journey assigned to ${owner.name}`
+            : `Journey unassigned (was ${previousName})`;
+          return {
+            tenantId,
+            patientId: r.patientId,
+            journeyId: r.id,
+            actorType: "user" as const,
+            actorId,
+            eventType: "journey_owner_changed",
+            title,
+            metadata: { previousOwnerUserId: r.ownerUserId, ownerUserId },
+          };
+        }),
+      );
+    }
+
+    return { ok: true, updatedCount: uniqueIds.length, journeyIds: uniqueIds, owner };
+  });
 }
