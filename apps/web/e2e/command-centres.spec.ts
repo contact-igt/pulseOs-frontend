@@ -90,12 +90,13 @@ test.describe("Doctor Command Centre", () => {
     await expect(page.getByTestId("doctor-home")).toBeVisible();
     await expect(page.getByTestId("doctor-kpi-strip")).toBeVisible();
     await expect(page.getByText("Today's Patient Queue")).toBeVisible();
-    // Renamed "Today's Completion" → "Visits Completed" (2026-09-21 UI pass)
-    // — it measures appointment-status-reached-completed, a genuinely
-    // earlier/different step than "Outcome Recorded" on the same ring, and
-    // the old label read as self-contradicting next to a 0% Outcome Recorded
-    // segment.
-    await expect(page.getByText("Visits Completed")).toBeVisible();
+    // The Doctor Home rework (S6) replaced the "Visits Completed" ring and Quick Stats
+    // (both duplicated the KPI strip) with the panels a doctor acts on: Next patient,
+    // the queue, outcomes awaiting, treatment follow-up and post-care reviews.
+    await expect(page.getByTestId("next-patient-card")).toBeVisible();
+    await expect(page.getByText("Consultations awaiting outcome")).toBeVisible();
+    await expect(page.getByTestId("doctor-treatment-follow-up")).toBeVisible();
+    await expect(page.getByTestId("doctor-post-care")).toBeVisible();
 
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "03-doctor-command-centre-desktop.png"), fullPage: true });
 

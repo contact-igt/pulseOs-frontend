@@ -17,7 +17,7 @@ function uniquePhone(): string {
 test.describe("CRM critical business flows", () => {
   test.skip(!DEMO_PASSWORD, "DEMO_PASSWORD must be set to run this suite");
 
-  test("FLOW 1: Admin creates a new lead end to end — appears in Leads, Patient 360, and Timeline", async ({ page }) => {
+  test("FLOW 1: Admin creates a new lead end to end — appears in Leads, opens its Journey page, and shows on the Timeline", async ({ page }) => {
     await login(page, "gyn.admin@pulseos.local");
     await page.goto("/leads");
     await expect(page.getByTestId("leads-page")).toBeVisible();
@@ -54,10 +54,11 @@ test.describe("CRM critical business flows", () => {
     // Appears in Leads.
     await expect(page.getByText(patientName)).toBeVisible();
 
-    // Follow it into Patient 360 → Journey → Timeline.
+    // A Leads row opens the dedicated Journey page (not Patient 360): the
+    // journey's service and its own Timeline are shown there.
     await page.getByText(patientName).first().click();
-    await expect(page.getByTestId("patient-360")).toBeVisible();
-    await expect(page.getByText("Pregnancy Care").first()).toBeVisible();
+    await expect(page.getByTestId("journey-detail")).toBeVisible();
+    await expect(page.getByTestId("journey-service")).toContainText("Pregnancy Care");
     await expect(page.getByText("Lead created — Pregnancy Care")).toBeVisible();
     await expect(page.getByText("Task created: callback")).toBeVisible();
   });
@@ -104,10 +105,10 @@ test.describe("CRM critical business flows", () => {
     const matchingRows = page.locator("tbody tr", { hasText: patientName });
     await expect(matchingRows).toHaveCount(1);
 
-    // That one patient now has 2 active journeys.
+    // That one patient now has 2 journeys, both active (header reads "2 journeys · 2 active").
     await matchingRows.first().click();
     await expect(page.getByTestId("patient-360")).toBeVisible();
-    await expect(page.getByText(/2 active journeys/)).toBeVisible();
+    await expect(page.getByText(/2 journeys · 2 active/)).toBeVisible();
   });
 
   test("FLOW: Add Lead drawer does not wipe fast-typed input on reopen (effect-timing race regression)", async ({ page }) => {

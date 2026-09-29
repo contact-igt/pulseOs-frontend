@@ -1,17 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
 import {
-  Badge, Card, ConnectorModeBadge, ErrorState, Skeleton, Timeline,
+  Badge, Card, ConnectorModeBadge, EmptyState, ErrorState, Panel, Skeleton, Tabs, Timeline,
   JOURNEY_STAGE_LABEL, JOURNEY_STAGE_TONE, APPOINTMENT_STATUS_LABEL, TREATMENT_STATUS_LABEL,
   CALL_STATUS_LABEL, CALL_STATUS_TONE,
 } from "@pulseos/ui";
-import { formatInr, formatMoneyOrDash, fmtCallDuration, fmtDateTime as fmtDate, fmtSmartDateTime } from "@pulseos/ui";
-import { PhoneIncoming, PhoneMissed, PhoneOutgoing } from "lucide-react";
-import { BackLink } from "@/components/shell/BackLink";
+import { formatInr, formatMoneyOrDash, fmtCallDuration, fmtDateTime as fmtDate, fmtSmartDateTime, urgencyLabel } from "@pulseos/ui";
+import { ArrowUpRight, PhoneIncoming, PhoneMissed, PhoneOutgoing } from "lucide-react";
+import { BackLink, withFrom } from "@/components/shell/BackLink";
+import { hasPermission } from "@pulseos/types";
+import { pathAllowedForRole } from "@/components/shell/nav";
 import type { AppointmentStatus, CallVm, JourneyCardVm, JourneyStage, TreatmentStatus } from "@pulseos/types";
 
 function initials(name: string) {
@@ -21,6 +24,20 @@ function initials(name: string) {
     .slice(0, 2)
     .join("")
     .toUpperCase();
+}
+
+const CLOSED_STAGES: JourneyStage[] = ["completed", "lost"];
+const isActiveJourney = (j: JourneyCardVm) => !CLOSED_STAGES.includes(j.stage);
+
+/** "1 active journey" only when it really is active; a lone completed/lost journey says so instead. */
+function journeySummary(journeys: JourneyCardVm[]): string {
+  if (journeys.length === 0) return "No journeys yet";
+  const active = journeys.filter(isActiveJourney).length;
+  if (journeys.length === 1) {
+    const only = journeys[0];
+    return active === 1 ? "1 active journey" : `1 journey · ${JOURNEY_STAGE_LABEL[only.stage] ?? only.stage}`;
+  }
+  return `${journeys.length} journeys · ${active} active`;
 }
 
 // Four checkpoints a coordinator actually thinks in, collapsed from the
@@ -40,74 +57,123 @@ function JourneyMiniFlow({ stage }: { stage: JourneyStage }) {
   const current = STAGE_CHECKPOINT[stage] ?? 0;
   const currentLabel = MINI_FLOW_STEPS[current] ?? "Treatment complete";
   return (
-    <div className="mt-2.5 flex items-center" aria-label={`Progress: ${currentLabel}`}>
+    <ol className="mt-3 flex items-center" aria-label={`Progress: ${currentLabel}`}>
       {MINI_FLOW_STEPS.map((label, i) => {
         const done = i < current;
         const isCurrent = i === current;
         return (
-          <div key={label} className="flex flex-1 items-center last:flex-none">
+          <li key={label} className="flex flex-1 items-center last:flex-none" aria-current={isCurrent ? "step" : undefined}>
             <div className="flex flex-col items-center gap-1">
               <span
                 className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold ${
-                  done ? "bg-primary-500 text-white" : isCurrent ? "border-2 border-primary-500 bg-white text-primary-500" : "border border-neutral-300 bg-white text-neutral-300"
+                  done ? "bg-primary-600 text-white" : isCurrent ? "border-2 border-primary-600 bg-white text-primary-600" : "border border-neutral-300 bg-white text-neutral-300"
                 }`}
               >
                 {done ? "✓" : ""}
               </span>
-              <span className={`whitespace-nowrap text-[10px] ${isCurrent ? "font-medium text-slate-900" : done ? "text-neutral-600" : "text-neutral-300"}`}>{label}</span>
+              <span className={`whitespace-nowrap text-[10px] ${isCurrent ? "font-semibold text-ink" : done ? "text-ink-2" : "text-neutral-400"}`}>{label}</span>
             </div>
-            {i < MINI_FLOW_STEPS.length - 1 && <span className={`mx-1 mb-3.5 h-px flex-1 ${done ? "bg-primary-500" : "bg-neutral-200"}`} />}
-          </div>
+            {i < MINI_FLOW_STEPS.length - 1 && <span className={`mx-1 mb-3.5 h-px flex-1 ${done ? "bg-primary-600" : "bg-line"}`} />}
+          </li>
         );
       })}
+    </ol>
+  );
+}
+
+function Fact({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[11px] font-medium uppercase tracking-wide text-ink-2">{label}</dt>
+      <dd className="mt-0.5 break-words text-xs font-medium leading-5 text-ink">{children}</dd>
     </div>
   );
 }
 
-function JourneyCard({ journey, active, onClick }: { journey: JourneyCardVm; active: boolean; onClick: () => void }) {
+function apptText(j: JourneyCardVm): string {
+  if (!j.appointmentTime) return "None scheduled";
+  return `${fmtDate(j.appointmentTime)} · ${APPOINTMENT_STATUS_LABEL[j.appointmentStatus as AppointmentStatus] ?? j.appointmentStatus}`;
+}
+
+function treatmentText(j: JourneyCardVm): string {
+  if (!j.treatmentLabel) return "None recorded";
+  return `${j.treatmentLabel} · ${TREATMENT_STATUS_LABEL[j.treatmentStatus as TreatmentStatus] ?? j.treatmentStatus}`;
+}
+
+/** Operational status of the focused journey: who owns it, what happens next, and where the visit / treatment stands. */
+function OperationalStatus({ journey }: { journey: JourneyCardVm }) {
+  const overdue = !!journey.nextActionDueAt && urgencyLabel(journey.nextActionDueAt).overdue && isActiveJourney(journey);
+  const cells: { key: string; label: string; value: ReactNode }[] = [
+    { key: "stage", label: "Stage", value: <Badge tone={JOURNEY_STAGE_TONE[journey.stage] ?? "neutral"}>{JOURNEY_STAGE_LABEL[journey.stage] ?? journey.stage}</Badge> },
+    {
+      key: "next-action",
+      label: "Next action",
+      value: journey.nextActionDueAt ? (
+        <span className="flex flex-wrap items-center gap-1.5">
+          {fmtDate(journey.nextActionDueAt)}
+          {overdue && <Badge tone="warning">Overdue</Badge>}
+        </span>
+      ) : (
+        "None pending"
+      ),
+    },
+    { key: "appointment", label: "Appointment", value: apptText(journey) },
+    { key: "treatment", label: "Treatment", value: treatmentText(journey) },
+    { key: "owner", label: "Owner", value: journey.ownerName ?? "Unassigned" },
+    { key: "doctor", label: "Doctor", value: journey.doctorName ?? "—" },
+  ];
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`w-full rounded-xl border p-3 text-left transition ${active ? "border-primary-500 bg-primary-50" : "border-neutral-200 bg-white hover:border-primary-300"}`}
+    <dl className="grid grid-cols-2 gap-px border-t border-line bg-line sm:grid-cols-3 lg:grid-cols-6" data-testid="patient-operational-status">
+      {cells.map((c) => (
+        <div key={c.key} className="min-w-0 bg-surface px-4 py-2.5" data-testid={`status-${c.key}`}>
+          <dt className="text-[11px] font-medium uppercase tracking-wide text-ink-2">{c.label}</dt>
+          <dd className="mt-1 break-words text-xs font-semibold leading-5 text-ink">{c.value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function JourneyCard({ journey, active, canOpen, onSelect }: { journey: JourneyCardVm; active: boolean; canOpen: boolean; onSelect: () => void }) {
+  return (
+    <Card
+      className={`p-4 transition-colors ${active ? "border-primary-500! ring-1 ring-primary-500/30" : ""}`}
+      onClick={onSelect}
+      data-testid={`journey-card-${journey.id}`}
+      aria-current={active ? "true" : undefined}
     >
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-slate-900">{journey.journeyType}</span>
-        <Badge tone={JOURNEY_STAGE_TONE[journey.stage] ?? "neutral"}>{JOURNEY_STAGE_LABEL[journey.stage] ?? journey.stage}</Badge>
+      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1.5">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+          <h3 className="break-words text-sm font-semibold tracking-tight text-ink">{journey.journeyType}</h3>
+          <Badge tone={JOURNEY_STAGE_TONE[journey.stage] ?? "neutral"}>{JOURNEY_STAGE_LABEL[journey.stage] ?? journey.stage}</Badge>
+        </div>
+        {canOpen && (
+          <Link
+            href={withFrom(`/journeys/${journey.id}`, "patients")}
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex shrink-0 items-center gap-0.5 text-xs font-medium text-primary-700 hover:underline"
+            data-testid={`open-journey-${journey.id}`}
+          >
+            Open journey
+            <ArrowUpRight size={13} aria-hidden="true" />
+          </Link>
+        )}
       </div>
       <JourneyMiniFlow stage={journey.stage} />
-      <dl className="mt-3 space-y-0.5 text-xs text-neutral-500">
-        <div className="flex justify-between gap-3"><dt>Owner</dt><dd>{journey.ownerName ?? "—"}</dd></div>
-        <div className="flex justify-between gap-3"><dt>Doctor</dt><dd>{journey.doctorName ?? "—"}</dd></div>
-        <div className="flex justify-between gap-3"><dt>Last interaction</dt><dd>{fmtDate(journey.lastInteractionAt)}</dd></div>
-        <div className="flex justify-between gap-3"><dt>Next action</dt><dd>{fmtDate(journey.nextActionDueAt)}</dd></div>
-        <div className="flex justify-between gap-3">
-          <dt>Next appointment</dt>
-          <dd>
-            {journey.appointmentTime
-              ? `${fmtDate(journey.appointmentTime)} · ${APPOINTMENT_STATUS_LABEL[journey.appointmentStatus as AppointmentStatus] ?? journey.appointmentStatus}`
-              : "—"}
-          </dd>
-        </div>
-        <div className="flex justify-between gap-3">
-          <dt>Treatment status</dt>
-          <dd>
-            {journey.treatmentLabel
-              ? `${journey.treatmentLabel} · ${TREATMENT_STATUS_LABEL[journey.treatmentStatus as TreatmentStatus] ?? journey.treatmentStatus}`
-              : "—"}
-          </dd>
-        </div>
-        {/* Specialty custom fields (e.g. Ophthalmology's "Eye Concern") —
-            configured in Settings, captured on Add Lead, previously had no
-            display anywhere in the product once saved. */}
-        {journey.customFields.map((f) => (
-          <div key={f.label} className="flex justify-between gap-3">
-            <dt className="shrink-0">{f.label}</dt>
-            <dd className="truncate text-right">{f.value}</dd>
-          </div>
-        ))}
-      </dl>
-    </button>
+      {/* Specialty custom fields (e.g. Ophthalmology's "Eye Concern") —
+          configured in Settings, captured on Add Lead. A compact grid, not a
+          card or a row per field. */}
+      {journey.customFields.length > 0 && (
+        <dl className="mt-3.5 grid grid-cols-2 gap-x-4 gap-y-2.5 border-t border-line pt-3" data-testid="journey-custom-fields">
+          {journey.customFields.map((f) => (
+            <Fact key={f.label} label={f.label}>{f.value}</Fact>
+          ))}
+        </dl>
+      )}
+      <p className="mt-3 text-[11px] text-ink-2">
+        Last interaction {journey.lastInteractionAt ? fmtSmartDateTime(journey.lastInteractionAt) : "—"}
+      </p>
+    </Card>
   );
 }
 
@@ -124,35 +190,26 @@ const CALL_DIRECTION_ICON = { inbound: PhoneIncoming, outbound: PhoneOutgoing } 
 function CallHistoryList({ calls }: { calls: CallVm[] }) {
   if (calls.length === 0) return null;
   return (
-    <Card className="p-4">
-      <div className="mb-0.5 flex items-center justify-between">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-400">Calls ({calls.length})</h2>
-      </div>
-      {/* This card is call-specific detail (duration, recording, connector
-          mode) that the Timeline deliberately keeps out of its own rows —
-          the same calls also appear there, interleaved chronologically with
-          WhatsApp, under the Communication filter. Named here so seeing a
-          call twice reads as "two levels of detail," not a duplicate. */}
-      <p className="mb-3 text-[11px] text-neutral-400">Chronological view, interleaved with WhatsApp, is in Timeline → Communication.</p>
-      <ul className="divide-y divide-neutral-100" data-testid="call-history-list">
+    <Panel title={`Calls (${calls.length})`} subtitle="Duration, recording and disposition" padded={false}>
+      <ul className="divide-y divide-line" data-testid="call-history-list">
         {calls.map((call) => {
           const Icon = call.status === "missed" ? PhoneMissed : CALL_DIRECTION_ICON[call.direction];
           return (
-            <li key={call.id} className="flex items-start gap-2.5 py-2.5 text-sm" data-testid={`call-row-${call.id}`}>
-              <Icon size={15} className="mt-0.5 shrink-0 text-neutral-400" aria-hidden="true" />
+            <li key={call.id} className="flex items-start gap-2.5 px-4 py-2.5 text-sm" data-testid={`call-row-${call.id}`}>
+              <Icon size={15} className="mt-0.5 shrink-0 text-ink-2" aria-hidden="true" />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-1.5">
                   <Badge tone={CALL_STATUS_TONE[call.status]}>{CALL_STATUS_LABEL[call.status]}</Badge>
                   <ConnectorModeBadge mode={call.connectorMode} />
-                  <span className="text-xs text-neutral-400">{fmtSmartDateTime(call.startedAt)}</span>
+                  <span className="text-xs text-ink-2">{fmtSmartDateTime(call.startedAt)}</span>
                 </div>
-                <p className="mt-1 text-xs text-neutral-500">
+                <p className="mt-1 break-words text-xs text-ink-2">
                   {call.agentName ?? "Unknown agent"} · {fmtCallDuration(call.durationSeconds)}
                   {call.disposition ? ` · ${call.disposition}` : ""}
                   {call.endpointLabel ? ` · ${call.endpointLabel}` : ""}
                 </p>
                 {call.recordingUrl && (
-                  <a href={call.recordingUrl} target="_blank" rel="noreferrer" className="mt-1 inline-block text-xs text-primary-600 hover:underline">
+                  <a href={call.recordingUrl} target="_blank" rel="noreferrer" className="mt-1 inline-block text-xs font-medium text-primary-700 hover:underline">
                     Recording
                   </a>
                 )}
@@ -161,29 +218,49 @@ function CallHistoryList({ calls }: { calls: CallVm[] }) {
           );
         })}
       </ul>
-    </Card>
+    </Panel>
   );
 }
+
+function AcquisitionMetric({ label, children, strong = false }: { label: string; children: ReactNode; strong?: boolean }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[11px] font-medium uppercase tracking-wide text-ink-2">{label}</dt>
+      <dd className={`mt-0.5 break-words text-sm text-ink ${strong ? "font-semibold" : ""}`}>{children}</dd>
+    </div>
+  );
+}
+
+const ALL_JOURNEYS = "all";
 
 export default function Patient360Page() {
   const params = useParams<{ patientId: string }>();
   const patientId = params.patientId;
-  const [selectedJourneyId, setSelectedJourneyId] = useState<string | null>(null);
-  const [showAllJourneys, setShowAllJourneys] = useState(true);
+  const [selection, setSelection] = useState<string>(ALL_JOURNEYS);
+
+  const session = useQuery({ queryKey: ["session"], queryFn: api.session });
+  // Journey Detail needs VIEW_JOURNEYS *and* a place in the role's navigation (a Doctor has the permission but
+  // is routed home from /journeys); mirrored here only to avoid a dead link, never as the authorization boundary.
+  const canOpenJourney = !!session.data && hasPermission(session.data.user.role, "VIEW_JOURNEYS") && pathAllowedForRole(session.data.user.role, "/journeys");
 
   const patient360 = useQuery({ queryKey: ["patient360", patientId], queryFn: () => api.patient360(patientId) });
-  const currentJourneyId = selectedJourneyId ?? patient360.data?.journeys[0]?.id;
+  const journeys = useMemo(() => patient360.data?.journeys ?? [], [patient360.data]);
+  const selectedJourney = journeys.find((j) => j.id === selection);
+  // The journey the status strip describes: the selected one, else the most recent still-active one, else the most recent.
+  const focusJourney = selectedJourney ?? journeys.find(isActiveJourney) ?? journeys[0];
+  const timelineJourneyId = selectedJourney?.id;
+
   const timeline = useQuery({
-    queryKey: ["timeline", patientId, showAllJourneys ? "all" : currentJourneyId],
-    queryFn: () => api.patientTimeline(patientId, showAllJourneys ? undefined : currentJourneyId),
+    queryKey: ["timeline", patientId, timelineJourneyId ?? "all"],
+    queryFn: () => api.patientTimeline(patientId, timelineJourneyId),
     enabled: patient360.isSuccess,
   });
 
   if (patient360.isLoading) {
     return (
-      <div className="mx-auto max-w-6xl space-y-5">
-        <Skeleton className="h-20" />
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.4fr_1fr]">
+      <div className="mx-auto max-w-6xl space-y-4">
+        <Skeleton className="h-32" />
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.4fr_1fr]">
           <Skeleton className="h-96" />
           <Skeleton className="h-96" />
         </div>
@@ -195,110 +272,95 @@ export default function Patient360Page() {
     return <ErrorState message="Could not load this patient." />;
   }
 
-  const { patient, journeys, calls, acquisition } = patient360.data;
+  const { patient, calls, acquisition } = patient360.data;
+
+  // Duplicate service names (two Cataract journeys) get a numeric suffix so the selector stays unambiguous.
+  const typeSeen = new Map<string, number>();
+  const journeyTabs = journeys.map((j) => {
+    const n = (typeSeen.get(j.journeyType) ?? 0) + 1;
+    typeSeen.set(j.journeyType, n);
+    return { key: j.id, label: n > 1 ? `${j.journeyType} (${n})` : j.journeyType, testId: `journey-tab-${j.id}` };
+  });
 
   return (
-    <div className="mx-auto max-w-6xl space-y-5" data-testid="patient-360">
+    <div className="mx-auto max-w-6xl space-y-4" data-testid="patient-360">
       <BackLink fallback="/patients" fallbackLabel="Back to Patients" />
 
-      {/* Header / patient context */}
-      <Card className="p-5">
-        <div className="flex items-start gap-3">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary-100 text-sm font-semibold text-primary-700">
+      {/* Patient identity, journey selector and operational status: one header panel */}
+      <Card className="overflow-hidden">
+        <div className="flex items-start gap-3 p-4">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary-100 text-sm font-semibold text-primary-700" aria-hidden="true">
             {initials(patient.name)}
           </span>
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h1 className="text-xl font-semibold text-slate-900">{patient.name}</h1>
-              <span className="text-xs text-neutral-400">{journeys.length} active journey{journeys.length === 1 ? "" : "s"}</span>
+            <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+              <h1 className="break-words text-xl font-semibold tracking-tight text-ink">{patient.name}</h1>
+              <span className="text-xs text-ink-2" data-testid="patient-journey-summary">{journeySummary(journeys)}</span>
             </div>
-            <p className="mt-0.5 text-sm text-neutral-500">
+            <p className="mt-0.5 break-words text-sm text-ink-2">
               {patient.phone} · {patient.preferredLanguage} · {patient.branchName ?? "No branch"}
             </p>
           </div>
         </div>
+        {journeys.length > 1 && (
+          <div className="border-t border-line px-4 py-2.5" data-testid="journey-selector">
+            <Tabs
+              ariaLabel="Journey"
+              items={[{ key: ALL_JOURNEYS, label: "All journeys", testId: "journey-tab-all" }, ...journeyTabs]}
+              value={selection}
+              onChange={setSelection}
+            />
+          </div>
+        )}
+        {focusJourney && <OperationalStatus journey={focusJourney} />}
       </Card>
 
-      {/* Main area: Timeline dominant (left), Journey/Next-Action context (right) */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.4fr_1fr]">
-        <div className="space-y-3 lg:order-1">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setShowAllJourneys(true)}
-              className={`rounded px-2 py-1 text-xs ${showAllJourneys ? "bg-primary-100 text-primary-700" : "text-neutral-500 hover:bg-neutral-100"}`}
-            >
-              All journeys
-            </button>
-            {!showAllJourneys && <span className="text-xs text-neutral-400">Showing timeline for the selected journey only</span>}
-          </div>
-
+      {/* Main area: Timeline first (left), journey context (right) */}
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[1.4fr_1fr]">
+        <div className="min-w-0 space-y-2">
+          {selectedJourney && (
+            <p className="px-1 text-xs text-ink-2">Showing the timeline for {selectedJourney.journeyType} only.</p>
+          )}
           {timeline.isLoading ? (
             <Skeleton className="h-96" />
           ) : timeline.isError ? (
             <ErrorState message="Could not load the timeline." />
           ) : (
-            timeline.data && <Timeline events={timeline.data} />
+            timeline.data && <Timeline events={timeline.data} order="desc" />
           )}
         </div>
 
-        <div className="space-y-3 lg:order-2">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-600">Journeys ({journeys.length})</h2>
+        <div className="min-w-0 space-y-3">
+          <h2 className="px-1 text-xs font-semibold uppercase tracking-wide text-ink-2">Journeys ({journeys.length})</h2>
+          {journeys.length === 0 && (
+            <Card><EmptyState message="No journeys yet" hint="A journey starts when an enquiry or appointment is recorded." /></Card>
+          )}
           {journeys.map((j) => (
-            <JourneyCard
-              key={j.id}
-              journey={j}
-              active={!showAllJourneys && j.id === currentJourneyId}
-              onClick={() => {
-                setSelectedJourneyId(j.id);
-                setShowAllJourneys(false);
-              }}
-            />
+            <JourneyCard key={j.id} journey={j} active={journeys.length > 1 && j.id === selectedJourney?.id} canOpen={canOpenJourney} onSelect={() => journeys.length > 1 && setSelection(j.id)} />
           ))}
           <CallHistoryList calls={calls} />
         </div>
       </div>
 
       {/* Acquisition / revenue: subordinate, below the operational section */}
-      <div className="rounded-xl border border-neutral-200 bg-white p-4">
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-400">Acquisition &amp; revenue</h2>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-          <div>
-            <span className="block text-[11px] uppercase tracking-wide text-neutral-400">Source</span>
-            <span className="text-sm text-slate-700">{acquisition.source ?? "—"}</span>
-          </div>
-          <div>
-            <span className="block text-[11px] uppercase tracking-wide text-neutral-400">Campaign</span>
-            <span className="text-sm text-slate-700">{acquisition.campaignName ?? "Organic / No campaign"}</span>
-          </div>
-          <div>
-            <span className="block text-[11px] uppercase tracking-wide text-neutral-400">First touch</span>
-            <span className="text-sm text-slate-700">{fmtDate(acquisition.firstTouchAt)}</span>
-          </div>
-          <div>
-            <span className="block text-[11px] uppercase tracking-wide text-neutral-400">Acquisition cost</span>
-            <span className="text-sm text-slate-700">{formatMoneyOrDash(acquisition.allocatedAcquisitionCost)}</span>
-          </div>
-          <div>
-            <span className="block text-[11px] uppercase tracking-wide text-neutral-400">Est. treatment value</span>
-            <span className="text-sm text-slate-700">{formatInr(acquisition.estimatedTreatmentValue)}</span>
-          </div>
-          <div>
-            <span className="block text-[11px] uppercase tracking-wide text-neutral-400">Attributed revenue</span>
-            <span className="text-sm font-medium text-slate-700">{formatInr(acquisition.attributedRevenue)}</span>
-          </div>
-        </div>
+      <Panel title="Acquisition & revenue" subtitle="Where this patient came from and what it has generated">
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-6">
+          <AcquisitionMetric label="Source">{acquisition.source ?? "—"}</AcquisitionMetric>
+          <AcquisitionMetric label="Campaign">{acquisition.campaignName ?? "Organic / No campaign"}</AcquisitionMetric>
+          <AcquisitionMetric label="First touch">{fmtDate(acquisition.firstTouchAt)}</AcquisitionMetric>
+          <AcquisitionMetric label="Acquisition cost">{formatMoneyOrDash(acquisition.allocatedAcquisitionCost)}</AcquisitionMetric>
+          <AcquisitionMetric label="Est. treatment value">{formatInr(acquisition.estimatedTreatmentValue)}</AcquisitionMetric>
+          <AcquisitionMetric label="Attributed revenue" strong>{formatInr(acquisition.attributedRevenue)}</AcquisitionMetric>
+        </dl>
 
         {acquisition.lastTouch && (
-          <div className="mt-4 flex items-center gap-2 rounded-lg border border-primary-100 bg-primary-50 px-3 py-2 text-xs" data-testid="patient-last-touch">
-            <span className="font-medium text-primary-700">Multi-touch:</span>
-            <span className="text-primary-700">
-              {acquisition.touchpointCount} touches recorded — most recently via <strong>{acquisition.lastTouch.source ?? "unknown source"}</strong>
-              {acquisition.lastTouch.campaignName ? ` (${acquisition.lastTouch.campaignName})` : ""} on {fmtDate(acquisition.lastTouch.occurredAt)}. First touch above is preserved.
-            </span>
+          <div className="mt-4 rounded-control border border-primary-100 bg-surface-info px-3 py-2 text-xs text-primary-800" data-testid="patient-last-touch">
+            <span className="font-semibold">Multi-touch:</span>{" "}
+            {acquisition.touchpointCount} touches recorded — most recently via <strong>{acquisition.lastTouch.source ?? "unknown source"}</strong>
+            {acquisition.lastTouch.campaignName ? ` (${acquisition.lastTouch.campaignName})` : ""} on {fmtDate(acquisition.lastTouch.occurredAt)}. First touch above is preserved.
           </div>
         )}
-      </div>
+      </Panel>
     </div>
   );
 }

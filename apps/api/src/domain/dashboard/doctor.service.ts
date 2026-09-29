@@ -21,7 +21,9 @@ export async function getDoctorDashboard(db: Db, tenantId: string, doctorUserId:
       scheduledAt: appointments.scheduledAt,
       patientName: patients.name,
       journeyType: journeys.journeyType,
+      specialtyKey: journeys.specialtyKey,
       journeyId: appointments.journeyId,
+      patientId: appointments.patientId,
       reason: appointments.reason,
       hasOutcome: consultationOutcomes.id,
     })
@@ -39,12 +41,18 @@ export async function getDoctorDashboard(db: Db, tenantId: string, doctorUserId:
     )
     .orderBy(appointments.scheduledAt);
 
-  const today: DoctorTodayItem[] = rows.map((r) => ({
+  const toItem = (r: { id: string; patientName: string; scheduledAt: Date; status: DoctorTodayItem["status"]; patientId: string; journeyId: string; journeyType: string; specialtyKey: string | null }): DoctorTodayItem => ({
     appointmentId: r.id,
     patientName: r.patientName,
     time: r.scheduledAt.toISOString(),
     status: r.status,
-  }));
+    patientId: r.patientId,
+    journeyId: r.journeyId,
+    journeyType: r.journeyType,
+    specialtyKey: r.specialtyKey,
+  });
+
+  const today: DoctorTodayItem[] = rows.map(toItem);
 
   const waitingNow = rows.filter((r) => r.status === "checked_in" || r.status === "waiting").length;
   const withMeCount = rows.filter((r) => r.status === "with_doctor").length;
@@ -61,12 +69,14 @@ export async function getDoctorDashboard(db: Db, tenantId: string, doctorUserId:
         journeyType: nextRow.journeyType,
         appointmentTime: nextRow.scheduledAt.toISOString(),
         reason: nextRow.reason,
+        patientId: nextRow.patientId,
+        journeyId: nextRow.journeyId,
       }
     : null;
 
   const awaitingOutcome: DoctorTodayItem[] = rows
     .filter((r) => r.status === "completed" && !r.hasOutcome)
-    .map((r) => ({ appointmentId: r.id, patientName: r.patientName, time: r.scheduledAt.toISOString(), status: r.status }));
+    .map(toItem);
 
   // Treatment Follow-ups: today's journeys with a treatment opportunity still
   // awaiting the patient's decision or acceptance — real domain state, not a flag.
@@ -81,7 +91,7 @@ export async function getDoctorDashboard(db: Db, tenantId: string, doctorUserId:
   }
   const treatmentFollowUps: DoctorTodayItem[] = rows
     .filter((r) => r.journeyId && pendingTreatmentJourneyIds.has(r.journeyId))
-    .map((r) => ({ appointmentId: r.id, patientName: r.patientName, time: r.scheduledAt.toISOString(), status: r.status }));
+    .map(toItem);
 
   const pastRows = await db
     .select({
@@ -90,6 +100,9 @@ export async function getDoctorDashboard(db: Db, tenantId: string, doctorUserId:
       scheduledAt: appointments.scheduledAt,
       patientName: patients.name,
       journeyType: journeys.journeyType,
+      specialtyKey: journeys.specialtyKey,
+      journeyId: appointments.journeyId,
+      patientId: appointments.patientId,
       hasOutcome: consultationOutcomes.id,
       outcome: consultationOutcomes.outcome,
     })
@@ -104,11 +117,12 @@ export async function getDoctorDashboard(db: Db, tenantId: string, doctorUserId:
   // Post-care / Reviews: seen, no treatment required — routine follow-up candidates.
   const postCare: DoctorTodayItem[] = pastRows
     .filter((r) => r.outcome === "NO_TREATMENT_REQUIRED")
-    .map((r) => ({ appointmentId: r.id, patientName: r.patientName, time: r.scheduledAt.toISOString(), status: r.status }));
+    .map(toItem);
 
   const recentPatients: DoctorRecentPatient[] = pastRows.map((r) => ({
     appointmentId: r.id,
     patientName: r.patientName,
+    patientId: r.patientId,
     journeyType: r.journeyType,
     time: r.scheduledAt.toISOString(),
   }));

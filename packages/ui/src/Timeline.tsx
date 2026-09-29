@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import { CalendarCheck, MessageCircle, Stethoscope, ListChecks, Circle, type LucideIcon } from "lucide-react";
-import { Card, EmptyState, SectionHeading } from "./primitives";
+import { useMemo, useState } from "react";
+import { CalendarCheck, IndianRupee, ListChecks, MessageCircle, Phone, Stethoscope, UserCog, Circle, type LucideIcon } from "lucide-react";
+import { Badge, Card, EmptyState, Tabs, type TabItem } from "./primitives";
 import { fmtDate, fmtTime } from "./format";
 import type { TimelineEventVm } from "@pulseos/types";
 
 export type { TimelineEventVm };
+
+type Category = TimelineEventVm["category"];
 
 /** "Today" / "Yesterday" / "16 Sept" — the day-group header text. */
 function dayHeaderLabel(iso: string): string {
@@ -26,18 +28,18 @@ function isSameDay(a: string, b: string): boolean {
   return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate();
 }
 
-const CATEGORY_LABEL: Record<TimelineEventVm["category"], string> = {
+const CATEGORY_LABEL: Record<Category, string> = {
   communication: "Communication",
   appointments: "Appointments",
-  clinical: "Clinical / Treatment",
-  tasks: "Tasks",
+  clinical: "Consultation & treatment",
+  tasks: "Tasks & ownership",
   other: "Other",
 };
 
-// A restrained icon + background cue per category — never a heavy card per
-// event, just enough to let the eye separate a WhatsApp reply from an
-// appointment change from a clinical note while scanning quickly.
-const CATEGORY_ICON: Record<TimelineEventVm["category"], LucideIcon> = {
+// Restrained icon per category (blue/white/neutral only; the label and the
+// icon carry the meaning, never colour alone), with a few event-type
+// overrides where a more specific glyph reads faster than the category's.
+const CATEGORY_ICON: Record<Category, LucideIcon> = {
   communication: MessageCircle,
   appointments: CalendarCheck,
   clinical: Stethoscope,
@@ -45,76 +47,121 @@ const CATEGORY_ICON: Record<TimelineEventVm["category"], LucideIcon> = {
   other: Circle,
 };
 
-const CATEGORY_DOT: Record<TimelineEventVm["category"], string> = {
-  communication: "bg-accent-100 text-accent-700",
-  appointments: "bg-primary-100 text-primary-700",
-  clinical: "bg-warning-100 text-warning-700",
+const EVENT_TYPE_ICON: Record<string, LucideIcon> = {
+  call_logged: Phone,
+  revenue_recorded: IndianRupee,
+  journey_owner_changed: UserCog,
+};
+
+const CATEGORY_DOT: Record<Category, string> = {
+  communication: "bg-primary-100 text-primary-700",
+  appointments: "bg-primary-600 text-white",
+  clinical: "bg-primary-50 text-primary-700 ring-1 ring-inset ring-primary-200",
   tasks: "bg-neutral-100 text-neutral-600",
   other: "bg-neutral-100 text-neutral-500",
 };
 
-const FILTERS: { key: "all" | TimelineEventVm["category"]; label: string }[] = [
+const CATEGORY_CHIP_TONE: Record<Category, "primary" | "neutral"> = {
+  communication: "primary",
+  appointments: "primary",
+  clinical: "primary",
+  tasks: "neutral",
+  other: "neutral",
+};
+
+const FILTERS: { key: "all" | Category; label: string }[] = [
   { key: "all", label: "All" },
   { key: "communication", label: "Communication" },
   { key: "appointments", label: "Appointments" },
-  { key: "clinical", label: "Clinical-operational" },
-  { key: "tasks", label: "Tasks" },
+  { key: "clinical", label: "Consultation & treatment" },
+  { key: "tasks", label: "Tasks & ownership" },
 ];
 
-export function Timeline({ events }: { events: TimelineEventVm[] }) {
+interface DayGroup {
+  key: string;
+  label: string;
+  events: TimelineEventVm[];
+}
+
+function groupByDay(events: TimelineEventVm[]): DayGroup[] {
+  const groups: DayGroup[] = [];
+  for (const event of events) {
+    const last = groups[groups.length - 1];
+    if (last && isSameDay(last.events[0].occurredAt, event.occurredAt)) last.events.push(event);
+    else groups.push({ key: event.id, label: dayHeaderLabel(event.occurredAt), events: [event] });
+  }
+  return groups;
+}
+
+/**
+ * Patient / journey timeline: day-grouped, filterable by category, readable at
+ * 390px (titles and descriptions wrap, the time never squeezes the title).
+ * `order` defaults to the API's chronological order; pass "desc" for a
+ * newest-first feed. Props are additive-only: Journey Detail consumes this too.
+ */
+export function Timeline({ events, order = "asc", className = "" }: { events: TimelineEventVm[]; order?: "asc" | "desc"; className?: string }) {
   const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("all");
-  const visible = filter === "all" ? events : events.filter((e) => e.category === filter);
+
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { all: events.length };
+    for (const e of events) c[e.category] = (c[e.category] ?? 0) + 1;
+    return c;
+  }, [events]);
+
+  const visible = useMemo(() => {
+    const filtered = filter === "all" ? events : events.filter((e) => e.category === filter);
+    return order === "desc" ? [...filtered].sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt)) : filtered;
+  }, [events, filter, order]);
+  const groups = useMemo(() => groupByDay(visible), [visible]);
+
+  // A category with no events yet is hidden rather than offered as an empty tab.
+  const tabs: TabItem[] = FILTERS.filter((f) => f.key === "all" || (counts[f.key] ?? 0) > 0).map((f) => ({ key: f.key, label: f.label, count: counts[f.key] ?? 0 }));
 
   return (
-    <Card className="p-4">
-      <SectionHeading title="Timeline" subtitle={`${visible.length} events`} />
-      <div className="mb-3 flex flex-wrap gap-1">
-        {FILTERS.map((f) => (
-          <button
-            key={f.key}
-            type="button"
-            onClick={() => setFilter(f.key)}
-            className={`rounded px-2 py-1 text-xs ${filter === f.key ? "bg-primary-100 text-primary-700" : "text-neutral-500 hover:bg-neutral-100"}`}
-          >
-            {f.label}
-          </button>
-        ))}
+    <Card className={`overflow-hidden ${className}`} data-testid="timeline">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-line px-4 py-3">
+        <div className="flex items-baseline gap-2">
+          <h2 className="text-sm font-semibold tracking-tight text-ink">Timeline</h2>
+          <span className="text-xs text-ink-2">{visible.length} events</span>
+        </div>
+        {events.length > 0 && <Tabs items={tabs} value={filter} onChange={(k) => setFilter(k as typeof filter)} ariaLabel="Filter timeline" />}
       </div>
       {visible.length === 0 ? (
-        <EmptyState message="No timeline events yet" />
+        <EmptyState message="No timeline events yet" hint={filter === "all" ? "Calls, messages, appointments and treatment updates appear here as they happen." : undefined} />
       ) : (
-        <ol className="space-y-4 border-l border-neutral-200 pl-4">
-          {visible.map((event, i) => {
-            const Icon = CATEGORY_ICON[event.category];
-            const showDayHeader = i === 0 || !isSameDay(event.occurredAt, visible[i - 1].occurredAt);
-            return (
-              <li key={event.id} className="relative">
-                {showDayHeader && (
-                  <p className={`text-[11px] font-semibold uppercase tracking-wide text-neutral-400 ${i === 0 ? "mb-2" : "mb-2 mt-2"}`}>
-                    {dayHeaderLabel(event.occurredAt)}
-                  </p>
-                )}
-                <span className={`absolute -left-[27px] flex h-5 w-5 items-center justify-center rounded-full ${CATEGORY_DOT[event.category]}`} style={{ top: showDayHeader ? "1.75rem" : 0 }}>
-                  <Icon size={12} strokeWidth={2} />
-                </span>
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-sm text-slate-900">{event.title}</span>
-                  <span className="shrink-0 text-[11px] tabular-nums text-neutral-400">{fmtTime(event.occurredAt)}</span>
-                </div>
-                {event.description && <p className="mt-0.5 text-xs text-neutral-500">{event.description}</p>}
-                <span className="mt-0.5 block text-[11px] text-neutral-400">
-                  {CATEGORY_LABEL[event.category]}
-                  {event.sourceChannel && ` · ${event.sourceChannel}`}
-                  {/* Which hospital line this call/WhatsApp message came in
-                      on — previously only visible on the separate Calls
-                      card, so scanning this cross-channel feed couldn't
-                      tell you that on its own. */}
-                  {event.endpointLabel && ` · ${event.endpointLabel}`}
-                </span>
-              </li>
-            );
-          })}
-        </ol>
+        <div className="px-4 pb-4 pt-3">
+          {groups.map((group) => (
+            <section key={group.key} className="mb-4 last:mb-0">
+              <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-2">{group.label}</h3>
+              <ol className="relative space-y-3.5 border-l border-line pl-7">
+                {group.events.map((event) => {
+                  const Icon = EVENT_TYPE_ICON[event.eventType] ?? CATEGORY_ICON[event.category];
+                  return (
+                    <li key={event.id} className="relative" data-testid="timeline-event">
+                      <span className={`absolute -left-[38px] top-0 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white ${CATEGORY_DOT[event.category]}`}>
+                        <Icon size={12} strokeWidth={2} aria-hidden="true" />
+                      </span>
+                      <div className="flex items-start justify-between gap-x-3">
+                        <span className="min-w-0 break-words text-sm font-medium leading-5 text-ink">{event.title}</span>
+                        <span className="shrink-0 pt-0.5 text-[11px] tabular-nums text-ink-2">{fmtTime(event.occurredAt)}</span>
+                      </div>
+                      {event.description && <p className="mt-0.5 break-words text-xs leading-5 text-ink-2">{event.description}</p>}
+                      <span className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-ink-2">
+                        <Badge tone={CATEGORY_CHIP_TONE[event.category]}>{CATEGORY_LABEL[event.category]}</Badge>
+                        {/* Which hospital line this call/WhatsApp message came in on. */}
+                        {(event.sourceChannel || event.endpointLabel) && (
+                          <span className="min-w-0 break-words">
+                            {[event.sourceChannel, event.endpointLabel].filter(Boolean).join(" · ")}
+                          </span>
+                        )}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ol>
+            </section>
+          ))}
+        </div>
       )}
     </Card>
   );

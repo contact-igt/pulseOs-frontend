@@ -23,6 +23,7 @@ const CATEGORY_BY_EVENT_TYPE: Record<string, "communication" | "appointments" | 
   revenue_recorded: "clinical",
   task_created: "tasks",
   task_completed: "tasks",
+  journey_owner_changed: "tasks",
   conversation_claimed: "communication",
   conversation_assigned: "communication",
   conversation_closed: "communication",

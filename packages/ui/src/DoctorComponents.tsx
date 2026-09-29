@@ -1,9 +1,10 @@
-import type { DoctorDashboard, DoctorRecentPatient, DoctorTodayItem } from "@pulseos/types";
-import { Badge, Card, EmptyState, SectionHeading } from "./primitives";
+import type { ReactNode } from "react";
+import type { AppointmentStatus, DoctorDashboard, DoctorNextPatient, DoctorRecentPatient, DoctorTodayItem } from "@pulseos/types";
+import { Badge, Card, EmptyState, Panel, SectionHeading } from "./primitives";
 import { SegmentedRadial } from "./SegmentedRadial";
 import { MetricStrip } from "./MetricStrip";
 import { APPOINTMENT_STATUS_LABEL as STATUS_LABEL, APPOINTMENT_STATUS_TONE as STATUS_TONE } from "./status";
-import { fmtTime } from "./format";
+import { fmtDate, fmtTime } from "./format";
 
 export function DoctorKpiStrip({ dashboard }: { dashboard: DoctorDashboard }) {
   return (
@@ -71,12 +72,54 @@ export function DoctorQuickStats({ dashboard }: { dashboard: DoctorDashboard }) 
   );
 }
 
+const isToday = (iso: string) => new Date(iso).toDateString() === new Date().toDateString();
+
+type PatientLinkRenderer = (item: { patientId?: string; patientName: string }, children: ReactNode) => ReactNode;
+
+/** The one patient the doctor is about to see: name, service, time and reason, with a link to Patient 360. */
+export function NextPatientCard({
+  patient,
+  status,
+  renderPatientLink,
+}: {
+  patient: DoctorNextPatient | null;
+  status?: AppointmentStatus;
+  renderPatientLink?: PatientLinkRenderer;
+}) {
+  return (
+    <Panel title="Next patient" tone="info" data-testid="next-patient-card">
+      {!patient ? (
+        <EmptyState message="No one else is scheduled for today." />
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <div className="min-w-0">
+            <p className="break-words text-base font-semibold tracking-tight text-ink">
+              {renderPatientLink ? renderPatientLink(patient, patient.patientName) : patient.patientName}
+            </p>
+            <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-2">
+              <Badge tone="primary">{patient.journeyType}</Badge>
+              {status && <Badge tone={STATUS_TONE[status]}>{STATUS_LABEL[status]}</Badge>}
+              {patient.reason && <span className="min-w-0 break-words">{patient.reason}</span>}
+            </p>
+          </div>
+          <div className="text-right">
+            <span className="block text-xl font-semibold tabular-nums leading-none text-ink">{fmtTime(patient.appointmentTime)}</span>
+            <span className="mt-1 block text-[11px] uppercase tracking-wide text-ink-2">Appointment</span>
+          </div>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
 export function DoctorTodayList({
   items,
   title,
   highlightId,
   emptyMessage = "Nothing scheduled here right now.",
   showStatus = true,
+  renderPatientLink,
+  testId,
 }: {
   items: DoctorTodayItem[];
   title: string;
@@ -88,33 +131,32 @@ export function DoctorTodayList({
    * and reads as contradicting the list's own title. Only "Today's Patient
    * Queue", where status genuinely varies row to row, wants it shown. */
   showStatus?: boolean;
+  /** Wrap the patient name in a link (the package is router-free, so the page supplies its own Link). */
+  renderPatientLink?: PatientLinkRenderer;
+  testId?: string;
 }) {
   return (
-    <Card className="p-4">
-      <SectionHeading title={title} subtitle={`${items.length}`} />
+    <Panel title={title} subtitle={`${items.length}`} padded={false} data-testid={testId}>
       {items.length === 0 ? (
         <EmptyState message={emptyMessage} />
       ) : (
-        <ul className="divide-y divide-neutral-100">
+        <ul className="divide-y divide-line">
           {items.map((item) => {
             const isNext = item.appointmentId === highlightId;
+            const name = <span className={`min-w-0 break-words text-sm ${isNext ? "font-semibold text-primary-800" : "font-medium text-ink"}`}>{item.patientName}</span>;
             return (
               <li
                 key={item.appointmentId}
-                className={`flex items-center justify-between rounded px-2 py-2 ${isNext ? "bg-primary-50" : ""}`}
+                className={`flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 ${isNext ? "bg-surface-info" : ""}`}
                 data-testid={isNext ? "next-patient-row" : undefined}
               >
-                <span className="flex min-w-0 items-center gap-2">
-                  {isNext && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary-500" />}
-                  <span className={`truncate text-sm ${isNext ? "font-medium text-primary-700" : "text-slate-900"}`}>{item.patientName}</span>
-                  {isNext && (
-                    <span className="shrink-0 rounded-full bg-primary-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
-                      Next
-                    </span>
-                  )}
+                <span className="min-w-16 shrink-0 whitespace-nowrap text-xs tabular-nums text-ink-2">{isToday(item.time) ? fmtTime(item.time) : `${fmtDate(item.time)}, ${fmtTime(item.time)}`}</span>
+                <span className="flex min-w-0 flex-1 basis-40 flex-wrap items-center gap-x-2 gap-y-1">
+                  {renderPatientLink ? renderPatientLink(item, name) : name}
+                  {isNext && <Badge tone="primary">Next</Badge>}
                 </span>
-                <span className="flex shrink-0 items-center gap-2">
-                  <span className="text-xs tabular-nums text-neutral-500">{fmtTime(item.time)}</span>
+                <span className="flex shrink-0 flex-wrap items-center gap-1.5">
+                  {item.journeyType && <Badge tone="neutral">{item.journeyType}</Badge>}
                   {showStatus && <Badge tone={STATUS_TONE[item.status]}>{STATUS_LABEL[item.status]}</Badge>}
                 </span>
               </li>
@@ -122,31 +164,33 @@ export function DoctorTodayList({
           })}
         </ul>
       )}
-    </Card>
+    </Panel>
   );
 }
 
 export const AwaitingOutcomeList = DoctorTodayList;
 
-export function RecentPatientsList({ items }: { items: DoctorRecentPatient[] }) {
+export function RecentPatientsList({ items, renderPatientLink }: { items: DoctorRecentPatient[]; renderPatientLink?: PatientLinkRenderer }) {
   return (
-    <Card className="p-4">
-      <SectionHeading title="Recent Patients" subtitle={`${items.length}`} />
+    <Panel title="Recent patients" subtitle={`${items.length}`} padded={false} data-testid="recent-patients">
       {items.length === 0 ? (
         <EmptyState message="No recent visits yet" />
       ) : (
-        <ul className="divide-y divide-neutral-100">
-          {items.map((item) => (
-            <li key={item.appointmentId} className="flex items-center justify-between py-2">
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm text-slate-900">{item.patientName}</span>
-                <span className="block text-xs text-neutral-500">{item.journeyType}</span>
-              </span>
-              <span className="shrink-0 text-xs tabular-nums text-neutral-500">{fmtTime(item.time)}</span>
-            </li>
-          ))}
+        <ul className="divide-y divide-line">
+          {items.map((item) => {
+            const name = <span className="block min-w-0 break-words text-sm font-medium text-ink">{item.patientName}</span>;
+            return (
+              <li key={item.appointmentId} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                <span className="min-w-0 flex-1">
+                  {renderPatientLink ? renderPatientLink(item, name) : name}
+                  <span className="block text-xs text-ink-2">{item.journeyType}</span>
+                </span>
+                <span className="shrink-0 text-xs tabular-nums text-ink-2">{fmtDate(item.time)}</span>
+              </li>
+            );
+          })}
         </ul>
       )}
-    </Card>
+    </Panel>
   );
 }
