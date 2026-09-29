@@ -88,6 +88,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       : (PAGE_META[pathname] ??
         (pathname.startsWith("/patients/")
           ? { title: "Patient 360", subtitle: "Full journey context for one patient" }
+          : pathname.startsWith("/journeys/")
+            ? { title: "Journey", subtitle: "One enquiry from source to treatment and revenue" }
           : pathname.startsWith("/campaigns/")
             ? { title: "Campaign Detail", subtitle: "Spend, attribution and outcomes for one campaign" }
             : { title: "PulseOS", subtitle: undefined }));

@@ -16,6 +16,7 @@ const FROM_ROUTES: Record<string, { href: string; label: string }> = {
   "command-centre": { href: "/command-centre", label: "Back to Command Centre" },
   inbox: { href: "/inbox", label: "Back to Inbox" },
   "my-work": { href: "/my-work", label: "Back to My Work" },
+  "doctor-home": { href: "/doctor-home", label: "Back to Doctor Home" },
   campaigns: { href: "/campaigns", label: "Back to Campaigns" },
   settings: { href: "/settings", label: "Back to Settings" },
 };

@@ -15,6 +15,7 @@ import {
   type OutcomeTreatmentChoice,
 } from "@pulseos/ui";
 import type { ConsultationOutcomeValue, DoctorTodayItem } from "@pulseos/types";
+import { withFrom } from "@/components/shell/BackLink";
 
 const OUTCOME_NOTICE: Record<ConsultationOutcomeValue, string> = {
   CONSULTED: "Consultation completed",
@@ -37,7 +38,7 @@ type Notice = { kind: "success" | "error"; text: string };
 function patientLink(item: { patientId?: string }, children: ReactNode) {
   if (!item.patientId) return children;
   return (
-    <Link href={`/patients/${item.patientId}`} className="min-w-0 hover:text-primary-700 hover:underline">
+    <Link href={withFrom(`/patients/${item.patientId}`, "doctor-home")} className="min-w-0 hover:text-primary-700 hover:underline">
       {children}
     </Link>
   );

@@ -1,6 +1,8 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { eq } from "drizzle-orm";
 import { buildApp } from "../app.js";
-import { queryClient } from "../db/client.js";
+import { db, queryClient } from "../db/client.js";
+import { journeys, patients, tasks, timelineEvents, treatmentOpportunities } from "../db/schema.js";
 import type { FastifyInstance } from "fastify";
 import type { TreatmentRow } from "@pulseos/types";
 
@@ -60,10 +62,16 @@ describe.skipIf(!DEMO_PASSWORD)("treatments (integration)", () => {
   });
 
   it("full lifecycle on one treatment: valid transition, rejected invalid transition, then acceptance creates a follow-up task and writes Timeline events", async () => {
-    const list = await app.inject({ method: "GET", url: "/treatments?status=ADVISED", cookies: { pulseos_session: coordinatorCookie } });
-    const rows = list.json() as TreatmentRow[];
-    expect(rows.length).toBeGreaterThan(0);
-    const target = rows[0];
+    // Own fixture, not a seeded ADVISED treatment: consuming seed state made
+    // this test fail on any second run without a reseed.
+    const session = await app.inject({ method: "GET", url: "/auth/session", cookies: { pulseos_session: coordinatorCookie } });
+    const tenantId = (session.json() as { user: { tenantId: string } }).user.tenantId;
+    const [patient] = await db.insert(patients).values({ tenantId, name: "Lifecycle Test Patient", phone: `98${String(Date.now()).slice(-8)}`, marketingConsent: false }).returning();
+    const [journey] = await db.insert(journeys).values({ tenantId, patientId: patient.id, journeyType: "Lifecycle Test", source: "walk_in", stage: "treatment_advised" }).returning();
+    const [treatment] = await db.insert(treatmentOpportunities).values({ tenantId, patientId: patient.id, journeyId: journey.id, treatmentLabel: "Lifecycle Test Treatment", status: "ADVISED", estimatedValue: 10_000 }).returning();
+    const target = { id: treatment.id, patientId: patient.id };
+
+    try {
 
     const toDecisionPending = await app.inject({
       method: "PATCH", url: `/treatments/${target.id}/status`, cookies: { pulseos_session: coordinatorCookie }, payload: { status: "DECISION_PENDING" },
@@ -88,5 +96,12 @@ describe.skipIf(!DEMO_PASSWORD)("treatments (integration)", () => {
     const timeline = await app.inject({ method: "GET", url: `/patients/${target.patientId}/timeline`, cookies: { pulseos_session: coordinatorCookie } });
     const eventTypes = (timeline.json() as { eventType: string }[]).map((e) => e.eventType);
     expect(eventTypes.filter((e) => e === "treatment_status_changed").length).toBeGreaterThanOrEqual(2);
+    } finally {
+      await db.delete(tasks).where(eq(tasks.journeyId, journey.id));
+      await db.delete(timelineEvents).where(eq(timelineEvents.patientId, patient.id));
+      await db.delete(treatmentOpportunities).where(eq(treatmentOpportunities.journeyId, journey.id));
+      await db.delete(journeys).where(eq(journeys.id, journey.id));
+      await db.delete(patients).where(eq(patients.id, patient.id));
+    }
   });
 });

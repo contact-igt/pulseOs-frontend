@@ -67,7 +67,6 @@ export async function journeyRoutes(app: FastifyInstance) {
 
     const result = await assignJourneyOwner(app.db, tenantId, actorId, body.data.journeyIds, body.data.ownerUserId);
     if (!result.ok) return reply.status(ASSIGN_FAILURE_STATUS[result.reason]).send({ error: result.reason });
-    const { ok: _ok, ...payload } = result;
-    return payload;
+    return { updatedCount: result.updatedCount, journeyIds: result.journeyIds, owner: result.owner };
   });
 }
