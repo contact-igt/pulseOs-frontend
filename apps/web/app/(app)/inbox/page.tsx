@@ -4,11 +4,11 @@ import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
 import { useRouter } from "next/navigation";
-import { Badge, ConfirmDialog, EmptyState, ErrorState, OverflowMenu, SectionHeading, Skeleton, useDialogFocus, relativeTime, fmtDate, fmtDateTime, fmtSmartDateTime, JOURNEY_STAGE_LABEL } from "@pulseos/ui";
+import { Badge, Button, Card, ConfirmDialog, EmptyState, ErrorState, FilterBar, FilterSelect, OverflowMenu, SectionHeading, Skeleton, useDialogFocus, relativeTime, fmtDate, fmtDateTime, fmtSmartDateTime, JOURNEY_STAGE_LABEL } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import { withFrom } from "@/components/shell/BackLink";
 import type { ConversationAutomationMode, ConversationAutomationPreference, ConversationChannel, ConversationDetail, OwnershipState } from "@pulseos/types";
-import { ArrowLeft, CalendarPlus, ListPlus, Mail, MessageCircle, MessageSquareText, PanelRight, Phone, User, Users as UsersIcon, X } from "lucide-react";
+import { ArrowLeft, CalendarPlus, ListPlus, Mail, MessageCircle, MessageSquareText, PanelRight, Phone, Search, User, Users as UsersIcon, X } from "lucide-react";
 
 const CHANNEL_ICON: Record<ConversationChannel, typeof Mail> = {
   WHATSAPP: MessageCircle,
@@ -200,52 +200,50 @@ export default function InboxPage() {
 
   return (
     <div className="flex h-full gap-4" data-testid="inbox-page">
-      {/* Conversation list — full width on its own screen below md, a fixed-width column alongside the thread at md+. */}
+      {/* Conversation list — full width on its own screen below md, a fixed-width column alongside the thread at md+.
+          Solid white panel: the list scrolls, so no backdrop blur behind it. */}
       <aside
-        className={`${mobileView === "thread" ? "hidden" : "flex"} w-full flex-shrink-0 flex-col overflow-hidden rounded-lg border border-neutral-200 bg-white md:flex md:w-72 xl:w-80`}
+        className={`${mobileView === "thread" ? "hidden" : "flex"} w-full flex-shrink-0 flex-col overflow-hidden rounded-card border border-line bg-surface shadow-panel md:flex md:w-72 xl:w-80`}
       >
-        <div className="space-y-2 border-b border-neutral-100 p-3">
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search patient…"
-            className="w-full rounded border border-neutral-200 px-2 py-1 text-xs text-slate-700"
-          />
-          <div className="flex gap-2">
-            <select
-              value={channel}
-              onChange={(e) => setChannel(e.target.value as ConversationChannel | "")}
-              className="flex-1 rounded border border-neutral-200 bg-white px-2 py-1 text-xs text-slate-700"
-            >
+        <div className="space-y-2 border-b border-line bg-surface-muted p-3">
+          <label className="glass-control relative flex h-8 items-center rounded-control">
+            <Search size={14} className="pointer-events-none absolute left-2.5 text-neutral-500" aria-hidden="true" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search patient…"
+              aria-label="Search conversations by patient"
+              className="h-full w-full bg-transparent pl-8 pr-2.5 text-xs text-ink outline-none placeholder:text-neutral-500"
+            />
+          </label>
+          <FilterBar className="gap-1.5">
+            <FilterSelect className="sm:flex-1!" value={channel} onChange={(e) => setChannel(e.target.value as ConversationChannel | "")} aria-label="Channel">
               <option value="">All channels</option>
               {(Object.keys(CHANNEL_LABEL) as ConversationChannel[]).map((c) => (
                 <option key={c} value={c}>{CHANNEL_LABEL[c]}</option>
               ))}
-            </select>
-            <select
-              value={ownershipState}
-              onChange={(e) => setOwnershipState(e.target.value as OwnershipState | "")}
-              className="flex-1 rounded border border-neutral-200 bg-white px-2 py-1 text-xs text-slate-700"
-            >
+            </FilterSelect>
+            <FilterSelect className="sm:flex-1!" value={ownershipState} onChange={(e) => setOwnershipState(e.target.value as OwnershipState | "")} aria-label="Conversation state">
               <option value="">All states</option>
               {(Object.keys(OWNERSHIP_LABEL) as OwnershipState[]).map((s) => (
                 <option key={s} value={s}>{OWNERSHIP_LABEL[s]}</option>
               ))}
-            </select>
-          </div>
-          {communicationEndpoints.data && communicationEndpoints.data.length > 0 && (
-            <select
-              value={communicationEndpointId}
-              onChange={(e) => setCommunicationEndpointId(e.target.value)}
-              className="w-full rounded border border-neutral-200 bg-white px-2 py-1 text-xs text-slate-700"
-              data-testid="endpoint-filter-select"
-            >
-              <option value="">All lines</option>
-              {communicationEndpoints.data.map((endpoint) => (
-                <option key={endpoint.id} value={endpoint.id}>{endpoint.displayLabel}</option>
-              ))}
-            </select>
-          )}
+            </FilterSelect>
+            {communicationEndpoints.data && communicationEndpoints.data.length > 0 && (
+              <FilterSelect
+                value={communicationEndpointId}
+                onChange={(e) => setCommunicationEndpointId(e.target.value)}
+                className="w-full"
+                aria-label="Line"
+                data-testid="endpoint-filter-select"
+              >
+                <option value="">All lines</option>
+                {communicationEndpoints.data.map((endpoint) => (
+                  <option key={endpoint.id} value={endpoint.id}>{endpoint.displayLabel}</option>
+                ))}
+              </FilterSelect>
+            )}
+          </FilterBar>
         </div>
         <div className="flex-1 overflow-y-auto">
           {conversations.isLoading && (
@@ -262,20 +260,30 @@ export default function InboxPage() {
                 type="button"
                 onClick={() => selectConversation(c.id)}
                 data-testid={`conversation-${c.id}`}
-                className={`flex w-full flex-col gap-1 border-b border-neutral-100 px-3 py-2 text-left hover:bg-neutral-50 ${active ? "bg-primary-50" : ""}`}
+                aria-current={active ? "true" : undefined}
+                className={`flex w-full flex-col gap-1 border-b border-line border-l-2 px-3 py-2.5 text-left transition-colors hover:bg-primary-50/60 ${active ? "border-l-primary-600 bg-primary-50" : "border-l-transparent"}`}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-1.5 text-xs font-medium text-slate-900">
-                    <Icon size={14} className="text-neutral-400" />
-                    {c.patientName}
+                  <span className="flex min-w-0 items-center gap-1.5 text-xs font-semibold text-ink">
+                    <Icon size={14} className="shrink-0 text-primary-600" aria-label={CHANNEL_LABEL[c.channel]} />
+                    <span className="truncate">{c.patientName}</span>
                   </span>
-                  <span className="whitespace-nowrap text-[10px] text-neutral-400">{relativeTime(c.lastMessageAt)}</span>
+                  <span className="whitespace-nowrap text-[10px] text-ink-2">{relativeTime(c.lastMessageAt)}</span>
                 </div>
-                <p className="truncate text-xs text-neutral-500">{c.lastMessage ?? "No messages yet"}</p>
-                <div className="flex items-center justify-between">
-                  <Badge tone={OWNERSHIP_TONE[c.ownershipState]}>{OWNERSHIP_LABEL[c.ownershipState]}</Badge>
+                <p className="truncate text-xs text-ink-2">{c.lastMessage ?? "No messages yet"}</p>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <Badge tone={OWNERSHIP_TONE[c.ownershipState]}>{OWNERSHIP_LABEL[c.ownershipState]}</Badge>
+                    {c.endpointLabel && (
+                      <span className="truncate text-[11px] text-ink-2" data-testid={`conversation-row-line-${c.id}`}>
+                        {c.endpointLabel}
+                      </span>
+                    )}
+                  </span>
                   {c.unreadCount > 0 && (
-                    <span className="rounded-full bg-primary-500 px-1.5 text-[10px] font-semibold text-white">{c.unreadCount}</span>
+                    <span className="min-w-[18px] rounded-full bg-primary-600 px-1.5 text-center text-[10px] font-semibold text-white" aria-label={`${c.unreadCount} unread`}>
+                      {c.unreadCount}
+                    </span>
                   )}
                 </div>
               </button>
@@ -285,22 +293,22 @@ export default function InboxPage() {
       </aside>
 
       {/* Thread — the primary surface. Never shares its width with Patient Context below 2xl. */}
-      <section className={`${mobileView === "list" ? "hidden" : "flex"} min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-neutral-200 bg-white md:flex`}>
+      <section className={`${mobileView === "list" ? "hidden" : "flex"} min-w-0 flex-1 flex-col overflow-hidden rounded-card border border-line bg-surface shadow-panel md:flex`}>
         {!selectedConversation && <EmptyState message="Select a conversation to view messages." />}
         {selectedConversation && (
           <>
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-100 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-2.5">
               <div className="flex min-w-0 items-center gap-2">
-                <button type="button" onClick={() => setMobileView("list")} className="shrink-0 rounded p-1 text-neutral-500 hover:bg-neutral-100 md:hidden" aria-label="Back to conversations">
+                <button type="button" onClick={() => setMobileView("list")} className="shrink-0 rounded-control p-1 text-neutral-600 hover:bg-primary-50 md:hidden" aria-label="Back to conversations">
                   <ArrowLeft size={18} />
                 </button>
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-slate-900">{selectedConversation.patientName}</p>
-                  <p className="mt-0.5 flex items-center gap-1.5 text-xs text-neutral-500">
+                  <p className="truncate text-sm font-semibold text-ink">{selectedConversation.patientName}</p>
+                  <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-ink-2">
                     {CHANNEL_LABEL[selectedConversation.channel]}
                     <Badge tone={OWNERSHIP_TONE[selectedConversation.ownershipState]}>{OWNERSHIP_LABEL[selectedConversation.ownershipState]}</Badge>
                     {automation.data && automation.data.mode !== "manual" && (
-                      <span className="rounded border border-neutral-200 px-1.5 py-0.5 text-[10px] font-medium text-neutral-500" data-testid="automation-mode-indicator">
+                      <span className="rounded-chip border border-line px-1.5 py-0.5 text-[10px] font-medium text-ink-2" data-testid="automation-mode-indicator">
                         {AUTOMATION_MODE_LABEL[automation.data.mode]}
                       </span>
                     )}
@@ -315,9 +323,9 @@ export default function InboxPage() {
                   const onClick = selectedConversation.ownershipState === "HUMAN_ACTIVE" ? handleReturnToAi : handleClaim;
                   const testId = selectedConversation.ownershipState === "HUMAN_ACTIVE" ? "return-to-ai" : label === "Take over" ? "take-over-conversation" : "claim-conversation";
                   return (
-                    <button type="button" onClick={onClick} data-testid={testId} className="rounded bg-primary-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-primary-700">
+                    <Button variant="primary" size="sm" onClick={onClick} data-testid={testId}>
                       {label}
-                    </button>
+                    </Button>
                   );
                 })()}
                 {selectedConversation.ownershipState !== "CLOSED" && (
@@ -333,7 +341,7 @@ export default function InboxPage() {
                 <button
                   type="button"
                   onClick={() => setContextOpen(true)}
-                  className="rounded p-1.5 text-neutral-500 hover:bg-neutral-100 2xl:hidden"
+                  className="rounded-control p-1.5 text-neutral-600 hover:bg-primary-50 2xl:hidden"
                   title="Patient context"
                   aria-label="Show patient context"
                   data-testid="open-patient-context"
@@ -344,37 +352,31 @@ export default function InboxPage() {
             </div>
 
             {assigning && (
-              <div className="flex items-center gap-1.5 border-b border-neutral-100 bg-neutral-50 px-3 py-2">
-                <span className="text-xs text-neutral-500">Assign to</span>
+              <div className="flex flex-wrap items-center gap-1.5 border-b border-line bg-surface-muted px-4 py-2">
+                <span className="text-xs text-ink-2">Assign to</span>
                 <select
                   value={assignTarget}
                   onChange={(e) => setAssignTarget(e.target.value)}
-                  className="rounded border border-neutral-200 bg-white px-1.5 py-1 text-xs text-slate-700"
+                  className="h-8 rounded-control border border-line-strong bg-surface px-2 text-xs text-ink"
                   autoFocus
                   data-testid="assign-target-select"
                 >
                   <option value="">Choose a person…</option>
                   {lookups.data?.owners.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
                 </select>
-                <button
-                  type="button"
-                  onClick={handleAssign}
-                  disabled={!assignTarget}
-                  className="rounded bg-primary-600 px-2 py-1 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-40"
-                  data-testid="confirm-assign"
-                >
+                <Button variant="primary" size="sm" onClick={handleAssign} disabled={!assignTarget} data-testid="confirm-assign">
                   Assign
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => {
                     setAssigning(false);
                     setAssignTarget("");
                   }}
-                  className="rounded px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-100"
                 >
                   Cancel
-                </button>
+                </Button>
               </div>
             )}
 
@@ -399,20 +401,25 @@ export default function InboxPage() {
               />
             )}
 
-            <div className="flex-1 space-y-3 overflow-y-auto p-3">
+            {/* Message list: plain scrolling surface (no blur, no gradient). Sender is named on every bubble and by alignment, never by colour alone. */}
+            <div className="flex-1 space-y-3 overflow-y-auto bg-surface-muted p-4" data-testid="message-list">
               {detail.isLoading && <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10" />)}</div>}
               {detail.data?.messages.map((m) =>
                 m.senderType === "system" ? (
-                  <p key={m.id} className="text-center text-[11px] italic text-neutral-400">{m.body}</p>
+                  <p key={m.id} className="text-center text-[11px] italic text-ink-2">{m.body}</p>
                 ) : (
                   <div key={m.id} className={`flex ${m.senderType === "patient" ? "justify-start" : "justify-end"}`}>
                     <div
-                      className={`max-w-[70%] rounded-lg px-3 py-2 text-xs ${
-                        m.senderType === "patient" ? "bg-neutral-100 text-slate-800" : m.senderType === "ai" ? "bg-accent-100 text-slate-800" : "bg-primary-500 text-white"
+                      className={`max-w-[75%] rounded-card border px-3 py-2 text-xs text-ink ${
+                        m.senderType === "patient"
+                          ? "border-line bg-surface"
+                          : m.senderType === "ai"
+                            ? "border-primary-200 bg-surface-info"
+                            : "border-primary-200 bg-primary-100"
                       }`}
                     >
-                      <p>{m.body}</p>
-                      <p className={`mt-1 text-[10px] ${m.senderType === "staff" ? "text-primary-100" : "text-neutral-400"}`}>
+                      <p className="whitespace-pre-wrap">{m.body}</p>
+                      <p className="mt-1 text-[10px] text-ink-2">
                         {m.senderType === "staff" ? m.senderName ?? "Staff" : m.senderType === "ai" ? "AI Assistant" : "Patient"} · {relativeTime(m.sentAt)}
                       </p>
                     </div>
@@ -426,31 +433,28 @@ export default function InboxPage() {
                 e.preventDefault();
                 handleSend();
               }}
-              className="flex items-center gap-2 border-t border-neutral-100 p-3"
+              className="flex items-center gap-2 border-t border-line px-4 py-3"
             >
               <input
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 placeholder={selectedConversation.ownershipState === "CLOSED" ? "This conversation is closed" : "Type a message…"}
+                aria-label="Message"
                 disabled={selectedConversation.ownershipState === "CLOSED"}
-                className="flex-1 rounded border border-neutral-200 px-2 py-1.5 text-xs text-slate-700 disabled:bg-neutral-50"
+                className="h-9 flex-1 rounded-control border border-line-strong bg-surface px-3 text-xs text-ink outline-none placeholder:text-neutral-500 focus:border-primary-500 disabled:bg-surface-muted"
               />
-              <button
-                type="submit"
-                disabled={selectedConversation.ownershipState === "CLOSED" || !draft.trim()}
-                className="rounded bg-primary-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-600 disabled:opacity-40"
-              >
+              <Button type="submit" variant="primary" disabled={selectedConversation.ownershipState === "CLOSED" || !draft.trim()}>
                 Send
-              </button>
+              </Button>
             </form>
           </>
         )}
       </section>
 
       {/* Patient Context — a real 3rd column only at very wide viewports. */}
-      <aside className="hidden w-72 flex-shrink-0 overflow-y-auto rounded-lg border border-neutral-200 bg-white p-3 2xl:block xl:w-80">
+      <Card tone="info" className="hidden w-72 flex-shrink-0 overflow-y-auto p-3 2xl:block xl:w-80">
         <PatientContextPanel detail={detail.data} onBook={openBookAppointment} onTask={openCreateTask} onProfile={goToProfile} />
-      </aside>
+      </Card>
 
       {/* Same content as a slide-over drawer everywhere narrower than 2xl. */}
       {contextOpen && (
@@ -459,11 +463,11 @@ export default function InboxPage() {
           <div
             ref={contextDialogRef}
             tabIndex={-1}
-            className="relative flex h-full w-full max-w-xs flex-col overflow-y-auto border-l border-neutral-200 bg-white p-3 shadow-xl transition-transform duration-200 motion-reduce:transition-none focus:outline-none"
+            className="relative flex h-full w-full max-w-xs flex-col overflow-y-auto border-l border-line bg-surface-info p-3 shadow-xl transition-transform duration-200 motion-reduce:transition-none focus:outline-none"
           >
             <div className="mb-1 flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wide text-neutral-400">Patient context</span>
-              <button type="button" onClick={() => setContextOpen(false)} aria-label="Close patient context" className="rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-slate-900" data-testid="close-patient-context">
+              <span className="text-xs font-semibold uppercase tracking-wide text-ink-2">Patient context</span>
+              <button type="button" onClick={() => setContextOpen(false)} aria-label="Close patient context" className="rounded-control p-1 text-neutral-600 hover:bg-white/70 hover:text-ink" data-testid="close-patient-context">
                 <X size={16} />
               </button>
             </div>
@@ -523,14 +527,14 @@ function AiSchedulePanel({
   }
 
   return (
-    <div className="space-y-2 border-b border-neutral-100 bg-neutral-50 px-3 py-3" data-testid="ai-schedule-panel">
+    <div className="space-y-2 border-b border-line bg-surface-muted px-4 py-3" data-testid="ai-schedule-panel">
       <div>
-        <p className="text-xs font-semibold text-slate-900">AI scheduling preference</p>
-        <p className="text-[11px] text-neutral-500">
+        <p className="text-xs font-semibold text-ink">AI scheduling preference</p>
+        <p className="text-[11px] text-ink-2">
           Configuration only — PulseOS has no live AI agent yet to act on this. Saving just records what should happen once one exists.
         </p>
       </div>
-      <div className="inline-flex rounded-lg border border-neutral-200 bg-white p-0.5" role="radiogroup" aria-label="AI scheduling preference" data-testid="automation-mode-select">
+      <div className="glass-control inline-flex rounded-control p-0.5" role="radiogroup" aria-label="AI scheduling preference" data-testid="automation-mode-select">
         {(["manual", "ai_when_available", "ai_scheduled"] as ConversationAutomationMode[]).map((m) => (
           <button
             key={m}
@@ -538,7 +542,7 @@ function AiSchedulePanel({
             role="radio"
             aria-checked={mode === m}
             onClick={() => setMode(m)}
-            className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${mode === m ? "bg-primary-600 text-white" : "text-neutral-600 hover:bg-neutral-100"}`}
+            className={`rounded-lg px-2.5 py-1 text-xs font-medium transition ${mode === m ? "bg-white text-primary-800 shadow-panel" : "text-ink-2 hover:bg-white/60 hover:text-ink"}`}
             data-testid={`automation-mode-${m}`}
           >
             {AUTOMATION_MODE_LABEL[m]}
@@ -546,36 +550,36 @@ function AiSchedulePanel({
         ))}
       </div>
       {current?.mode === "ai_scheduled" && current.scheduledStart && current.scheduledEnd && (
-        <p className="text-[11px] text-neutral-500">
+        <p className="text-[11px] text-ink-2">
           Currently: {fmtSmartDateTime(current.scheduledStart)} → {fmtSmartDateTime(current.scheduledEnd)} ({current.timezone})
         </p>
       )}
       {mode === "ai_scheduled" && (
         <div className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-1 text-[11px] text-neutral-500">
+          <label className="flex items-center gap-1 text-[11px] text-ink-2">
             Start
-            <input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} className="rounded border border-neutral-200 px-1.5 py-1 text-xs" data-testid="automation-start-input" />
+            <input type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} className="h-8 rounded-control border border-line-strong bg-surface px-1.5 text-xs text-ink" data-testid="automation-start-input" />
           </label>
-          <label className="flex items-center gap-1 text-[11px] text-neutral-500">
+          <label className="flex items-center gap-1 text-[11px] text-ink-2">
             End
-            <input type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} className="rounded border border-neutral-200 px-1.5 py-1 text-xs" data-testid="automation-end-input" />
+            <input type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} className="h-8 rounded-control border border-line-strong bg-surface px-1.5 text-xs text-ink" data-testid="automation-end-input" />
           </label>
-          <label className="flex items-center gap-1 text-[11px] text-neutral-500">
+          <label className="flex items-center gap-1 text-[11px] text-ink-2">
             Timezone
-            <input type="text" value={timezone} onChange={(e) => setTimezone(e.target.value)} className="w-32 rounded border border-neutral-200 px-1.5 py-1 text-xs" data-testid="automation-timezone-input" />
+            <input type="text" value={timezone} onChange={(e) => setTimezone(e.target.value)} className="h-8 w-32 rounded-control border border-line-strong bg-surface px-1.5 text-xs text-ink" data-testid="automation-timezone-input" />
           </label>
         </div>
       )}
-      {error && <p className="text-[11px] text-danger-500">{error}</p>}
+      {error && <p role="alert" className="text-[11px] text-danger-700">{error}</p>}
       <div className="flex items-center gap-2">
-        <button type="button" onClick={save} disabled={saving} className="rounded bg-primary-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-40" data-testid="save-automation">
+        <Button variant="primary" size="sm" onClick={save} disabled={saving} data-testid="save-automation">
           {saving ? "Saving…" : "Save"}
-        </button>
-        <button type="button" onClick={onCancel} className="rounded px-2.5 py-1 text-xs text-neutral-500 hover:bg-neutral-100">
+        </Button>
+        <Button variant="ghost" size="sm" onClick={onCancel}>
           Cancel
-        </button>
+        </Button>
         {mode !== "manual" && (
-          <span className="text-[10px] text-neutral-400">Automated replies require the AI runtime to be active.</span>
+          <span className="text-[10px] text-ink-2">Automated replies require the AI runtime to be active.</span>
         )}
       </div>
     </div>
@@ -598,7 +602,7 @@ function PatientContextPanel({
   return (
     <>
       {!hideTitle && <SectionHeading title="Patient context" />}
-      {!detail?.patientContext && <p className="text-xs text-neutral-400">No active journey for this patient.</p>}
+      {!detail?.patientContext && <p className="text-xs text-ink-2">No active journey for this patient.</p>}
       {detail?.patientContext && (
         <dl className="space-y-2 text-xs">
           <Row label="Journey" value={detail.patientContext.journeyType} />
@@ -611,7 +615,7 @@ function PatientContextPanel({
       )}
 
       {detail?.patientContext && (
-        <div className="mt-4 border-t border-neutral-100 pt-3">
+        <div className="mt-4 border-t border-line pt-3">
           <SectionHeading title="Quick Actions" />
           <div className="space-y-1">
             <QuickActionButton icon={CalendarPlus} label="Book Appointment" onClick={onBook} />
@@ -626,9 +630,9 @@ function PatientContextPanel({
 
 function Row({ label, value }: { label: string; value: string | null | undefined }) {
   return (
-    <div className="flex items-center justify-between gap-2 border-b border-neutral-50 pb-1.5">
-      <dt className="text-neutral-500">{label}</dt>
-      <dd className="text-right font-medium text-slate-800">{value ?? "—"}</dd>
+    <div className="flex items-center justify-between gap-2 border-b border-line pb-1.5">
+      <dt className="text-ink-2">{label}</dt>
+      <dd className="text-right font-medium text-ink">{value ?? "—"}</dd>
     </div>
   );
 }
@@ -638,9 +642,9 @@ function QuickActionButton({ icon: Icon, label, onClick }: { icon: typeof User; 
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-neutral-600 transition hover:bg-neutral-50 hover:text-slate-900"
+      className="flex w-full items-center gap-2 rounded-control px-2 py-1.5 text-left text-xs text-ink transition hover:bg-white/80"
     >
-      <Icon size={14} className="text-neutral-400" />
+      <Icon size={14} className="text-primary-600" />
       {label}
     </button>
   );

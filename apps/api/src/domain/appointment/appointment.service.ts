@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, lt } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, lt, max } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { appointments, branches, patients, timelineEvents, users } from "../../db/schema.js";
 import type { AppointmentAction, AppointmentRow, AppointmentStatus, CreateAppointmentInput, FrontDeskDashboard } from "@pulseos/types";
@@ -129,13 +129,44 @@ export async function createAppointment(db: Db, tenantId: string, actorId: strin
   return toRow(full);
 }
 
+// Wait duration needs a real arrival time. Appointments have no checked-in
+// timestamp of their own, but every check-in already writes an
+// `appointment_checked_in` Timeline event — take the latest one today per
+// (patient, journey). No event (e.g. seeded status) leaves arrivedAt null so
+// the UI can say so honestly instead of inventing a wait.
+async function withArrivalTimes(db: Db, tenantId: string, rows: AppointmentRow[], dayStart: Date): Promise<AppointmentRow[]> {
+  if (rows.length === 0) return rows;
+  const events = await db
+    .select({ patientId: timelineEvents.patientId, journeyId: timelineEvents.journeyId, at: max(timelineEvents.occurredAt) })
+    .from(timelineEvents)
+    .where(
+      and(
+        eq(timelineEvents.tenantId, tenantId),
+        eq(timelineEvents.eventType, "appointment_checked_in"),
+        gte(timelineEvents.occurredAt, dayStart),
+        inArray(timelineEvents.patientId, rows.map((r) => r.patientId)),
+      ),
+    )
+    .groupBy(timelineEvents.patientId, timelineEvents.journeyId);
+  const arrivals = new Map(events.map((e) => [`${e.patientId}:${e.journeyId}`, e.at]));
+  return rows.map((r) => {
+    const at = arrivals.get(`${r.patientId}:${r.journeyId}`);
+    return { ...r, arrivedAt: at ? at.toISOString() : null };
+  });
+}
+
 export async function getFrontDeskDashboard(db: Db, tenantId: string, branchId?: string): Promise<FrontDeskDashboard> {
   const { start, end } = todayRange();
   const todayRows = await selectAppointments(db, tenantId, { branchId }, { start, end });
 
   const today = todayRows.map(toRow);
   const arrivals = todayRows.filter((r) => r.status === "checked_in" || r.status === "waiting" || r.status === "with_doctor" || r.status === "completed").map(toRow);
-  const waitingQueue = todayRows.filter((r) => r.status === "checked_in" || r.status === "waiting").map(toRow);
+  const waitingQueue = await withArrivalTimes(
+    db,
+    tenantId,
+    todayRows.filter((r) => r.status === "checked_in" || r.status === "waiting").map(toRow),
+    start,
+  );
   const noShows = todayRows.filter((r) => r.status === "no_show").map(toRow);
   const pendingConfirmations = todayRows.filter((r) => r.status === "requested" || r.status === "scheduled").map(toRow);
 

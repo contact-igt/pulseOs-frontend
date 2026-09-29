@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { api } from "@pulseos/api-client";
-import { Badge, Card, ConfirmDialog, ErrorState, SectionHeading, Skeleton } from "@pulseos/ui";
+import { Badge, Button, ConfirmDialog, ErrorState, Panel, Skeleton } from "@pulseos/ui";
 import { hasPermission } from "@pulseos/types";
 import type { CustomFieldDefinitionVm, CustomFieldType, SpecialtyDetailVm, UpdateCustomFieldInput } from "@pulseos/types";
 
@@ -32,10 +32,10 @@ function FieldRow({
     <li className="flex flex-col gap-1.5 px-3 py-2 text-xs" data-testid={`field-row-${field.key}`}>
       <div className="flex items-center gap-2">
         <div className="flex shrink-0 flex-col">
-          <button type="button" onClick={() => onMove("up")} disabled={isFirst} className="text-neutral-400 hover:text-slate-900 disabled:opacity-30" aria-label={`Move ${field.label} up`} data-testid={`field-move-up-${field.key}`}>
+          <button type="button" onClick={() => onMove("up")} disabled={isFirst} className="text-ink-2 hover:text-ink disabled:opacity-30" aria-label={`Move ${field.label} up`} data-testid={`field-move-up-${field.key}`}>
             <ChevronUp size={12} />
           </button>
-          <button type="button" onClick={() => onMove("down")} disabled={isLast} className="text-neutral-400 hover:text-slate-900 disabled:opacity-30" aria-label={`Move ${field.label} down`} data-testid={`field-move-down-${field.key}`}>
+          <button type="button" onClick={() => onMove("down")} disabled={isLast} className="text-ink-2 hover:text-ink disabled:opacity-30" aria-label={`Move ${field.label} down`} data-testid={`field-move-down-${field.key}`}>
             <ChevronDown size={12} />
           </button>
         </div>
@@ -46,20 +46,20 @@ function FieldRow({
             const next = e.target.value.trim();
             if (next && next !== field.label) onSave({ label: next });
           }}
-          className="min-w-0 flex-1 rounded border border-transparent px-1 py-0.5 text-slate-800 outline-none hover:border-neutral-200 focus:border-primary-400"
+          className="min-w-0 flex-1 rounded border border-transparent px-1 py-0.5 text-ink outline-none hover:border-neutral-200 focus:border-primary-400"
         />
-        <span className="shrink-0 text-neutral-400">{field.fieldType.toLowerCase()}</span>
-        <label className="flex shrink-0 items-center gap-1 text-neutral-500">
+        <span className="shrink-0 text-ink-2">{field.fieldType.toLowerCase()}</span>
+        <label className="flex shrink-0 items-center gap-1 text-ink-2">
           <input type="checkbox" checked={field.required} onChange={(e) => onSave({ required: e.target.checked })} />
           Required
         </label>
-        <button type="button" onClick={onArchive} className="shrink-0 text-neutral-400 hover:text-danger-500">
+        <button type="button" onClick={onArchive} className="shrink-0 text-ink-2 hover:text-danger-700">
           Archive
         </button>
       </div>
       {isSelectType && (
         <div className="ml-5 flex items-center gap-1.5">
-          <span className="shrink-0 text-neutral-400">Options</span>
+          <span className="shrink-0 text-ink-2">Options</span>
           <input
             type="text"
             defaultValue={(field.options ?? []).join(", ")}
@@ -68,7 +68,7 @@ function FieldRow({
               const next = e.target.value.split(",").map((s) => s.trim()).filter(Boolean);
               onSave({ options: next });
             }}
-            className="min-w-0 flex-1 rounded border border-neutral-200 px-1.5 py-0.5 text-slate-700 outline-none focus:border-primary-400"
+            className="min-w-0 flex-1 h-7 rounded-control border border-line-strong bg-surface px-1.5 text-ink outline-none focus:border-primary-500"
           />
         </div>
       )}
@@ -159,15 +159,15 @@ function SpecialtyDetail({ specialtyKey }: { specialtyKey: string }) {
   const d: SpecialtyDetailVm = detail.data;
 
   return (
-    <div className="space-y-3 border-t border-neutral-100 p-4">
+    <div className="space-y-3 border-t border-line p-4">
       {saveError && (
-        <p className="rounded border border-danger-200 bg-danger-50 px-2.5 py-1.5 text-xs text-danger-700" data-testid="specialty-save-error">
+        <p className="rounded-control border border-danger-100 bg-danger-100/60 px-2.5 py-1.5 text-xs text-danger-700" data-testid="specialty-save-error">
           {saveError}
         </p>
       )}
       <div className="flex flex-wrap items-center gap-4 text-xs">
         <label className="flex items-center gap-1.5">
-          <span className="text-neutral-400">Display label</span>
+          <span className="text-ink-2">Display label</span>
           <input
             type="text"
             defaultValue={d.displayName}
@@ -175,12 +175,12 @@ function SpecialtyDetail({ specialtyKey }: { specialtyKey: string }) {
               const next = e.target.value.trim();
               if (next && next !== d.displayName) saveHeader({ displayName: next });
             }}
-            className="rounded border border-neutral-200 px-2 py-1 text-slate-800 outline-none focus:border-primary-400"
+            className="h-8 rounded-control border border-line-strong bg-surface px-2 text-ink outline-none focus:border-primary-500"
             data-testid="specialty-display-label"
           />
         </label>
         <label className="flex items-center gap-1.5">
-          <span className="text-neutral-400">Default Journey type</span>
+          <span className="text-ink-2">Default Journey type</span>
           <input
             type="text"
             defaultValue={d.defaultJourneyType}
@@ -188,16 +188,16 @@ function SpecialtyDetail({ specialtyKey }: { specialtyKey: string }) {
               const next = e.target.value.trim();
               if (next && next !== d.defaultJourneyType) saveHeader({ defaultJourneyType: next });
             }}
-            className="rounded border border-neutral-200 px-2 py-1 text-slate-800 outline-none focus:border-primary-400"
+            className="h-8 rounded-control border border-line-strong bg-surface px-2 text-ink outline-none focus:border-primary-500"
             data-testid="specialty-default-journey-type"
           />
         </label>
       </div>
 
       {d.fields.length === 0 ? (
-        <p className="text-xs text-neutral-400">No custom fields configured yet.</p>
+        <p className="text-xs text-ink-2">No custom fields configured yet.</p>
       ) : (
-        <ul className="divide-y divide-neutral-100 rounded border border-neutral-100">
+        <ul className="divide-y divide-line rounded-control border border-line">
           {d.fields.map((f, i) => (
             <FieldRow
               key={f.id}
@@ -218,9 +218,9 @@ function SpecialtyDetail({ specialtyKey }: { specialtyKey: string }) {
           placeholder="New field label…"
           value={newLabel}
           onChange={(e) => setNewLabel(e.target.value)}
-          className="rounded border border-neutral-200 px-2 py-1 text-xs outline-none focus:border-primary-400"
+          className="h-8 rounded-control border border-line-strong bg-surface px-2 text-xs text-ink outline-none placeholder:text-neutral-500 focus:border-primary-500"
         />
-        <select value={newType} onChange={(e) => setNewType(e.target.value as CustomFieldType)} className="rounded border border-neutral-200 px-2 py-1 text-xs">
+        <select value={newType} onChange={(e) => setNewType(e.target.value as CustomFieldType)} className="h-8 rounded-control border border-line-strong bg-surface px-2 text-xs text-ink">
           {FIELD_TYPES.map((t) => (
             <option key={t} value={t}>
               {t}
@@ -233,12 +233,12 @@ function SpecialtyDetail({ specialtyKey }: { specialtyKey: string }) {
             placeholder="Options, comma-separated…"
             value={newOptions}
             onChange={(e) => setNewOptions(e.target.value)}
-            className="rounded border border-neutral-200 px-2 py-1 text-xs outline-none focus:border-primary-400"
+            className="h-8 rounded-control border border-line-strong bg-surface px-2 text-xs text-ink outline-none placeholder:text-neutral-500 focus:border-primary-500"
           />
         )}
-        <button type="button" onClick={addField} disabled={!newLabel.trim()} className="rounded bg-primary-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-40">
+        <Button size="sm" variant="primary" onClick={addField} disabled={!newLabel.trim()}>
           Add field
-        </button>
+        </Button>
       </div>
 
       <ConfirmDialog
@@ -275,35 +275,33 @@ export default function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-5" data-testid="settings-page">
-      <Card className="p-4">
-        <SectionHeading title="Specialties & Fields" subtitle="Configure which specialties Add Lead offers, and their custom fields" />
-
+      <Panel title="Specialties & Fields" subtitle="Configure which specialties Add Lead offers, and their custom fields">
         {(specialties.isLoading || session.isLoading) && <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12" />)}</div>}
         {specialties.isError && <ErrorState message="Could not load specialties." />}
         {specialties.data && !session.isLoading && (
-          <ul className="divide-y divide-neutral-100 rounded-lg border border-neutral-200" data-testid="specialty-list">
+          <ul className="divide-y divide-line rounded-control border border-line" data-testid="specialty-list">
             {specialties.data.map((s) => (
               <li key={s.key}>
                 <div className="flex items-center justify-between px-4 py-3">
                   {canManage ? (
                     <button type="button" onClick={() => setExpanded(expanded === s.key ? null : s.key)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
-                      <span className="text-sm font-medium text-slate-900">{s.displayName}</span>
+                      <span className="text-sm font-medium text-ink">{s.displayName}</span>
                       <Badge tone={s.enabled ? "success" : "neutral"}>{s.enabled ? "Enabled" : "Disabled"}</Badge>
-                      <span className="min-w-0 truncate text-xs text-neutral-400">{s.fieldCount} custom field{s.fieldCount === 1 ? "" : "s"}</span>
+                      <span className="min-w-0 truncate text-xs text-ink-2">{s.fieldCount} custom field{s.fieldCount === 1 ? "" : "s"}</span>
                     </button>
                   ) : (
                     <div className="flex min-w-0 flex-1 items-center gap-3 text-left">
-                      <span className="text-sm font-medium text-slate-900">{s.displayName}</span>
+                      <span className="text-sm font-medium text-ink">{s.displayName}</span>
                       <Badge tone={s.enabled ? "success" : "neutral"}>{s.enabled ? "Enabled" : "Disabled"}</Badge>
-                      <span className="min-w-0 truncate text-xs text-neutral-400">{s.fieldCount} custom field{s.fieldCount === 1 ? "" : "s"}</span>
+                      <span className="min-w-0 truncate text-xs text-ink-2">{s.fieldCount} custom field{s.fieldCount === 1 ? "" : "s"}</span>
                     </div>
                   )}
                   {canManage && (
                     <div className="flex shrink-0 items-center gap-3">
-                      <button type="button" onClick={() => toggleEnabled(s.key, s.enabled)} className="text-xs font-medium text-primary-600 hover:underline" data-testid={`specialty-toggle-${s.key}`}>
+                      <button type="button" onClick={() => toggleEnabled(s.key, s.enabled)} className="text-xs font-medium text-primary-700 hover:underline" data-testid={`specialty-toggle-${s.key}`}>
                         {s.enabled ? "Disable" : "Enable"}
                       </button>
-                      <button type="button" onClick={() => setExpanded(expanded === s.key ? null : s.key)} className="text-xs text-neutral-500 hover:text-slate-900">
+                      <button type="button" onClick={() => setExpanded(expanded === s.key ? null : s.key)} className="text-xs text-ink-2 hover:text-ink">
                         {expanded === s.key ? "Close" : "Edit"}
                       </button>
                     </div>
@@ -314,7 +312,7 @@ export default function SettingsPage() {
             ))}
           </ul>
         )}
-      </Card>
+      </Panel>
     </div>
   );
 }

@@ -4,11 +4,13 @@ import { useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
-import { Card, ConnectorModeBadge, EmptyState, ErrorState, MetricStrip, SectionHeading, Skeleton, SpendAtRisk, Table, TableBody, TableHead, Td, Th, Tr, formatInr, formatMoneyOrDash, formatRoas } from "@pulseos/ui";
+import { Card, ConnectorModeBadge, EmptyState, ErrorState, FilterBar, FilterSelect, MetricStrip, Panel, Skeleton, SpendAtRisk, Table, TableBody, TableHead, Td, Th, Tr, formatInr, formatMoneyOrDash, formatRoas } from "@pulseos/ui";
 import type { CampaignFilters, SourceChannel } from "@pulseos/types";
 import { withFrom } from "@/components/shell/BackLink";
 
 const SOURCE_OPTIONS: SourceChannel[] = ["meta", "google", "website", "whatsapp", "phone", "walk_in", "referral", "organic", "other"];
+const SOURCE_LABEL: Record<SourceChannel, string> = { meta: "Meta", google: "Google", website: "Website", whatsapp: "WhatsApp", phone: "Phone", walk_in: "Walk-in", referral: "Referral", organic: "Organic", other: "Other" };
+const DATE_INPUT = "glass-control h-8 rounded-control px-2 text-xs text-ink outline-none focus-visible:border-primary-500";
 
 export default function CampaignsPage() {
   const [filters, setFilters] = useState<CampaignFilters>({});
@@ -21,23 +23,19 @@ export default function CampaignsPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-5" data-testid="campaigns-page">
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-neutral-200 bg-white p-2" data-testid="campaigns-filter-bar">
-        <select
-          value={filters.branchId ?? ""}
-          onChange={(e) => setFilters((f) => ({ ...f, branchId: e.target.value || undefined }))}
-          className="rounded border border-neutral-200 bg-white px-2 py-1 text-xs text-slate-700"
-        >
+      <FilterBar data-testid="campaigns-filter-bar">
+        <FilterSelect value={filters.branchId ?? ""} onChange={(e) => setFilters((f) => ({ ...f, branchId: e.target.value || undefined }))} aria-label="Branch">
           <option value="">All branches</option>
           {lookups.data?.branches.map((b) => (
             <option key={b.id} value={b.id}>
               {b.name}
             </option>
           ))}
-        </select>
-        <select
+        </FilterSelect>
+        <FilterSelect
           value={filters.specialtyKey ?? ""}
           onChange={(e) => setFilters((f) => ({ ...f, specialtyKey: e.target.value || undefined }))}
-          className="rounded border border-neutral-200 bg-white px-2 py-1 text-xs text-slate-700"
+          aria-label="Specialty"
           data-testid="campaigns-specialty-filter"
         >
           <option value="">All specialties</option>
@@ -46,46 +44,44 @@ export default function CampaignsPage() {
               {s.displayName}
             </option>
           ))}
-        </select>
-        <select
-          value={filters.source ?? ""}
-          onChange={(e) => setFilters((f) => ({ ...f, source: (e.target.value as SourceChannel) || undefined }))}
-          className="rounded border border-neutral-200 bg-white px-2 py-1 text-xs text-slate-700"
-        >
+        </FilterSelect>
+        <FilterSelect value={filters.source ?? ""} onChange={(e) => setFilters((f) => ({ ...f, source: (e.target.value as SourceChannel) || undefined }))} aria-label="Source">
           <option value="">All sources</option>
           {SOURCE_OPTIONS.map((s) => (
             <option key={s} value={s}>
-              {s}
+              {SOURCE_LABEL[s]}
             </option>
           ))}
-        </select>
-        <div className="flex items-center gap-1 text-xs text-neutral-500">
-          <span>From</span>
+        </FilterSelect>
+        <div className="flex items-center gap-1.5 text-xs text-ink-2">
+          <label htmlFor="campaigns-date-from">From</label>
           <input
+            id="campaigns-date-from"
             type="date"
             value={filters.dateFrom ?? ""}
             onChange={(e) => setFilters((f) => ({ ...f, dateFrom: e.target.value || undefined }))}
-            className="rounded border border-neutral-200 bg-white px-2 py-1 text-xs text-slate-700"
+            className={DATE_INPUT}
             data-testid="campaigns-date-from"
           />
-          <span>To</span>
+          <label htmlFor="campaigns-date-to">To</label>
           <input
+            id="campaigns-date-to"
             type="date"
             value={filters.dateTo ?? ""}
             onChange={(e) => setFilters((f) => ({ ...f, dateTo: e.target.value || undefined }))}
-            className="rounded border border-neutral-200 bg-white px-2 py-1 text-xs text-slate-700"
+            className={DATE_INPUT}
             data-testid="campaigns-date-to"
           />
         </div>
         {(filters.branchId || filters.specialtyKey || filters.source || filters.dateFrom || filters.dateTo) && (
-          <button type="button" onClick={() => setFilters({})} className="text-xs text-neutral-400 hover:text-slate-900">
+          <button type="button" onClick={() => setFilters({})} className="text-xs font-medium text-primary-700 hover:underline">
             Clear filters
           </button>
         )}
-      </div>
+      </FilterBar>
 
       <section>
-        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-600">Marketing Efficiency</h2>
+        <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-2">Marketing Efficiency</h2>
         {efficiency.isLoading && <div className="grid grid-cols-3 gap-2 lg:grid-cols-6">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-16" />)}</div>}
         {efficiency.isError && <ErrorState message="Could not load marketing efficiency." />}
         {efficiency.data && (
@@ -103,7 +99,7 @@ export default function CampaignsPage() {
               ]}
             />
             {/* Secondary: derived cost/volume detail — same data, deliberately smaller and quieter than the primary row. */}
-            <div className="grid grid-cols-2 gap-2 rounded-lg border border-neutral-200 bg-white px-4 py-2.5 sm:grid-cols-4" data-testid="marketing-efficiency-secondary">
+            <Card tone="info" className="grid grid-cols-2 gap-2 px-4 py-2.5 sm:grid-cols-4" data-testid="marketing-efficiency-secondary">
               {[
                 { key: "consultations", label: "Consultations", value: efficiency.data.consultations },
                 { key: "cpl", label: "Cost / Lead", value: formatMoneyOrDash(efficiency.data.cpl) },
@@ -111,11 +107,11 @@ export default function CampaignsPage() {
                 { key: "cpt", label: "Cost / Treatment", value: formatMoneyOrDash(efficiency.data.costPerTreatment) },
               ].map((cell) => (
                 <div key={cell.key} data-testid={`metric-${cell.key}`}>
-                  <span className="block text-sm font-medium tabular-nums text-neutral-700">{cell.value}</span>
-                  <span className="block text-[11px] text-neutral-500">{cell.label}</span>
+                  <span className="block text-sm font-semibold tabular-nums text-ink">{cell.value}</span>
+                  <span className="block text-[11px] text-ink-2">{cell.label}</span>
                 </div>
               ))}
-            </div>
+            </Card>
           </div>
         )}
       </section>
@@ -126,16 +122,16 @@ export default function CampaignsPage() {
           no visible scroll affordance. Full width removes the need to
           scroll at all on any desktop viewport this product targets. */}
       <div className="space-y-5">
-        <Card className="overflow-x-auto p-4">
-          <SectionHeading title="Campaign / Source Performance" subtitle={performance.data ? `${performance.data.length} campaigns` : undefined} />
-          {performance.isLoading && <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-8" />)}</div>}
+        <Panel title="Campaign / Source Performance" subtitle={performance.data ? `${performance.data.length} campaigns` : undefined} padded={false}>
+          {performance.isLoading && <div className="space-y-2 p-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-8" />)}</div>}
           {performance.isError && <ErrorState message="Could not load campaign performance." />}
           {performance.data && performance.data.length === 0 && <EmptyState message="No campaigns match these filters." />}
           {performance.data && performance.data.length > 0 && (
+            <div className="overflow-x-auto">
             <Table className="min-w-[860px]">
               <TableHead>
                 <tr>
-                  <Th>Campaign</Th>
+                  <Th leading>Campaign</Th>
                   <Th>Source</Th>
                   <Th align="right">Spend</Th>
                   <Th align="right">Leads</Th>
@@ -153,7 +149,7 @@ export default function CampaignsPage() {
               <TableBody>
                 {performance.data.map((row) => (
                   <Tr key={row.campaignId ?? row.campaignName} data-testid={`campaign-row-${row.campaignId ?? row.campaignName}`}>
-                    <Td className="text-slate-900">
+                    <Td leading nowrap={false} className="text-ink">
                       <span className="flex items-center gap-1.5">
                         {row.campaignId ? (
                           <Link href={withFrom(`/campaigns/${row.campaignId}`, "campaigns")} className="font-medium text-primary-700 hover:underline">
@@ -166,7 +162,7 @@ export default function CampaignsPage() {
                       </span>
                       {row.specialtyLabel && <span className="block text-[11px] text-neutral-400">{row.specialtyLabel}</span>}
                     </Td>
-                    <Td className="text-neutral-600">{row.source}</Td>
+                    <Td className="text-ink-2">{SOURCE_LABEL[row.source as SourceChannel] ?? row.source}</Td>
                     <Td align="right">{formatInr(row.spend)}</Td>
                     <Td align="right">{row.leads}</Td>
                     <Td align="right">{row.appointments}</Td>
@@ -182,8 +178,9 @@ export default function CampaignsPage() {
                 ))}
               </TableBody>
             </Table>
+            </div>
           )}
-        </Card>
+        </Panel>
 
         {spendAtRisk.isLoading ? <Skeleton className="h-64" /> : spendAtRisk.isError ? <ErrorState message="Could not load spend at risk." /> : spendAtRisk.data && <SpendAtRisk data={spendAtRisk.data} />}
       </div>

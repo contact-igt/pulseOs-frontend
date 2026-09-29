@@ -12,12 +12,12 @@ function todayRange() {
 }
 
 function toRow(r: {
-  id: string; patientId: string; patientName: string; journeyId: string | null; journeyType: string | null;
+  id: string; patientId: string; patientName: string; journeyId: string | null; journeyType: string | null; source?: TaskRow["source"];
   assignedTo: string | null; assignedToName: string | null; type: TaskRow["type"]; priority: TaskRow["priority"];
   status: TaskRow["status"]; reason: TaskRow["reason"]; notes: string | null; dueAt: Date; completedAt: Date | null; createdAt: Date;
 }): TaskRow {
   return {
-    id: r.id, patientId: r.patientId, patientName: r.patientName, journeyId: r.journeyId, journeyType: r.journeyType,
+    id: r.id, patientId: r.patientId, patientName: r.patientName, journeyId: r.journeyId, journeyType: r.journeyType, source: r.source ?? null,
     assignedTo: r.assignedTo, assignedToName: r.assignedToName, type: r.type, priority: r.priority, status: r.status,
     reason: r.reason, notes: r.notes, dueAt: r.dueAt.toISOString(), completedAt: r.completedAt ? r.completedAt.toISOString() : null,
     createdAt: r.createdAt.toISOString(),
@@ -51,7 +51,7 @@ export async function listTasks(db: Db, tenantId: string, filters: TaskFilters):
   const rows = await db
     .select({
       id: tasks.id, patientId: tasks.patientId, patientName: patients.name,
-      journeyId: tasks.journeyId, journeyType: journeys.journeyType,
+      journeyId: tasks.journeyId, journeyType: journeys.journeyType, source: journeys.source,
       assignedTo: tasks.assignedTo, assignedToName: users.name,
       type: tasks.type, priority: tasks.priority, status: tasks.status, reason: tasks.reason, notes: tasks.notes,
       dueAt: tasks.dueAt, completedAt: tasks.completedAt, createdAt: tasks.createdAt,
@@ -182,7 +182,7 @@ export async function getTaskById(db: Db, tenantId: string, taskId: string): Pro
   const [row] = await db
     .select({
       id: tasks.id, patientId: tasks.patientId, patientName: patients.name,
-      journeyId: tasks.journeyId, journeyType: journeys.journeyType,
+      journeyId: tasks.journeyId, journeyType: journeys.journeyType, source: journeys.source,
       assignedTo: tasks.assignedTo, assignedToName: users.name,
       type: tasks.type, priority: tasks.priority, status: tasks.status, reason: tasks.reason, notes: tasks.notes,
       dueAt: tasks.dueAt, completedAt: tasks.completedAt, createdAt: tasks.createdAt,

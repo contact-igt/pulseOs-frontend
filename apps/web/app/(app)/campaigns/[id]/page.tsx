@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
 import {
-  Badge, Card, ConnectorModeBadge, EmptyState, ErrorState, MetricStrip, SectionHeading, Skeleton, Table, TableBody, TableHead, Td, Th, Tr,
+  Badge, Card, ConnectorModeBadge, EmptyState, ErrorState, MetricStrip, Panel, Skeleton, Table, TableBody, TableHead, Td, Th, Tr,
   formatInr, formatMoneyOrDash, formatRoas, fmtDateWithYear as fmtDate, JOURNEY_STAGE_LABEL, JOURNEY_STAGE_TONE,
 } from "@pulseos/ui";
 import { BackLink, withFrom } from "@/components/shell/BackLink";
@@ -53,20 +53,20 @@ export default function CampaignDetailPage() {
     <div className="mx-auto max-w-6xl space-y-5" data-testid="campaign-detail-page">
       <BackLink fallback="/campaigns" fallbackLabel="Back to Campaigns" />
 
-      <Card className="p-5">
+      <Card className="px-5 py-4">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-xl font-semibold text-slate-900">{campaign.campaignName}</h1>
+              <h1 className="text-xl font-semibold tracking-tight text-ink">{campaign.campaignName}</h1>
               <ConnectorModeBadge mode={campaign.connectorMode} />
             </div>
-            <p className="mt-1 text-sm text-neutral-500">
+            <p className="mt-1 text-sm text-ink-2">
               {campaign.source}
               {campaign.specialtyLabel ? ` · ${campaign.specialtyLabel}` : ""}
             </p>
           </div>
           {journeyList.data && journeyList.data.length > 0 && (
-            <span className="text-xs text-neutral-400">
+            <span className="text-xs text-ink-2">
               First attributed {fmtDate([...journeyList.data].sort((a, b) => a.lastActivityAt.localeCompare(b.lastActivityAt))[0].lastActivityAt)}
             </span>
           )}
@@ -91,7 +91,7 @@ export default function CampaignDetailPage() {
         />
         {/* Secondary: derived cost/volume detail — Tx Advised stays visible
             via each journey row's stage badge below, not duplicated here. */}
-        <div className="grid grid-cols-2 gap-2 rounded-lg border border-neutral-100 bg-neutral-50 px-4 py-2.5 sm:grid-cols-4" data-testid="campaign-detail-metrics-secondary">
+        <Card tone="info" className="grid grid-cols-2 gap-2 px-4 py-2.5 sm:grid-cols-4" data-testid="campaign-detail-metrics-secondary">
           {[
             { key: "consultations", label: "Consultations", value: campaign.consultations },
             { key: "cpl", label: "Cost / Lead", value: formatMoneyOrDash(campaign.cpl) },
@@ -99,19 +99,19 @@ export default function CampaignDetailPage() {
             { key: "cpt", label: "Cost / Treatment", value: formatMoneyOrDash(campaign.costPerTreatment) },
           ].map((cell) => (
             <div key={cell.key} data-testid={`metric-${cell.key}`}>
-              <span className="block text-sm font-medium tabular-nums text-neutral-700">{cell.value}</span>
-              <span className="block text-[11px] text-neutral-500">{cell.label}</span>
+              <span className="block text-sm font-semibold tabular-nums text-ink">{cell.value}</span>
+              <span className="block text-[11px] text-ink-2">{cell.label}</span>
             </div>
           ))}
-        </div>
+        </Card>
       </div>
 
-      <Card className="overflow-x-auto p-4">
-        <SectionHeading title="Attribution / Journeys" subtitle={journeyList.data ? `${journeyList.data.length} journeys` : undefined} />
-        {journeyList.isLoading && <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-8" />)}</div>}
+      <Panel title="Attribution / Journeys" subtitle={journeyList.data ? `${journeyList.data.length} journeys` : undefined} padded={false}>
+        {journeyList.isLoading && <div className="space-y-2 p-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-8" />)}</div>}
         {journeyList.isError && <ErrorState message="Could not load attributed journeys." />}
         {journeyList.data && journeyList.data.length === 0 && <EmptyState message="No journeys attributed to this campaign yet." />}
         {journeyList.data && journeyList.data.length > 0 && (
+          <div className="overflow-x-auto">
           <Table className="min-w-[720px]">
             <TableHead>
               <tr>
@@ -131,17 +131,22 @@ export default function CampaignDetailPage() {
                       {row.patientName}
                     </Link>
                   </Td>
-                  <Td className="text-neutral-600">{row.journeyType}</Td>
+                  <Td>
+                    <Link href={withFrom(`/journeys/${row.id}`, "campaigns")} className="text-ink hover:text-primary-700 hover:underline" data-testid={`campaign-journey-link-${row.id}`}>
+                      {row.journeyType}
+                    </Link>
+                  </Td>
                   <Td><Badge tone={JOURNEY_STAGE_TONE[row.stage] ?? "neutral"}>{JOURNEY_STAGE_LABEL[row.stage] ?? row.stage}</Badge></Td>
-                  <Td className="text-neutral-600">{row.doctorName ?? "—"}</Td>
-                  <Td className="text-neutral-600">{fmtDate(row.lastActivityAt)}</Td>
+                  <Td className="text-ink-2">{row.doctorName ?? "—"}</Td>
+                  <Td className="text-ink-2">{fmtDate(row.lastActivityAt)}</Td>
                   <Td align="right">{formatInr(row.treatmentValue)}</Td>
                 </Tr>
               ))}
             </TableBody>
           </Table>
+          </div>
         )}
-      </Card>
+      </Panel>
     </div>
   );
 }

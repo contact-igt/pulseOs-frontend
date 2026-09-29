@@ -137,6 +137,39 @@ describe.skipIf(!DEMO_PASSWORD)("appointments / front desk (integration)", () =>
     expect(eventTypes).toContain("appointment_completed");
   });
 
+  it("Front Desk waiting queue rows carry arrivedAt (the real check-in time from the Timeline) so the UI can show an honest wait duration", async () => {
+    const lookups = await app.inject({ method: "GET", url: "/lookups", cookies: { pulseos_session: frontDeskCookie } });
+    const { branches, doctors } = lookups.json() as Lookups;
+    const lead = await app.inject({
+      method: "POST", url: "/leads", cookies: { pulseos_session: frontDeskCookie },
+      payload: { name: "Wait Duration Test Patient", phone: `9${Math.floor(100000000 + Math.random() * 899999999)}`, specialtyKey: "GENERAL_OPD", branchId: branches[0].id, source: "walk_in", journeyType: "General Consultation" },
+    });
+    const { patientId, journeyId } = lead.json() as CreateLeadResult;
+    // Scheduled "now" so it lands in today's Front Desk board regardless of time of day.
+    const create = await app.inject({
+      method: "POST", url: "/appointments", cookies: { pulseos_session: frontDeskCookie },
+      payload: { patientId, journeyId, branchId: branches[0].id, doctorId: doctors[0].id, scheduledAt: new Date().toISOString() },
+    });
+    const appt = create.json() as AppointmentRow;
+    for (const action of ["confirm", "check_in", "mark_waiting"]) {
+      const r = await app.inject({ method: "PATCH", url: `/appointments/${appt.id}/action`, cookies: { pulseos_session: frontDeskCookie }, payload: { action } });
+      expect(r.statusCode).toBe(200);
+    }
+
+    const fd = await app.inject({ method: "GET", url: "/front-desk", cookies: { pulseos_session: frontDeskCookie } });
+    const queueRow = (fd.json() as { waitingQueue: AppointmentRow[] }).waitingQueue.find((r) => r.id === appt.id)!;
+    expect(queueRow).toBeTruthy();
+    expect(queueRow.arrivedAt).toBeTruthy();
+    const ageMs = Date.now() - new Date(queueRow.arrivedAt!).getTime();
+    expect(ageMs).toBeGreaterThanOrEqual(0);
+    expect(ageMs).toBeLessThan(60_000);
+
+    // Rows that are not in the waiting queue carry no arrival time.
+    const scheduled = await freshScheduledAppointment();
+    const list = await app.inject({ method: "GET", url: `/appointments?journeyId=${scheduled.journeyId}`, cookies: { pulseos_session: frontDeskCookie } });
+    expect((list.json() as AppointmentRow[])[0].arrivedAt ?? null).toBeNull();
+  });
+
   it("cannot complete an appointment that isn't currently with the doctor", async () => {
     const target = await freshScheduledAppointment();
     const res = await app.inject({ method: "PATCH", url: `/appointments/${target.id}/complete`, cookies: { pulseos_session: frontDeskCookie } });

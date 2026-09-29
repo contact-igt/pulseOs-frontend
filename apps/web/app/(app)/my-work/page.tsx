@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
 import { api } from "@pulseos/api-client";
-import { Badge, Button, Card, EmptyState, ErrorState, Skeleton, TASK_REASON_LABEL, TASK_REASON_TONE, fmtDateTime as fmtDate, urgencyLabel } from "@pulseos/ui";
+import Link from "next/link";
+import { Badge, Button, EmptyState, ErrorState, Panel, Skeleton, Tabs, Toolbar, TASK_REASON_LABEL, TASK_REASON_TONE, fmtDateTime as fmtDate, urgencyLabel } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import { withFrom } from "@/components/shell/BackLink";
 import { hasPermission } from "@pulseos/types";
-import type { TaskReason, TaskRow, TaskStatus, TaskType, TaskView } from "@pulseos/types";
+import type { TaskReason, TaskRow, TaskType, TaskView } from "@pulseos/types";
 
 const TABS: { key: TaskView | "mine"; label: string }[] = [
   { key: "mine", label: "My Work" },
@@ -45,12 +45,14 @@ const TYPE_LABEL: Record<TaskType, string> = {
   OTHER: "Other",
 };
 
-const STATUS_TONE: Record<TaskStatus, "neutral" | "warning" | "danger" | "primary"> = {
-  pending: "neutral",
-  in_progress: "primary",
-  completed: "neutral",
-  cancelled: "neutral",
+const SOURCE_LABEL: Record<string, string> = {
+  meta: "Meta", google: "Google", website: "Website", whatsapp: "WhatsApp", phone: "Phone", walk_in: "Walk-in", referral: "Referral", organic: "Organic", other: "Other",
 };
+
+// One grid shared by the column-header row and every task row (xl and up) — the
+// actions column is a fixed width so columns line up across rows;
+// below xl each row reflows into a two-line card instead of a squeezed table.
+const ROW_GRID = "xl:grid-cols-[minmax(0,1.3fr)_minmax(0,2fr)_minmax(0,1fr)_minmax(0,0.7fr)_minmax(0,1fr)_15rem]";
 
 
 function isOverdue(task: TaskRow) {
@@ -58,7 +60,6 @@ function isOverdue(task: TaskRow) {
 }
 
 export default function MyWorkPage() {
-  const router = useRouter();
   const queryClient = useQueryClient();
   const quickCreate = useQuickCreate();
   const [tab, setTab] = useState<(typeof TABS)[number]["key"]>("mine");
@@ -153,147 +154,184 @@ export default function MyWorkPage() {
     invalidate();
   }
 
+  // Tabs only takes a plain-text `count`, which has no test id; the label is
+  // rendered as-is inside the tab button, so the count is passed as part of a
+  // node to keep the long-standing `my-work-tab-count-*` test ids.
+  const tabItems = visibleTabs.map((t) => ({
+    key: t.key,
+    label: (
+      <>
+        {t.label}
+        {counts.data && (
+          <span className="tabular-nums text-neutral-500" data-testid={`my-work-tab-count-${t.key}`}>
+            {counts.data[t.key]}
+          </span>
+        )}
+      </>
+    ) as unknown as string,
+    testId: `my-work-tab-${t.key}`,
+  }));
+
   return (
-    <div className="mx-auto max-w-5xl space-y-4" data-testid="my-work-page">
-      {canManageTasks && (
-        <div className="flex justify-end">
-          <Button variant="primary" onClick={() => quickCreate.openAddTask()} data-testid="add-task-button">
-            + Add Task
-          </Button>
-        </div>
-      )}
+    <div className="mx-auto max-w-6xl space-y-3" data-testid="my-work-page">
+      <Toolbar
+        actions={
+          canManageTasks && (
+            <Button variant="primary" onClick={() => quickCreate.openAddTask()} data-testid="add-task-button">
+              + Add Task
+            </Button>
+          )
+        }
+      >
+        <Tabs items={tabItems} value={effectiveTab} onChange={(k) => setTab(k as typeof tab)} ariaLabel="Work queue" />
+      </Toolbar>
 
-      <div className="flex flex-wrap gap-1 rounded border border-neutral-200 bg-white p-1" role="tablist">
-        {visibleTabs.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            role="tab"
-            aria-selected={effectiveTab === t.key}
-            onClick={() => setTab(t.key)}
-            className={`flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition ${effectiveTab === t.key ? "bg-primary-50 text-primary-700" : "text-neutral-500 hover:bg-neutral-100"}`}
-            data-testid={`my-work-tab-${t.key}`}
-          >
-            {t.label}
-            {counts.data && (
-              <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-normal tabular-nums text-neutral-500" data-testid={`my-work-tab-count-${t.key}`}>
-                {counts.data[t.key]}
-              </span>
-            )}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter by reason">
+        <span className="mr-1 text-[11px] font-semibold uppercase tracking-wide text-ink-2">Reason</span>
+        {REASON_GROUPS.map((g) => {
+          const active = reasonKey === g.key;
+          return (
+            <button
+              key={g.key}
+              type="button"
+              aria-pressed={active}
+              onClick={() => setReasonKey(g.key)}
+              className={`inline-flex h-7 items-center gap-1.5 rounded-control border px-2.5 text-xs font-medium transition ${active ? "border-primary-300 bg-primary-50 text-primary-800" : "border-line bg-surface text-ink-2 hover:border-primary-200 hover:text-ink"}`}
+              data-testid={`my-work-reason-${g.key}`}
+            >
+              {g.label}
+              {tasks.data && (
+                <span className="tabular-nums text-neutral-500" data-testid={`my-work-reason-count-${g.key}`}>
+                  {reasonCounts[g.key]}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
-      <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Filter by reason">
-        {REASON_GROUPS.map((g) => (
-          <button
-            key={g.key}
-            type="button"
-            role="tab"
-            aria-selected={reasonKey === g.key}
-            onClick={() => setReasonKey(g.key)}
-            className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition ${reasonKey === g.key ? "border-primary-200 bg-primary-50 text-primary-700" : "border-neutral-200 bg-white text-neutral-500 hover:bg-neutral-50"}`}
-            data-testid={`my-work-reason-${g.key}`}
-          >
-            {g.label}
-            {tasks.data && (
-              <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-normal tabular-nums text-neutral-500" data-testid={`my-work-reason-count-${g.key}`}>
-                {reasonCounts[g.key]}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
-
-      <Card className="p-0">
+      <Panel padded={false}>
         {(tasks.isLoading || session.isLoading) && <div className="space-y-2 p-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-14" />)}</div>}
         {tasks.isError && <div className="p-4"><ErrorState message="Could not load tasks." /></div>}
         {visibleTasks && visibleTasks.length === 0 && (
-          <div className="p-8">
-            <EmptyState message="You're all caught up." />
-            {canManageTasks && (
-              <div className="mt-3 flex justify-center">
-                <button type="button" onClick={() => quickCreate.openAddTask()} className="text-xs font-medium text-primary-600 hover:underline">
-                  + Add Task
-                </button>
-              </div>
-            )}
+          <div className="p-6">
+            <EmptyState
+              message="You're all caught up."
+              hint="Nothing in this queue needs a Next Action right now."
+              action={
+                canManageTasks ? (
+                  <button type="button" onClick={() => quickCreate.openAddTask()} className="text-xs font-medium text-primary-700 hover:underline">
+                    + Add Task
+                  </button>
+                ) : undefined
+              }
+            />
           </div>
         )}
         {visibleTasks && visibleTasks.length > 0 && (
-          <ul className="divide-y divide-neutral-100" data-testid="my-work-task-list">
-            {visibleTasks.map((task) => {
-              const overdue = isOverdue(task);
-              const urgency = task.status === "pending" ? urgencyLabel(task.dueAt) : null;
-              return (
-                <li
-                  key={task.id}
-                  className={`p-4 ${overdue ? "border-l-2 border-l-danger-500 bg-danger-100/30" : ""}`}
-                  data-testid={`task-row-${task.id}`}
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <div className={`hidden gap-x-4 border-b border-line bg-surface-muted px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-ink-2 xl:grid ${ROW_GRID}`} aria-hidden="true">
+              <span>Patient / Journey</span>
+              <span>Reason / Next Action</span>
+              <span>Due</span>
+              <span>Source</span>
+              <span>Owner</span>
+              <span className="text-right">Actions</span>
+            </div>
+            <ul className="divide-y divide-line" data-testid="my-work-task-list">
+              {visibleTasks.map((task) => {
+                const overdue = isOverdue(task);
+                const urgency = task.status === "pending" ? urgencyLabel(task.dueAt) : null;
+                const canAct = canManageTasks && task.status !== "completed";
+                return (
+                  <li
+                    key={task.id}
+                    className={`grid gap-x-4 gap-y-2 px-4 py-3 xl:items-start ${ROW_GRID} ${overdue ? "border-l-2 border-l-danger-500 pl-[14px]" : ""}`}
+                    data-testid={`task-row-${task.id}`}
+                  >
                     <div className="min-w-0">
-                      <button
-                        type="button"
-                        onClick={() => router.push(withFrom(`/patients/${task.patientId}`, "my-work"))}
-                        className="text-sm font-medium text-slate-900 hover:underline"
-                      >
+                      <Link href={withFrom(`/patients/${task.patientId}`, "my-work")} className="block truncate text-sm font-semibold text-ink hover:text-primary-700 hover:underline" data-testid={`task-patient-${task.id}`}>
                         {task.patientName}
-                      </button>
-                      <span className="ml-2 text-xs text-neutral-500">{task.journeyType ?? "General"}</span>
-                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                        <Badge tone={STATUS_TONE[task.status]}>{TYPE_LABEL[task.type]}</Badge>
-                        <Badge tone={TASK_REASON_TONE[task.reason]}>{TASK_REASON_LABEL[task.reason]}</Badge>
-                        {task.priority === "high" && <Badge tone="warning">High priority</Badge>}
-                        <span className={`text-xs tabular-nums ${overdue ? "font-medium text-danger-500" : "text-neutral-500"}`}>
-                          {urgency ? urgency.text : `Due ${fmtDate(task.dueAt)}`}
-                        </span>
-                        <span className="text-xs text-neutral-400">· {fmtDate(task.dueAt)}</span>
-                        {task.assignedToName && <span className="text-xs text-neutral-400">· {task.assignedToName}</span>}
-                      </div>
-                      {task.notes && <p className="mt-1.5 text-xs text-neutral-600">{task.notes}</p>}
-                    </div>
-
-                    {canManageTasks && task.status !== "completed" && (
-                      <div className="flex shrink-0 items-center gap-1.5">
-                        {!task.assignedTo && (
-                          <button type="button" onClick={() => assignToMe(task.id)} className="rounded border border-primary-200 px-2 py-1 text-xs font-medium text-primary-700 hover:bg-primary-50" data-testid={`task-assign-me-${task.id}`}>
-                            Assign to me
-                          </button>
-                        )}
-                        <button type="button" onClick={() => reschedule(task.id, 1)} className="rounded border border-neutral-200 px-2 py-1 text-xs text-neutral-600 hover:bg-neutral-50" data-testid={`task-reschedule-${task.id}`}>
-                          +1 day
-                        </button>
-                        <button type="button" onClick={() => complete(task.id)} className="rounded bg-primary-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-primary-700" data-testid={`task-complete-${task.id}`}>
-                          Complete
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {canManageTasks && task.status !== "completed" && (
-                    <div className="mt-2 flex items-center gap-1.5">
-                      <input
-                        type="text"
-                        placeholder="Add a note…"
-                        value={noteDraft[task.id] ?? ""}
-                        onChange={(e) => setNoteDraft((d) => ({ ...d, [task.id]: e.target.value }))}
-                        className="w-full max-w-xs rounded border border-neutral-200 px-2 py-1 text-xs outline-none focus:border-primary-400"
-                        data-testid={`task-note-input-${task.id}`}
-                      />
-                      {noteDraft[task.id] !== undefined && (
-                        <button type="button" onClick={() => saveNote(task.id)} className="text-xs font-medium text-primary-600 hover:underline">
-                          Save
-                        </button>
+                      </Link>
+                      {task.journeyId ? (
+                        <Link href={withFrom(`/journeys/${task.journeyId}`, "my-work")} className="block truncate text-xs text-primary-700 hover:underline" data-testid={`task-journey-${task.id}`}>
+                          {task.journeyType ?? "Journey"}
+                        </Link>
+                      ) : (
+                        <span className="block truncate text-xs text-ink-2">No journey</span>
                       )}
                     </div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Badge tone={TASK_REASON_TONE[task.reason]}>{TASK_REASON_LABEL[task.reason]}</Badge>
+                        {task.priority === "high" && <Badge tone="warning">High priority</Badge>}
+                      </div>
+                      <p className="mt-1 text-xs text-ink">
+                        <span className="text-ink-2">Next Action · </span>
+                        {TYPE_LABEL[task.type]}
+                      </p>
+                      {task.notes && <p className="mt-0.5 text-xs text-ink-2">{task.notes}</p>}
+                    </div>
+
+                    {/* Below xl: due / source / owner share one wrapping line; at xl they become grid columns. */}
+                    <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 xl:contents">
+                      <div className="min-w-0 text-xs tabular-nums">
+                        <span className={`block ${overdue ? "font-semibold text-danger-700" : "text-ink"}`}>{urgency ? urgency.text : `Due ${fmtDate(task.dueAt)}`}</span>
+                        <span className="block text-ink-2">{fmtDate(task.dueAt)}</span>
+                      </div>
+
+                      <div className="min-w-0 text-xs text-ink">
+                        <span className="text-ink-2 xl:hidden">Source · </span>
+                        {task.source ? (SOURCE_LABEL[task.source] ?? task.source) : "—"}
+                      </div>
+
+                      <div className="min-w-0 truncate text-xs text-ink">
+                        <span className="text-ink-2 xl:hidden">Owner · </span>
+                        {task.assignedToName ?? <span className="text-ink-2">Unassigned</span>}
+                      </div>
+                    </div>
+
+                    {canAct && (
+                      <div className="flex min-w-0 flex-col gap-1.5 xl:items-end">
+                        <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                          {!task.assignedTo && (
+                            <Button size="sm" variant="secondary" onClick={() => assignToMe(task.id)} data-testid={`task-assign-me-${task.id}`}>
+                              Assign to me
+                            </Button>
+                          )}
+                          <Button size="sm" variant="secondary" onClick={() => reschedule(task.id, 1)} data-testid={`task-reschedule-${task.id}`}>
+                            +1 day
+                          </Button>
+                          <Button size="sm" variant="primary" onClick={() => complete(task.id)} data-testid={`task-complete-${task.id}`}>
+                            Complete
+                          </Button>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="text"
+                            placeholder="Add a note…"
+                            aria-label={`Add a note for ${task.patientName}`}
+                            value={noteDraft[task.id] ?? ""}
+                            onChange={(e) => setNoteDraft((d) => ({ ...d, [task.id]: e.target.value }))}
+                            className="h-7 w-full min-w-0 max-w-[11rem] rounded-control border border-line bg-surface px-2 text-xs text-ink outline-none placeholder:text-neutral-500 focus:border-primary-500 xl:w-40"
+                            data-testid={`task-note-input-${task.id}`}
+                          />
+                          {noteDraft[task.id] !== undefined && (
+                            <button type="button" onClick={() => saveNote(task.id)} className="text-xs font-medium text-primary-700 hover:underline">
+                              Save
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         )}
-      </Card>
+      </Panel>
     </div>
   );
 }

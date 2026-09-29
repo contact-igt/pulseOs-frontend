@@ -1,8 +1,16 @@
-import type { AppointmentAction, AppointmentRow, AppointmentStatus } from "@pulseos/types";
-import { Badge, Card, EmptyState, SectionHeading } from "./primitives";
-import { APPOINTMENT_STATUS_LABEL as STATUS_LABEL, APPOINTMENT_STATUS_TONE as STATUS_TONE } from "./status";
-import { fmtTime } from "./format";
+"use client";
 
+import { useEffect, useState } from "react";
+import type { MouseEvent, ReactNode } from "react";
+import type { AppointmentAction, AppointmentRow, AppointmentStatus } from "@pulseos/types";
+import { Badge, Button, EmptyState, Panel } from "./primitives";
+import { Table, TableBody, TableHead, Td, Th, Tr } from "./Table";
+import { APPOINTMENT_STATUS_LABEL as STATUS_LABEL, APPOINTMENT_STATUS_TONE as STATUS_TONE } from "./status";
+import { fmtSmartDateTime, fmtTime } from "./format";
+
+// The single valid forward step per status. Mirrors the server's
+// VALID_FROM_STATUSES graph (apps/api appointment.service.ts) so a row only
+// ever offers an action the API will accept.
 const NEXT_ACTION: Partial<Record<AppointmentStatus, { action: AppointmentAction; label: string }>> = {
   requested: { action: "confirm", label: "Confirm" },
   scheduled: { action: "confirm", label: "Confirm" },
@@ -10,6 +18,32 @@ const NEXT_ACTION: Partial<Record<AppointmentStatus, { action: AppointmentAction
   checked_in: { action: "mark_waiting", label: "Mark Waiting" },
   waiting: { action: "send_to_doctor", label: "Send to Doctor" },
 };
+
+const CAN_MARK_NO_SHOW: ReadonlySet<AppointmentStatus> = new Set(["requested", "scheduled", "confirmed"]);
+
+/** "12 min" / "1h 05m" — whole minutes, never negative. */
+export function formatWaitDuration(fromIso: string, now: number): string {
+  const mins = Math.max(0, Math.floor((now - new Date(fromIso).getTime()) / 60_000));
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return `${h}h ${String(m).padStart(2, "0")}m`;
+}
+
+/**
+ * Honest wait cell for a row in the waiting queue: the real check-in time when
+ * the Timeline recorded one, otherwise how long past the booked slot it is
+ * (labelled as such), otherwise nothing — never an invented duration.
+ */
+function waitCell(row: AppointmentRow, now: number): { text: string; basis: string | null; hint: string } {
+  if (row.arrivedAt) {
+    return { text: formatWaitDuration(row.arrivedAt, now), basis: `since ${fmtTime(row.arrivedAt)}`, hint: `Checked in at ${fmtTime(row.arrivedAt)}` };
+  }
+  if (new Date(row.scheduledAt).getTime() <= now) {
+    return { text: formatWaitDuration(row.scheduledAt, now), basis: "past slot", hint: `Arrival time not recorded — counted from the ${fmtTime(row.scheduledAt)} slot` };
+  }
+  return { text: "—", basis: null, hint: "Arrival time not recorded" };
+}
 
 export function AppointmentList({
   title,
@@ -20,6 +54,10 @@ export function AppointmentList({
   onComplete,
   onRowClick,
   showDoctor = true,
+  showBranch = false,
+  showWait = false,
+  showDate = false,
+  actions,
 }: {
   title: string;
   subtitle?: string;
@@ -29,64 +67,109 @@ export function AppointmentList({
   onComplete?: (row: AppointmentRow) => void;
   onRowClick?: (row: AppointmentRow) => void;
   showDoctor?: boolean;
+  /** Adds the branch under the patient name (multi-branch tenants). */
+  showBranch?: boolean;
+  /** Adds a live "Wait" column (Front Desk waiting queue). */
+  showWait?: boolean;
+  /** Shows date + time instead of time only (lists that span several days). */
+  showDate?: boolean;
+  /** Optional header actions (filters, links). */
+  actions?: ReactNode;
 }) {
+  // Ticks once a minute, and only while a wait column is on screen.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!showWait) return;
+    setNow(Date.now());
+    const id = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(id);
+  }, [showWait]);
+
+  const stop = (e: MouseEvent) => e.stopPropagation();
+  const hasActions = !!onAction || !!onComplete;
+
   return (
-    <Card className="p-4">
-      <SectionHeading title={title} subtitle={subtitle ?? `${rows.length}`} />
+    <Panel title={title} subtitle={subtitle ?? `${rows.length}`} action={actions} padded={false}>
       {rows.length === 0 ? (
         <EmptyState message={emptyMessage} />
       ) : (
-        <ul className="divide-y divide-neutral-100" data-testid="appointment-list">
-          {rows.map((row) => {
-            const next = NEXT_ACTION[row.status];
-            return (
-              <li key={row.id} className="flex items-center justify-between gap-3 py-2" data-testid={`appointment-row-${row.id}`}>
-                <button type="button" onClick={() => onRowClick?.(row)} className="min-w-0 flex-1 text-left">
-                  <span className="block truncate text-sm text-slate-900">{row.patientName}</span>
-                  <span className="block truncate text-xs text-neutral-500">
-                    {fmtTime(row.scheduledAt)}
-                    {showDoctor && row.doctorName ? ` · ${row.doctorName}` : ""}
-                    {row.branchName ? ` · ${row.branchName}` : ""}
-                  </span>
-                </button>
-                <span className="flex shrink-0 items-center gap-2">
-                  <Badge tone={STATUS_TONE[row.status]}>{STATUS_LABEL[row.status]}</Badge>
-                  {onAction && next && (
-                    <button
-                      type="button"
-                      onClick={() => onAction(row, next.action)}
-                      className="rounded border border-neutral-200 px-2 py-1 text-xs font-medium text-neutral-600 hover:bg-neutral-50"
-                      data-testid={`appointment-action-${row.id}`}
-                    >
-                      {next.label}
-                    </button>
-                  )}
-                  {onComplete && row.status === "with_doctor" && (
-                    <button
-                      type="button"
-                      onClick={() => onComplete(row)}
-                      className="rounded bg-primary-600 px-2 py-1 text-xs font-medium text-white hover:bg-primary-700"
-                      data-testid={`appointment-complete-${row.id}`}
-                    >
-                      Complete
-                    </button>
-                  )}
-                  {onAction && (row.status === "scheduled" || row.status === "confirmed" || row.status === "requested") && (
-                    <button
-                      type="button"
-                      onClick={() => onAction(row, "mark_no_show")}
-                      className="rounded border border-danger-100 px-2 py-1 text-xs font-medium text-danger-700 hover:bg-danger-100"
-                      data-testid={`appointment-noshow-${row.id}`}
-                    >
-                      No-show
-                    </button>
-                  )}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
+        <div className="overflow-x-auto" data-testid="appointment-list">
+          <Table>
+            <TableHead>
+              <tr>
+                {/* Below sm the Time column folds into the patient line, below md the Doctor column does too — so Status and the next step stay on screen. */}
+                <Th leading className="hidden sm:table-cell">{showDate ? "When" : "Time"}</Th>
+                <Th className="max-sm:pl-4">Patient</Th>
+                {showDoctor && <Th className="hidden md:table-cell">Doctor</Th>}
+                <Th>Status</Th>
+                {showWait && <Th className="hidden sm:table-cell">Wait</Th>}
+                {hasActions && <Th align="right">Next step</Th>}
+              </tr>
+            </TableHead>
+            <TableBody>
+              {rows.map((row) => {
+                const next = NEXT_ACTION[row.status];
+                const wait = showWait ? waitCell(row, now) : null;
+                return (
+                  <Tr key={row.id} onClick={onRowClick ? () => onRowClick(row) : undefined} data-testid={`appointment-row-${row.id}`}>
+                    <Td leading className="hidden tabular-nums text-ink-2 sm:table-cell">
+                      {showDate ? fmtSmartDateTime(row.scheduledAt) : fmtTime(row.scheduledAt)}
+                    </Td>
+                    <Td nowrap={false} className="max-w-[10rem] max-sm:pl-4 max-sm:max-w-[9rem]">
+                      {/* The first control in the row: opens the appointment drawer. The click bubbles to the row handler. */}
+                      <button type="button" className="block max-w-full truncate text-left text-sm font-medium text-ink hover:text-primary-700 hover:underline">
+                        {row.patientName}
+                      </button>
+                      {wait && <span className="block truncate text-[11px] font-medium tabular-nums text-ink sm:hidden">Waiting {wait.text}{wait.basis ? ` ${wait.basis}` : ""}</span>}
+                      <span className="block truncate text-[11px] tabular-nums text-ink-2 sm:hidden">{showDate ? fmtSmartDateTime(row.scheduledAt) : fmtTime(row.scheduledAt)}</span>
+                      {showDoctor && row.doctorName && <span className="block truncate text-[11px] text-ink-2 md:hidden">{row.doctorName}</span>}
+                      {(showBranch && row.branchName) || row.reason ? (
+                        <span className="block truncate text-[11px] text-ink-2">{[showBranch ? row.branchName : null, row.reason].filter(Boolean).join(" · ")}</span>
+                      ) : null}
+                    </Td>
+                    {showDoctor && <Td className="hidden text-ink md:table-cell">{row.doctorName ?? "—"}</Td>}
+                    <Td>
+                      <Badge tone={STATUS_TONE[row.status]}>{STATUS_LABEL[row.status]}</Badge>
+                    </Td>
+                    {wait && (
+                      <Td nowrap className="hidden tabular-nums text-ink sm:table-cell" title={wait.hint} data-testid={`appointment-wait-${row.id}`}>
+                        {wait.text}
+                        {wait.basis && <span className="block text-[11px] font-normal text-ink-2">{wait.basis}</span>}
+                      </Td>
+                    )}
+                    {hasActions && (
+                      <Td align="right" nowrap={false} className="sm:whitespace-nowrap">
+                        <span className="inline-flex flex-wrap items-center justify-end gap-1.5" onClick={stop}>
+                          {onAction && next && (
+                            <Button size="sm" variant="secondary" onClick={() => onAction(row, next.action)} data-testid={`appointment-action-${row.id}`}>
+                              {next.label}
+                            </Button>
+                          )}
+                          {onComplete && row.status === "with_doctor" && (
+                            <Button size="sm" variant="primary" onClick={() => onComplete(row)} data-testid={`appointment-complete-${row.id}`}>
+                              Complete
+                            </Button>
+                          )}
+                          {onAction && onRowClick && row.status === "no_show" && (
+                            <Button size="sm" variant="secondary" onClick={() => onRowClick(row)} data-testid={`appointment-reschedule-${row.id}`}>
+                              Reschedule
+                            </Button>
+                          )}
+                          {onAction && CAN_MARK_NO_SHOW.has(row.status) && (
+                            <Button size="sm" variant="danger" onClick={() => onAction(row, "mark_no_show")} data-testid={`appointment-noshow-${row.id}`}>
+                              No-show
+                            </Button>
+                          )}
+                        </span>
+                      </Td>
+                    )}
+                  </Tr>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
       )}
-    </Card>
+    </Panel>
   );
 }

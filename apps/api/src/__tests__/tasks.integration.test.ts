@@ -81,7 +81,11 @@ describe.skipIf(!DEMO_PASSWORD)("tasks / follow-ups / my work (integration)", ()
     const beforeCounts = before.json() as { mine: number; overdue: number; today: number; upcoming: number; completed: number };
 
     const overdueDue = new Date(Date.now() - 2 * 86400000).toISOString();
-    const todayDue = new Date(Date.now() + 3600000).toISOString();
+    // Halfway between now and local midnight: always later today and still in
+    // the future (now + 1h crossed into tomorrow when the suite ran after 23:00).
+    const endOfToday = new Date();
+    endOfToday.setHours(24, 0, 0, 0);
+    const todayDue = new Date(Date.now() + (endOfToday.getTime() - Date.now()) / 2).toISOString();
     const upcomingDue = new Date(Date.now() + 5 * 86400000).toISOString();
 
     await app.inject({ method: "POST", url: "/tasks", cookies: { pulseos_session: coordinatorCookie }, payload: { patientId: somePatientId, journeyId: someJourneyId, type: "CALLBACK", dueAt: overdueDue, assignedTo: user.id } });
@@ -119,6 +123,34 @@ describe.skipIf(!DEMO_PASSWORD)("tasks / follow-ups / my work (integration)", ()
     const after = await app.inject({ method: "GET", url: "/tasks/counts", cookies: { pulseos_session: doctorCookie } });
     const afterCounts = after.json() as { mine: number };
     expect(afterCounts.mine).toBe(beforeCounts.mine);
+  });
+
+  it("GET /tasks rows carry the owning Journey's acquisition source (read-model field for My Work), null when the task has no Journey", async () => {
+    const created = await app.inject({
+      method: "POST",
+      url: "/tasks",
+      cookies: { pulseos_session: coordinatorCookie },
+      payload: { patientId: somePatientId, journeyId: someJourneyId, type: "CALLBACK", dueAt: new Date(Date.now() + 86400000).toISOString() },
+    });
+    const { id } = created.json() as TaskRow;
+
+    const journeysRes = await app.inject({ method: "GET", url: "/journeys", cookies: { pulseos_session: coordinatorCookie } });
+    const journey = (journeysRes.json() as JourneyListRow[]).find((j) => j.id === someJourneyId)!;
+
+    const list = await app.inject({ method: "GET", url: "/tasks", cookies: { pulseos_session: coordinatorCookie } });
+    const row = (list.json() as TaskRow[]).find((t) => t.id === id)!;
+    expect(typeof row.source).toBe("string");
+    expect(row.source).toBe(journey.source);
+
+    const noJourney = await app.inject({
+      method: "POST",
+      url: "/tasks",
+      cookies: { pulseos_session: coordinatorCookie },
+      payload: { patientId: somePatientId, type: "OTHER", dueAt: new Date(Date.now() + 86400000).toISOString() },
+    });
+    const noJourneyId = (noJourney.json() as TaskRow).id;
+    const list2 = await app.inject({ method: "GET", url: "/tasks", cookies: { pulseos_session: coordinatorCookie } });
+    expect((list2.json() as TaskRow[]).find((t) => t.id === noJourneyId)!.source).toBeNull();
   });
 
   it("creates a task with the full field set and returns it", async () => {

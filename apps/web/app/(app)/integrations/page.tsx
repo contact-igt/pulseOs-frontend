@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@pulseos/api-client";
 import {
-  Badge, EmptyState, ErrorState, SectionHeading, Skeleton, Table, TableBody, TableHead, Td, Th, Tr,
+  Badge, Button, EmptyState, ErrorState, SectionHeading, Skeleton, Table, TableBody, TableHead, Td, Th, Tr,
   relativeTime, CONNECTOR_STATUS_LABEL, CONNECTOR_STATUS_TONE, CONNECTOR_EVENT_STATUS_LABEL, CONNECTOR_EVENT_STATUS_TONE,
 } from "@pulseos/ui";
 import { hasPermission } from "@pulseos/types";
@@ -121,29 +121,29 @@ function EndpointsSection({ connectorId, canManage }: { connectorId: string; can
         subtitle={endpoints.data ? `${endpoints.data.length}` : undefined}
         action={
           canManage && !showAddForm ? (
-            <button
-              type="button"
+            <Button
+              size="sm"
+              variant="secondary"
               onClick={() => {
                 setAddError(null);
                 setShowAddForm(true);
               }}
-              className="text-xs font-medium text-primary-600 hover:underline"
               data-testid="add-endpoint-button"
             >
               Add endpoint
-            </button>
+            </Button>
           ) : undefined
         }
       />
 
       {endpoints.isLoading && <Skeleton className="h-16" />}
       {endpoints.isError && <ErrorState message="Could not load endpoints." />}
-      {endpoints.data && endpoints.data.length === 0 && <p className="text-xs text-neutral-400">No endpoints configured for this connector yet.</p>}
+      {endpoints.data && endpoints.data.length === 0 && <p className="text-xs text-ink-2">No endpoints configured for this connector yet.</p>}
 
-      {rowError && <p className="mb-2 rounded border border-danger-200 bg-danger-50 px-2.5 py-1.5 text-xs text-danger-700">{rowError}</p>}
+      {rowError && <p className="mb-2 rounded-control border border-danger-100 bg-danger-100/60 px-2.5 py-1.5 text-xs text-danger-700">{rowError}</p>}
 
       {endpoints.data && endpoints.data.length > 0 && (
-        <div className="overflow-hidden rounded-lg border border-neutral-100">
+        <div className="overflow-hidden rounded-card border border-line">
           <Table>
             <TableHead>
               <tr>
@@ -160,10 +160,10 @@ function EndpointsSection({ connectorId, canManage }: { connectorId: string; can
               {endpoints.data.map((e) => (
                 <Tr key={e.id} className="hover:bg-transparent" data-testid={`endpoint-row-${e.id}`}>
                   <Td className="text-neutral-600">{ENDPOINT_TYPE_LABEL[e.type]}</Td>
-                  <Td className="text-slate-800">{e.publicNumber}</Td>
-                  <Td className="text-neutral-500">{e.providerRef}</Td>
-                  <Td className="text-slate-800">{e.displayLabel}</Td>
-                  <Td className="text-neutral-500">{e.branchName ?? "—"}</Td>
+                  <Td className="text-ink">{e.publicNumber}</Td>
+                  <Td className="text-ink-2">{e.providerRef}</Td>
+                  <Td className="text-ink">{e.displayLabel}</Td>
+                  <Td className="text-ink-2">{e.branchName ?? "—"}</Td>
                   <Td>
                     <Badge tone={e.isActive ? "success" : "neutral"}>{e.isActive ? "Active" : "Inactive"}</Badge>
                   </Td>
@@ -173,7 +173,7 @@ function EndpointsSection({ connectorId, canManage }: { connectorId: string; can
                         type="button"
                         onClick={() => toggleActive(e)}
                         disabled={togglingId === e.id}
-                        className="text-xs font-medium text-primary-600 hover:underline disabled:opacity-40"
+                        className="text-xs font-medium text-primary-700 hover:underline disabled:opacity-40"
                         data-testid={`endpoint-toggle-${e.id}`}
                       >
                         {togglingId === e.id ? "Saving…" : e.isActive ? "Deactivate" : "Activate"}
@@ -188,9 +188,9 @@ function EndpointsSection({ connectorId, canManage }: { connectorId: string; can
       )}
 
       {canManage && showAddForm && (
-        <div className="mt-3 space-y-2 rounded-lg border border-neutral-100 bg-neutral-50 p-3">
+        <div className="mt-3 space-y-2 rounded-lg border border-line bg-surface-muted p-3">
           {addError && (
-            <p className="rounded border border-danger-200 bg-danger-50 px-2.5 py-1.5 text-xs text-danger-700" data-testid="add-endpoint-error">
+            <p className="rounded-control border border-danger-100 bg-danger-100/60 px-2.5 py-1.5 text-xs text-danger-700" data-testid="add-endpoint-error">
               {addError}
             </p>
           )}
@@ -198,7 +198,7 @@ function EndpointsSection({ connectorId, canManage }: { connectorId: string; can
             <select
               value={newType}
               onChange={(e) => setNewType(e.target.value as CommunicationEndpointType)}
-              className="rounded border border-neutral-200 bg-white px-2 py-1 text-xs text-slate-700"
+              className="h-8 rounded-control border border-line-strong bg-surface px-2 text-xs text-ink"
               data-testid="new-endpoint-type"
             >
               <option value="PHONE">Phone</option>
@@ -209,7 +209,7 @@ function EndpointsSection({ connectorId, canManage }: { connectorId: string; can
               placeholder="Public number, e.g. +91…"
               value={newPublicNumber}
               onChange={(e) => setNewPublicNumber(e.target.value)}
-              className="rounded border border-neutral-200 px-2 py-1 text-xs outline-none focus:border-primary-400"
+              className="h-8 rounded-control border border-line-strong bg-surface px-2 text-xs text-ink outline-none placeholder:text-neutral-500 focus:border-primary-500"
               data-testid="new-endpoint-public-number"
             />
             <input
@@ -217,7 +217,7 @@ function EndpointsSection({ connectorId, canManage }: { connectorId: string; can
               placeholder="Provider reference"
               value={newProviderRef}
               onChange={(e) => setNewProviderRef(e.target.value)}
-              className="rounded border border-neutral-200 px-2 py-1 text-xs outline-none focus:border-primary-400"
+              className="h-8 rounded-control border border-line-strong bg-surface px-2 text-xs text-ink outline-none placeholder:text-neutral-500 focus:border-primary-500"
               data-testid="new-endpoint-provider-ref"
             />
             <input
@@ -225,13 +225,13 @@ function EndpointsSection({ connectorId, canManage }: { connectorId: string; can
               placeholder="Display label"
               value={newDisplayLabel}
               onChange={(e) => setNewDisplayLabel(e.target.value)}
-              className="rounded border border-neutral-200 px-2 py-1 text-xs outline-none focus:border-primary-400"
+              className="h-8 rounded-control border border-line-strong bg-surface px-2 text-xs text-ink outline-none placeholder:text-neutral-500 focus:border-primary-500"
               data-testid="new-endpoint-display-label"
             />
             <select
               value={newBranchId}
               onChange={(e) => setNewBranchId(e.target.value)}
-              className="rounded border border-neutral-200 bg-white px-2 py-1 text-xs text-slate-700"
+              className="h-8 rounded-control border border-line-strong bg-surface px-2 text-xs text-ink"
               data-testid="new-endpoint-branch"
             >
               <option value="">No branch</option>
@@ -243,26 +243,26 @@ function EndpointsSection({ connectorId, canManage }: { connectorId: string; can
             </select>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
+            <Button
+              size="sm"
+              variant="primary"
               onClick={addEndpoint}
               disabled={adding || !newPublicNumber.trim() || !newProviderRef.trim() || !newDisplayLabel.trim()}
-              className="rounded bg-primary-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-40"
               data-testid="save-endpoint-button"
             >
               {adding ? "Adding…" : "Save endpoint"}
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
               onClick={() => {
                 setShowAddForm(false);
                 setAddError(null);
                 resetForm();
               }}
-              className="rounded border border-neutral-200 px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100"
             >
               Cancel
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -304,9 +304,9 @@ export default function IntegrationsPage() {
 
   return (
     <div className="flex h-full flex-col gap-4" data-testid="integrations-page">
-      <div className="flex min-h-0 flex-1 gap-4">
-      <div className="flex w-96 flex-shrink-0 flex-col overflow-hidden rounded-lg border border-neutral-200 bg-white">
-        <div className="border-b border-neutral-100 p-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
+      <div className="flex max-h-80 w-full flex-shrink-0 flex-col overflow-hidden lg:max-h-none lg:w-96 rounded-card border border-line bg-surface shadow-panel">
+        <div className="border-b border-line p-3">
           <SectionHeading title="Connectors" subtitle={connectors.data ? `${connectors.data.length}` : undefined} />
         </div>
         <div className="flex-1 overflow-y-auto">
@@ -324,41 +324,49 @@ export default function IntegrationsPage() {
                   setSyncMessage(null);
                 }}
                 data-testid={`connector-row-${c.provider}`}
-                className={`flex w-full items-start gap-2 border-b border-neutral-100 px-3 py-2.5 text-left hover:bg-neutral-50 ${active ? "bg-primary-50" : ""}`}
+                className={`flex w-full items-start gap-2 border-b border-line px-3 py-2.5 text-left hover:bg-primary-50/60 ${active ? "border-l-2 border-l-primary-600 bg-primary-50" : "border-l-2 border-l-transparent"}`}
               >
-                <Icon size={15} className="mt-0.5 flex-shrink-0 text-neutral-400" />
+                <Icon size={15} className="mt-0.5 flex-shrink-0 text-ink-2" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-xs font-medium text-slate-900">{c.displayName}</span>
-                    <span className="whitespace-nowrap text-[10px] text-neutral-400">{relativeTime(c.lastEventAt)}</span>
+                    <span className="truncate text-xs font-medium text-ink">{c.displayName}</span>
+                    <span className="whitespace-nowrap text-[10px] text-ink-2">{relativeTime(c.lastEventAt)}</span>
                   </div>
-                  <p className="mt-0.5 text-[11px] text-neutral-500">{TYPE_LABEL[c.type]}</p>
+                  <p className="mt-0.5 text-[11px] text-ink-2">{TYPE_LABEL[c.type]}</p>
                   <div className="mt-1 flex flex-wrap items-center gap-1">
                     <Badge tone={STATUS_TONE[c.status]}>{STATUS_LABEL[c.status]}</Badge>
                     <Badge tone={MODE_TONE[c.mode]}>{MODE_LABEL[c.mode]}</Badge>
                     {c.capabilities.slice(0, 2).map((cap) => (
-                      <span key={cap} className="rounded bg-neutral-100 px-1.5 py-0.5 text-[9px] font-medium text-neutral-500">
+                      <span key={cap} className="rounded-chip bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-ink-2">
                         {cap.replace(/_/g, " ")}
                       </span>
                     ))}
-                    {c.capabilities.length > 2 && <span className="text-[9px] text-neutral-400">+{c.capabilities.length - 2}</span>}
+                    {c.capabilities.length > 2 && <span className="text-[10px] text-ink-2">+{c.capabilities.length - 2}</span>}
                   </div>
                 </div>
               </button>
             );
           })}
+          {/* Not a connector row: CCS / IVRSMS has no live webhook or authenticated access yet, so it is listed as what it is — not configured — and is never selectable or "connectable" from here. */}
+          <div className="border-t border-line bg-surface-muted px-3 py-2.5" data-testid="connector-row-ccs-ivrsms-not-configured">
+            <div className="flex items-center justify-between gap-2">
+              <span className="truncate text-xs font-medium text-ink">CCS / IVRSMS</span>
+              <Badge tone="neutral">Not configured</Badge>
+            </div>
+            <p className="mt-0.5 text-[11px] text-ink-2">Telephony · no live webhook or provider access yet, so nothing is connected.</p>
+          </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto rounded-lg border border-neutral-200 bg-white p-5">
+      <div className="min-w-0 flex-1 overflow-y-auto rounded-card border border-line bg-surface p-5 shadow-panel">
         {!detail.data && !detail.isLoading && <EmptyState message="Select a connector to view its configuration." />}
         {detail.isLoading && <Skeleton className="h-64" />}
         {detail.data && (
           <div className="space-y-5">
             <div className="flex items-start justify-between">
               <div>
-                <h2 className="text-base font-semibold text-slate-900">{detail.data.connector.displayName}</h2>
-                <p className="mt-0.5 text-xs text-neutral-500">
+                <h2 className="text-base font-semibold text-ink">{detail.data.connector.displayName}</h2>
+                <p className="mt-0.5 text-xs text-ink-2">
                   {TYPE_LABEL[detail.data.connector.type]} · provider key <code className="rounded bg-neutral-100 px-1 py-0.5 text-[11px]">{detail.data.connector.provider}</code>
                 </p>
               </div>
@@ -368,23 +376,32 @@ export default function IntegrationsPage() {
               </span>
             </div>
 
-            <div className="grid grid-cols-3 gap-4 border-y border-neutral-100 py-4 text-xs">
+            <div className="grid grid-cols-3 gap-4 border-y border-line py-4 text-xs">
               <div>
-                <span className="block text-[11px] uppercase tracking-wide text-neutral-400">Secrets configured</span>
-                <span className="text-sm text-slate-800">{detail.data.connector.hasSecrets ? "Yes" : "No"}</span>
+                <span className="block text-[11px] uppercase tracking-wide text-ink-2">Secrets configured</span>
+                <span className="text-sm text-ink">{detail.data.connector.hasSecrets ? "Yes" : "No"}</span>
               </div>
               <div>
-                <span className="block text-[11px] uppercase tracking-wide text-neutral-400">Last event</span>
-                <span className="text-sm text-slate-800">{relativeTime(detail.data.connector.lastEventAt)}</span>
+                <span className="block text-[11px] uppercase tracking-wide text-ink-2">Last event</span>
+                <span className="text-sm text-ink">{relativeTime(detail.data.connector.lastEventAt)}</span>
               </div>
               <div>
-                <span className="block text-[11px] uppercase tracking-wide text-neutral-400">Last sync</span>
-                <span className="text-sm text-slate-800">{relativeTime(detail.data.connector.lastSyncAt)}</span>
+                <span className="block text-[11px] uppercase tracking-wide text-ink-2">Last sync</span>
+                <span className="text-sm text-ink">{relativeTime(detail.data.connector.lastSyncAt)}</span>
               </div>
             </div>
 
+            {detail.data.connector.mode !== "LIVE" && (
+              <div className="rounded-control border border-line bg-surface-info px-3 py-2 text-xs text-ink" data-testid="connector-mode-notice">
+                <span className="font-semibold">{MODE_LABEL[detail.data.connector.mode]} mode.</span>{" "}
+                {detail.data.connector.mode === "FIXTURE"
+                  ? "Sample data only — this is not a live provider connection, whatever the status above says."
+                  : "Provider sandbox — test traffic only, not a live production connection."}
+              </div>
+            )}
+
             {detail.data.connector.lastError && (
-              <div className="rounded border border-danger-100 bg-danger-100/40 px-3 py-2 text-xs text-danger-700">
+              <div className="rounded-control border border-danger-100 bg-danger-100/50 px-3 py-2 text-xs text-danger-700">
                 Last error: {detail.data.connector.lastError}
               </div>
             )}
@@ -393,7 +410,7 @@ export default function IntegrationsPage() {
               <SectionHeading title="Capabilities" />
               <div className="flex flex-wrap gap-1.5">
                 {detail.data.connector.capabilities.map((cap) => (
-                  <span key={cap} className="rounded bg-neutral-100 px-2 py-1 text-[11px] font-medium text-neutral-600">
+                  <span key={cap} className="rounded-chip bg-neutral-100 px-2 py-1 text-[11px] font-medium text-ink">
                     {cap.replace(/_/g, " ")}
                   </span>
                 ))}
@@ -406,13 +423,13 @@ export default function IntegrationsPage() {
 
             <div>
               <SectionHeading title="Configuration" subtitle="Non-secret metadata only" />
-              {!detail.data.configuration && <p className="text-xs text-neutral-400">No configuration set.</p>}
+              {!detail.data.configuration && <p className="text-xs text-ink-2">No configuration set.</p>}
               {detail.data.configuration && (
                 <dl className="space-y-1 text-xs">
                   {Object.entries(detail.data.configuration).map(([key, value]) => (
                     <div key={key} className="flex justify-between border-b border-neutral-50 pb-1">
-                      <dt className="text-neutral-500">{key}</dt>
-                      <dd className="font-medium text-slate-800">{String(value)}</dd>
+                      <dt className="text-ink-2">{key}</dt>
+                      <dd className="font-medium text-ink">{String(value)}</dd>
                     </div>
                   ))}
                 </dl>
@@ -421,9 +438,9 @@ export default function IntegrationsPage() {
 
             <div>
               <SectionHeading title="Recent events" subtitle={`${detail.data.recentEvents.length}`} />
-              {detail.data.recentEvents.length === 0 && <p className="text-xs text-neutral-400">No events recorded yet.</p>}
+              {detail.data.recentEvents.length === 0 && <p className="text-xs text-ink-2">No events recorded yet.</p>}
               {detail.data.recentEvents.length > 0 && (
-                <div className="overflow-hidden rounded-lg border border-neutral-100">
+                <div className="overflow-hidden rounded-card border border-line">
                   <Table>
                     <TableHead>
                       <tr>
@@ -440,8 +457,8 @@ export default function IntegrationsPage() {
                           <Td>
                             <Badge tone={CONNECTOR_EVENT_STATUS_TONE[e.status] ?? "neutral"}>{CONNECTOR_EVENT_STATUS_LABEL[e.status] ?? e.status}</Badge>
                           </Td>
-                          <Td className="text-neutral-500">{e.externalEventId}</Td>
-                          <Td className="text-neutral-500">{relativeTime(e.receivedAt)}</Td>
+                          <Td className="text-ink-2">{e.externalEventId}</Td>
+                          <Td className="text-ink-2">{relativeTime(e.receivedAt)}</Td>
                         </Tr>
                       ))}
                     </TableBody>
@@ -451,37 +468,25 @@ export default function IntegrationsPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
+              <Button
+                size="sm"
+                variant="secondary"
                 onClick={() => queryClient.invalidateQueries({ queryKey: ["connector", effectiveSelectedId] })}
-                className="rounded border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100"
                 title="Reload this connector's status from PulseOS — does not contact the provider"
               >
                 Reload Status
-              </button>
+              </Button>
               {canManage && detail.data.connector.capabilities.includes("SYNC_CAMPAIGNS") && (
-                <button
-                  type="button"
-                  onClick={() => runSync("campaigns")}
-                  disabled={syncing !== null}
-                  className="rounded bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50"
-                  data-testid="sync-campaigns-button"
-                >
+                <Button size="sm" variant="primary" onClick={() => runSync("campaigns")} disabled={syncing !== null} data-testid="sync-campaigns-button">
                   {syncing === "campaigns" ? "Syncing…" : "Sync Campaigns"}
-                </button>
+                </Button>
               )}
               {canManage && detail.data.connector.capabilities.includes("SYNC_PERFORMANCE") && (
-                <button
-                  type="button"
-                  onClick={() => runSync("performance")}
-                  disabled={syncing !== null}
-                  className="rounded bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50"
-                  data-testid="sync-performance-button"
-                >
+                <Button size="sm" variant="primary" onClick={() => runSync("performance")} disabled={syncing !== null} data-testid="sync-performance-button">
                   {syncing === "performance" ? "Syncing…" : "Sync Performance"}
-                </button>
+                </Button>
               )}
-              {syncMessage && <span className="text-xs text-neutral-500">{syncMessage}</span>}
+              {syncMessage && <span className="text-xs text-ink-2">{syncMessage}</span>}
             </div>
           </div>
         )}

@@ -256,6 +256,9 @@ export interface DoctorNextPatient {
   journeyType: string;
   appointmentTime: string;
   reason: string | null;
+  /** For Patient 360 / Journey links. Always set by GET /dashboard/doctor. */
+  patientId?: string;
+  journeyId?: string;
 }
 
 export type AppointmentStatus =
@@ -274,11 +277,20 @@ export interface DoctorTodayItem {
   patientName: string;
   time: string;
   status: AppointmentStatus;
+  /** Always set by GET /dashboard/doctor; optional so hand-built fixtures stay valid. */
+  patientId?: string;
+  journeyId?: string;
+  /** Service line of the appointment's journey (e.g. "Laser Vision Correction"). */
+  journeyType?: string;
+  /** Journey specialty key — matches TreatmentDefinitionVm.specialtyKey, so a row can be offered only its own service's catalog procedures. */
+  specialtyKey?: string | null;
 }
 
 export interface DoctorRecentPatient {
   appointmentId: string;
   patientName: string;
+  /** For Patient 360 links. Always set by GET /dashboard/doctor. */
+  patientId?: string;
   journeyType: string;
   time: string;
 }
@@ -561,6 +573,8 @@ export interface TaskRow {
   patientName: string;
   journeyId: string | null;
   journeyType: string | null;
+  /** Acquisition source of the owning Journey (null for a task with no Journey). */
+  source?: SourceChannel | null;
   assignedTo: string | null;
   assignedToName: string | null;
   type: TaskType;
@@ -609,6 +623,8 @@ export interface AppointmentRow {
   status: AppointmentStatus;
   scheduledAt: string;
   reason: string | null;
+  /** Real check-in time (from the Timeline) — only populated for Front Desk waiting-queue rows. */
+  arrivedAt?: string | null;
 }
 
 export type AppointmentAction = "confirm" | "check_in" | "mark_waiting" | "send_to_doctor" | "mark_no_show" | "cancel";

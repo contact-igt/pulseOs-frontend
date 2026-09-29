@@ -140,13 +140,19 @@ test.describe("Multi-specialty demo environments", () => {
     await page.goto("/appointments");
     await expect(page.getByTestId("appointments-page")).toBeVisible();
     await expect(page.getByText("Anil Joshi").first()).toBeVisible();
-    await expect(page.getByText(/09:00 am · Dr\. Rajiv Menon/)).toBeVisible();
+    // The demo clock places same-day slots relative to the current time of day
+    // (seed/demo/demo-clock.ts), so assert a time and the doctor on Anil Joshi's
+    // row rather than a fixed clock time or the old single-line "time · doctor" text.
+    const anilRow = page.locator('[data-testid^="appointment-row-"]', { hasText: "Anil Joshi" }).first();
+    await expect(anilRow).toContainText(/\d{1,2}:\d{2}\s?(am|pm)/i);
+    await expect(anilRow).toContainText("Dr. Rajiv Menon");
     await shot(page, "07-ophthalmology-appointments.png");
 
     await page.goto("/treatments");
     await expect(page.getByTestId("treatments-page")).toBeVisible();
     await expect(page.getByText("Cataract Surgery — Right Eye").first()).toBeVisible();
-    await expect(page.getByText("Ptosis Correction").first()).toBeVisible();
+    // Scoped to the table: the new Procedure filter also lists "Ptosis Correction" as a (hidden) <option>.
+    await expect(page.locator("tbody").getByText("Ptosis Correction").first()).toBeVisible();
     await shot(page, "08-ophthalmology-treatments.png");
 
     await page.goto("/campaigns");

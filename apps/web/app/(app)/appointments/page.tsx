@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
-import { AppointmentDrawer, AppointmentList, Button, ErrorState, Skeleton } from "@pulseos/ui";
+import { Search } from "lucide-react";
+import { AppointmentDrawer, AppointmentList, Button, ErrorState, FilterBar, FilterSelect, Skeleton, Tabs, Toolbar } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import { hasPermission } from "@pulseos/types";
 import type { AppointmentAction, AppointmentRow } from "@pulseos/types";
@@ -99,50 +100,50 @@ export default function AppointmentsPage() {
   const searched = search.trim() ? visibleRows.filter((r) => r.patientName.toLowerCase().includes(search.trim().toLowerCase())) : visibleRows;
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4" data-testid="appointments-page">
-      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-neutral-200 bg-white p-2">
-        <div className="flex gap-0.5 rounded border border-neutral-200 p-0.5">
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => setTab(t.key)}
-              className={`rounded px-2.5 py-1 text-xs font-medium transition ${tab === t.key ? "bg-primary-50 text-primary-700" : "text-neutral-500 hover:bg-neutral-100"}`}
-              data-testid={`appointments-tab-${t.key}`}
-            >
-              {t.label}
-            </button>
-          ))}
+    <div className="mx-auto max-w-6xl space-y-3" data-testid="appointments-page">
+      <Toolbar
+        actions={
+          canManage && (
+            <Button variant="primary" onClick={() => quickCreate.openNewAppointment()} data-testid="new-appointment-button">
+              + New Appointment
+            </Button>
+          )
+        }
+      >
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <Tabs
+            ariaLabel="Appointment view"
+            items={TABS.map((t) => ({ key: t.key, label: t.label, testId: `appointments-tab-${t.key}` }))}
+            value={tab}
+            onChange={(k) => setTab(k as ViewTab)}
+          />
+          <FilterBar>
+            <FilterSelect value={branchId} onChange={(e) => setBranchId(e.target.value)} aria-label="Branch">
+              <option value="">All branches</option>
+              {lookups.data?.branches.map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </FilterSelect>
+            <FilterSelect value={doctorId} onChange={(e) => setDoctorId(e.target.value)} aria-label="Doctor">
+              <option value="">All doctors</option>
+              {lookups.data?.doctors.map((d) => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
+            </FilterSelect>
+            <label className="glass-control relative flex h-8 min-w-0 flex-1 items-center rounded-control sm:w-48 sm:flex-none">
+              <Search size={14} className="pointer-events-none absolute left-2.5 text-neutral-500" aria-hidden="true" />
+              <input
+                type="text"
+                placeholder="Search patients…"
+                aria-label="Search patients"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="h-full w-full bg-transparent pl-8 pr-2.5 text-xs text-ink outline-none placeholder:text-neutral-500"
+              />
+            </label>
+          </FilterBar>
         </div>
-
-        <select value={branchId} onChange={(e) => setBranchId(e.target.value)} className="rounded border border-neutral-200 bg-white px-2 py-1 text-xs text-slate-700">
-          <option value="">All branches</option>
-          {lookups.data?.branches.map((b) => (
-            <option key={b.id} value={b.id}>{b.name}</option>
-          ))}
-        </select>
-
-        <select value={doctorId} onChange={(e) => setDoctorId(e.target.value)} className="rounded border border-neutral-200 bg-white px-2 py-1 text-xs text-slate-700">
-          <option value="">All doctors</option>
-          {lookups.data?.doctors.map((d) => (
-            <option key={d.id} value={d.id}>{d.name}</option>
-          ))}
-        </select>
-
-        <input
-          type="text"
-          placeholder="Search patients…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="rounded border border-neutral-200 bg-white px-2 py-1 text-xs outline-none focus:border-primary-400"
-        />
-
-        {canManage && (
-          <Button variant="primary" size="sm" onClick={() => quickCreate.openNewAppointment()} data-testid="new-appointment-button" className="ml-auto">
-            + New Appointment
-          </Button>
-        )}
-      </div>
+      </Toolbar>
 
       {appointments.isLoading ? (
         <Skeleton className="h-64" />
@@ -155,6 +156,8 @@ export default function AppointmentsPage() {
           onAction={canManage ? handleAction : undefined}
           onComplete={canManage ? handleComplete : undefined}
           onRowClick={(row) => setSelected(row)}
+          showBranch
+          showDate={tab !== "today"}
           emptyMessage="No appointments match these filters."
         />
       )}
