@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { ConnectorMode, SourcePerformanceRow } from "@pulseos/types";
-import { Badge, Card, SectionHeading } from "./primitives";
+import { Badge, Card, Panel, SectionHeading } from "./primitives";
 import { formatInr, formatMoneyOrDash, formatMoneyOrDashCompact, formatRoas } from "./format";
 
 type SortKey = "spend" | "enquiries" | "treatments" | "revenue" | "roas";
@@ -26,7 +26,7 @@ export function SourcePerformanceTable({
 }: {
   rows: SourcePerformanceRow[];
   onRowClick?: (row: SourcePerformanceRow) => void;
-  /** Narrow 3-column layout (source, revenue, ROAS) for a 1/3-width dashboard panel. */
+  /** Top-5 ranked list (revenue, ROAS, spend, share bar) for a narrow dashboard panel. */
   compact?: boolean;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>(compact ? "revenue" : "spend");
@@ -46,42 +46,55 @@ export function SourcePerformanceTable({
     }
   }
 
-  const columns: { key: SortKey; label: string }[] = compact
-    ? [
-        { key: "revenue", label: "Revenue" },
-        { key: "roas", label: "ROAS" },
-      ]
-    : [
-        { key: "spend", label: "Spend" },
-        { key: "enquiries", label: "Enquiries" },
-        { key: "treatments", label: "Treatments" },
-        { key: "revenue", label: "Revenue" },
-        { key: "roas", label: "ROAS" },
-      ];
+  const columns: { key: SortKey; label: string }[] = [
+    { key: "spend", label: "Spend" },
+    { key: "enquiries", label: "Enquiries" },
+    { key: "treatments", label: "Treatments" },
+    { key: "revenue", label: "Revenue" },
+    { key: "roas", label: "ROAS" },
+  ];
+
+  if (compact) {
+    // Names wrap to two lines instead of truncating to "Cataract Consultation ...";
+    // a thin single-hue share bar carries revenue at a glance.
+    const top = sorted.slice(0, 5);
+    const maxRevenue = Math.max(...top.map((r) => r.revenue), 1);
+    return (
+      <Panel title="Top Campaigns by Revenue" subtitle="ROAS = revenue ÷ spend" padded={false} className="h-full" data-testid="top-campaigns">
+        <ul className="divide-y divide-line">
+          {top.map((row) => (
+            <li key={row.campaignId ?? row.source}>
+              <button
+                type="button"
+                onClick={() => onRowClick?.(row)}
+                disabled={!onRowClick}
+                className="block w-full px-4 py-2.5 text-left transition hover:bg-primary-50 focus-visible:-outline-offset-2 disabled:cursor-default disabled:hover:bg-transparent"
+              >
+                <span className="flex items-start justify-between gap-3">
+                  <span className="line-clamp-2 min-w-0 text-sm font-medium leading-snug text-ink">{row.campaignName}</span>
+                  <span className="shrink-0 text-sm font-semibold tabular-nums text-ink">{formatMoneyOrDashCompact(row.revenue)}</span>
+                </span>
+                <span className="mt-1 flex items-center gap-2">
+                  <span className="text-[11px] capitalize text-ink-2">{row.source}</span>
+                  <ConnectorModeBadge mode={row.connectorMode} />
+                  <span className="text-[11px] tabular-nums text-ink-2">· {formatMoneyOrDashCompact(row.spend)} spend</span>
+                  <span className="ml-auto text-xs font-medium tabular-nums text-ink">{formatRoas(row.roas)} ROAS</span>
+                </span>
+                <span className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-primary-100" aria-hidden="true">
+                  <span className="block h-full rounded-full bg-primary-500" style={{ width: `${Math.max((row.revenue / maxRevenue) * 100, row.revenue > 0 ? 3 : 0)}%` }} />
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </Panel>
+    );
+  }
 
   return (
-    <Card className={compact ? "overflow-hidden p-4" : "overflow-x-auto p-4"}>
-      <SectionHeading title={compact ? "Top Campaigns by Revenue" : "Source / Campaign Performance"} />
-      {/* Compact mode uses table-layout: fixed with explicit column widths.
-          table-layout: auto sizes columns to unwrapped content (nowrap
-          numeric cells), which can render wider than the card even with
-          w-full — invisible with overflow-hidden, since it clips the
-          rightmost header instead of shrinking or scrolling. Fixed layout
-          makes the declared widths (not content) authoritative, so it holds
-          at any panel width instead of only the ones this was eyeballed at.
-          Every compact cell also gets `truncate` as a defensive floor: a
-          fixed-width column can't overflow past the card any more, but
-          without truncate a too-long value would still spill sideways onto
-          its neighbour instead of just clipping — worse, since it silently
-          drifts columns out of alignment instead of visibly ellipsizing. */}
-      <table className={compact ? "w-full table-fixed text-left text-xs" : "w-full min-w-[480px] text-left text-xs"}>
-        {compact && (
-          <colgroup>
-            <col className="w-[44%]" />
-            <col className="w-[34%]" />
-            <col className="w-[22%]" />
-          </colgroup>
-        )}
+    <Card className="overflow-x-auto p-4">
+      <SectionHeading title="Source / Campaign Performance" />
+      <table className="w-full min-w-[480px] text-left text-xs">
         <thead>
           <tr className="text-neutral-500">
             <th className="truncate pb-1 font-medium">Campaign</th>
@@ -93,24 +106,20 @@ export function SourcePerformanceTable({
           </tr>
         </thead>
         <tbody className="divide-y divide-neutral-100">
-          {(compact ? sorted.slice(0, 5) : sorted).map((row) => (
+          {sorted.map((row) => (
             <tr key={row.campaignId ?? row.source} className="cursor-pointer hover:bg-neutral-50" onClick={() => onRowClick?.(row)}>
               <td className="py-1.5">
                 <span className="flex items-center gap-1.5">
-                  <span className={`block truncate text-slate-900 ${compact ? "" : "max-w-[220px]"}`}>{row.campaignName}</span>
+                  <span className="block max-w-[220px] truncate text-slate-900">{row.campaignName}</span>
                   <ConnectorModeBadge mode={row.connectorMode} />
                 </span>
                 <span className="block truncate text-[11px] capitalize text-neutral-400">{row.source}</span>
               </td>
-              {!compact && (
-                <>
-                  <td className="py-1.5 text-right tabular-nums">{formatInr(row.spend)}</td>
-                  <td className="py-1.5 text-right tabular-nums">{row.enquiries}</td>
-                  <td className="py-1.5 text-right tabular-nums">{row.treatments}</td>
-                </>
-              )}
-              <td className={`py-1.5 text-right tabular-nums ${compact ? "truncate" : ""}`}>{compact ? formatMoneyOrDashCompact(row.revenue) : formatMoneyOrDash(row.revenue)}</td>
-              <td className={`py-1.5 text-right tabular-nums font-medium ${compact ? "truncate" : ""}`}>{formatRoas(row.roas)}</td>
+              <td className="py-1.5 text-right tabular-nums">{formatInr(row.spend)}</td>
+              <td className="py-1.5 text-right tabular-nums">{row.enquiries}</td>
+              <td className="py-1.5 text-right tabular-nums">{row.treatments}</td>
+              <td className="py-1.5 text-right tabular-nums">{formatMoneyOrDash(row.revenue)}</td>
+              <td className="py-1.5 text-right tabular-nums font-medium">{formatRoas(row.roas)}</td>
             </tr>
           ))}
         </tbody>

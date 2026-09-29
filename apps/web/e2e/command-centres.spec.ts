@@ -25,11 +25,13 @@ test.describe("Admin Command Centre", () => {
 
     await expect(page.getByTestId("command-centre")).toBeVisible();
     await expect(page.getByTestId("kpi-strip")).toBeVisible();
-    // Radial center label shortened to "Conversion" (2026-09-21 UI pass) —
-    // the panel heading already says "Journey Health", so "Journey" in the
-    // center label was redundant and, at 1024px, actually overflowed.
-    await expect(page.getByText("Conversion", { exact: true })).toBeVisible();
-    await expect(page.getByText("Journey Health")).toBeVisible();
+    // 2026-09-29 recomposition: the Journey Health radial repeated the funnel's
+    // numbers, so it was replaced by real business data — the executive
+    // strip (revenue anchor) and the Service Lines panel.
+    await expect(page.getByTestId("executive-strip")).toBeVisible();
+    await expect(page.getByTestId("exec-attributedRevenue")).toBeVisible();
+    await expect(page.getByTestId("service-lines")).toBeVisible();
+    await expect(page.getByText("Service Lines")).toBeVisible();
 
     // Drill-down affordance: clicking a KPI cell navigates to a filtered sub-page.
     // That sub-page (Patients) is out of scope for this checkpoint and not yet built,
@@ -43,7 +45,7 @@ test.describe("Admin Command Centre", () => {
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "01-admin-command-centre-desktop.png"), fullPage: true });
     await page.getByTestId("journey-funnel").scrollIntoViewIfNeeded();
     await page.getByTestId("journey-funnel").screenshot({ path: path.join(ARTIFACTS_DIR, "05-admin-primary-analytics.png") });
-    await page.getByTestId("journey-health-radial").screenshot({ path: path.join(ARTIFACTS_DIR, "06-journey-health-radial.png") });
+    await page.getByTestId("service-lines").screenshot({ path: path.join(ARTIFACTS_DIR, "06-service-lines.png") });
 
     await page.setViewportSize({ width: 768, height: 1024 });
     const overflowX = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
@@ -51,6 +53,26 @@ test.describe("Admin Command Centre", () => {
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "02-admin-command-centre-tablet.png"), fullPage: true });
 
     expect(consoleErrors, `Console errors on Admin Command Centre: ${consoleErrors.join(" | ")}`).toEqual([]);
+  });
+});
+
+test.describe("Admin Command Centre — navigation", () => {
+  test("an Attention row opens its journey (not a patient id built from a task id)", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await login(page, "gyn.admin@pulseos.local");
+    const row = page.locator('[data-testid^="attention-row-"]').first();
+    await expect(row).toBeVisible();
+    await row.click();
+    // The page behind /journeys/<id> is owned elsewhere; the contract here is the URL.
+    await expect(page).toHaveURL(/\/journeys\/[0-9a-f-]{36}\?from=command-centre/);
+  });
+
+  test("Team / Doctor Load rows are not interactive (no dead /team or /doctors links)", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await login(page, "gyn.admin@pulseos.local");
+    const rows = page.locator('[data-testid^="load-row-"]');
+    await expect(rows.first()).toBeVisible();
+    expect(await page.locator('[data-testid^="load-row-"] >> nth=0').evaluate((el) => el.tagName)).not.toBe("BUTTON");
   });
 });
 

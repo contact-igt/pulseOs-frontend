@@ -7,9 +7,9 @@ import { SegmentedRadial } from "./SegmentedRadial";
 // "consulted" is a healthy funnel stage, not a warning state, and chart-amber
 // is the literal same hex as the warning/danger semantic tone).
 const COLORS: Record<string, string> = {
-  contacted: "var(--color-chart-blue)",
+  contacted: "var(--color-primary-700)",
   booked: "var(--color-chart-teal)",
-  attended: "var(--color-primary-300)",
+  attended: "var(--color-primary-400)",
   consulted: "var(--color-neutral-600)",
   treatment_advised: "var(--color-primary-800)",
 };

@@ -29,7 +29,7 @@ test.describe("Command Centre — responsive acceptance", () => {
     await login(page);
     await expect(page.getByTestId("command-centre")).toBeVisible();
     await expect(page.getByTestId("journey-funnel")).toBeVisible();
-    await expect(page.getByTestId("journey-health-radial")).toBeVisible();
+    await expect(page.getByTestId("service-lines")).toBeVisible();
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "command-centre-1440.png") });
     expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
 
@@ -58,13 +58,13 @@ test.describe("Command Centre — responsive acceptance", () => {
     await page.setViewportSize({ width: 1024, height: 768 });
     await login(page);
     await expect(page.getByTestId("command-centre")).toBeVisible();
-    await expect(page.getByTestId("journey-health-radial")).toBeVisible();
+    await expect(page.getByTestId("service-lines")).toBeVisible();
 
     // No card's content should render wider than the card itself — this is
     // the generic signature of "table-layout: auto with overflow-hidden"
     // silently clipping content, whatever the specific cause.
     const overflowingCards = await page.evaluate(() => {
-      const cards = Array.from(document.querySelectorAll('[data-testid="command-centre"] .rounded-xl'));
+      const cards = Array.from(document.querySelectorAll('[data-testid="command-centre"] .rounded-card'));
       return cards
         .filter((c) => c.scrollWidth > c.clientWidth + 1)
         .map((c) => ({ text: c.textContent?.slice(0, 40), overflowPx: c.scrollWidth - c.clientWidth }));
@@ -85,11 +85,15 @@ test.describe("Command Centre — responsive acceptance", () => {
     );
     expect(truncatedHeadings, "section heading(s) rendering truncated at 1024px").toEqual([]);
 
-    const truncatedLegendLabels = await page.evaluate(() =>
-      Array.from(document.querySelectorAll('[data-testid="journey-health-radial"] [data-testid^="radial-segment-"] span.truncate'))
+    // 2026-09-29 recomposition: the Journey Health radial (and its legend) was
+    // replaced by the Service Lines panel, so the same "no visibly clipped
+    // label" guarantee now covers service names and the Attention queue's
+    // patient / journey / owner text at this width.
+    const truncatedLabels = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('[data-testid="service-lines"] span.truncate, [data-testid="attention-queue"] span.truncate'))
         .filter((s) => s.scrollWidth > s.clientWidth + 1)
         .map((s) => s.textContent),
     );
-    expect(truncatedLegendLabels, "Journey Health legend label(s) rendering truncated at 1024px").toEqual([]);
+    expect(truncatedLabels, "Service Lines / Attention label(s) rendering truncated at 1024px").toEqual([]);
   });
 });

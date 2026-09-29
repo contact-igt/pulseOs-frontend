@@ -1,46 +1,70 @@
 import type { ExecutiveStrip } from "@pulseos/types";
-import { Card } from "./primitives";
-import { formatInr, formatMoneyOrDash, formatRoas } from "./format";
+import { formatInr, formatRoas } from "./format";
 
 interface Metric {
   key: keyof ExecutiveStrip;
   label: string;
   format: (v: number | null) => string;
-  tone?: "warning" | "danger";
 }
 
+// Order is the reading order of the business: outcome (revenue, the one blue
+// anchor) → what it cost → how efficient → what is at risk → the volume
+// behind it. On a phone the outcome comes first and spans the full width.
 const METRICS: Metric[] = [
-  { key: "marketingSpend", label: "Marketing Spend", format: (v) => formatInr(v ?? 0) },
-  { key: "enquiries", label: "Enquiries Acquired", format: (v) => String(v ?? 0) },
-  { key: "consultations", label: "Consultations", format: (v) => String(v ?? 0) },
-  { key: "treatmentsCompleted", label: "Treatments Completed", format: (v) => String(v ?? 0) },
-  { key: "attributedRevenue", label: "Attributed Revenue", format: (v) => formatInr(v ?? 0) },
+  { key: "attributedRevenue", label: "Attributed revenue", format: (v) => formatInr(v ?? 0) },
+  { key: "marketingSpend", label: "Marketing spend", format: (v) => formatInr(v ?? 0) },
   { key: "roas", label: "ROAS", format: (v) => formatRoas(v) },
-  { key: "spendAtRisk", label: "Spend At Risk", format: (v) => formatMoneyOrDash(v ?? 0), tone: "warning" },
+  { key: "spendAtRisk", label: "Spend at risk", format: (v) => formatInr(v ?? 0) },
+  { key: "enquiries", label: "Enquiries acquired", format: (v) => String(v ?? 0) },
+  { key: "consultations", label: "Consultations", format: (v) => String(v ?? 0) },
+  { key: "treatmentsCompleted", label: "Treatments completed", format: (v) => String(v ?? 0) },
 ];
 
+/**
+ * Hospital-level business headline: one connected strip (same material as
+ * MetricStrip), attributed revenue as the single blue anchor. Numbers come
+ * from `/dashboard/executive`, which is all-time and not affected by the
+ * branch/service filters.
+ *
+ * Container-driven columns rather than MetricStrip's fixed one-per-cell row:
+ * seven ₹-figures do not fit one line in a ~740px content area, so the strip
+ * goes 2 cols (anchor full width) → 4 cols (anchor spans two) → 7 cols.
+ */
 export function ExecutiveStripSection({ data, onSpendAtRiskClick }: { data: ExecutiveStrip; onSpendAtRiskClick?: () => void }) {
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
-      {METRICS.map((m) => {
-        const value = data[m.key] as number | null;
-        const clickable = m.key === "spendAtRisk";
-        return (
-          <Card key={m.key} className={`p-3 ${clickable ? "cursor-pointer transition hover:border-warning-500" : ""}`}>
-            {clickable ? (
-              <button type="button" onClick={onSpendAtRiskClick} className="flex w-full flex-col items-start text-left">
-                <span className="text-xl font-semibold tabular-nums text-warning-500">{m.format(value)}</span>
-                <span className="mt-1 text-xs leading-tight text-neutral-500">{m.label}</span>
-              </button>
-            ) : (
-              <div className="flex flex-col items-start">
-                <span className="text-xl font-semibold tabular-nums text-slate-900">{m.format(value)}</span>
-                <span className="mt-1 text-xs leading-tight text-neutral-500">{m.label}</span>
-              </div>
-            )}
-          </Card>
-        );
-      })}
+    <div className="@container">
+      <div
+        className="grid grid-cols-2 gap-px overflow-hidden rounded-card border border-line bg-line shadow-panel @[30rem]:grid-cols-4 @[68rem]:grid-cols-7"
+        data-testid="executive-strip"
+      >
+        {METRICS.map((m) => {
+          const anchor = m.key === "attributedRevenue";
+          const clickable = m.key === "spendAtRisk" && !!onSpendAtRiskClick;
+          const surface = anchor ? "bg-primary-700 text-white" : "bg-surface";
+          const span = anchor ? "col-span-2 @[68rem]:col-span-1" : "";
+          const content = (
+            <>
+              <span className={`block text-xl font-semibold leading-none tabular-nums ${anchor ? "text-white" : "text-ink"}`}>{m.format(data[m.key])}</span>
+              <span className={`mt-1.5 block text-xs font-medium leading-tight ${anchor ? "text-primary-100" : "text-ink-2"}`}>{m.label}</span>
+            </>
+          );
+          return clickable ? (
+            <button
+              key={m.key}
+              type="button"
+              onClick={onSpendAtRiskClick}
+              className={`flex min-w-0 flex-col items-start px-4 py-3 text-left transition hover:bg-primary-50 focus-visible:-outline-offset-2 ${surface} ${span}`}
+              data-testid={`exec-${m.key}`}
+            >
+              {content}
+            </button>
+          ) : (
+            <div key={m.key} className={`min-w-0 px-4 py-3 ${surface} ${span}`} data-testid={`exec-${m.key}`}>
+              {content}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -1,40 +1,61 @@
 import type { AttentionReason, SpendAtRisk as SpendAtRiskData } from "@pulseos/types";
-import { Card, SectionHeading } from "./primitives";
-import { formatInrCompact } from "./format";
+import { Badge, Panel } from "./primitives";
+import { formatInr } from "./format";
 import { ATTENTION_REASON_LABEL as REASON_LABEL } from "./status";
 
-export function SpendAtRisk({ data, onReasonClick }: { data: SpendAtRiskData; onReasonClick?: (reason: AttentionReason) => void }) {
+/**
+ * Spend At Risk: marketing spend tied to journeys that are still active but
+ * stalled on a follow-up. Recoverable by definition — never "waste". The
+ * total leads; the reasons underneath are a single-hue bar list. `marketingSpend`
+ * (optional) adds the share-of-spend context line.
+ */
+export function SpendAtRisk({
+  data,
+  marketingSpend,
+  onReasonClick,
+}: {
+  data: SpendAtRiskData;
+  /** Total marketing spend, to express the at-risk figure as a share. */
+  marketingSpend?: number;
+  onReasonClick?: (reason: AttentionReason) => void;
+}) {
   const max = Math.max(...data.byReason.map((r) => r.estimatedValue), 1);
+  const share = marketingSpend && marketingSpend > 0 ? Math.round((data.totalAtRisk / marketingSpend) * 100) : null;
+  const rows = [...data.byReason].sort((a, b) => b.estimatedValue - a.estimatedValue);
 
   return (
-    <Card className="p-4">
-      <SectionHeading
-        title="Spend At Risk"
-        subtitle="Marketing spend tied to unresolved follow-ups"
-        action={
-          <span className="text-lg font-semibold tabular-nums text-danger-500" data-testid="spend-at-risk-total">
-            {formatInrCompact(data.totalAtRisk)}
-          </span>
-        }
-      />
-      <div className="space-y-1.5">
-        {data.byReason.map((row) => (
-          <button
-            key={row.reason}
-            type="button"
-            onClick={() => onReasonClick?.(row.reason)}
-            className="flex w-full items-center gap-3 rounded px-1 py-1 text-left hover:bg-neutral-50"
-            data-testid={`spend-risk-${row.reason}`}
-          >
-            <span className="w-40 shrink-0 truncate text-xs text-neutral-600">{REASON_LABEL[row.reason]}</span>
-            <div className="h-3 flex-1 rounded bg-neutral-100">
-              <div className="h-3 rounded bg-danger-500" style={{ width: `${Math.max((row.estimatedValue / max) * 100, row.estimatedValue > 0 ? 4 : 0)}%` }} />
-            </div>
-            <span className="w-8 shrink-0 text-right text-xs tabular-nums text-neutral-500">{row.count}</span>
-            <span className="w-16 shrink-0 text-right text-xs tabular-nums text-slate-900">{formatInrCompact(row.estimatedValue)}</span>
-          </button>
-        ))}
+    <Panel
+      title="Spend At Risk"
+      subtitle="Active journeys awaiting follow-up"
+      action={data.totalAtRisk > 0 ? <Badge tone="warning">Recoverable</Badge> : undefined}
+      id="spend-at-risk-panel"
+    >
+      <div className="mb-3 flex items-baseline gap-2">
+        <span className="text-2xl font-semibold tabular-nums text-ink" data-testid="spend-at-risk-total">
+          {formatInr(data.totalAtRisk)}
+        </span>
+        {share !== null && <span className="text-xs text-ink-2">{share}% of marketing spend</span>}
       </div>
-    </Card>
+      <ul className="@container space-y-0.5">
+        {rows.map((row) => (
+          <li key={row.reason}>
+            <button
+              type="button"
+              onClick={() => onReasonClick?.(row.reason)}
+              className="flex w-full items-center gap-3 rounded-control px-2 py-1.5 text-left transition hover:bg-primary-50 focus-visible:-outline-offset-2 disabled:cursor-default"
+              disabled={!onReasonClick}
+              data-testid={`spend-risk-${row.reason}`}
+            >
+              <span className={`min-w-0 flex-1 text-xs leading-snug ${row.count === 0 ? "text-ink-2" : "text-ink"}`}>{REASON_LABEL[row.reason]}</span>
+              <span className="hidden h-2 w-16 shrink-0 overflow-hidden rounded-full bg-primary-100 @[28rem]:block" aria-hidden="true">
+                <span className="block h-full rounded-full bg-primary-500" style={{ width: `${Math.max((row.estimatedValue / max) * 100, row.estimatedValue > 0 ? 6 : 0)}%` }} />
+              </span>
+              <span className="w-[4.5rem] shrink-0 whitespace-nowrap text-right text-xs tabular-nums text-ink-2">{row.count} {row.count === 1 ? "journey" : "journeys"}</span>
+              <span className={`w-16 shrink-0 text-right text-xs font-medium tabular-nums ${row.count === 0 ? "text-ink-2" : "text-ink"}`}>{formatInr(row.estimatedValue)}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </Panel>
   );
 }
