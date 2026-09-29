@@ -2,11 +2,12 @@
 
 import { useMemo } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import type { LeadsBySourceResponse, SourceChannel } from "@pulseos/types";
+import type { AnalyticsPeriod, LeadsBySourceResponse, SourceChannel } from "@pulseos/types";
 import { ChartEmptyState, ChartLegend, ChartTooltipCard } from "./AnalyticsPanel";
 import { CHART_INK, SOURCE_LABELS, chartSourceKey, fmtBucketLabel, fmtCountNum, fmtDayShort, fmtPct, niceCountAxis, sourceColor } from "./chartTheme";
+import { inProgressIndex } from "./trend";
 
-type Row = { key: string; label: string; total: number; span: string } & Record<string, number | string>;
+type Row = { key: string; label: string; total: number; span: string; inProgress: boolean } & Record<string, number | string | boolean>;
 
 /**
  * Stacked bars: enquiries per day (or per 7-day block for long ranges) split by
@@ -24,7 +25,8 @@ export function DailySourceChart({
   compact = false,
   testId = "daily-source-chart",
 }: {
-  data: Pick<LeadsBySourceResponse, "buckets" | "sources" | "granularity" | "total">;
+  /** `period.today` marks the still-running bucket; omit it for a fully past range. */
+  data: Pick<LeadsBySourceResponse, "buckets" | "sources" | "granularity" | "total"> & { period?: Pick<AnalyticsPeriod, "today"> };
   height?: number;
   onSourceClick?: (source: SourceChannel) => void;
   activeSource?: SourceChannel;
@@ -32,15 +34,18 @@ export function DailySourceChart({
   compact?: boolean;
   testId?: string;
 }) {
+  const openIndex = inProgressIndex(data.buckets, data.period?.today);
+  const running = data.granularity === "day" ? "Today" : "This week";
   const { rows, series, totals } = useMemo(() => {
     const keys = [...new Set(data.sources.map(chartSourceKey))];
     const totals = new Map<SourceChannel, number>();
-    const rows: Row[] = data.buckets.map((b) => {
+    const rows: Row[] = data.buckets.map((b, i) => {
       const row: Row = {
         key: b.key,
-        label: fmtDayShort(b.key),
+        label: i === openIndex ? running : fmtDayShort(b.key),
         span: fmtBucketLabel(b),
         total: b.total,
+        inProgress: i === openIndex,
       };
       for (const k of keys) row[k] = 0;
       for (const [src, n] of Object.entries(b.bySource) as [SourceChannel, number][]) {
@@ -51,7 +56,7 @@ export function DailySourceChart({
       return row;
     });
     return { rows, series: keys, totals };
-  }, [data]);
+  }, [data, openIndex, running]);
 
   if (data.total === 0) {
     return <ChartEmptyState height={height} message="No enquiries in this period" hint="Widen the date range or clear a filter to see enquiries by source." />;
@@ -60,7 +65,7 @@ export function DailySourceChart({
   const legend = series.map((s) => ({ key: s, label: SOURCE_LABELS[s], color: sourceColor(s), value: totals.get(s) ?? 0 }));
   const axis = niceCountAxis(Math.max(...rows.map((r) => r.total), 0));
   const nonZero = rows.filter((r) => r.total > 0).length;
-  const summary = `Enquiries by source, ${rows.length} ${data.granularity === "day" ? "days" : "weeks"}: ${data.total} in total across ${nonZero} active ${data.granularity === "day" ? "days" : "weeks"}.`;
+  const summary = `Enquiries by source, ${rows.length} ${data.granularity === "day" ? "days" : "weeks"}: ${data.total} in total across ${nonZero} active ${data.granularity === "day" ? "days" : "weeks"}.` + (openIndex !== -1 ? ` ${running} is still in progress.` : "");
 
   return (
     <div data-testid={testId}>
@@ -74,7 +79,7 @@ export function DailySourceChart({
               tickLine={false}
               axisLine={{ stroke: CHART_INK.baseline }}
               tick={{ fontSize: 11, fill: CHART_INK.secondary }}
-              interval="equidistantPreserveStart"
+              interval={openIndex !== -1 ? "preserveEnd" : "equidistantPreserveStart"}
               minTickGap={compact ? 28 : 14}
               tickMargin={6}
             />
@@ -105,6 +110,7 @@ export function DailySourceChart({
                       share: fmtPct(row.total > 0 ? (row[s] as number) / row.total : null),
                     }))}
                     footer={{ label: "Total", value: fmtCountNum(row.total) }}
+                    note={row.inProgress ? `${running} is still in progress — counted so far.` : undefined}
                   />
                 );
               }}

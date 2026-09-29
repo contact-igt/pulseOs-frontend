@@ -28,10 +28,10 @@ import {
   formatInr,
   formatInrCompact,
   sourceColor,
+  splitInProgress,
 } from "@pulseos/ui";
 import { RankedBars, type BarRow } from "./common";
 import { prevLabel } from "./overview";
-import { splitInProgress } from "./trend";
 
 /** Enquiries over time against the previous period of the same length. */
 export function LeadTrend({ data, height = 240 }: { data: LeadsBySourceResponse; height?: number }) {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { ChartEmptyState, ChartLegend, ChartTooltipCard, TrendIndicator } from "../AnalyticsPanel";
+import { DailySourceChart } from "../DailySourceChart";
 import {
   SERIES_PALETTE,
   chartSourceKey,
@@ -96,5 +97,18 @@ describe("chart primitives", () => {
     expect(screen.getByText("7 Sep")).toBeTruthy();
     expect(screen.getByText("60%")).toBeTruthy();
     expect(screen.getByText("Total")).toBeTruthy();
+  });
+});
+
+describe("DailySourceChart", () => {
+  const day = (key: string, meta: number) => ({ key, to: key, days: 1, partial: false, total: meta, bySource: { meta }, previousTotal: null });
+  it("labels the still-running day 'Today' instead of presenting it as a finished short day", () => {
+    render(
+      <DailySourceChart
+        data={{ buckets: [day("2026-09-29", 4), day("2026-09-30", 1)], sources: ["meta"], granularity: "day", total: 5, period: { today: "2026-09-30" } }}
+      />,
+    );
+    expect(screen.getByText("Today")).toBeTruthy();
+    expect(screen.getByRole("img").getAttribute("aria-label")).toMatch(/today is still in progress/i);
   });
 });
