@@ -284,3 +284,32 @@ workflows). Command Centre precision pass (Phase 4) is already done — see
 `docs/audits/2026-09-21-pulseos-ui-refinement-v2.md`. DB was freshly reseeded as the last action before
 this resume point — anyone continuing should be aware repeated full-suite Playwright runs will need another
 reseed before trusting `crm-critical-flows.spec.ts` results (see flake note above).
+
+## 2026-09-30 — Stabilization + view-system completion loop
+
+**Auth gate (c6727fb) — PASSED.** Login 500 was migration 0016 (`tenants.timezone`) not applied to
+`pulseos_dev`; logout 400 was the shared api-client sending `content-type: application/json` on bodyless
+POSTs (`FST_ERR_CTP_EMPTY_JSON_BODY`) — fixed in the helper (+204/empty-200 handling, 9 unit tests).
+Central Fastify error handler: 5xx bodies are generic (`internal_error`), full error logged server-side
+only. Auth session lifecycle integration suite (14) + live auth e2e (4) incl. no-overlay checks.
+
+**V0 shared view primitives (5e1a444)** — recovered, verified (packages/ui 63/63), temporary
+`/view-primitives-demo` route removed. ViewSwitcher, CalendarView (day/week/month + agenda), KanbanBoard,
+GanttTimeline, tenant-timezone `dates.ts`, `useViewState` (URL state). Controller-owned.
+
+**Analytics (65da880)** — Agent G failed twice on infrastructure; controller finished it directly per the
+failure policy. Verified: analytics API 45/45 (incl. timezone boundary suite), web unit 11/11, e2e
+analytics + auth 11/11. KPIs reconcile to underlying rows. Fix added by controller: Enquiry trend showed
+today's in-progress day as a plunge to 0 → `period.today` added to the API period; the running bucket is
+drawn as a dashed open segment with a hollow point, tooltip note and footnote.
+Sankey decision: REJECTED — journeys store only the current stage (no stage-transition history), so any
+flow diagram would invent paths. Journey tab uses furthest-stage outcome bars by source/service instead.
+
+**Page views** — P1 (Appointments / Doctor Home / Front Desk), P2 (Leads read-only board / My Work /
+Patient 360 Upcoming), P3 (Treatments pipeline + procedure calendar / Campaigns calendar + timeline)
+launched in parallel with strict file ownership; agents do not write to git; controller integrates.
+
+### Resume point (2026-09-30)
+If context compacts: check `git log` (latest controller commits above), then collect P1/P2/P3 reports,
+integration-gate them, then reviewers R1–R7, full gate (lint/typecheck/test/build, full Playwright twice
+without reseed, final clean reseed), Opus review, final report.
