@@ -52,6 +52,7 @@ export const whatsAppMetaCloudAdapter: MessagingProviderAdapter = {
             fromName: contactByWaId.get(msg.from) ?? null,
             body: bodyText,
             occurredAt: new Date(Number(msg.timestamp) * 1000),
+            phoneNumberId: value.metadata?.phone_number_id ?? null,
           });
         }
 
@@ -74,8 +75,13 @@ export const whatsAppMetaCloudAdapter: MessagingProviderAdapter = {
     if (config.mode === "fixture") {
       // No live Meta credentials in local dev — this is a genuinely usable,
       // deterministic stand-in for the Graph API response shape, never
-      // presented as a real delivered message.
-      return { providerMessageId: `FIXTURE_WAMID_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` };
+      // presented as a real delivered message. Embeds the phoneNumberId it
+      // was actually given (falling back to the connector default the same
+      // way the real branch below reads config.phoneNumberId) so a test can
+      // prove which line a fixture "send" would have used, without needing
+      // a live Graph API call.
+      const phoneNumberId = typeof config.phoneNumberId === "string" ? config.phoneNumberId : "unknown";
+      return { providerMessageId: `FIXTURE_WAMID_${phoneNumberId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` };
     }
 
     const phoneNumberId = config.phoneNumberId;

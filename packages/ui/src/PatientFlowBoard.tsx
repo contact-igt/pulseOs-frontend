@@ -19,10 +19,12 @@ const COMPACT_LABELS: Record<PatientFlowCount["bucket"], string> = {
 
 const COLORS: Record<PatientFlowCount["bucket"], string> = {
   confirmed: "var(--color-neutral-300)",
-  checked_in: "var(--color-chart-indigo)",
+  checked_in: "var(--color-primary-300)",
   waiting: "var(--color-chart-amber)",
   with_doctor: "var(--color-chart-blue)",
-  completed: "var(--color-primary-500)",
+  // Success tone, not the same blue as "with_doctor" (they rendered
+  // identically before — primary-500 and chart-blue are the same hex).
+  completed: "var(--color-accent-500)",
 };
 
 export function PatientFlowBoard({

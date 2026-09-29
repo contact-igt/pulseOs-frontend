@@ -103,10 +103,18 @@ describe.skipIf(!DEMO_PASSWORD)("inbox / conversations (integration)", () => {
     expect(claimAfterClose.statusCode).toBe(409);
 
     const timeline = await app.inject({ method: "GET", url: `/patients/${target.patientId}/timeline`, cookies: { pulseos_session: coordinatorCookie } });
-    const eventTypes = (timeline.json() as { eventType: string }[]).map((e) => e.eventType);
+    const events = timeline.json() as { eventType: string; description: string | null }[];
+    const eventTypes = events.map((e) => e.eventType);
     expect(eventTypes).toContain("conversation_claimed");
     expect(eventTypes).toContain("conversation_returned_to_ai");
     expect(eventTypes).toContain("conversation_closed");
+
+    // Inbound WhatsApp messages have always written a "whatsapp_message"
+    // Timeline event — sendMessage (the STAFF REPLY path) never did, so
+    // Timeline silently showed only the patient's half of every WhatsApp
+    // thread. The reply sent above must appear here too.
+    const outboundEvent = events.find((e) => e.eventType === "whatsapp_message" && e.description?.includes("here's the update"));
+    expect(outboundEvent).toBeDefined();
   });
 
   it("assigning a conversation writes a distinct conversation_assigned Timeline event (not conversation_claimed)", async () => {

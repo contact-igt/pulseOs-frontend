@@ -2,7 +2,7 @@ import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { buildApp } from "../app.js";
 import { queryClient } from "../db/client.js";
 import type { FastifyInstance } from "fastify";
-import type { ConnectorRow } from "@pulseos/types";
+import type { ConnectorRow, Patient360 } from "@pulseos/types";
 
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD;
 const SHARED_SECRET = "pulseos-fixture-runo-secret";
@@ -73,8 +73,31 @@ describe.skipIf(!DEMO_PASSWORD)("Runo webhook (integration, fixture mode)", () =
     const patient = rows[0];
 
     const timeline = await app.inject({ method: "GET", url: `/patients/${patient.id}/timeline`, cookies: { pulseos_session: adminCookie } });
-    const events = timeline.json() as { eventType: string }[];
-    expect(events.some((e) => e.eventType === "call_logged")).toBe(true);
+    const events = timeline.json() as { eventType: string; relatedEntityType: string | null; relatedEntityId: string | null }[];
+    const callEvent = events.find((e) => e.eventType === "call_logged");
+    expect(callEvent).toBeDefined();
+
+    // The `calls` table had been write-only since its introduction — no API
+    // route ever read it back. This is the read path's first real proof:
+    // the call must actually surface on Patient 360, not just exist as an
+    // orphaned DB row.
+    const patient360 = await app.inject({ method: "GET", url: `/patients/${patient.id}/360`, cookies: { pulseos_session: adminCookie } });
+    expect(patient360.statusCode).toBe(200);
+    const { calls } = patient360.json() as Patient360;
+    expect(calls.length).toBe(1);
+    expect(calls[0]).toMatchObject({
+      provider: "runo",
+      direction: "inbound",
+      status: "completed",
+      durationSeconds: 120,
+      recordingUrl: "https://fixture.example/recording.mp3",
+      agentName: "Test Agent",
+    });
+
+    // The Timeline event must be traceable back to its own `calls` row, not
+    // just tagged with a type and no id.
+    expect(callEvent!.relatedEntityType).toBe("call");
+    expect(callEvent!.relatedEntityId).toBe(calls[0].id);
   });
 
   it("a duplicate delivery of the same call_id is idempotent — only one Timeline event is written", async () => {
@@ -93,6 +116,47 @@ describe.skipIf(!DEMO_PASSWORD)("Runo webhook (integration, fixture mode)", () =
     expect(callEvents.length).toBe(1);
   });
 
+  it("a missed call creates a CALLBACK task even with no disposition — previously created nothing at all", async () => {
+    const phone = "919100000005";
+    const res = await app.inject({
+      method: "POST",
+      url: `/webhooks/runo/${connectorId}`,
+      payload: runoCallPayload({ callId: "call-fixture-missed", phone, name: "Runo Missed Caller", status: "missed" }),
+      headers: { "x-api-key": SHARED_SECRET },
+    });
+    expect(res.statusCode).toBe(200);
+
+    const patients = await app.inject({ method: "GET", url: `/patients?search=${encodeURIComponent("Runo Missed Caller")}`, cookies: { pulseos_session: adminCookie } });
+    const patient = (patients.json() as { id: string }[])[0];
+
+    const taskRes = await app.inject({ method: "GET", url: `/tasks?patientId=${patient.id}`, cookies: { pulseos_session: adminCookie } });
+    const taskRows = taskRes.json() as { type: string; status: string; notes: string | null }[];
+    const callbackTask = taskRows.find((t) => t.type === "CALLBACK");
+    expect(callbackTask).toBeDefined();
+    expect(callbackTask!.status).toBe("pending");
+    expect(callbackTask!.notes).toMatch(/missed call/i);
+  });
+
+  it("a missed call with a (nonsensical but possible) disposition still only creates the missed-call task, not also a disposition-mapped one", async () => {
+    const phone = "919100000006";
+    const res = await app.inject({
+      method: "POST",
+      url: `/webhooks/runo/${connectorId}`,
+      payload: runoCallPayload({ callId: "call-fixture-missed-disp", phone, name: "Runo Missed Disp Caller", status: "missed", disposition: "CALL_BACK_LATER" }),
+      headers: { "x-api-key": SHARED_SECRET },
+    });
+    expect(res.statusCode).toBe(200);
+
+    const patients = await app.inject({ method: "GET", url: `/patients?search=${encodeURIComponent("Runo Missed Disp Caller")}`, cookies: { pulseos_session: adminCookie } });
+    const patient = (patients.json() as { id: string }[])[0];
+
+    const taskRes = await app.inject({ method: "GET", url: `/tasks?patientId=${patient.id}`, cookies: { pulseos_session: adminCookie } });
+    const taskRows = taskRes.json() as { type: string; notes: string | null }[];
+    const callbackTasks = taskRows.filter((t) => t.type === "CALLBACK");
+    expect(callbackTasks.length).toBe(1);
+    expect(callbackTasks[0].notes).toMatch(/missed call/i);
+  });
+
   it("a CALL_BACK_LATER disposition creates a CALLBACK task (deterministic disposition mapping)", async () => {
     const phone = "919100000004";
     const res = await app.inject({
@@ -109,5 +173,68 @@ describe.skipIf(!DEMO_PASSWORD)("Runo webhook (integration, fixture mode)", () =
     const tasks = await app.inject({ method: "GET", url: `/tasks?patientId=${patient.id}`, cookies: { pulseos_session: adminCookie } });
     const taskRows = tasks.json() as { type: string }[];
     expect(taskRows.some((t) => t.type === "CALLBACK")).toBe(true);
+  });
+
+  it("resolves a call's endpoint when the connector has exactly one active endpoint configured", async () => {
+    // Other test files (e.g. communication-endpoints.integration.test.ts)
+    // also create endpoints on this same seeded Runo connector — when the
+    // full suite runs together, leftover active ones from those files would
+    // break this test's "exactly one" precondition regardless of execution
+    // order. Deactivate whatever is already there first so this test proves
+    // its own claim rather than depending on suite ordering.
+    const existing = await app.inject({ method: "GET", url: `/connectors/${connectorId}/endpoints`, cookies: { pulseos_session: adminCookie } });
+    for (const e of existing.json() as { id: string; isActive: boolean }[]) {
+      if (e.isActive) {
+        await app.inject({ method: "PATCH", url: `/connectors/${connectorId}/endpoints/${e.id}`, cookies: { pulseos_session: adminCookie }, payload: { isActive: false } });
+      }
+    }
+
+    const created = await app.inject({
+      method: "POST",
+      url: `/connectors/${connectorId}/endpoints`,
+      cookies: { pulseos_session: adminCookie },
+      payload: { type: "PHONE", publicNumber: "+919100099001", providerRef: "runo-sole-line", displayLabel: "Runo Sole Line" },
+    });
+    expect(created.statusCode).toBe(201);
+
+    const phone = "919100000007";
+    const res = await app.inject({
+      method: "POST",
+      url: `/webhooks/runo/${connectorId}`,
+      payload: runoCallPayload({ callId: "call-fixture-endpoint-sole", phone, name: "Runo Sole Endpoint Caller" }),
+      headers: { "x-api-key": SHARED_SECRET },
+    });
+    expect(res.statusCode).toBe(200);
+
+    const patients = await app.inject({ method: "GET", url: `/patients?search=${encodeURIComponent("Runo Sole Endpoint Caller")}`, cookies: { pulseos_session: adminCookie } });
+    const patient = (patients.json() as { id: string }[])[0];
+    const patient360 = await app.inject({ method: "GET", url: `/patients/${patient.id}/360`, cookies: { pulseos_session: adminCookie } });
+    const { calls } = patient360.json() as Patient360;
+    expect(calls[0].endpointLabel).toBe("Runo Sole Line");
+  });
+
+  it("does not guess an endpoint when the connector has more than one — ambiguous stays null", async () => {
+    const second = await app.inject({
+      method: "POST",
+      url: `/connectors/${connectorId}/endpoints`,
+      cookies: { pulseos_session: adminCookie },
+      payload: { type: "PHONE", publicNumber: "+919100099002", providerRef: "runo-second-line", displayLabel: "Runo Second Line" },
+    });
+    expect(second.statusCode).toBe(201);
+
+    const phone = "919100000008";
+    const res = await app.inject({
+      method: "POST",
+      url: `/webhooks/runo/${connectorId}`,
+      payload: runoCallPayload({ callId: "call-fixture-endpoint-ambiguous", phone, name: "Runo Ambiguous Endpoint Caller" }),
+      headers: { "x-api-key": SHARED_SECRET },
+    });
+    expect(res.statusCode).toBe(200);
+
+    const patients = await app.inject({ method: "GET", url: `/patients?search=${encodeURIComponent("Runo Ambiguous Endpoint Caller")}`, cookies: { pulseos_session: adminCookie } });
+    const patient = (patients.json() as { id: string }[])[0];
+    const patient360 = await app.inject({ method: "GET", url: `/patients/${patient.id}/360`, cookies: { pulseos_session: adminCookie } });
+    const { calls } = patient360.json() as Patient360;
+    expect(calls[0].endpointLabel).toBeNull();
   });
 });

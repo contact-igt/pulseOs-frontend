@@ -43,11 +43,13 @@
   --color-danger-500: #c14634;
   --color-danger-700: #8f2f22;
 
+  /* No chart-indigo/chart-violet — the palette stays cobalt/teal/amber/slate,
+     never purple, per the design direction's explicit "AI/automation is
+     never purple" rule. Multi-segment charts needing a 4th/5th hue reach
+     for --color-primary-300/700/800 or --color-neutral-600 instead. */
   --color-chart-blue: #2569c7;
   --color-chart-teal: #2bb8ab;
-  --color-chart-indigo: #5b5fc7;
   --color-chart-amber: #c98a1f;
-  --color-chart-violet: #8a5fb0;
 }
 
 /* --font-sans is injected by next/font (apps/web/app/layout.tsx) on <html>

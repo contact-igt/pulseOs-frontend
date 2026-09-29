@@ -17,6 +17,10 @@ export function formatInrCompact(amount: number): string {
   return `₹${rounded.toLocaleString("en-IN")}`;
 }
 
+export function formatMoneyOrDashCompact(amount: number | null): string {
+  return amount === null ? "—" : formatInrCompact(amount);
+}
+
 export function formatRoas(roas: number | null): string {
   return roas === null ? "—" : `${roas.toFixed(1)}x`;
 }
@@ -42,6 +46,14 @@ export function fmtDateWithYear(iso: string | null | undefined): string {
 export function fmtTime(iso: string | null | undefined): string {
   if (!iso) return "—";
   return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+}
+
+/** "4m 21s" / "38s" — call duration, null for a call that never connected (missed/failed/no_answer). */
+export function fmtCallDuration(seconds: number | null): string {
+  if (seconds === null || seconds <= 0) return "—";
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
 }
 
 /** "16 Sept, 2:30 PM" — the common combined case. */

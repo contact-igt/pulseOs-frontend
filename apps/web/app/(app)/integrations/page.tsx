@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "@pulseos/api-client";
+import { api, ApiError } from "@pulseos/api-client";
 import {
   Badge, EmptyState, ErrorState, SectionHeading, Skeleton, Table, TableBody, TableHead, Td, Th, Tr,
   relativeTime, CONNECTOR_STATUS_LABEL, CONNECTOR_STATUS_TONE, CONNECTOR_EVENT_STATUS_LABEL, CONNECTOR_EVENT_STATUS_TONE,
 } from "@pulseos/ui";
 import { hasPermission } from "@pulseos/types";
-import type { ConnectorMode, ConnectorType } from "@pulseos/types";
+import type { CommunicationEndpointType, CommunicationEndpointVm, ConnectorMode, ConnectorType } from "@pulseos/types";
 import { Mail, MessageCircle, Phone, Radio, ShieldCheck, Target, Zap } from "lucide-react";
 
 const TYPE_ICON: Record<ConnectorType, typeof Phone> = {
@@ -39,6 +39,236 @@ const STATUS_TONE = CONNECTOR_STATUS_TONE;
 // connection, no matter how healthy their status looks otherwise.
 const MODE_LABEL: Record<ConnectorMode, string> = { FIXTURE: "Fixture", SANDBOX: "Sandbox", LIVE: "Live" };
 const MODE_TONE: Record<ConnectorMode, "neutral" | "warning" | "primary"> = { FIXTURE: "neutral", SANDBOX: "warning", LIVE: "primary" };
+
+const ENDPOINT_TYPE_LABEL: Record<CommunicationEndpointType, string> = { PHONE: "Phone", WHATSAPP: "WhatsApp" };
+
+// The N-numbers-per-connector layer (a WABA can hold many phone_number_ids;
+// a Runo integration can cover several SIM/reception lines) — only relevant
+// for TELEPHONY/MESSAGING connectors, an ADS/EMAIL/STORAGE/HIS connector has
+// no phone lines to configure here.
+function EndpointsSection({ connectorId, canManage }: { connectorId: string; canManage: boolean }) {
+  const queryClient = useQueryClient();
+  const endpoints = useQuery({ queryKey: ["connector-endpoints", connectorId], queryFn: () => api.communicationEndpoints(connectorId) });
+  const branches = useQuery({ queryKey: ["branches"], queryFn: api.branches, enabled: canManage });
+
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newType, setNewType] = useState<CommunicationEndpointType>("PHONE");
+  const [newPublicNumber, setNewPublicNumber] = useState("");
+  const [newProviderRef, setNewProviderRef] = useState("");
+  const [newDisplayLabel, setNewDisplayLabel] = useState("");
+  const [newBranchId, setNewBranchId] = useState("");
+  const [addError, setAddError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [rowError, setRowError] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  function invalidate() {
+    queryClient.invalidateQueries({ queryKey: ["connector-endpoints", connectorId] });
+  }
+
+  async function toggleActive(endpoint: CommunicationEndpointVm) {
+    setRowError(null);
+    setTogglingId(endpoint.id);
+    try {
+      await api.updateCommunicationEndpoint(connectorId, endpoint.id, { isActive: !endpoint.isActive });
+      invalidate();
+    } catch {
+      setRowError(`Could not update "${endpoint.displayLabel}" — try again.`);
+    } finally {
+      setTogglingId(null);
+    }
+  }
+
+  function resetForm() {
+    setNewType("PHONE");
+    setNewPublicNumber("");
+    setNewProviderRef("");
+    setNewDisplayLabel("");
+    setNewBranchId("");
+  }
+
+  async function addEndpoint() {
+    if (!newPublicNumber.trim() || !newProviderRef.trim() || !newDisplayLabel.trim()) return;
+    setAdding(true);
+    setAddError(null);
+    try {
+      await api.createCommunicationEndpoint(connectorId, {
+        connectorId,
+        type: newType,
+        publicNumber: newPublicNumber.trim(),
+        providerRef: newProviderRef.trim(),
+        displayLabel: newDisplayLabel.trim(),
+        branchId: newBranchId || null,
+      });
+      resetForm();
+      setShowAddForm(false);
+      invalidate();
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        setAddError("An endpoint with this provider reference already exists on this connector.");
+      } else {
+        setAddError("Could not add this endpoint — try again.");
+      }
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  return (
+    <div>
+      <SectionHeading
+        title="Endpoints"
+        subtitle={endpoints.data ? `${endpoints.data.length}` : undefined}
+        action={
+          canManage && !showAddForm ? (
+            <button
+              type="button"
+              onClick={() => {
+                setAddError(null);
+                setShowAddForm(true);
+              }}
+              className="text-xs font-medium text-primary-600 hover:underline"
+              data-testid="add-endpoint-button"
+            >
+              Add endpoint
+            </button>
+          ) : undefined
+        }
+      />
+
+      {endpoints.isLoading && <Skeleton className="h-16" />}
+      {endpoints.isError && <ErrorState message="Could not load endpoints." />}
+      {endpoints.data && endpoints.data.length === 0 && <p className="text-xs text-neutral-400">No endpoints configured for this connector yet.</p>}
+
+      {rowError && <p className="mb-2 rounded border border-danger-200 bg-danger-50 px-2.5 py-1.5 text-xs text-danger-700">{rowError}</p>}
+
+      {endpoints.data && endpoints.data.length > 0 && (
+        <div className="overflow-hidden rounded-lg border border-neutral-100">
+          <Table>
+            <TableHead>
+              <tr>
+                <Th>Type</Th>
+                <Th>Number</Th>
+                <Th>Provider ref</Th>
+                <Th>Label</Th>
+                <Th>Branch</Th>
+                <Th>Status</Th>
+                {canManage && <Th align="right">Actions</Th>}
+              </tr>
+            </TableHead>
+            <TableBody>
+              {endpoints.data.map((e) => (
+                <Tr key={e.id} className="hover:bg-transparent" data-testid={`endpoint-row-${e.id}`}>
+                  <Td className="text-neutral-600">{ENDPOINT_TYPE_LABEL[e.type]}</Td>
+                  <Td className="text-slate-800">{e.publicNumber}</Td>
+                  <Td className="text-neutral-500">{e.providerRef}</Td>
+                  <Td className="text-slate-800">{e.displayLabel}</Td>
+                  <Td className="text-neutral-500">{e.branchName ?? "—"}</Td>
+                  <Td>
+                    <Badge tone={e.isActive ? "success" : "neutral"}>{e.isActive ? "Active" : "Inactive"}</Badge>
+                  </Td>
+                  {canManage && (
+                    <Td align="right">
+                      <button
+                        type="button"
+                        onClick={() => toggleActive(e)}
+                        disabled={togglingId === e.id}
+                        className="text-xs font-medium text-primary-600 hover:underline disabled:opacity-40"
+                        data-testid={`endpoint-toggle-${e.id}`}
+                      >
+                        {togglingId === e.id ? "Saving…" : e.isActive ? "Deactivate" : "Activate"}
+                      </button>
+                    </Td>
+                  )}
+                </Tr>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      {canManage && showAddForm && (
+        <div className="mt-3 space-y-2 rounded-lg border border-neutral-100 bg-neutral-50 p-3">
+          {addError && (
+            <p className="rounded border border-danger-200 bg-danger-50 px-2.5 py-1.5 text-xs text-danger-700" data-testid="add-endpoint-error">
+              {addError}
+            </p>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={newType}
+              onChange={(e) => setNewType(e.target.value as CommunicationEndpointType)}
+              className="rounded border border-neutral-200 bg-white px-2 py-1 text-xs text-slate-700"
+              data-testid="new-endpoint-type"
+            >
+              <option value="PHONE">Phone</option>
+              <option value="WHATSAPP">WhatsApp</option>
+            </select>
+            <input
+              type="text"
+              placeholder="Public number, e.g. +91…"
+              value={newPublicNumber}
+              onChange={(e) => setNewPublicNumber(e.target.value)}
+              className="rounded border border-neutral-200 px-2 py-1 text-xs outline-none focus:border-primary-400"
+              data-testid="new-endpoint-public-number"
+            />
+            <input
+              type="text"
+              placeholder="Provider reference"
+              value={newProviderRef}
+              onChange={(e) => setNewProviderRef(e.target.value)}
+              className="rounded border border-neutral-200 px-2 py-1 text-xs outline-none focus:border-primary-400"
+              data-testid="new-endpoint-provider-ref"
+            />
+            <input
+              type="text"
+              placeholder="Display label"
+              value={newDisplayLabel}
+              onChange={(e) => setNewDisplayLabel(e.target.value)}
+              className="rounded border border-neutral-200 px-2 py-1 text-xs outline-none focus:border-primary-400"
+              data-testid="new-endpoint-display-label"
+            />
+            <select
+              value={newBranchId}
+              onChange={(e) => setNewBranchId(e.target.value)}
+              className="rounded border border-neutral-200 bg-white px-2 py-1 text-xs text-slate-700"
+              data-testid="new-endpoint-branch"
+            >
+              <option value="">No branch</option>
+              {branches.data?.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={addEndpoint}
+              disabled={adding || !newPublicNumber.trim() || !newProviderRef.trim() || !newDisplayLabel.trim()}
+              className="rounded bg-primary-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-40"
+              data-testid="save-endpoint-button"
+            >
+              {adding ? "Adding…" : "Save endpoint"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowAddForm(false);
+                setAddError(null);
+                resetForm();
+              }}
+              className="rounded border border-neutral-200 px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function IntegrationsPage() {
   const queryClient = useQueryClient();
@@ -169,6 +399,10 @@ export default function IntegrationsPage() {
                 ))}
               </div>
             </div>
+
+            {(detail.data.connector.type === "TELEPHONY" || detail.data.connector.type === "MESSAGING") && (
+              <EndpointsSection connectorId={detail.data.connector.id} canManage={canManage} />
+            )}
 
             <div>
               <SectionHeading title="Configuration" subtitle="Non-secret metadata only" />

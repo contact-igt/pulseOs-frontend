@@ -48,9 +48,7 @@ export const colors = {
   chart: {
     blue: "#2569c7",
     teal: "#2bb8ab",
-    indigo: "#5b5fc7",
     amber: "#c98a1f",
-    violet: "#8a5fb0",
   },
 } as const;
 

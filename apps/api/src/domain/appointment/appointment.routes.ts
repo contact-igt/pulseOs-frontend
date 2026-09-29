@@ -24,6 +24,7 @@ const REASON_STATUS: Record<string, number> = {
   appointment_not_found: 404,
   appointment_closed: 409,
   not_with_doctor: 409,
+  invalid_transition: 409,
 };
 
 export async function appointmentRoutes(app: FastifyInstance) {

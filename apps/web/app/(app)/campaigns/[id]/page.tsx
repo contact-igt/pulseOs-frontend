@@ -73,21 +73,38 @@ export default function CampaignDetailPage() {
         </div>
       </Card>
 
-      <MetricStrip
-        testId="campaign-detail-metrics"
-        cells={[
-          { key: "spend", label: "Spend", value: formatInr(campaign.spend) },
-          { key: "leads", label: "Leads", value: campaign.leads },
-          { key: "appointments", label: "Appointments", value: campaign.appointments },
-          { key: "consultations", label: "Consultations", value: campaign.consultations },
-          { key: "treatmentAdvised", label: "Tx Advised", value: campaign.treatmentAdvised },
-          { key: "treatmentCompleted", label: "Tx Completed", value: campaign.treatmentCompleted },
-          { key: "revenue", label: "Revenue", value: formatInr(campaign.revenue) },
-          { key: "roas", label: "ROAS", value: formatRoas(campaign.roas) },
-          { key: "cpl", label: "Cost / Lead", value: formatMoneyOrDash(campaign.cpl) },
-          { key: "cpt", label: "Cost / Treatment", value: formatMoneyOrDash(campaign.costPerTreatment) },
-        ]}
-      />
+      <div className="space-y-2">
+        {/* Primary: same 6-cell shape as the root Campaigns page's efficiency
+            strip, so the two screens read as one product. A 10-cell strip
+            here previously left an orphaned cell on its own row at every
+            breakpoint (10 doesn't divide evenly by 3 or 6). */}
+        <MetricStrip
+          testId="campaign-detail-metrics"
+          cells={[
+            { key: "spend", label: "Spend", value: formatInr(campaign.spend) },
+            { key: "leads", label: "Leads", value: campaign.leads },
+            { key: "appointments", label: "Appointments", value: campaign.appointments },
+            { key: "treatmentCompleted", label: "Treatments", value: campaign.treatmentCompleted },
+            { key: "revenue", label: "Revenue", value: formatInr(campaign.revenue) },
+            { key: "roas", label: "ROAS", value: formatRoas(campaign.roas) },
+          ]}
+        />
+        {/* Secondary: derived cost/volume detail — Tx Advised stays visible
+            via each journey row's stage badge below, not duplicated here. */}
+        <div className="grid grid-cols-2 gap-2 rounded-lg border border-neutral-100 bg-neutral-50 px-4 py-2.5 sm:grid-cols-4" data-testid="campaign-detail-metrics-secondary">
+          {[
+            { key: "consultations", label: "Consultations", value: campaign.consultations },
+            { key: "cpl", label: "Cost / Lead", value: formatMoneyOrDash(campaign.cpl) },
+            { key: "cpa", label: "Cost / Appointment", value: formatMoneyOrDash(campaign.costPerAppointment) },
+            { key: "cpt", label: "Cost / Treatment", value: formatMoneyOrDash(campaign.costPerTreatment) },
+          ].map((cell) => (
+            <div key={cell.key} data-testid={`metric-${cell.key}`}>
+              <span className="block text-sm font-medium tabular-nums text-neutral-700">{cell.value}</span>
+              <span className="block text-[11px] text-neutral-500">{cell.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
 
       <Card className="overflow-x-auto p-4">
         <SectionHeading title="Attribution / Journeys" subtitle={journeyList.data ? `${journeyList.data.length} journeys` : undefined} />

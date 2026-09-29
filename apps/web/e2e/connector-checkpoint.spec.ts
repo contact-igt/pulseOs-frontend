@@ -120,10 +120,19 @@ test.describe("Communication connectors checkpoint (Group Y)", () => {
 
     // ---- Tablet screenshots ----
     await page.setViewportSize({ width: 768, height: 1024 });
+
+    // Integrations is Hospital-Admin/Super-Admin only (VIEW_INTEGRATIONS —
+    // Coordinator never had it; the role-aware route guard added later just
+    // started enforcing what the permission matrix already said, so staying
+    // logged in as coordinator here now correctly redirects away before the
+    // page renders). Re-login as admin for this one screenshot rather than
+    // pretend a role that can't reach the page took it.
+    await login(page, "admin@pulseos.local");
     await page.goto("/integrations");
     await expect(page.getByTestId("integrations-page")).toBeVisible();
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "07-integrations-tablet.png"), fullPage: true });
 
+    await login(page, "coordinator@pulseos.local");
     await page.goto("/inbox");
     await expect(page.getByTestId("inbox-page")).toBeVisible();
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "08-inbox-tablet.png"), fullPage: true });

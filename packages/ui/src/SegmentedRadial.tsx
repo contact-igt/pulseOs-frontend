@@ -43,9 +43,16 @@ export function SegmentedRadial({
   const labelY = center - blockHeight / 2 + valueFontSize + lineGap + labelFontSize / 2;
 
   return (
-    <Card className="p-4" data-testid={testId}>
+    <Card className="@container p-4" data-testid={testId}>
       <SectionHeading title={title} subtitle={subtitle} />
-      <div className="flex min-w-0 flex-col items-center gap-4 sm:flex-row sm:items-start sm:gap-6">
+      {/* @container query, not a viewport (sm:) breakpoint — this panel can
+          sit in a narrow grid column (e.g. Command Centre's 4/12 slot at
+          1024px) where the viewport is wide but the card itself isn't, which
+          a viewport breakpoint can't see. Side-by-side only once the card has
+          enough width for the legend to stay readable (170px svg + ~170px
+          legend + gap); otherwise stacked, where the legend gets the full
+          card width instead of truncating. */}
+      <div className="flex min-w-0 flex-col items-center gap-4 @[360px]:flex-row @[360px]:items-start @[360px]:gap-6">
         {/* CSS controls the rendered box (aspect-square + a max-width cap,
             allowed to shrink below that in a tight flex row); viewBox stays
             fixed at the original 220-unit coordinate system so every radius/
@@ -63,19 +70,25 @@ export function SegmentedRadial({
               <g key={seg.key}>
                 <title>{`${seg.label}: ${seg.count} (${seg.pct}%)`}</title>
                 <circle cx={center} cy={center} r={radius} fill="none" stroke="var(--color-neutral-100)" strokeWidth={strokeWidth} />
-                <circle
-                  cx={center}
-                  cy={center}
-                  r={radius}
-                  fill="none"
-                  stroke={seg.color}
-                  strokeWidth={strokeWidth}
-                  strokeDasharray={`${filled} ${circumference - filled}`}
-                  strokeLinecap="round"
-                  transform={`rotate(-90 ${center} ${center})`}
-                  className={onSegmentClick ? "cursor-pointer transition-opacity hover:opacity-80" : undefined}
-                  onClick={() => onSegmentClick?.(seg.key)}
-                />
+                {/* A round-linecap circle with a zero-length dash still paints
+                    a dot at the start point — skip the progress arc entirely
+                    at 0% rather than let a segment with no share of the ring
+                    show up as a colored mark on it. */}
+                {filled > 0 && (
+                  <circle
+                    cx={center}
+                    cy={center}
+                    r={radius}
+                    fill="none"
+                    stroke={seg.color}
+                    strokeWidth={strokeWidth}
+                    strokeDasharray={`${filled} ${circumference - filled}`}
+                    strokeLinecap="round"
+                    transform={`rotate(-90 ${center} ${center})`}
+                    className={onSegmentClick ? "cursor-pointer transition-opacity hover:opacity-80" : undefined}
+                    onClick={() => onSegmentClick?.(seg.key)}
+                  />
+                )}
               </g>
             );
           })}
@@ -87,12 +100,19 @@ export function SegmentedRadial({
           </text>
         </svg>
 
-        <ul className="min-w-[140px] flex-1 space-y-1.5">
+        {/* w-full (not just flex-1) so the list keeps the card's full
+            content width in stacked mode too — items-center on the parent
+            centers flex children by their own box, and without an explicit
+            width the <ul> shrinks to its content, which visually centers
+            every legend row under the donut instead of the plain
+            left-aligned list this is meant to read as. */}
+        <ul className="w-full min-w-[140px] flex-1 space-y-1.5">
           {segments.map((seg) => (
             <li key={seg.key}>
               <button
                 type="button"
                 onClick={() => onSegmentClick?.(seg.key)}
+                title={`${seg.label}: ${seg.count} (${seg.pct}%)`}
                 className="flex w-full items-center gap-2 rounded px-1 py-1 text-left hover:bg-neutral-50"
                 data-testid={`radial-segment-${seg.key}`}
               >

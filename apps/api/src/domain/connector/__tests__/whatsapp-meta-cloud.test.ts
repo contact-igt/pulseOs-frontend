@@ -34,6 +34,15 @@ describe("whatsAppMetaCloudAdapter (unit)", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it("sendMessage in fixture mode embeds the phoneNumberId it was given, so a caller can prove which line it would have sent from", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const withEndpoint = await whatsAppMetaCloudAdapter.sendMessage({ mode: "fixture", phoneNumberId: "SPECIFIC_LINE_ID" }, { accessToken: "unused" }, "919000000000", "hello");
+    expect(withEndpoint.providerMessageId).toContain("SPECIFIC_LINE_ID");
+
+    const withoutEndpoint = await whatsAppMetaCloudAdapter.sendMessage({ mode: "fixture" }, { accessToken: "unused" }, "919000000000", "hello");
+    expect(withoutEndpoint.providerMessageId).toContain("unknown");
+  });
+
   it("sendMessage in live mode posts to the Graph API and returns the wamid from the response", async () => {
     vi.stubGlobal(
       "fetch",

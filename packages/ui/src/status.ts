@@ -1,4 +1,4 @@
-import type { AppointmentStatus, AttentionReason, ConnectorStatus, JourneyStage, TreatmentStatus } from "@pulseos/types";
+import type { AppointmentStatus, AttentionReason, CallStatus, ConnectorStatus, JourneyStage, TaskReason, TreatmentStatus } from "@pulseos/types";
 
 // One display map per domain, shared across every table/badge/drawer that
 // shows this status — never a raw backend enum in front of a user, and
@@ -27,6 +27,22 @@ export const APPOINTMENT_STATUS_TONE: Record<AppointmentStatus, Tone> = {
   completed: "success",
   no_show: "danger",
   cancelled: "neutral",
+};
+
+export const CALL_STATUS_LABEL: Record<CallStatus, string> = {
+  completed: "Completed",
+  missed: "Missed",
+  no_answer: "No Answer",
+  busy: "Busy",
+  failed: "Failed",
+};
+
+export const CALL_STATUS_TONE: Record<CallStatus, Tone> = {
+  completed: "success",
+  missed: "danger",
+  no_answer: "warning",
+  busy: "warning",
+  failed: "danger",
 };
 
 export const TREATMENT_STATUS_LABEL: Record<TreatmentStatus, string> = {
@@ -81,6 +97,31 @@ export const ATTENTION_REASON_LABEL: Record<AttentionReason, string> = {
   no_show: "No-show",
   high_intent_uncontacted: "High-intent, uncontacted",
   treatment_decision_pending: "Treatment decision pending",
+};
+
+// Why a Task exists (distinct from its `type`, which is what action it is).
+// Shown as a small per-row badge on "My Work" so a telecaller can tell a
+// brand-new enquiry apart from a missed-call recovery at a glance. Shares
+// wording with ATTENTION_REASON_LABEL for the five reasons both cover, plus
+// the two Task-only reasons (manual_task, new_lead).
+export const TASK_REASON_LABEL: Record<TaskReason, string> = {
+  overdue_callback: "Overdue callback",
+  missed_follow_up: "Missed follow-up",
+  no_show: "No-show",
+  high_intent_uncontacted: "High-intent, uncontacted",
+  treatment_decision_pending: "Treatment decision pending",
+  manual_task: "Manual task",
+  new_lead: "New enquiry",
+};
+
+export const TASK_REASON_TONE: Record<TaskReason, Tone> = {
+  overdue_callback: "warning",
+  missed_follow_up: "danger",
+  no_show: "danger",
+  high_intent_uncontacted: "primary",
+  treatment_decision_pending: "warning",
+  manual_task: "neutral",
+  new_lead: "primary",
 };
 
 export const CONNECTOR_STATUS_LABEL: Record<ConnectorStatus, string> = {

@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, gte, inArray, or } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
-import { appointments, conversationAutomationPreferences, conversations, journeys, messages, patients, tasks, timelineEvents, users } from "../../db/schema.js";
+import { appointments, communicationEndpoints, conversationAutomationPreferences, conversations, journeys, messages, patients, tasks, timelineEvents, users } from "../../db/schema.js";
 import { getConnectorById, getConnectorSecrets, touchConnectorError, touchConnectorSuccess } from "../connector/connector.service.js";
 import { getMessagingAdapter } from "../connector/registry.js";
 import type { ConversationAutomationMode, ConversationAutomationPreference, ConversationChannel, ConversationDetail, ConversationRow, OwnershipState } from "@pulseos/types";
@@ -9,6 +9,7 @@ export interface ConversationFilters {
   channel?: ConversationChannel;
   ownershipState?: OwnershipState;
   search?: string;
+  communicationEndpointId?: string;
 }
 
 export async function listConversations(db: Db, tenantId: string, filters: ConversationFilters): Promise<ConversationRow[]> {
@@ -21,15 +22,18 @@ export async function listConversations(db: Db, tenantId: string, filters: Conve
       ownershipState: conversations.ownershipState,
       ownerName: users.name,
       lastMessageAt: conversations.lastMessageAt,
+      endpointLabel: communicationEndpoints.displayLabel,
     })
     .from(conversations)
     .innerJoin(patients, eq(conversations.patientId, patients.id))
     .leftJoin(users, eq(conversations.assignedTo, users.id))
+    .leftJoin(communicationEndpoints, eq(conversations.communicationEndpointId, communicationEndpoints.id))
     .where(
       and(
         eq(conversations.tenantId, tenantId),
         filters.channel ? eq(conversations.channel, filters.channel) : undefined,
         filters.ownershipState ? eq(conversations.ownershipState, filters.ownershipState) : undefined,
+        filters.communicationEndpointId ? eq(conversations.communicationEndpointId, filters.communicationEndpointId) : undefined,
       ),
     )
     .orderBy(desc(conversations.lastMessageAt));
@@ -62,6 +66,7 @@ export async function listConversations(db: Db, tenantId: string, filters: Conve
     unreadCount: unreadByConv.get(r.id) ?? 0,
     ownerName: r.ownerName,
     ownershipState: r.ownershipState,
+    endpointLabel: r.endpointLabel,
   }));
 }
 
@@ -72,6 +77,9 @@ export async function getConversationDetail(db: Db, tenantId: string, conversati
   const [patient] = await db.select({ name: patients.name }).from(patients).where(eq(patients.id, conv.patientId)).limit(1);
   const [assignedUser] = conv.assignedTo
     ? await db.select({ name: users.name }).from(users).where(eq(users.id, conv.assignedTo)).limit(1)
+    : [null];
+  const [endpoint] = conv.communicationEndpointId
+    ? await db.select({ displayLabel: communicationEndpoints.displayLabel }).from(communicationEndpoints).where(eq(communicationEndpoints.id, conv.communicationEndpointId)).limit(1)
     : [null];
 
   const unreadIds = await db
@@ -147,6 +155,7 @@ export async function getConversationDetail(db: Db, tenantId: string, conversati
       unreadCount: 0,
       ownerName: assignedUser?.name ?? null,
       ownershipState: conv.ownershipState,
+      endpointLabel: endpoint?.displayLabel ?? null,
     },
     messages: messageRows.map((m) => ({ id: m.id, senderType: m.senderType, senderName: m.senderName, body: m.body, sentAt: m.sentAt.toISOString() })),
     patientContext,
@@ -322,7 +331,23 @@ export async function sendMessage(db: Db, tenantId: string, conversationId: stri
           // touchConnectorError below — the actual root cause of a previously
           // observed flake where connector-checkpoint's own live-reply step
           // corrupted connector status for any later run against the same DB.
-          const config = { ...((connector.configuration as Record<string, unknown>) ?? {}), mode: connector.mode.toLowerCase() };
+          const config: Record<string, unknown> = { ...((connector.configuration as Record<string, unknown>) ?? {}), mode: connector.mode.toLowerCase() };
+          // The Inbox/Patient 360 UI shows which hospital line this thread
+          // resolved to (e.g. "Fertility Line") — a reply must actually be
+          // sent from that same line, not silently fall back to the
+          // connector's single default `phoneNumberId`, or the UI would be
+          // asserting a delivery line the send path doesn't honour. For
+          // WhatsApp, providerRef IS the real phone_number_id (see
+          // communication-endpoint.service.ts) — safe to override generic
+          // config here since every other adapter ignores an unknown key.
+          if (existing.communicationEndpointId) {
+            const [endpoint] = await db
+              .select({ providerRef: communicationEndpoints.providerRef })
+              .from(communicationEndpoints)
+              .where(eq(communicationEndpoints.id, existing.communicationEndpointId))
+              .limit(1);
+            if (endpoint) config.phoneNumberId = endpoint.providerRef;
+          }
           const sent = await adapter.sendMessage(config, secrets, to, body);
           providerMessageId = sent.providerMessageId;
           deliveryStatus = "sent";
@@ -347,5 +372,27 @@ export async function sendMessage(db: Db, tenantId: string, conversationId: stri
     deliveryStatus,
   });
   await db.update(conversations).set({ lastMessageAt: now }).where(eq(conversations.id, conversationId));
+
+  // Inbound patient messages have always written a "whatsapp_message"
+  // Timeline event (whatsapp-webhook.service.ts) — this outbound path never
+  // did, so Timeline silently showed only the patient's half of every
+  // thread. Written even when delivery failed (deliveryStatus: "failed") —
+  // the staff member's own action is still a real Timeline event regardless
+  // of provider outcome.
+  await db.insert(timelineEvents).values({
+    tenantId,
+    patientId: existing.patientId,
+    journeyId: existing.journeyId,
+    actorType: "user",
+    actorId,
+    eventType: "whatsapp_message",
+    title: "WhatsApp message sent",
+    description: body,
+    sourceChannel: "whatsapp",
+    occurredAt: now,
+    relatedEntityType: "conversation",
+    relatedEntityId: conversationId,
+  });
+
   return { ok: true };
 }

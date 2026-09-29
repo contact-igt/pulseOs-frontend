@@ -2,7 +2,7 @@ import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { buildApp } from "../app.js";
 import { queryClient } from "../db/client.js";
 import type { FastifyInstance } from "fastify";
-import type { AppointmentRow } from "@pulseos/types";
+import type { AppointmentRow, CreateLeadResult, Lookups } from "@pulseos/types";
 
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD;
 
@@ -33,11 +33,40 @@ describe.skipIf(!DEMO_PASSWORD)("appointments / front desk (integration)", () =>
     await queryClient.end();
   });
 
-  async function findOpenAppointments(count: number): Promise<AppointmentRow[]> {
-    const list = await app.inject({ method: "GET", url: "/appointments", cookies: { pulseos_session: frontDeskCookie } });
-    const open = (list.json() as AppointmentRow[]).filter((a) => a.status !== "completed" && a.status !== "cancelled" && a.status !== "with_doctor");
-    expect(open.length).toBeGreaterThanOrEqual(count);
-    return open.slice(0, count);
+  // A row plucked from the seeded /appointments list could be in ANY open
+  // status (seed.ts assigns them close to randomly) — fine when no
+  // transition-order validation exists, but not once the server actually
+  // enforces the canonical graph (see appointment-transitions.integration.test.ts):
+  // a test assuming "this is freshly scheduled" could silently get a
+  // "confirmed" or "checked_in" row instead and fail the FIRST transition it
+  // attempts. Tests that need a specific starting status create their own
+  // appointment (guaranteed "scheduled") rather than gambling on seed state.
+  async function freshScheduledAppointment(): Promise<AppointmentRow> {
+    const lookups = await app.inject({ method: "GET", url: "/lookups", cookies: { pulseos_session: frontDeskCookie } });
+    const { branches, doctors } = lookups.json() as Lookups;
+
+    const lead = await app.inject({
+      method: "POST",
+      url: "/leads",
+      cookies: { pulseos_session: frontDeskCookie },
+      payload: {
+        name: "Appointment Lifecycle Test Patient",
+        phone: `9${Math.floor(100000000 + Math.random() * 899999999)}`,
+        specialtyKey: "GENERAL_OPD",
+        branchId: branches[0].id,
+        source: "walk_in",
+        journeyType: "General Consultation",
+      },
+    });
+    const { patientId, journeyId } = lead.json() as CreateLeadResult;
+
+    const create = await app.inject({
+      method: "POST",
+      url: "/appointments",
+      cookies: { pulseos_session: frontDeskCookie },
+      payload: { patientId, journeyId, branchId: branches[0].id, doctorId: doctors[0].id, scheduledAt: new Date(Date.now() + 86400000).toISOString() },
+    });
+    return create.json() as AppointmentRow;
   }
 
   it("rejects an unauthenticated request with 401", async () => {
@@ -70,7 +99,7 @@ describe.skipIf(!DEMO_PASSWORD)("appointments / front desk (integration)", () =>
   });
 
   it("full front-desk transition lifecycle writes Timeline events at each step, ending in a real WAITING state", async () => {
-    const [scheduled] = await findOpenAppointments(1);
+    const scheduled = await freshScheduledAppointment();
 
     const confirm = await app.inject({
       method: "PATCH", url: `/appointments/${scheduled.id}/action`, cookies: { pulseos_session: frontDeskCookie }, payload: { action: "confirm" },
@@ -109,14 +138,14 @@ describe.skipIf(!DEMO_PASSWORD)("appointments / front desk (integration)", () =>
   });
 
   it("cannot complete an appointment that isn't currently with the doctor", async () => {
-    const [target] = await findOpenAppointments(1);
+    const target = await freshScheduledAppointment();
     const res = await app.inject({ method: "PATCH", url: `/appointments/${target.id}/complete`, cookies: { pulseos_session: frontDeskCookie } });
     expect(res.statusCode).toBe(409);
     expect(res.json().error).toBe("not_with_doctor");
   });
 
   it("marking a no-show then rescheduling recovers it back to scheduled, both writing Timeline events", async () => {
-    const [target] = await findOpenAppointments(1);
+    const target = await freshScheduledAppointment();
 
     const noShow = await app.inject({
       method: "PATCH", url: `/appointments/${target.id}/action`, cookies: { pulseos_session: frontDeskCookie }, payload: { action: "mark_no_show" },

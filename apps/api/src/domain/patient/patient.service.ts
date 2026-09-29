@@ -4,6 +4,8 @@ import {
   appointments,
   branches,
   campaignTouchpoints,
+  customFieldDefinitions,
+  customFieldValues,
   journeys,
   marketingCampaigns,
   patients,
@@ -15,6 +17,7 @@ import {
 } from "../../db/schema.js";
 import { allocatedAcquisitionCost } from "../marketing/formulas.js";
 import { getAttributionSummary } from "../acquisition/attribution.service.js";
+import { listCallsForPatient } from "../connector/call-webhook.service.js";
 import { resolveOrCreatePatient } from "./identity.service.js";
 import type { CreatePatientInput, CreatePatientResult, JourneyCardVm, Patient360, PatientListRow, PatientSearchRow } from "@pulseos/types";
 
@@ -205,6 +208,17 @@ export async function listPatients(db: Db, tenantId: string, filters: PatientLis
     .map(({ ownerUserId: _ownerUserId, ...rest }) => rest);
 }
 
+// customFieldValues.value is jsonb — the field type (TEXT/NUMBER/DATE/
+// BOOLEAN/SELECT/MULTI_SELECT/PHONE) decides its JS shape at write time, so
+// display formatting is generic over shape rather than re-deriving the
+// field's type here.
+function formatCustomFieldValue(value: unknown): string {
+  if (Array.isArray(value)) return value.length > 0 ? value.join(", ") : "—";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (value === null || value === undefined || value === "") return "—";
+  return String(value);
+}
+
 export async function getPatient360(db: Db, tenantId: string, patientId: string): Promise<Patient360 | null> {
   const [patient] = await db
     .select({ id: patients.id, name: patients.name, phone: patients.phone, preferredLanguage: patients.preferredLanguage, branchName: branches.name })
@@ -255,6 +269,17 @@ export async function getPatient360(db: Db, tenantId: string, patientId: string)
       .orderBy(desc(timelineEvents.occurredAt))
       .limit(1);
 
+    // Deliberately NOT filtered to archived = false: a value entered while a
+    // field was active must keep showing here even after Settings later
+    // archives that field definition — archiving retires it from new Add
+    // Lead submissions, it doesn't erase what was already recorded.
+    const customFieldRows = await db
+      .select({ label: customFieldDefinitions.label, value: customFieldValues.value, sortOrder: customFieldDefinitions.sortOrder })
+      .from(customFieldValues)
+      .innerJoin(customFieldDefinitions, eq(customFieldValues.fieldDefinitionId, customFieldDefinitions.id))
+      .where(eq(customFieldValues.journeyId, j.id))
+      .orderBy(customFieldDefinitions.sortOrder);
+
     journeyCards.push({
       id: j.id,
       journeyType: j.journeyType,
@@ -268,6 +293,7 @@ export async function getPatient360(db: Db, tenantId: string, patientId: string)
       treatmentStatus: treatment?.status ?? null,
       treatmentLabel: treatment?.label ?? null,
       lastInteractionAt: lastEvent ? lastEvent.occurredAt.toISOString() : null,
+      customFields: customFieldRows.map((f) => ({ label: f.label, value: formatCustomFieldValue(f.value) })),
     });
   }
 
@@ -338,9 +364,12 @@ export async function getPatient360(db: Db, tenantId: string, patientId: string)
     };
   }
 
+  const calls = await listCallsForPatient(db, tenantId, patient.id);
+
   return {
     patient: { id: patient.id, name: patient.name, phone: patient.phone, preferredLanguage: patient.preferredLanguage, branchName: patient.branchName },
     journeys: journeyCards,
+    calls,
     acquisition,
   };
 }

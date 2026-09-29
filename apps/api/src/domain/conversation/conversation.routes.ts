@@ -25,7 +25,7 @@ export async function conversationRoutes(app: FastifyInstance) {
 
   app.get("/conversations", async (request) => {
     const tenantId = request.sessionUser!.tenantId;
-    const query = request.query as { channel?: ConversationChannel; ownershipState?: OwnershipState; search?: string };
+    const query = request.query as { channel?: ConversationChannel; ownershipState?: OwnershipState; search?: string; communicationEndpointId?: string };
     return listConversations(app.db, tenantId, query);
   });
 

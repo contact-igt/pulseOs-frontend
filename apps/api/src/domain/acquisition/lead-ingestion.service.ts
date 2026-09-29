@@ -75,7 +75,10 @@ export async function ingestNormalizedLead(
       tenantId,
       patientId: patient.id,
       journeyId: journey.id,
-      reason: "manual_task",
+      // A brand-new, never-touched enquiry — distinct from "manual_task" so
+      // a Telecaller Workspace "New Leads" view can filter on it rather than
+      // being indistinguishable from any other ad hoc manual task.
+      reason: "new_lead",
       type: "CALLBACK",
       priority: "normal",
       status: "pending",

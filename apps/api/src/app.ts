@@ -13,7 +13,7 @@ import { taskRoutes } from "./domain/task/task.routes.js";
 import { appointmentRoutes } from "./domain/appointment/appointment.routes.js";
 import { treatmentRoutes } from "./domain/treatment/treatment.routes.js";
 import { conversationRoutes } from "./domain/conversation/conversation.routes.js";
-import { connectorRoutes } from "./domain/connector/connector.routes.js";
+import { connectorRoutes, communicationEndpointReadRoutes } from "./domain/connector/connector.routes.js";
 import { webhookRoutes } from "./domain/connector/webhook.routes.js";
 import { leadRoutes } from "./domain/lead/lead.routes.js";
 import { specialtyRoutes } from "./domain/specialty/specialty.routes.js";
@@ -69,6 +69,7 @@ export async function buildApp() {
     await protectedApp.register(treatmentRoutes);
     await protectedApp.register(conversationRoutes);
     await protectedApp.register(connectorRoutes);
+    await protectedApp.register(communicationEndpointReadRoutes);
     await protectedApp.register(leadRoutes);
     await protectedApp.register(specialtyRoutes);
     await protectedApp.register(campaignRoutes);

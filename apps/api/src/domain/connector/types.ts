@@ -7,6 +7,11 @@ export interface InboundMessageEvent {
   fromName: string | null;
   body: string;
   occurredAt: Date;
+  // Meta's own `metadata.phone_number_id`, present on every real inbound
+  // webhook payload (confirmed against Meta's live docs) — which hospital
+  // WhatsApp number received this message. Null only for a payload shape
+  // that omits it (never expected from a real Meta delivery).
+  phoneNumberId: string | null;
 }
 
 export interface MessageStatusEvent {

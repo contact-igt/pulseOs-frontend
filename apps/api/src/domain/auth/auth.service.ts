@@ -2,6 +2,7 @@ import { hash, verify } from "@node-rs/argon2";
 import { eq } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { users, sessions, tenants, branches } from "../../db/schema.js";
+import type { Role } from "@pulseos/types";
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 12;
 
@@ -13,13 +14,11 @@ export async function verifyPassword(hashValue: string, plain: string): Promise<
   return verify(hashValue, plain);
 }
 
-export async function loginWithPassword(db: Db, email: string, password: string) {
-  const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
-  if (!user) return { ok: false as const, reason: "invalid_credentials" as const };
-
-  const valid = await verifyPassword(user.passwordHash, password);
-  if (!valid) return { ok: false as const, reason: "invalid_credentials" as const };
-
+// Shared by password login and Dev Login — the only difference between them
+// is how the target user is found (email+password vs. role lookup); once a
+// `users` row is settled on, session creation is identical, so both go
+// through one path rather than a parallel/weaker one for Dev Login.
+async function createSessionFor(db: Db, user: typeof users.$inferSelect) {
   const [session] = await db
     .insert(sessions)
     .values({ userId: user.id, expiresAt: new Date(Date.now() + SESSION_TTL_MS) })
@@ -43,6 +42,26 @@ export async function loginWithPassword(db: Db, email: string, password: string)
       role: user.role,
     },
   };
+}
+
+export async function loginWithPassword(db: Db, email: string, password: string) {
+  const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  if (!user) return { ok: false as const, reason: "invalid_credentials" as const };
+
+  const valid = await verifyPassword(user.passwordHash, password);
+  if (!valid) return { ok: false as const, reason: "invalid_credentials" as const };
+
+  return createSessionFor(db, user);
+}
+
+// Development convenience only — see auth.routes.ts for the env guard that
+// decides whether this is even reachable. No password check: it exists
+// specifically to skip typing one, for a fixed, non-secret set of seeded
+// demo accounts, never a real credential.
+export async function loginByRole(db: Db, role: Role) {
+  const [user] = await db.select().from(users).where(eq(users.role, role)).limit(1);
+  if (!user) return { ok: false as const, reason: "no_seeded_user_for_role" as const };
+  return createSessionFor(db, user);
 }
 
 export async function resolveSession(db: Db, sessionId: string) {

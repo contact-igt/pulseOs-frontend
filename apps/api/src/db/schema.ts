@@ -107,7 +107,7 @@ export const taskStatusEnum = pgEnum("task_status", ["pending", "in_progress", "
 // Tasks/My Work and answers "what does the assignee actually need to do."
 // The two taxonomies serve different screens and are kept independent.
 export const taskReasonEnum = pgEnum("task_reason", [
-  "overdue_callback", "missed_follow_up", "no_show", "high_intent_uncontacted", "treatment_decision_pending", "manual_task",
+  "overdue_callback", "missed_follow_up", "no_show", "high_intent_uncontacted", "treatment_decision_pending", "manual_task", "new_lead",
 ]);
 
 export const taskTypeEnum = pgEnum("task_type", [
@@ -394,10 +394,31 @@ export const conversations = pgTable("conversations", {
   // resolve an inbound webhook back to this conversation without re-deriving
   // it from the patient's phone number every time.
   externalThreadId: text("external_thread_id"),
+  // Which hospital WhatsApp number this thread is on. Nullable — existing
+  // rows and any tenant with only one number never populate this; it only
+  // matters once a tenant configures more than one WhatsApp endpoint.
+  communicationEndpointId: uuid("communication_endpoint_id").references(() => communicationEndpoints.id),
 }, (t) => ({
   tenantIdx: index("conversations_tenant_idx").on(t.tenantId),
   patientIdx: index("conversations_patient_idx").on(t.patientId),
-  externalThreadUnique: uniqueIndex("conversations_connector_external_thread_unique").on(t.connectorId, t.externalThreadId),
+  // Widened from (connectorId, externalThreadId): under one WABA, the same
+  // patient (externalThreadId = their wa_id) can legitimately message two
+  // different hospital numbers — without the endpoint in the key, those two
+  // genuinely separate conversations would collide into one.
+  //
+  // Endpoint resolution is now live (whatsapp-webhook.service.ts resolves
+  // and stamps communicationEndpointId from the real metadata.phone_number_id,
+  // and findOrCreateConversation's SELECT matches on it too, so the app-level
+  // guard and this index agree). REMAINING, still-live risk: Postgres treats
+  // every NULL as distinct for uniqueness, so for any still-endpoint-less
+  // conversation (no CommunicationEndpoint configured for that line yet) the
+  // DB-level race backstop is weaker than for a resolved one — two
+  // concurrent inbound webhooks for the same (connectorId, externalThreadId,
+  // endpoint=NULL) could both pass this index. The app-level find-or-create
+  // SELECT-then-INSERT in whatsapp-webhook.service.ts (now NULL-aware via
+  // isNull()) remains the real duplicate guard for that case, same as before
+  // this column existed.
+  externalThreadUnique: uniqueIndex("conversations_connector_endpoint_external_thread_unique").on(t.connectorId, t.communicationEndpointId, t.externalThreadId),
 }));
 
 // Configuration/scheduling preference only — there is no agent runtime yet
@@ -483,6 +504,46 @@ export const connectors = pgTable("connectors", {
 }, (t) => ({
   tenantIdx: index("connectors_tenant_idx").on(t.tenantId),
   tenantProviderUnique: uniqueIndex("connectors_tenant_provider_unique").on(t.tenantId, t.provider),
+}));
+
+// ---------------------------------------------------------------------------
+// Communication endpoints — the N-hospital-numbers-per-1-connector layer.
+// A Connector stays 1-per-tenant-per-provider (it owns the single credential/
+// webhook a provider actually gives you — one WABA webhook URL, one Runo API
+// key — confirmed against both providers' real architecture, not assumed).
+// A hospital can still have several phone/WhatsApp lines under that one
+// connector (Main Line, Fertility Line, a WhatsApp number) — this table is
+// that N side. Deliberately NOT unique per (tenantId) — many endpoints per
+// tenant is the whole point.
+// ---------------------------------------------------------------------------
+
+export const communicationEndpointTypeEnum = pgEnum("communication_endpoint_type", ["PHONE", "WHATSAPP"]);
+
+export const communicationEndpoints = pgTable("communication_endpoints", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  connectorId: uuid("connector_id").notNull().references(() => connectors.id),
+  // Optional — not every number maps 1:1 to a branch (e.g. a specialty line
+  // shared across branches).
+  branchId: uuid("branch_id").references(() => branches.id),
+  type: communicationEndpointTypeEnum("type").notNull(),
+  // Denormalized from connectors.provider — cheap, avoids a join for the
+  // common "which provider is this number on" read.
+  provider: text("provider").notNull(),
+  publicNumber: text("public_number").notNull(),
+  // The provider's own identifier for this specific number: WhatsApp's real
+  // `phone_number_id` (confirmed present on every inbound webhook payload),
+  // or — for Runo, which never exposes which SIM/line a call used (confirmed
+  // against their live API) — a manual/config label an admin assigns, never
+  // silently treated as provider-verified.
+  providerRef: text("provider_ref").notNull(),
+  displayLabel: text("display_label").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  tenantIdx: index("communication_endpoints_tenant_idx").on(t.tenantId),
+  connectorProviderRefUnique: uniqueIndex("communication_endpoints_connector_provider_ref_unique").on(t.connectorId, t.providerRef),
 }));
 
 // Google Business Profile aggregate listing performance — a dedicated table
@@ -596,6 +657,11 @@ export const calls = pgTable("calls", {
   id: uuid("id").primaryKey().defaultRandom(),
   tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
   connectorId: uuid("connector_id").notNull().references(() => connectors.id),
+  // Nullable: Runo never tells you which hospital line/SIM a call used
+  // (confirmed against their real API) — most calls will have no resolvable
+  // endpoint unless a tenant has configured a manual default for its Runo
+  // connector. Never backfilled; existing rows stay null forever, correctly.
+  communicationEndpointId: uuid("communication_endpoint_id").references(() => communicationEndpoints.id),
   patientId: uuid("patient_id").references(() => patients.id),
   journeyId: uuid("journey_id").references(() => journeys.id),
   externalCallId: text("external_call_id").notNull(),

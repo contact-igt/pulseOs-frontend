@@ -120,7 +120,12 @@ export default function CampaignsPage() {
         )}
       </section>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.9fr_1fr]">
+      {/* Stacked, not side-by-side — the performance table has 13 real
+          columns (min-w 860px) and was getting squeezed into a ~750px
+          column next to Spend At Risk, clipping the last few columns with
+          no visible scroll affordance. Full width removes the need to
+          scroll at all on any desktop viewport this product targets. */}
+      <div className="space-y-5">
         <Card className="overflow-x-auto p-4">
           <SectionHeading title="Campaign / Source Performance" subtitle={performance.data ? `${performance.data.length} campaigns` : undefined} />
           {performance.isLoading && <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-8" />)}</div>}

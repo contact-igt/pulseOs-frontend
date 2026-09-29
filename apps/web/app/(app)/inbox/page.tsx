@@ -69,6 +69,7 @@ export default function InboxPage() {
   const quickCreate = useQuickCreate();
   const [channel, setChannel] = useState<ConversationChannel | "">("");
   const [ownershipState, setOwnershipState] = useState<OwnershipState | "">("");
+  const [communicationEndpointId, setCommunicationEndpointId] = useState("");
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -88,9 +89,20 @@ export default function InboxPage() {
   const [contextOpen, setContextOpen] = useState(false);
 
   const conversations = useQuery({
-    queryKey: ["conversations", channel, ownershipState, search],
-    queryFn: () => api.conversations({ channel: channel || undefined, ownershipState: ownershipState || undefined, search: search || undefined }),
+    queryKey: ["conversations", channel, ownershipState, communicationEndpointId, search],
+    queryFn: () =>
+      api.conversations({
+        channel: channel || undefined,
+        ownershipState: ownershipState || undefined,
+        communicationEndpointId: communicationEndpointId || undefined,
+        search: search || undefined,
+      }),
   });
+
+  // Populates the "line" filter — which hospital phone/WhatsApp line a
+  // conversation came in on. Tenant-wide flat list (no connectorId arg),
+  // not the per-connector one used on the Integrations page.
+  const communicationEndpoints = useQuery({ queryKey: ["communication-endpoints"], queryFn: () => api.communicationEndpoints() });
 
   const effectiveSelectedId = selectedId ?? conversations.data?.[0]?.id ?? null;
 
@@ -221,6 +233,19 @@ export default function InboxPage() {
               ))}
             </select>
           </div>
+          {communicationEndpoints.data && communicationEndpoints.data.length > 0 && (
+            <select
+              value={communicationEndpointId}
+              onChange={(e) => setCommunicationEndpointId(e.target.value)}
+              className="w-full rounded border border-neutral-200 bg-white px-2 py-1 text-xs text-slate-700"
+              data-testid="endpoint-filter-select"
+            >
+              <option value="">All lines</option>
+              {communicationEndpoints.data.map((endpoint) => (
+                <option key={endpoint.id} value={endpoint.id}>{endpoint.displayLabel}</option>
+              ))}
+            </select>
+          )}
         </div>
         <div className="flex-1 overflow-y-auto">
           {conversations.isLoading && (
@@ -279,6 +304,7 @@ export default function InboxPage() {
                         {AUTOMATION_MODE_LABEL[automation.data.mode]}
                       </span>
                     )}
+                    {selectedConversation.endpointLabel && <span data-testid="conversation-endpoint-label">· {selectedConversation.endpointLabel}</span>}
                   </p>
                 </div>
               </div>

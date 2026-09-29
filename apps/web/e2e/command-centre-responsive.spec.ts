@@ -45,4 +45,51 @@ test.describe("Command Centre — responsive acceptance", () => {
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "command-centre-768.png") });
     expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
   });
+
+  // Regression test for the 2026-09-21 UI Refinement V2 pass: the actual bugs
+  // (a compact table overflowing its card, a heading word-breaking, a radial
+  // legend truncated to 3-4 characters) were all invisible to the
+  // document.scrollWidth check above, because the card that contained each
+  // one used `overflow-hidden` — the overflow was real but silently clipped
+  // at the card boundary rather than pushing out the page. This test asserts
+  // the actual failure signatures directly, specifically at 1024px, the one
+  // breakpoint where the prior audit pass never looked live.
+  test("1024px: no panel clips its own content, no heading or legend label is truncated", async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await login(page);
+    await expect(page.getByTestId("command-centre")).toBeVisible();
+    await expect(page.getByTestId("journey-health-radial")).toBeVisible();
+
+    // No card's content should render wider than the card itself — this is
+    // the generic signature of "table-layout: auto with overflow-hidden"
+    // silently clipping content, whatever the specific cause.
+    const overflowingCards = await page.evaluate(() => {
+      const cards = Array.from(document.querySelectorAll('[data-testid="command-centre"] .rounded-xl'));
+      return cards
+        .filter((c) => c.scrollWidth > c.clientWidth + 1)
+        .map((c) => ({ text: c.textContent?.slice(0, 40), overflowPx: c.scrollWidth - c.clientWidth }));
+    });
+    expect(overflowingCards, JSON.stringify(overflowingCards)).toEqual([]);
+
+    // `truncate` (CSS text-overflow: ellipsis) doesn't change an element's
+    // DOM text, only how it paints — so a text-content assertion like
+    // getByText(...).toBeVisible() would pass even while the label reads
+    // "Con..." on screen. scrollWidth > clientWidth on the truncating
+    // element itself is what actually distinguishes "fits" from "visually
+    // clipped", since the browser still lays out the untruncated content
+    // internally even when it isn't painted.
+    const truncatedHeadings = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('[data-testid="command-centre"] h2'))
+        .filter((h) => h.scrollWidth > h.clientWidth + 1)
+        .map((h) => h.textContent),
+    );
+    expect(truncatedHeadings, "section heading(s) rendering truncated at 1024px").toEqual([]);
+
+    const truncatedLegendLabels = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('[data-testid="journey-health-radial"] [data-testid^="radial-segment-"] span.truncate'))
+        .filter((s) => s.scrollWidth > s.clientWidth + 1)
+        .map((s) => s.textContent),
+    );
+    expect(truncatedLegendLabels, "Journey Health legend label(s) rendering truncated at 1024px").toEqual([]);
+  });
 });

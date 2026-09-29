@@ -1,17 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@pulseos/api-client";
-import { CircleGauge, Eye, EyeOff, HeartPulse, TrendingUp, UsersRound } from "lucide-react";
-
-const ROLE_HOME: Record<string, string> = {
-  DOCTOR: "/doctor-home",
-  HOSPITAL_ADMIN: "/command-centre",
-  SUPER_ADMIN: "/command-centre",
-  FRONT_DESK: "/front-desk",
-  PATIENT_COORDINATOR: "/my-work",
-};
+import type { Role } from "@pulseos/types";
+import { ChevronDown, CircleGauge, Eye, EyeOff, HeartPulse, TrendingUp, UsersRound } from "lucide-react";
+import { ROLE_HOME } from "../../components/shell/nav";
 
 const BENEFITS = [
   { icon: UsersRound, title: "Acquire", body: "Capture enquiries from every channel." },
@@ -24,6 +18,68 @@ const STATS = [
   { value: "25+", label: "Clinics" },
   { value: "98%", label: "Satisfaction" },
 ];
+
+// Development-only one-click sign-in — entirely absent outside local
+// development, not just hidden: /auth/dev-login/roles is a 404 (the route
+// doesn't exist, see auth.routes.ts::devLoginEnabled) anywhere the env flag
+// isn't explicitly on, so this renders nothing rather than an empty
+// placeholder. Deliberately quiet — collapsed by default, secondary to the
+// real Sign in button above it, never a competing CTA.
+function DevLoginBlock() {
+  const router = useRouter();
+  const [roles, setRoles] = useState<{ role: Role; label: string }[] | null>(null);
+  const [open, setOpen] = useState(false);
+  const [loggingInAs, setLoggingInAs] = useState<Role | null>(null);
+
+  useEffect(() => {
+    api
+      .devLoginRoles()
+      .then(setRoles)
+      .catch(() => setRoles([]));
+  }, []);
+
+  if (!roles || roles.length === 0) return null;
+
+  async function loginAs(role: Role) {
+    setLoggingInAs(role);
+    try {
+      const { user } = await api.devLogin(role);
+      router.push(ROLE_HOME[user.role]);
+    } catch {
+      setLoggingInAs(null);
+    }
+  }
+
+  return (
+    <div className="mt-6 border-t border-neutral-100 pt-4" data-testid="dev-login-block">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between text-xs font-medium text-neutral-400 transition hover:text-neutral-600"
+        data-testid="dev-login-toggle"
+      >
+        <span>Development</span>
+        <ChevronDown size={14} className={`transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="mt-2 grid grid-cols-2 gap-1.5" data-testid="dev-login-roles">
+          {roles.map((r) => (
+            <button
+              key={r.role}
+              type="button"
+              onClick={() => loginAs(r.role)}
+              disabled={loggingInAs !== null}
+              className="rounded-md border border-neutral-200 px-2 py-1.5 text-xs text-neutral-600 transition hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700 disabled:opacity-50"
+              data-testid={`dev-login-role-${r.role}`}
+            >
+              {loggingInAs === r.role ? "Signing in…" : r.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -176,6 +232,8 @@ export default function LoginPage() {
               {loading ? "Signing in…" : "Sign in"}
             </button>
           </form>
+
+          <DevLoginBlock />
 
           <p className="mt-6 text-center text-xs text-neutral-400">Need help? Contact your administrator.</p>
         </div>

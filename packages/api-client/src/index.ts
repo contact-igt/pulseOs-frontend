@@ -8,6 +8,7 @@ import type {
   CampaignFilters,
   CampaignPerformanceRow,
   FrontDeskDashboard,
+  CommunicationEndpointVm,
   ConnectorDetail,
   ConnectorRow,
   ConsultationOutcomeValue,
@@ -18,6 +19,7 @@ import type {
   ConversationRow,
   ConversionStage,
   CreateAppointmentInput,
+  CreateCommunicationEndpointInput,
   CreateCustomFieldInput,
   CreateLeadInput,
   CreateLeadResult,
@@ -39,9 +41,11 @@ import type {
   MarketingSourceRow,
   OwnershipState,
   Patient360,
+  TimelineEventVm,
   PatientFlowCount,
   PatientListRow,
   PatientSearchRow,
+  Role,
   SessionUser,
   SourcePerformanceRow,
   SpecialtyDetailVm,
@@ -49,12 +53,14 @@ import type {
   SpendAtRisk,
   SpendAtRiskSummary,
   TaskCounts,
+  TaskReason,
   TaskRow,
   TaskView,
   TeamWorkloadRow,
   TodayStrip,
   TreatmentRow,
   TreatmentStatus,
+  UpdateCommunicationEndpointInput,
   UpdateCustomFieldInput,
   UpdateSpecialtyInput,
 } from "@pulseos/types";
@@ -82,15 +88,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export interface TimelineEventVm {
-  id: string;
-  eventType: string;
-  title: string;
-  description: string | null;
-  sourceChannel: string | null;
-  occurredAt: string;
-  category: "communication" | "appointments" | "clinical" | "tasks" | "other";
-}
+export type { TimelineEventVm };
 
 export interface PatientListFilters {
   search?: string;
@@ -127,6 +125,12 @@ export const api = {
     request<{ user: SessionUser }>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   logout: () => request<{ ok: true }>("/auth/logout", { method: "POST" }),
   session: () => request<{ user: SessionUser }>("/auth/session"),
+  /** 404s (thrown as ApiError) whenever Dev Login isn't enabled — the route
+   * doesn't exist at all outside local development, see
+   * apps/api/src/domain/auth/auth.routes.ts::devLoginEnabled. Callers treat
+   * that 404 as "feature unavailable here", not an error to surface. */
+  devLoginRoles: () => request<{ role: Role; label: string }[]>("/auth/dev-login/roles"),
+  devLogin: (role: Role) => request<{ user: SessionUser }>("/auth/dev-login", { method: "POST", body: JSON.stringify({ role }) }),
   branches: () => request<Branch[]>("/branches"),
   journeyTypes: () => request<string[]>("/journey-types"),
   today: (f: DashboardQuery = {}) => request<TodayStrip>(`/dashboard/today${qs(f)}`),
@@ -152,7 +156,7 @@ export const api = {
   recordOutcome: (appointmentId: string, input: { outcome: ConsultationOutcomeValue; notes?: string; treatmentLabel?: string; estimatedValue?: number }) =>
     request<{ ok: true }>(`/appointments/${appointmentId}/outcome`, { method: "POST", body: JSON.stringify(input) }),
   lookups: () => request<Lookups>("/lookups"),
-  tasks: (filters: { view?: TaskView; assignedTo?: string; patientId?: string } = {}) =>
+  tasks: (filters: { view?: TaskView; assignedTo?: string; patientId?: string; reason?: TaskReason } = {}) =>
     request<TaskRow[]>(`/tasks${toQuery({ ...filters })}`),
   taskCounts: () => request<TaskCounts>("/tasks/counts"),
   createTask: (input: CreateTaskInput) => request<TaskRow>("/tasks", { method: "POST", body: JSON.stringify(input) }),
@@ -171,7 +175,7 @@ export const api = {
   treatments: (filters: { status?: TreatmentStatus; ownerId?: string } = {}) => request<TreatmentRow[]>(`/treatments${toQuery({ ...filters })}`),
   updateTreatmentStatus: (id: string, status: TreatmentStatus, plannedDate?: string) =>
     request<{ ok: true }>(`/treatments/${id}/status`, { method: "PATCH", body: JSON.stringify({ status, plannedDate }) }),
-  conversations: (filters: { channel?: ConversationChannel; ownershipState?: OwnershipState; search?: string } = {}) =>
+  conversations: (filters: { channel?: ConversationChannel; ownershipState?: OwnershipState; search?: string; communicationEndpointId?: string } = {}) =>
     request<ConversationRow[]>(`/conversations${toQuery({ ...filters })}`),
   conversation: (id: string) => request<ConversationDetail>(`/conversations/${id}`),
   sendConversationMessage: (id: string, body: string) =>
@@ -193,6 +197,14 @@ export const api = {
   syncConnectorPerformance: (id: string) =>
     request<{ ok: true; syncedCount: number } | { ok: false; reason: string; message?: string }>(`/connectors/${id}/sync-performance`, { method: "POST", body: JSON.stringify({}) }),
   createAppointment: (input: CreateAppointmentInput) => request<AppointmentRow>("/appointments", { method: "POST", body: JSON.stringify(input) }),
+
+  // Communication endpoints (multi-hospital-number layer over a Connector)
+  communicationEndpoints: (connectorId?: string) =>
+    request<CommunicationEndpointVm[]>(connectorId ? `/connectors/${connectorId}/endpoints` : "/communication-endpoints"),
+  createCommunicationEndpoint: (connectorId: string, input: CreateCommunicationEndpointInput) =>
+    request<CommunicationEndpointVm>(`/connectors/${connectorId}/endpoints`, { method: "POST", body: JSON.stringify(input) }),
+  updateCommunicationEndpoint: (connectorId: string, endpointId: string, input: UpdateCommunicationEndpointInput) =>
+    request<CommunicationEndpointVm>(`/connectors/${connectorId}/endpoints/${endpointId}`, { method: "PATCH", body: JSON.stringify(input) }),
 
   // Leads (CRM-2/3/4)
   leads: (filters: { status?: LeadStatus; specialtyKey?: string; source?: string } = {}) => request<LeadRow[]>(`/leads${toQuery({ ...filters })}`),

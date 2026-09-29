@@ -149,6 +149,22 @@ const ACTION_STATUS: Record<AppointmentAction, AppointmentStatus> = {
   cancel: "cancelled",
 };
 
+// The canonical transition graph — not invented here, but read off the
+// frontend's own already-shipped encoding of it: AppointmentList.tsx's
+// NEXT_ACTION map (one valid next action per status) plus
+// AppointmentDrawer.tsx's CAN_NO_SHOW/CAN_CANCEL sets. Previously only
+// enforced client-side; a direct API call could skip steps (e.g. confirmed
+// straight to with_doctor) or move backward (waiting back to confirmed) with
+// nothing stopping it server-side.
+const VALID_FROM_STATUSES: Record<AppointmentAction, AppointmentStatus[]> = {
+  confirm: ["requested", "scheduled"],
+  check_in: ["confirmed"],
+  mark_waiting: ["checked_in"],
+  send_to_doctor: ["waiting"],
+  mark_no_show: ["requested", "scheduled", "confirmed"],
+  cancel: ["requested", "scheduled", "confirmed", "checked_in", "waiting"],
+};
+
 const ACTION_EVENT: Record<AppointmentAction, string> = {
   confirm: "appointment_confirmed",
   check_in: "appointment_checked_in",
@@ -177,6 +193,7 @@ export async function applyAppointmentAction(
   const [existing] = await db.select().from(appointments).where(and(eq(appointments.tenantId, tenantId), eq(appointments.id, appointmentId))).limit(1);
   if (!existing) return { ok: false, reason: "appointment_not_found" };
   if (existing.status === "completed" || existing.status === "cancelled") return { ok: false, reason: "appointment_closed" };
+  if (!VALID_FROM_STATUSES[action].includes(existing.status)) return { ok: false, reason: "invalid_transition" };
 
   const nextStatus = ACTION_STATUS[action];
   await db.update(appointments).set({ status: nextStatus }).where(eq(appointments.id, appointmentId));

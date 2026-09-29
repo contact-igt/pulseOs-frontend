@@ -85,7 +85,19 @@ describe.skipIf(!DEMO_PASSWORD)("website form ingestion (Group AC) — integrati
     expect(rows.some((p) => p.id === result.patientId)).toBe(true);
 
     const tasks = await app.inject({ method: "GET", url: `/tasks?patientId=${result.patientId}`, cookies: { pulseos_session: adminCookie } });
-    expect((tasks.json() as unknown[]).length).toBeGreaterThan(0);
+    const taskRows = tasks.json() as { id: string; reason: string }[];
+    expect(taskRows.length).toBeGreaterThan(0);
+    // A brand-new, never-touched enquiry gets a distinct "new_lead" reason —
+    // previously indistinguishable from any other ad hoc "manual_task",
+    // which is exactly what a Telecaller Workspace "New Leads" view needs
+    // to filter on.
+    expect(taskRows[0].reason).toBe("new_lead");
+
+    const filtered = await app.inject({ method: "GET", url: `/tasks?patientId=${result.patientId}&reason=new_lead`, cookies: { pulseos_session: adminCookie } });
+    expect((filtered.json() as unknown[]).length).toBe(taskRows.length);
+
+    const filteredOut = await app.inject({ method: "GET", url: `/tasks?patientId=${result.patientId}&reason=no_show`, cookies: { pulseos_session: adminCookie } });
+    expect((filteredOut.json() as unknown[]).length).toBe(0);
 
     const [touchpoint] = await db.select().from(campaignTouchpoints).where(eq(campaignTouchpoints.journeyId, result.journeyId));
     expect(touchpoint.source).toBe("google");
@@ -93,6 +105,17 @@ describe.skipIf(!DEMO_PASSWORD)("website form ingestion (Group AC) — integrati
     expect(touchpoint.utmCampaign).toBe("ivf-search-q3");
     expect(touchpoint.gclid).toBe("gclid-abc123");
     expect(touchpoint.touchType).toBe("first_touch");
+
+    // The Attention Queue is the org-wide "needs an SLA-style call" view —
+    // overdue/no-show/uncontacted/treatment-decision. A brand-new, not-yet-due
+    // "new_lead" task is a different kind of thing (freshly created, not yet
+    // late) and was never meant to land there: AttentionReason has no
+    // "new_lead" member at all, so if the query didn't exclude it, the row
+    // would render with a blank/undefined reason label.
+    const attention = await app.inject({ method: "GET", url: "/dashboard/attention", cookies: { pulseos_session: adminCookie } });
+    expect(attention.statusCode).toBe(200);
+    const attentionRows = attention.json() as { id: string; reason: string }[];
+    expect(attentionRows.some((r) => r.id === taskRows[0]!.id)).toBe(false);
   });
 
   it("re-posting the same submissionId is idempotent — no duplicate Patient/Journey/task is created", async () => {

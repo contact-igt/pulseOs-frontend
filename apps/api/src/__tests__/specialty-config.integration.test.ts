@@ -4,7 +4,7 @@ import { buildApp } from "../app.js";
 import { db, queryClient } from "../db/client.js";
 import { customFieldValues } from "../db/schema.js";
 import type { FastifyInstance } from "fastify";
-import type { CreateLeadResult, CustomFieldDefinitionVm, SpecialtyDetailVm, SpecialtyTemplateVm } from "@pulseos/types";
+import type { CreateLeadResult, CustomFieldDefinitionVm, Patient360, SpecialtyDetailVm, SpecialtyTemplateVm } from "@pulseos/types";
 
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD;
 
@@ -200,7 +200,14 @@ describe.skipIf(!DEMO_PASSWORD)("specialty configuration (integration)", () => {
         customFieldValues: { insurance_provider: "Star Health" },
       },
     });
-    const { journeyId } = lead.json() as CreateLeadResult;
+    const { journeyId, patientId } = lead.json() as CreateLeadResult;
+
+    // Before archiving: the value is visible on Patient 360 (this endpoint
+    // previously never surfaced custom field values at all — see
+    // patient.service.ts::getPatient360).
+    const before360 = await app.inject({ method: "GET", url: `/patients/${patientId}/360`, cookies: { pulseos_session: adminCookie } });
+    const beforeJourney = (before360.json() as Patient360).journeys.find((j) => j.id === journeyId);
+    expect(beforeJourney?.customFields).toContainEqual({ label: "Insurance provider", value: "Star Health" });
 
     await app.inject({ method: "PATCH", url: `/specialties/fields/${field.id}`, cookies: { pulseos_session: adminCookie }, payload: { archived: true } });
 
@@ -210,6 +217,13 @@ describe.skipIf(!DEMO_PASSWORD)("specialty configuration (integration)", () => {
 
     const activeFields = await app.inject({ method: "GET", url: "/specialties/GENERAL_OPD/fields", cookies: { pulseos_session: coordinatorCookie } });
     expect((activeFields.json() as CustomFieldDefinitionVm[]).map((f) => f.key)).not.toContain("insurance_provider");
+
+    // After archiving: the historical value must still show on Patient 360
+    // — archiving retires the field from new leads, it must never erase or
+    // hide what was already recorded against an existing journey.
+    const after360 = await app.inject({ method: "GET", url: `/patients/${patientId}/360`, cookies: { pulseos_session: adminCookie } });
+    const afterJourney = (after360.json() as Patient360).journeys.find((j) => j.id === journeyId);
+    expect(afterJourney?.customFields).toContainEqual({ label: "Insurance provider", value: "Star Health" });
   });
 
   it("a specialty key that does not exist for this tenant 404s rather than leaking another tenant's config", async () => {

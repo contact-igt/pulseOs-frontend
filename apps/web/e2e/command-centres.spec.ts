@@ -25,7 +25,10 @@ test.describe("Admin Command Centre", () => {
 
     await expect(page.getByTestId("command-centre")).toBeVisible();
     await expect(page.getByTestId("kpi-strip")).toBeVisible();
-    await expect(page.getByText("Journey Conversion")).toBeVisible();
+    // Radial center label shortened to "Conversion" (2026-09-21 UI pass) —
+    // the panel heading already says "Journey Health", so "Journey" in the
+    // center label was redundant and, at 1024px, actually overflowed.
+    await expect(page.getByText("Conversion", { exact: true })).toBeVisible();
     await expect(page.getByText("Journey Health")).toBeVisible();
 
     // Drill-down affordance: clicking a KPI cell navigates to a filtered sub-page.
@@ -65,7 +68,12 @@ test.describe("Doctor Command Centre", () => {
     await expect(page.getByTestId("doctor-home")).toBeVisible();
     await expect(page.getByTestId("doctor-kpi-strip")).toBeVisible();
     await expect(page.getByText("Today's Patient Queue")).toBeVisible();
-    await expect(page.getByText("Today's Completion")).toBeVisible();
+    // Renamed "Today's Completion" → "Visits Completed" (2026-09-21 UI pass)
+    // — it measures appointment-status-reached-completed, a genuinely
+    // earlier/different step than "Outcome Recorded" on the same ring, and
+    // the old label read as self-contradicting next to a 0% Outcome Recorded
+    // segment.
+    await expect(page.getByText("Visits Completed")).toBeVisible();
 
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "03-doctor-command-centre-desktop.png"), fullPage: true });
 

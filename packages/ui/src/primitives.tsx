@@ -11,9 +11,21 @@ export function Card({ children, className = "", ...rest }: { children: ReactNod
 export function SectionHeading({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
   return (
     <div className="mb-3 flex items-start justify-between gap-3">
-      <div className="flex items-baseline gap-2">
-        <h2 className="text-sm font-semibold tracking-wide text-slate-900">{title}</h2>
-        {subtitle && <span className="text-xs text-neutral-500">{subtitle}</span>}
+      {/* min-w-0 lets this flex child actually shrink below its content's
+          natural width (the flex default is min-width:auto, i.e. never
+          smaller than max-content) — without it `truncate` below has no
+          room to take effect and the title just bleeds past the card
+          instead. flex-wrap so a long subtitle drops to its own line under
+          a tight panel (e.g. Command Centre's 1.5fr/1fr row at 1024px)
+          rather than squeezing the title. */}
+      <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        {/* truncate (not just whitespace-nowrap) — the longest real title
+            in this app ("Top Campaigns by Revenue") has as little as 9px of
+            headroom in its narrowest real panel; ellipsizing on overflow is
+            a much safer failure mode than the Card's overflow-hidden
+            silently clipping the title with no visual cue at all. */}
+        <h2 className="min-w-0 truncate text-sm font-semibold tracking-wide text-slate-900">{title}</h2>
+        {subtitle && <span className="shrink-0 text-xs text-neutral-500">{subtitle}</span>}
       </div>
       {action}
     </div>

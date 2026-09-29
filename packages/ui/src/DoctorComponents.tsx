@@ -38,7 +38,11 @@ export function DoctorFlowRadial({ dashboard }: { dashboard: DoctorDashboard }) 
       title="Today's Patient Flow"
       subtitle={`${scheduledCount} scheduled`}
       segments={segments}
-      centerLabel="Today's Completion"
+      // "Completion" here means the visit itself concluded (appointment
+      // status reached completed) — a separate, earlier step than logging a
+      // consultation outcome afterward. Named precisely so it doesn't read
+      // as contradicting a 0% "Outcome Recorded" segment on the same ring.
+      centerLabel="Visits Completed"
       centerValue={`${dashboard.completionPct}%`}
     />
   );
@@ -67,12 +71,29 @@ export function DoctorQuickStats({ dashboard }: { dashboard: DoctorDashboard }) 
   );
 }
 
-export function DoctorTodayList({ items, title, highlightId }: { items: DoctorTodayItem[]; title: string; highlightId?: string }) {
+export function DoctorTodayList({
+  items,
+  title,
+  highlightId,
+  emptyMessage = "Nothing scheduled here right now.",
+  showStatus = true,
+}: {
+  items: DoctorTodayItem[];
+  title: string;
+  highlightId?: string;
+  emptyMessage?: string;
+  /** Every row in this list shares the same appointment status by
+   * construction (e.g. "Awaiting Outcome" is only ever completed visits) —
+   * repeating that status badge on every row doesn't distinguish anything
+   * and reads as contradicting the list's own title. Only "Today's Patient
+   * Queue", where status genuinely varies row to row, wants it shown. */
+  showStatus?: boolean;
+}) {
   return (
     <Card className="p-4">
       <SectionHeading title={title} subtitle={`${items.length}`} />
       {items.length === 0 ? (
-        <EmptyState message="Nothing here" />
+        <EmptyState message={emptyMessage} />
       ) : (
         <ul className="divide-y divide-neutral-100">
           {items.map((item) => {
@@ -94,7 +115,7 @@ export function DoctorTodayList({ items, title, highlightId }: { items: DoctorTo
                 </span>
                 <span className="flex shrink-0 items-center gap-2">
                   <span className="text-xs tabular-nums text-neutral-500">{fmtTime(item.time)}</span>
-                  <Badge tone={STATUS_TONE[item.status]}>{STATUS_LABEL[item.status]}</Badge>
+                  {showStatus && <Badge tone={STATUS_TONE[item.status]}>{STATUS_LABEL[item.status]}</Badge>}
                 </span>
               </li>
             );

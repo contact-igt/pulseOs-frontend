@@ -216,6 +216,20 @@ export async function getPatientFlow(db: Db, tenantId: string, filters: Dashboar
   return (Object.keys(buckets) as PatientFlowCount["bucket"][]).map((bucket) => ({ bucket, count: buckets[bucket] }));
 }
 
+// The Attention Queue is specifically the SLA-style "already late or stalled"
+// set — not every task reason belongs here. Whitelisted (not "!= manual_task")
+// so a future Task-only reason (like "new_lead": a fresh, not-yet-due
+// first-response task, not something stalled) is excluded by default instead
+// of silently reaching AttentionItem with no matching label — that exact gap
+// happened once already when "new_lead" was added but this query wasn't.
+const ATTENTION_TASK_REASONS: AttentionItem["reason"][] = [
+  "overdue_callback",
+  "missed_follow_up",
+  "no_show",
+  "high_intent_uncontacted",
+  "treatment_decision_pending",
+];
+
 export async function getAttentionQueue(db: Db, tenantId: string, filters: DashboardFilters = {}): Promise<AttentionItem[]> {
   const branchClause = filters.branchId ? eq(patients.branchId, filters.branchId) : undefined;
   const rows = await db
@@ -231,7 +245,7 @@ export async function getAttentionQueue(db: Db, tenantId: string, filters: Dashb
     .innerJoin(patients, eq(tasks.patientId, patients.id))
     .leftJoin(journeys, eq(tasks.journeyId, journeys.id))
     .leftJoin(users, eq(tasks.assignedTo, users.id))
-    .where(and(eq(tasks.tenantId, tenantId), eq(tasks.status, "pending"), sql`${tasks.reason} != 'manual_task'`, branchClause))
+    .where(and(eq(tasks.tenantId, tenantId), eq(tasks.status, "pending"), inArray(tasks.reason, ATTENTION_TASK_REASONS), branchClause))
     .orderBy(tasks.dueAt)
     .limit(20);
 
@@ -245,8 +259,11 @@ export async function getAttentionQueue(db: Db, tenantId: string, filters: Dashb
   }));
 }
 
-// Spend-At-Risk categories map 1:1 onto the existing task-reason catalog —
-// each reason IS an operational failure keeping acquisition spend unrealized.
+// Spend-At-Risk categories map onto 5 of the task-reason catalog's stalled/
+// overdue reasons (the same set ATTENTION_TASK_REASONS above whitelists) —
+// each IS an operational failure keeping acquisition spend unrealized.
+// Task-only reasons that aren't a stall (manual_task, new_lead) are
+// deliberately excluded, not merely uncovered.
 export const SPEND_AT_RISK_CATEGORIES: { key: SpendAtRiskCategoryKey; label: string; taskReason: string }[] = [
   { key: "uncontacted", label: "Uncontacted", taskReason: "high_intent_uncontacted" },
   { key: "overdue_follow_up", label: "Overdue follow-up", taskReason: "overdue_callback" },

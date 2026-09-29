@@ -39,7 +39,12 @@ export default function DoctorHomePage() {
       <DoctorKpiStrip dashboard={data} />
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.4fr_1fr]">
-        <DoctorTodayList items={data.today} title="Today's Patient Queue" highlightId={data.nextPatient?.appointmentId} />
+        <DoctorTodayList
+          items={data.today}
+          title="Today's Patient Queue"
+          highlightId={data.nextPatient?.appointmentId}
+          emptyMessage="No appointments on your schedule today."
+        />
         <div className="space-y-5">
           <DoctorFlowRadial dashboard={data} />
           <DoctorQuickStats dashboard={data} />
@@ -47,9 +52,14 @@ export default function DoctorHomePage() {
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-        <AwaitingOutcomeList items={data.awaitingOutcome} title="Consultations Awaiting Outcome" />
-        <DoctorTodayList items={data.treatmentFollowUps} title="Treatment Follow-ups" />
-        <DoctorTodayList items={data.postCare} title="Post-care / Reviews" />
+        <AwaitingOutcomeList
+          items={data.awaitingOutcome}
+          title="Consultations Awaiting Outcome"
+          emptyMessage="No consultations waiting on an outcome."
+          showStatus={false}
+        />
+        <DoctorTodayList items={data.treatmentFollowUps} title="Treatment Follow-ups" emptyMessage="No treatment follow-ups due." showStatus={false} />
+        <DoctorTodayList items={data.postCare} title="Post-care / Reviews" emptyMessage="No post-care reviews due." showStatus={false} />
       </div>
 
       <RecentPatientsList items={data.recentPatients} />
