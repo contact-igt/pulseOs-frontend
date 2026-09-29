@@ -2,11 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, ChevronDown, LogOut, Menu, Search } from "lucide-react";
 import { QuickCreateMenu, JOURNEY_STAGE_LABEL, type QuickCreateItem } from "@pulseos/ui";
 import type { SessionUser } from "@pulseos/types";
-import { api } from "@pulseos/api-client";
+import { api, ApiError } from "@pulseos/api-client";
 import { useQuickCreate } from "./QuickCreateProvider";
 import { initials } from "./nav";
 
@@ -30,7 +30,10 @@ export function TopBar({
   onMenuClick?: () => void;
 }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [profileOpen, setProfileOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
   const quickCreate = useQuickCreate();
 
   const quickCreateItems: QuickCreateItem[] = [
@@ -41,8 +44,23 @@ export function TopBar({
   ].filter((x): x is QuickCreateItem => !!x);
 
   async function logout() {
-    await api.logout();
-    router.push("/login");
+    if (loggingOut) return;
+    setLoggingOut(true);
+    setLogoutError(null);
+    try {
+      await api.logout();
+    } catch (err) {
+      // An already-expired session is effectively logged out. Anything else
+      // (network, 5xx) may have left the server session alive — say so rather
+      // than pretending it worked.
+      if (!(err instanceof ApiError && err.status === 401)) {
+        setLogoutError("Couldn't log out. Check your connection and try again.");
+        setLoggingOut(false);
+        return;
+      }
+    }
+    queryClient.clear();
+    router.replace("/login");
   }
 
   return (
@@ -108,12 +126,19 @@ export function TopBar({
               <button
                 type="button"
                 onClick={logout}
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-600 transition hover:bg-neutral-100 hover:text-slate-900"
+                disabled={loggingOut}
+                aria-busy={loggingOut}
+                className="flex min-h-11 w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-600 transition hover:bg-neutral-100 hover:text-slate-900 disabled:cursor-wait disabled:opacity-60 lg:min-h-0"
                 data-testid="logout-button"
               >
                 <LogOut size={14} />
-                Log out
+                {loggingOut ? "Logging out…" : "Log out"}
               </button>
+              {logoutError && (
+                <p role="alert" className="mx-2 mb-1.5 rounded-control bg-danger-100 px-2 py-1.5 text-[11px] text-danger-700" data-testid="logout-error">
+                  {logoutError}
+                </p>
+              )}
             </div>
           )}
         </div>

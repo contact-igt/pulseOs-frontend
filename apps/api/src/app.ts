@@ -1,4 +1,4 @@
-import Fastify from "fastify";
+import Fastify, { type FastifyError } from "fastify";
 import cookie from "@fastify/cookie";
 import { db } from "./db/client.js";
 import { resolveSession } from "./domain/auth/auth.service.js";
@@ -22,6 +22,19 @@ import { websiteFormRoutes } from "./domain/acquisition/website-form.routes.js";
 
 export async function buildApp() {
   const app = Fastify({ logger: true });
+
+  // Unexpected failures are logged in full server-side but answered with a
+  // generic body — a raw error message (e.g. a failed SQL query with table
+  // names and ids) must never reach the browser. Expected 4xx errors keep
+  // their specific, non-sensitive Fastify codes/messages.
+  app.setErrorHandler((error: FastifyError, request, reply) => {
+    const status = error.statusCode && error.statusCode >= 400 ? error.statusCode : 500;
+    if (status >= 500) {
+      request.log.error({ err: error }, "unhandled error");
+      return reply.status(status).send({ error: "internal_error" });
+    }
+    return reply.status(status).send({ statusCode: status, code: error.code, error: error.name, message: error.message });
+  });
 
   app.decorate("db", db);
 

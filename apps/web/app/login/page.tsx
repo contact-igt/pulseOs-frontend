@@ -125,10 +125,15 @@ export default function LoginPage() {
       const { user } = await api.login(email, password);
       router.push(ROLE_HOME[user.role] ?? "/command-centre");
     } catch (err) {
+      // The email stays as typed; focus goes where the user needs to act.
       if (err instanceof ApiError && err.status === 401) {
         setError("Incorrect email or password.");
+        document.getElementById("password")?.focus();
+      } else if (err instanceof ApiError) {
+        // The API answered, so it is running — don't blame connectivity.
+        setError("PulseOS couldn't sign you in right now. Please try again in a moment.");
       } else {
-        setError("Could not reach PulseOS API. Is it running?");
+        setError("Could not reach PulseOS. Check your connection and try again.");
       }
     } finally {
       setLoading(false);

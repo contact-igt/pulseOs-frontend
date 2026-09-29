@@ -81,17 +81,24 @@ class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    credentials: "include",
-    headers: { "content-type": "application/json", ...init?.headers },
-  });
+  const headers = new Headers(init?.headers);
+  // JSON content-type only when there is a string (JSON) body: Fastify
+  // rejects a bodyless request that claims application/json with 400
+  // (FST_ERR_CTP_EMPTY_JSON_BODY). FormData gets no header so the browser can
+  // add the multipart boundary; a caller-provided content-type is kept.
+  if (typeof init?.body === "string" && !headers.has("content-type")) headers.set("content-type", "application/json");
+
+  const res = await fetch(`${API_BASE}${path}`, { ...init, credentials: "include", headers });
   if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new ApiError(res.status, body.error ?? res.statusText);
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new ApiError(res.status, body?.error ?? res.statusText);
   }
-  return res.json() as Promise<T>;
+  // 204, or a 200 with no body (e.g. a bare acknowledgement): nothing to parse.
+  const text = res.status === 204 ? "" : await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
 }
+
+export { request as apiRequest };
 
 export type { TimelineEventVm };
 
