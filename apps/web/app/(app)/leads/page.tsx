@@ -1,13 +1,21 @@
 "use client";
 
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import Link from "next/link";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { api } from "@pulseos/api-client";
-import { Badge, Button, Card, EmptyState, ErrorState, MetricStrip, Skeleton, Table, TableBody, TableHead, Td, Th, Tr, fmtDate } from "@pulseos/ui";
+import {
+  Badge, Button, Card, EmptyState, ErrorState, MetricStrip, Skeleton, Table, TableBody, TableHead, Tabs, Td, Th, Toolbar, Tr,
+  fmtDate, relativeTime, urgencyLabel,
+} from "@pulseos/ui";
+import { hasPermission, type LeadRow, type LeadStatus } from "@pulseos/types";
+import { UserRoundCog } from "lucide-react";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import { withFrom } from "@/components/shell/BackLink";
-import type { LeadRow, LeadStatus } from "@pulseos/types";
+import { AssignOwnerDialog } from "@/components/journey/AssignOwnerDialog";
+import { OwnerScopeControl, useOwnerScope } from "@/components/journey/OwnerScopeControl";
+import { invalidateJourneyQueries } from "@/components/journey/invalidate";
 
 const STATUS_TABS: { key: LeadStatus | "all"; label: string }[] = [
   { key: "all", label: "All" },
@@ -40,25 +48,75 @@ const STATUS_TONE: Record<LeadStatus, "neutral" | "warning" | "danger" | "primar
   lost: "neutral",
 };
 
+/** What the open assignment dialog is for: one row, or the current bulk selection. */
+type Assigning = { kind: "one"; row: LeadRow } | { kind: "bulk" } | null;
 
 export default function LeadsPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const quickCreate = useQuickCreate();
   const [statusFilter, setStatusFilter] = useState<LeadStatus | "all">("all");
+  const [owner, setOwner] = useOwnerScope();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [assigning, setAssigning] = useState<Assigning>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
+  const session = useQuery({ queryKey: ["session"], queryFn: api.session, retry: false });
+  const lookups = useQuery({ queryKey: ["lookups"], queryFn: api.lookups, staleTime: 60_000 });
   const summary = useQuery({ queryKey: ["leads-summary"], queryFn: api.leadsSummary });
   const leads = useQuery({
-    queryKey: ["leads", statusFilter],
-    queryFn: () => api.leads(statusFilter === "all" ? {} : { status: statusFilter }),
+    queryKey: ["leads", statusFilter, owner],
+    queryFn: () => api.leads({ ...(statusFilter === "all" ? {} : { status: statusFilter }), ...(owner ? { owner } : {}) }),
   });
 
+  const canAssign = session.data ? hasPermission(session.data.user.role, "MANAGE_JOURNEYS") : false;
+  const owners = lookups.data?.owners ?? [];
+  const rows = useMemo(() => leads.data ?? [], [leads.data]);
+  // Selection only ever counts rows still on screen (filters can hide selected rows).
+  const selectedIds = useMemo(() => rows.filter((r) => selected.has(r.id)).map((r) => r.id), [rows, selected]);
+  const allSelected = rows.length > 0 && selectedIds.length === rows.length;
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const ownerName = (id: string | null) => (id ? owners.find((o) => o.id === id)?.name ?? "the selected owner" : "Unassigned");
+
+  async function submitAssignment(ownerId: string | null) {
+    if (!assigning) return;
+    if (assigning.kind === "one") {
+      await api.assignJourneyOwner(assigning.row.id, ownerId);
+      setNotice(null);
+    } else {
+      const result = await api.assignJourneyOwnerBulk(selectedIds, ownerId);
+      setSelected(new Set());
+      setNotice(`${result.updatedCount} journey${result.updatedCount === 1 ? "" : "s"} assigned to ${ownerName(ownerId)}.`);
+    }
+    invalidateJourneyQueries(queryClient);
+    setAssigning(null);
+  }
+
   return (
-    <div className="mx-auto max-w-7xl space-y-5" data-testid="leads-page">
-      <div className="flex justify-end">
-        <Button variant="primary" onClick={() => quickCreate.openAddLead()} data-testid="add-lead-button">
-          + Add Lead
-        </Button>
-      </div>
+    <div className="mx-auto max-w-7xl space-y-4" data-testid="leads-page">
+      <Toolbar
+        actions={
+          <Button variant="primary" onClick={() => quickCreate.openAddLead()} data-testid="add-lead-button">
+            + Add Lead
+          </Button>
+        }
+      >
+        <Tabs
+          ariaLabel="Lead status"
+          value={statusFilter}
+          onChange={(k) => setStatusFilter(k as LeadStatus | "all")}
+          items={STATUS_TABS.map((t) => ({ key: t.key, label: t.label, testId: `leads-tab-${t.key}` }))}
+        />
+      </Toolbar>
 
       {summary.data && (
         <MetricStrip
@@ -74,23 +132,33 @@ export default function LeadsPage() {
         />
       )}
 
-      <div className="flex flex-wrap gap-1 rounded-lg border border-neutral-200 bg-white p-1" role="tablist">
-        {STATUS_TABS.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            role="tab"
-            aria-selected={statusFilter === t.key}
-            onClick={() => setStatusFilter(t.key)}
-            className={`rounded px-2.5 py-1.5 text-xs font-medium transition ${
-              statusFilter === t.key ? "bg-primary-50 text-primary-700" : "text-neutral-500 hover:bg-neutral-100"
-            }`}
-            data-testid={`leads-tab-${t.key}`}
-          >
-            {t.label}
+      <Toolbar>
+        <OwnerScopeControl
+          value={owner}
+          onChange={(next) => {
+            setOwner(next);
+            setSelected(new Set());
+          }}
+          owners={owners}
+        />
+      </Toolbar>
+
+      {canAssign && selectedIds.length > 0 && (
+        <Card tone="info" className="flex flex-wrap items-center gap-3 px-4 py-2" data-testid="bulk-bar" role="region" aria-label="Bulk actions">
+          <span className="text-sm font-medium text-ink">{selectedIds.length} selected</span>
+          <Button variant="primary" size="sm" onClick={() => { setNotice(null); setAssigning({ kind: "bulk" }); }} data-testid="bulk-assign">
+            Assign to…
+          </Button>
+          <button type="button" onClick={() => setSelected(new Set())} className="text-xs text-ink-2 hover:text-ink" data-testid="bulk-clear">
+            Clear
           </button>
-        ))}
-      </div>
+        </Card>
+      )}
+      {notice && (
+        <p role="status" className="px-1 text-xs text-primary-700" data-testid="assign-notice">
+          {notice}
+        </p>
+      )}
 
       <Card className="overflow-x-auto p-0">
         {leads.isLoading && <div className="space-y-2 p-4">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-8" />)}</div>}
@@ -105,45 +173,120 @@ export default function LeadsPage() {
             </div>
           </div>
         )}
-        {leads.data && leads.data.length > 0 && (
-          <Table className="min-w-[980px]">
+        {rows.length > 0 && (
+          <Table className="min-w-[960px]">
             <TableHead>
               <tr>
-                <Th leading>Lead / Patient</Th>
-                <Th>Phone</Th>
-                <Th>Specialty</Th>
+                {canAssign && (
+                  <Th leading className="w-10">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={() => setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.id)))}
+                      aria-label="Select all leads"
+                      data-testid="lead-select-all"
+                    />
+                  </Th>
+                )}
+                <Th leading={!canAssign}>Patient</Th>
+                <Th>Journey</Th>
                 <Th>Source</Th>
-                <Th>Campaign</Th>
                 <Th>Status</Th>
                 <Th>Owner</Th>
                 <Th>Last Interaction</Th>
                 <Th>Next Action</Th>
-                <Th>Created</Th>
-                <Th>Priority</Th>
+                <Th>Enquiry</Th>
               </tr>
             </TableHead>
             <TableBody>
-              {leads.data.map((lead: LeadRow) => (
-                <Tr key={lead.id} onClick={() => router.push(withFrom(`/patients/${lead.patientId}`, "leads"))} data-testid={`lead-row-${lead.id}`}>
-                  <Td leading className="text-slate-900">{lead.patientName}</Td>
-                  <Td className="text-neutral-600">{lead.phone}</Td>
-                  <Td className="text-neutral-600">{lead.specialtyLabel ?? "—"}</Td>
-                  <Td className="text-neutral-600">{lead.source}</Td>
-                  <Td className="text-neutral-600">{lead.campaignName ?? "—"}</Td>
-                  <Td>
-                    <Badge tone={STATUS_TONE[lead.leadStatus]}>{STATUS_LABEL[lead.leadStatus]}</Badge>
-                  </Td>
-                  <Td className="text-neutral-600">{lead.ownerName ?? "—"}</Td>
-                  <Td className="text-neutral-600">{fmtDate(lead.lastInteractionAt)}</Td>
-                  <Td className="text-neutral-600">{fmtDate(lead.nextActionDueAt)}</Td>
-                  <Td className="text-neutral-600">{fmtDate(lead.createdAt)}</Td>
-                  <Td>{lead.priority === "high" ? <Badge tone="warning">High</Badge> : <span className="text-neutral-400">Normal</span>}</Td>
-                </Tr>
-              ))}
+              {rows.map((lead: LeadRow) => {
+                const due = lead.nextActionDueAt ? urgencyLabel(lead.nextActionDueAt) : null;
+                return (
+                  <Tr key={lead.id} onClick={() => router.push(withFrom(`/journeys/${lead.id}`, "leads"))} data-testid={`lead-row-${lead.id}`}>
+                    {canAssign && (
+                      <Td leading className="w-10" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selected.has(lead.id)}
+                          onChange={() => toggle(lead.id)}
+                          aria-label={`Select ${lead.patientName}`}
+                          data-testid={`lead-select-${lead.id}`}
+                        />
+                      </Td>
+                    )}
+                    <Td leading={!canAssign}>
+                      <Link
+                        href={withFrom(`/journeys/${lead.id}`, "leads")}
+                        onClick={(e) => e.stopPropagation()}
+                        className="block font-medium text-ink hover:text-primary-700 hover:underline"
+                      >
+                        {lead.patientName}
+                      </Link>
+                      <span className="block text-[11px] text-ink-2">{lead.phone}</span>
+                    </Td>
+                    <Td className="text-ink-2">{lead.specialtyLabel ?? "—"}</Td>
+                    <Td className="text-ink-2">
+                      <span className="block">{lead.source}</span>
+                      {lead.campaignName && <span className="block max-w-[10rem] truncate text-[11px] text-neutral-500">{lead.campaignName}</span>}
+                    </Td>
+                    <Td>
+                      <Badge tone={STATUS_TONE[lead.leadStatus]}>{STATUS_LABEL[lead.leadStatus]}</Badge>
+                    </Td>
+                    <Td>
+                      <span className="flex items-center gap-1.5">
+                        <span className={lead.ownerName ? "text-ink" : "text-ink-2"} data-testid={`lead-owner-${lead.id}`}>
+                          {lead.ownerName ?? "Unassigned"}
+                        </span>
+                        {canAssign && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setNotice(null);
+                              setAssigning({ kind: "one", row: lead });
+                            }}
+                            aria-label={`${lead.ownerName ? "Change" : "Assign"} owner for ${lead.patientName}`}
+                            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-chip text-primary-700 hover:bg-primary-50"
+                            data-testid={`assign-owner-${lead.id}`}
+                          >
+                            <UserRoundCog size={14} aria-hidden="true" />
+                          </button>
+                        )}
+                      </span>
+                    </Td>
+                    <Td className="text-ink-2">{relativeTime(lead.lastInteractionAt)}</Td>
+                    <Td>
+                      {due ? (
+                        <>
+                          <span className={`block ${due.overdue ? "font-medium text-danger-700" : "text-ink-2"}`}>{due.text}</span>
+                          <span className="block text-[11px] text-neutral-500">{fmtDate(lead.nextActionDueAt)}</span>
+                        </>
+                      ) : (
+                        <span className="text-neutral-500">—</span>
+                      )}
+                    </Td>
+                    <Td className="text-ink-2">
+                      <span className="block">{fmtDate(lead.createdAt)}</span>
+                      <span className="block text-[11px] text-neutral-500">{relativeTime(lead.createdAt)}</span>
+                    </Td>
+                  </Tr>
+                );
+              })}
             </TableBody>
           </Table>
         )}
       </Card>
+
+      {assigning && canAssign && (
+        <AssignOwnerDialog
+          open
+          subject={assigning.kind === "one" ? assigning.row.patientName : `${selectedIds.length} journey${selectedIds.length === 1 ? "" : "s"}`}
+          owners={owners}
+          initialOwnerId={assigning.kind === "one" ? assigning.row.ownerId : null}
+          onClose={() => setAssigning(null)}
+          onSubmit={submitAssignment}
+        />
+      )}
     </div>
   );
 }

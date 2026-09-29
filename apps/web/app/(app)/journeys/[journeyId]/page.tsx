@@ -1,0 +1,321 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { api } from "@pulseos/api-client";
+import {
+  APPOINTMENT_STATUS_LABEL, APPOINTMENT_STATUS_TONE, Badge, Card, EmptyState, ErrorState, JOURNEY_STAGE_LABEL, JOURNEY_STAGE_TONE,
+  PageHeader, Panel, Skeleton, TREATMENT_STATUS_LABEL, TREATMENT_STATUS_TONE, Timeline,
+  fmtDate, fmtDateTime, formatInr, relativeTime, urgencyLabel,
+} from "@pulseos/ui";
+import { hasPermission, type JourneyDetailVm, type RevenueEventVm, type TaskType } from "@pulseos/types";
+import { ChevronRight, UserRoundCog } from "lucide-react";
+import { BackLink, withFrom } from "@/components/shell/BackLink";
+import { AssignOwnerDialog } from "@/components/journey/AssignOwnerDialog";
+import { JourneyStageFlow } from "@/components/journey/JourneyStageFlow";
+import { invalidateJourneyQueries } from "@/components/journey/invalidate";
+
+const TASK_TYPE_LABEL: Record<TaskType, string> = {
+  CALLBACK: "Callback",
+  FOLLOW_UP: "Follow-up",
+  APPOINTMENT_CONFIRMATION: "Confirm appointment",
+  NO_SHOW_RECOVERY: "No-show recovery",
+  TREATMENT_DECISION: "Treatment decision",
+  POST_CARE: "Post-care",
+  RECALL: "Recall",
+  OTHER: "Task",
+};
+
+const REVENUE_TYPE_LABEL: Record<RevenueEventVm["type"], string> = {
+  consultation_fee: "Consultation fee",
+  treatment_payment: "Treatment payment",
+  other: "Payment",
+};
+
+const SOURCE_LABEL: Record<string, string> = {
+  meta: "Meta", google: "Google", website: "Website", whatsapp: "WhatsApp", phone: "Phone", walk_in: "Walk-in", referral: "Referral", organic: "Organic", other: "Other",
+};
+
+function Fact({ label, children, testId }: { label: string; children: React.ReactNode; testId?: string }) {
+  return (
+    <div className="min-w-0" data-testid={testId}>
+      <dt className="text-[11px] font-medium uppercase tracking-wide text-ink-2">{label}</dt>
+      <dd className="mt-0.5 truncate text-sm text-ink">{children}</dd>
+    </div>
+  );
+}
+
+function initials(name: string) {
+  return name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
+}
+
+function JourneyPageSkeleton() {
+  return (
+    <div className="mx-auto max-w-6xl space-y-5" data-testid="journey-loading">
+      <Skeleton className="h-4 w-28" />
+      <Skeleton className="h-40" />
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.5fr_1fr]">
+        <Skeleton className="h-96" />
+        <div className="space-y-4">
+          <Skeleton className="h-32" />
+          <Skeleton className="h-32" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NotFound() {
+  return (
+    <div className="mx-auto max-w-3xl space-y-4" data-testid="journey-not-found">
+      <BackLink fallback="/journeys" fallbackLabel="Back to Journeys" />
+      <Card className="py-6">
+        <EmptyState
+          message="This journey could not be found"
+          hint="It may have been removed, or it belongs to a different hospital. Go back to Journeys to pick another."
+          action={<Link href="/journeys" className="text-xs font-medium text-primary-600 hover:underline">Open Journeys</Link>}
+        />
+      </Card>
+    </div>
+  );
+}
+
+export default function JourneyDetailPage() {
+  const params = useParams<{ journeyId: string }>();
+  const journeyId = params.journeyId;
+  const queryClient = useQueryClient();
+  const [assigning, setAssigning] = useState(false);
+
+  const session = useQuery({ queryKey: ["session"], queryFn: api.session, retry: false });
+  const lookups = useQuery({ queryKey: ["lookups"], queryFn: api.lookups, staleTime: 60_000 });
+  const detail = useQuery({
+    queryKey: ["journey", journeyId],
+    queryFn: () => api.journeyDetail(journeyId),
+    retry: (count, err) => (err as { status?: number }).status !== 404 && count < 1,
+  });
+
+  const role = session.data?.user.role;
+  const canAssign = role ? hasPermission(role, "MANAGE_JOURNEYS") : false;
+
+  if (detail.isLoading) return <JourneyPageSkeleton />;
+  if (detail.isError) {
+    if ((detail.error as { status?: number }).status === 404) return <NotFound />;
+    return (
+      <div className="mx-auto max-w-3xl space-y-4">
+        <BackLink fallback="/journeys" fallbackLabel="Back to Journeys" />
+        <ErrorState message="Could not load this journey." />
+      </div>
+    );
+  }
+  if (!detail.data) return <NotFound />;
+
+  const { patient, journey, customFields, timeline, tasks, appointments, treatments, revenue }: JourneyDetailVm = detail.data;
+  const stageTone = JOURNEY_STAGE_TONE[journey.stage] ?? "neutral";
+  const openTasks = tasks.filter((t) => t.status === "pending" || t.status === "in_progress");
+  const doneTasks = tasks.length - openTasks.length;
+  const restricted = [treatments === null ? "treatments" : null, revenue === null ? "revenue" : null].filter(Boolean) as string[];
+  const nextDue = journey.nextAction ? urgencyLabel(journey.nextAction.dueAt) : null;
+
+  return (
+    <div className="mx-auto max-w-6xl space-y-5" data-testid="journey-detail">
+      <PageHeader
+        back={<BackLink fallback="/journeys" fallbackLabel="Back to Journeys" />}
+        title={patient.name}
+        subtitle={`${patient.phone}${patient.branchName ? ` · ${patient.branchName}` : ""}`}
+        actions={
+          <Link
+            href={withFrom(`/patients/${patient.id}`, "journeys")}
+            className="inline-flex items-center gap-1 rounded-control border border-line-strong bg-white/85 px-3 py-2 text-sm font-medium text-neutral-700 shadow-panel transition hover:bg-white"
+            data-testid="journey-patient-link"
+          >
+            Open Patient 360
+            <ChevronRight size={14} aria-hidden="true" />
+          </Link>
+        }
+      />
+
+      {/* Journey summary: what this enquiry is, where it stands, who owns the next move. */}
+      <Card className="p-4 sm:p-5">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-100 text-xs font-semibold text-primary-700" aria-hidden="true">
+            {initials(patient.name)}
+          </span>
+          <h2 className="text-base font-semibold tracking-tight text-ink" data-testid="journey-service">{journey.journeyType}</h2>
+          <span data-testid="journey-stage"><Badge tone={stageTone}>{JOURNEY_STAGE_LABEL[journey.stage] ?? journey.stage}</Badge></span>
+        </div>
+
+        {journey.stage !== "lost" && (
+          <div className="mt-4 max-w-xl">
+            <JourneyStageFlow stage={journey.stage} />
+          </div>
+        )}
+
+        <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-4">
+          <Fact label="Source">{SOURCE_LABEL[journey.source] ?? journey.source}</Fact>
+          <Fact label="Campaign">{journey.campaign?.name ?? "Organic / no campaign"}</Fact>
+          <Fact label="Owner" testId="journey-owner">
+            <span className="flex items-center gap-1.5">
+              <span className={`truncate ${journey.owner ? "" : "text-ink-2"}`}>{journey.owner?.name ?? "Unassigned"}</span>
+              {canAssign && (
+                <button
+                  type="button"
+                  onClick={() => setAssigning(true)}
+                  aria-label={journey.owner ? "Change owner" : "Assign owner"}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-chip px-1.5 py-0.5 text-[11px] font-medium text-primary-700 hover:bg-primary-50"
+                  data-testid="journey-assign-owner"
+                >
+                  <UserRoundCog size={12} aria-hidden="true" />
+                  {journey.owner ? "Change" : "Assign"}
+                </button>
+              )}
+            </span>
+          </Fact>
+          <Fact label="Doctor">{journey.doctorName ?? "—"}</Fact>
+          <Fact label="Enquiry created">{fmtDate(journey.createdAt)} <span className="text-xs text-ink-2">· {relativeTime(journey.createdAt)}</span></Fact>
+          <Fact label="Last interaction">{relativeTime(journey.lastInteractionAt)}</Fact>
+          <Fact label="Next Action" testId="journey-next-action">
+            {journey.nextAction && nextDue ? (
+              <span>
+                {journey.nextAction.label}
+                <span className={`ml-1.5 text-xs ${nextDue.overdue ? "font-medium text-danger-700" : "text-ink-2"}`}>{nextDue.text}</span>
+              </span>
+            ) : (
+              <span className="text-ink-2">None scheduled</span>
+            )}
+          </Fact>
+        </dl>
+
+        {customFields.length > 0 && (
+          <div className="mt-5 border-t border-line pt-4" data-testid="journey-custom-fields">
+            <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-2">Specialty details</h3>
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-2.5 sm:grid-cols-3 lg:grid-cols-4">
+              {customFields.map((f) => (
+                <div key={f.label} className="min-w-0">
+                  <dt className="truncate text-[11px] text-ink-2">{f.label}</dt>
+                  <dd className="truncate text-sm text-ink" title={f.value}>{f.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        )}
+      </Card>
+
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.5fr_1fr]">
+        <div data-testid="journey-timeline">
+          <Timeline events={timeline} />
+        </div>
+
+        <div className="space-y-4">
+          <Panel title="Follow-ups" subtitle={openTasks.length ? `${openTasks.length} open` : undefined} data-testid="journey-tasks" padded={false}>
+            {openTasks.length === 0 ? (
+              <p className="px-4 py-3 text-xs text-ink-2">No open follow-ups{doneTasks ? ` · ${doneTasks} completed` : ""}.</p>
+            ) : (
+              <ul className="divide-y divide-line">
+                {openTasks.map((t) => {
+                  const due = urgencyLabel(t.dueAt);
+                  return (
+                    <li key={t.id} className="flex items-start justify-between gap-3 px-4 py-2.5 text-sm" data-testid={`journey-task-${t.id}`}>
+                      <div className="min-w-0">
+                        <p className="truncate text-ink">{TASK_TYPE_LABEL[t.type] ?? t.type}</p>
+                        <p className="truncate text-xs text-ink-2">{t.assignedToName ?? "Unassigned"}</p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className={`text-xs ${due.overdue ? "font-medium text-danger-700" : "text-ink-2"}`}>{due.text}</p>
+                        <p className="text-[11px] text-neutral-500">{fmtDate(t.dueAt)}</p>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {openTasks.length > 0 && doneTasks > 0 && <p className="border-t border-line px-4 py-2 text-[11px] text-ink-2">{doneTasks} completed</p>}
+          </Panel>
+
+          <Panel title="Appointments" data-testid="journey-appointments" padded={false}>
+            {appointments.length === 0 ? (
+              <p className="px-4 py-3 text-xs text-ink-2">No appointments booked yet.</p>
+            ) : (
+              <ul className="divide-y divide-line">
+                {appointments.map((a) => (
+                  <li key={a.id} className="flex items-start justify-between gap-3 px-4 py-2.5 text-sm">
+                    <div className="min-w-0">
+                      <p className="truncate text-ink">{fmtDateTime(a.scheduledAt)}</p>
+                      <p className="truncate text-xs text-ink-2">{a.doctorName ?? "Doctor not set"}{a.reason ? ` · ${a.reason}` : ""}</p>
+                    </div>
+                    <Badge tone={APPOINTMENT_STATUS_TONE[a.status] ?? "neutral"}>{APPOINTMENT_STATUS_LABEL[a.status] ?? a.status}</Badge>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+
+          {treatments !== null && (
+            <Panel title="Treatments" data-testid="journey-treatments" padded={false}>
+              {treatments.length === 0 ? (
+                <p className="px-4 py-3 text-xs text-ink-2">No treatment advised yet.</p>
+              ) : (
+                <ul className="divide-y divide-line">
+                  {treatments.map((t) => (
+                    <li key={t.id} className="flex items-start justify-between gap-3 px-4 py-2.5 text-sm">
+                      <div className="min-w-0">
+                        <p className="truncate text-ink">{t.treatmentLabel}</p>
+                        <p className="truncate text-xs text-ink-2">
+                          {formatInr(t.estimatedValue)}{t.plannedDate ? ` · planned ${fmtDate(t.plannedDate)}` : ""}
+                        </p>
+                      </div>
+                      <Badge tone={TREATMENT_STATUS_TONE[t.status] ?? "neutral"}>{TREATMENT_STATUS_LABEL[t.status] ?? t.status}</Badge>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Panel>
+          )}
+
+          {revenue !== null && (
+            <Panel title="Revenue attribution" subtitle={formatInr(revenue.total)} data-testid="journey-revenue" padded={false}>
+              {revenue.events.length === 0 ? (
+                <p className="px-4 py-3 text-xs text-ink-2">No revenue recorded yet. Attributed to {SOURCE_LABEL[journey.source] ?? journey.source}{journey.campaign ? ` · ${journey.campaign.name}` : ""} once payments post.</p>
+              ) : (
+                <ul className="divide-y divide-line">
+                  {revenue.events.map((e) => (
+                    <li key={e.id} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
+                      <div className="min-w-0">
+                        <p className="truncate text-ink">{REVENUE_TYPE_LABEL[e.type] ?? "Payment"}</p>
+                        <p className="text-xs text-ink-2">{fmtDate(e.occurredAt)}</p>
+                      </div>
+                      <span className="tabular-nums text-ink">{formatInr(e.amount)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Panel>
+          )}
+
+          {restricted.length > 0 && (
+            <p className="px-1 text-[11px] text-ink-2" data-testid="journey-restricted-note">
+              {restricted.join(" and ").replace(/^./, (c) => c.toUpperCase())} {restricted.length > 1 ? "are" : "is"} not available for your role.
+            </p>
+          )}
+        </div>
+      </div>
+
+      {assigning && canAssign && (
+        <AssignOwnerDialog
+          open
+          subject={patient.name}
+          owners={lookups.data?.owners ?? []}
+          initialOwnerId={journey.owner?.id ?? null}
+          onClose={() => setAssigning(false)}
+          onSubmit={async (ownerId) => {
+            const updated = await api.assignJourneyOwner(journey.id, ownerId);
+            queryClient.setQueryData(["journey", journeyId], updated);
+            invalidateJourneyQueries(queryClient);
+            setAssigning(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
