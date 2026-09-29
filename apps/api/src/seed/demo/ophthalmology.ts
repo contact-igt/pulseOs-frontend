@@ -14,6 +14,7 @@ import {
   createLeadsInOrder,
   daysFromNow,
   fixtureIdentifiers,
+  journeyIdForPatient,
   seedConversations,
   seedJourneys,
   type ConversationConfig,
@@ -653,29 +654,30 @@ export async function seedOphthalmologyTenant(passwordHash: string) {
     runoConnectorId: runoConnector.id, whatsappConnectorId: whatsappConnector.id, endpoints,
   };
 
-  const { timelineRows } = await seedJourneys(ctx, JOURNEY_CONFIGS);
+  const { journeyIds, timelineRows } = await seedJourneys(ctx, JOURNEY_CONFIGS);
   if (timelineRows.length > 0) await db.insert(timelineEvents).values(timelineRows);
   await seedConversations(ctx, CONVERSATION_CONFIGS);
 
   // Standalone tasks so every My Work view has today / upcoming / completed rows.
+  const journeyOf = (patientIdx: number) => journeyIdForPatient(JOURNEY_CONFIGS, journeyIds, patientIdx);
   await db.insert(tasks).values([
     {
-      tenantId: tenant.id, patientId: patientRows[1].id, assignedTo: coordinator.id, reason: "manual_task", type: "APPOINTMENT_CONFIRMATION",
+      tenantId: tenant.id, patientId: patientRows[1].id, journeyId: journeyOf(1), assignedTo: coordinator.id, reason: "manual_task", type: "APPOINTMENT_CONFIRMATION",
       priority: "normal", status: "pending", dueAt: daysFromNow(0, 15), createdBy: admin.id,
       notes: "Confirm tomorrow's cataract consultation and remind the patient to bring an attendant",
     },
     {
-      tenantId: tenant.id, patientId: patientRows[5].id, assignedTo: frontDesk.id, reason: "manual_task", type: "FOLLOW_UP",
+      tenantId: tenant.id, patientId: patientRows[5].id, journeyId: journeyOf(5), assignedTo: frontDesk.id, reason: "manual_task", type: "FOLLOW_UP",
       priority: "normal", status: "pending", dueAt: daysFromNow(0, 17), createdBy: admin.id,
       notes: "Remind about contact-lens instructions before tomorrow's laser screening",
     },
     {
-      tenantId: tenant.id, patientId: patientRows[9].id, assignedTo: frontDesk.id, reason: "manual_task", type: "RECALL",
+      tenantId: tenant.id, patientId: patientRows[9].id, journeyId: journeyOf(9), assignedTo: frontDesk.id, reason: "manual_task", type: "RECALL",
       priority: "normal", status: "pending", dueAt: daysFromNow(4, 10), createdBy: admin.id,
       notes: "Recall for the post-cataract review",
     },
     {
-      tenantId: tenant.id, patientId: patientRows[8].id, assignedTo: coordinator.id, reason: "manual_task", type: "POST_CARE",
+      tenantId: tenant.id, patientId: patientRows[8].id, journeyId: journeyOf(8), assignedTo: coordinator.id, reason: "manual_task", type: "POST_CARE",
       priority: "normal", status: "completed", dueAt: daysFromNow(-2, 10), completedAt: daysFromNow(-2, 14), completedBy: coordinator.id,
       createdBy: admin.id, notes: "Post-surgery check-in call",
     },

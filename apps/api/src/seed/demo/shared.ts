@@ -674,3 +674,14 @@ export async function createLeadsInOrder(tenantId: string, actorUserId: string, 
   }
   return results;
 }
+
+/**
+ * The one Journey seeded for a patient, for tasks created outside the journey
+ * builder. Throws when the patient has none or several so a task can never
+ * silently lose its Journey (or have one guessed for it).
+ */
+export function journeyIdForPatient(configs: readonly { patientIdx: number }[], journeyIds: readonly string[], patientIdx: number): string {
+  const matches = configs.flatMap((c, i) => (c.patientIdx === patientIdx ? [journeyIds[i]!] : []));
+  if (matches.length !== 1) throw new Error(`Seed: patient #${patientIdx} has ${matches.length} journeys — link the task to one explicitly`);
+  return matches[0]!;
+}

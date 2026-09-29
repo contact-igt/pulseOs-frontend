@@ -14,6 +14,7 @@ import {
   createDemoUsers,
   createLeadsInOrder,
   daysFromNow,
+  journeyIdForPatient,
   minutesAgo,
   seedConversations,
   seedJourneys,
@@ -312,19 +313,20 @@ export async function seedGynecologyTenant(passwordHash: string) {
   const { journeyIds, timelineRows } = await seedJourneys(ctx, JOURNEY_CONFIGS);
 
   // A few standalone tasks spanning today/upcoming/completed so every My Work view has real rows.
+  const journeyOf = (patientIdx: number) => journeyIdForPatient(JOURNEY_CONFIGS, journeyIds, patientIdx);
   await db.insert(tasks).values([
     {
-      tenantId: tenant.id, patientId: patientRows[2].id,
+      tenantId: tenant.id, patientId: patientRows[2].id, journeyId: journeyOf(2),
       assignedTo: coordinator.id, reason: "manual_task", type: "APPOINTMENT_CONFIRMATION", priority: "normal",
       notes: "Confirm tomorrow's 11am slot with patient", status: "pending", dueAt: daysFromNow(0, 15), createdBy: admin.id,
     },
     {
-      tenantId: tenant.id, patientId: patientRows[3].id,
+      tenantId: tenant.id, patientId: patientRows[3].id, journeyId: journeyOf(3),
       assignedTo: frontDesk.id, reason: "manual_task", type: "RECALL", priority: "normal",
       status: "pending", dueAt: daysFromNow(4, 10), createdBy: admin.id,
     },
     {
-      tenantId: tenant.id, patientId: patientRows[4].id,
+      tenantId: tenant.id, patientId: patientRows[4].id, journeyId: journeyOf(4),
       assignedTo: coordinator.id, reason: "manual_task", type: "POST_CARE", priority: "normal",
       notes: "Post-op check-in call", status: "completed", dueAt: daysFromNow(-2, 10),
       completedAt: daysFromNow(-2, 14), completedBy: coordinator.id, createdBy: admin.id,
