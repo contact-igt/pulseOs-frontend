@@ -1,12 +1,24 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
-import { Search } from "lucide-react";
-import { AppointmentDrawer, AppointmentList, Button, ErrorState, MetricStrip, PatientFlowBoard, Skeleton, Toolbar } from "@pulseos/ui";
+import { ListOrdered, Search, Users } from "lucide-react";
+import { AppointmentDrawer, AppointmentList, Button, ErrorState, MetricStrip, PatientFlowBoard, Skeleton, Toolbar, ViewSwitcher, formatKey } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
-import type { AppointmentAction, AppointmentRow, PatientFlowCount } from "@pulseos/types";
+import type { AppointmentRow, PatientFlowCount } from "@pulseos/types";
+import { useViewState } from "@/lib/useViewState";
+import { matchesSearch } from "@/components/appointments/appointmentViews";
+import { useAppointmentActions, useCalendarContext, useUrlFilters } from "@/components/appointments/hooks";
+import { InlineNotice } from "@/components/appointments/InlineNotice";
+import { TodayFlow } from "@/components/appointments/TodayFlow";
+
+const FRONT_DESK_VIEWS = ["queue", "flow"] as const;
+type FrontDeskView = (typeof FRONT_DESK_VIEWS)[number];
+const VIEW_OPTIONS = [
+  { key: "queue" as const, label: "Queue", icon: <Users size={14} />, controls: "front-desk-view-panel" },
+  { key: "flow" as const, label: "Today flow", icon: <ListOrdered size={14} />, controls: "front-desk-view-panel" },
+];
 
 const FLOW_LABEL: Record<PatientFlowCount["bucket"], string> = {
   confirmed: "Confirmed",
@@ -37,7 +49,10 @@ function buildFlow(today: AppointmentRow[]): PatientFlowCount[] {
 export default function FrontDeskPage() {
   const queryClient = useQueryClient();
   const quickCreate = useQuickCreate();
-  const [search, setSearch] = useState("");
+  const { timeZone, today: todayKey } = useCalendarContext();
+  const { view, setView } = useViewState<FrontDeskView>({ views: FRONT_DESK_VIEWS, defaultView: "queue", timeZone });
+  const urlFilters = useUrlFilters();
+  const [search, setSearch] = useState(() => urlFilters.get("q"));
   const [selected, setSelected] = useState<AppointmentRow | null>(null);
   // Clicking a Patient Flow stage narrows the Today list to that stage.
   const [flowFilter, setFlowFilter] = useState<PatientFlowCount["bucket"] | null>(null);
@@ -49,35 +64,21 @@ export default function FrontDeskPage() {
     enabled: !!selected,
   });
 
-  function invalidate() {
+  const invalidate = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["front-desk"] });
     queryClient.invalidateQueries({ queryKey: ["timeline"] });
-  }
-
-  async function handleAction(row: AppointmentRow, action: AppointmentAction) {
-    await api.appointmentAction(row.id, action);
-    invalidate();
-    setSelected(null);
-  }
-
-  async function handleComplete(row: AppointmentRow) {
-    await api.completeAppointment(row.id);
-    invalidate();
-    setSelected(null);
-  }
-
-  async function handleReschedule(row: AppointmentRow, newIso: string) {
-    await api.rescheduleAppointment(row.id, newIso);
-    invalidate();
-    setSelected(null);
-  }
+  }, [queryClient]);
+  const closeDrawer = useCallback(() => setSelected(null), [setSelected]);
+  // Same actions as before; a server rejection (stale status) is an inline message, never an unhandled error.
+  const { handleAction, handleComplete, handleReschedule, error: actionError, clearError } = useAppointmentActions({ refresh: invalidate, onDone: closeDrawer });
 
   const today = useMemo(() => dashboard.data?.today ?? [], [dashboard.data]);
   const filteredToday = useMemo(() => {
-    const q = search.trim().toLowerCase();
     const byStage = flowFilter ? today.filter((a) => flowBucket(a) === flowFilter) : today;
-    return q ? byStage.filter((a) => a.patientName.toLowerCase().includes(q)) : byStage;
+    return byStage.filter((a) => matchesSearch(a, search));
   }, [today, search, flowFilter]);
+  // The Today flow is the same "today" rows as the queue, narrowed only by the (URL) search.
+  const flowRows = useMemo(() => today.filter((a) => matchesSearch(a, search)), [today, search]);
 
   const kpis = useMemo(
     () => [
@@ -120,19 +121,27 @@ export default function FrontDeskPage() {
           </>
         }
       >
-        <label className="glass-control relative flex h-8 w-full max-w-xs items-center rounded-control">
-          <Search size={14} className="pointer-events-none absolute left-2.5 text-neutral-500" aria-hidden="true" />
-          <input
-            type="text"
-            placeholder="Search today's patients…"
-            aria-label="Search today's patients"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="h-full w-full bg-transparent pl-8 pr-2.5 text-xs text-ink outline-none placeholder:text-neutral-500"
-            data-testid="front-desk-search"
-          />
-        </label>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <ViewSwitcher ariaLabel="Front desk view" value={view} onChange={(v) => setView(v)} options={VIEW_OPTIONS} />
+          <label className="glass-control relative flex h-8 w-full min-w-0 max-w-xs flex-1 items-center rounded-control">
+            <Search size={14} className="pointer-events-none absolute left-2.5 text-neutral-500" aria-hidden="true" />
+            <input
+              type="text"
+              placeholder="Search today's patients…"
+              aria-label="Search today's patients"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                urlFilters.set({ q: e.target.value.trim() ? e.target.value : undefined });
+              }}
+              className="h-full w-full bg-transparent pl-8 pr-2.5 text-xs text-ink outline-none placeholder:text-neutral-500"
+              data-testid="front-desk-search"
+            />
+          </label>
+        </div>
       </Toolbar>
+
+      {actionError && <InlineNotice message={actionError} onDismiss={clearError} testId="front-desk-action-error" />}
 
       <MetricStrip
         testId="front-desk-kpi-strip"
@@ -140,70 +149,82 @@ export default function FrontDeskPage() {
         cells={kpis.map((k) => ({ key: k.label, label: k.label, value: k.value }))}
       />
 
-      {/* Two columns from xl. Below xl the wrappers dissolve (`contents`) and the panels stack in operational order: Waiting Queue first. */}
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] xl:items-start">
-        <div className="contents xl:block xl:space-y-4">
-          <div className="order-2 min-w-0 xl:order-none">
-            <PatientFlowBoard data={buildFlow(today)} onBucketClick={(b) => setFlowFilter((cur) => (cur === b ? null : b))} />
-          </div>
-          <div className="order-4 min-w-0 xl:order-none">
-            <AppointmentList
-              title="Pending Confirmation"
-              rows={dashboard.data.pendingConfirmations}
-              onAction={handleAction}
-              onRowClick={(row) => setSelected(row)}
-              showDoctor={false}
-              emptyMessage="Nothing pending confirmation."
-            />
-          </div>
-          <div className="order-5 min-w-0 xl:order-none">
-            <AppointmentList
-              title="No-show Recovery"
-              rows={dashboard.data.noShows}
-              onAction={handleAction}
-              onRowClick={(row) => setSelected(row)}
-              showDoctor={false}
-              emptyMessage="No no-shows today."
-            />
-          </div>
+      {/* Queue: two columns from xl. Below xl the wrappers dissolve (`contents`) and the panels stack in operational order: Waiting Queue first. */}
+      {view === "flow" ? (
+        <div id="front-desk-view-panel" role="tabpanel">
+          <TodayFlow
+            rows={flowRows}
+            timeZone={timeZone}
+            dayLabel={formatKey(todayKey, { weekday: "short", day: "numeric", month: "short" })}
+            onSelect={setSelected}
+            filtered={!!search.trim()}
+          />
         </div>
+      ) : (
+        <div id="front-desk-view-panel" role="tabpanel" className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] xl:items-start">
+          <div className="contents xl:block xl:space-y-4">
+            <div className="order-2 min-w-0 xl:order-none">
+              <PatientFlowBoard data={buildFlow(today)} onBucketClick={(b) => setFlowFilter((cur) => (cur === b ? null : b))} />
+            </div>
+            <div className="order-4 min-w-0 xl:order-none">
+              <AppointmentList
+                title="Pending Confirmation"
+                rows={dashboard.data.pendingConfirmations}
+                onAction={handleAction}
+                onRowClick={(row) => setSelected(row)}
+                showDoctor={false}
+                emptyMessage="Nothing pending confirmation."
+              />
+            </div>
+            <div className="order-5 min-w-0 xl:order-none">
+              <AppointmentList
+                title="No-show Recovery"
+                rows={dashboard.data.noShows}
+                onAction={handleAction}
+                onRowClick={(row) => setSelected(row)}
+                showDoctor={false}
+                emptyMessage="No no-shows today."
+              />
+            </div>
+          </div>
 
-        <div className="contents xl:block xl:space-y-4">
-          <div className="order-1 min-w-0 xl:order-none">
-            <AppointmentList
-              title="Waiting Queue"
-              rows={dashboard.data.waitingQueue}
-              onAction={handleAction}
-              onComplete={handleComplete}
-              onRowClick={(row) => setSelected(row)}
-              showWait
-              emptyMessage="No one waiting."
-            />
-          </div>
-          <div className="order-3 min-w-0 xl:order-none">
-            <AppointmentList
-              title={flowFilter ? `Today · ${FLOW_LABEL[flowFilter]}` : "Today's Appointments"}
-              rows={filteredToday}
-              onAction={handleAction}
-              onComplete={handleComplete}
-              onRowClick={(row) => setSelected(row)}
-              actions={
-                flowFilter ? (
-                  <button type="button" onClick={() => setFlowFilter(null)} className="text-xs font-medium text-primary-700 hover:underline" data-testid="front-desk-clear-stage">
-                    Show all
-                  </button>
-                ) : undefined
-              }
-              emptyMessage={flowFilter || search ? "No appointments match this view." : "No appointments today."}
-            />
+          <div className="contents xl:block xl:space-y-4">
+            <div className="order-1 min-w-0 xl:order-none">
+              <AppointmentList
+                title="Waiting Queue"
+                rows={dashboard.data.waitingQueue}
+                onAction={handleAction}
+                onComplete={handleComplete}
+                onRowClick={(row) => setSelected(row)}
+                showWait
+                emptyMessage="No one waiting."
+              />
+            </div>
+            <div className="order-3 min-w-0 xl:order-none" data-testid="front-desk-today">
+              <AppointmentList
+                title={flowFilter ? `Today · ${FLOW_LABEL[flowFilter]}` : "Today's Appointments"}
+                rows={filteredToday}
+                onAction={handleAction}
+                onComplete={handleComplete}
+                onRowClick={(row) => setSelected(row)}
+                actions={
+                  flowFilter ? (
+                    <button type="button" onClick={() => setFlowFilter(null)} className="text-xs font-medium text-primary-700 hover:underline" data-testid="front-desk-clear-stage">
+                      Show all
+                    </button>
+                  ) : undefined
+                }
+                emptyMessage={flowFilter || search ? "No appointments match this view." : "No appointments today."}
+              />
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       <AppointmentDrawer
         appointment={selected}
         recentEvents={timeline.data}
-        onClose={() => setSelected(null)}
+        onClose={closeDrawer}
         onAction={handleAction}
         onComplete={handleComplete}
         onReschedule={handleReschedule}

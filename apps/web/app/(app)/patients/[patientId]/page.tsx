@@ -6,17 +6,23 @@ import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
 import {
-  Badge, Card, ConnectorModeBadge, EmptyState, ErrorState, Panel, Skeleton, Tabs, Timeline,
+  Badge, Card, ConnectorModeBadge, EmptyState, ErrorState, Panel, Skeleton, Tabs, Timeline, ViewSwitcher,
   JOURNEY_STAGE_LABEL, JOURNEY_STAGE_TONE, APPOINTMENT_STATUS_LABEL, TREATMENT_STATUS_LABEL,
   CALL_STATUS_LABEL, CALL_STATUS_TONE,
 } from "@pulseos/ui";
 import { formatInr, formatMoneyOrDash, fmtCallDuration, fmtDateTime as fmtDate, fmtSmartDateTime, urgencyLabel } from "@pulseos/ui";
-import { ArrowUpRight, PhoneIncoming, PhoneMissed, PhoneOutgoing } from "lucide-react";
+import { ArrowUpRight, CalendarClock, History, PhoneIncoming, PhoneMissed, PhoneOutgoing } from "lucide-react";
 import { BackLink, withFrom } from "@/components/shell/BackLink";
 import { hasPermission } from "@pulseos/types";
 import { pathAllowedForRole } from "@/components/shell/nav";
 import type { AppointmentStatus, CallVm, JourneyCardVm, JourneyStage, TreatmentStatus } from "@pulseos/types";
+import { useViewState } from "@/lib/useViewState";
+import { PatientUpcomingList } from "@/components/patient360/PatientUpcomingList";
+import { useHospitalTimeZone } from "@/lib/useHospitalTimeZone";
 
+const VIEWS = ["timeline", "upcoming"] as const;
+type P360View = (typeof VIEWS)[number];
+/** Until the Upcoming response names the hospital zone (tenants default to it). */
 function initials(name: string) {
   return name
     .split(" ")
@@ -250,6 +256,13 @@ export default function Patient360Page() {
   const focusJourney = selectedJourney ?? journeys.find(isActiveJourney) ?? journeys[0];
   const timelineJourneyId = selectedJourney?.id;
 
+  // Upcoming: existing future appointments / open tasks / scheduled treatments for THIS patient,
+  // permission-trimmed server-side; grouped in the hospital's timezone the response names.
+  const upcoming = useQuery({ queryKey: ["patient-upcoming", patientId], queryFn: () => api.patientUpcoming(patientId), enabled: patient360.isSuccess });
+  const timeZone = useHospitalTimeZone();
+  const { view, setView } = useViewState<P360View>({ views: VIEWS, defaultView: "timeline", timeZone });
+  const upcomingCount = upcoming.data ? upcoming.data.items.filter((i) => !selectedJourney || i.journeyId === selectedJourney.id).length : null;
+
   const timeline = useQuery({
     queryKey: ["timeline", patientId, timelineJourneyId ?? "all"],
     queryFn: () => api.patientTimeline(patientId, timelineJourneyId),
@@ -318,16 +331,44 @@ export default function Patient360Page() {
       {/* Main area: Timeline first (left), journey context (right) */}
       <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[1.4fr_1fr]">
         <div className="min-w-0 space-y-2">
-          {selectedJourney && (
-            <p className="px-1 text-xs text-ink-2">Showing the timeline for {selectedJourney.journeyType} only.</p>
-          )}
-          {timeline.isLoading ? (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <ViewSwitcher
+              ariaLabel="Patient view"
+              value={view}
+              onChange={setView}
+              options={[
+                { key: "timeline", label: "Timeline", icon: <History size={14} />, controls: "patient-view-panel" },
+                { key: "upcoming", label: upcomingCount === null ? "Upcoming" : `Upcoming ${upcomingCount}`, icon: <CalendarClock size={14} />, controls: "patient-view-panel" },
+              ]}
+            />
+            {selectedJourney && (
+              <p className="px-1 text-xs text-ink-2">Showing {selectedJourney.journeyType} only.</p>
+            )}
+          </div>
+          <div id="patient-view-panel" role="tabpanel" aria-label={view === "upcoming" ? "Upcoming" : "Timeline"} className="min-w-0">
+          {view === "upcoming" ? (
+            upcoming.isLoading ? (
+              <Skeleton className="h-48" />
+            ) : upcoming.isError || !upcoming.data ? (
+              <ErrorState message="Could not load what's upcoming for this patient." />
+            ) : (
+              <PatientUpcomingList
+                items={upcoming.data.items}
+                timeZone={timeZone}
+                journeyId={selectedJourney?.id}
+                showJourney={journeys.length > 1}
+                role={session.data?.user.role}
+                now={new Date()}
+              />
+            )
+          ) : timeline.isLoading ? (
             <Skeleton className="h-96" />
           ) : timeline.isError ? (
             <ErrorState message="Could not load the timeline." />
           ) : (
             timeline.data && <Timeline events={timeline.data} order="desc" />
           )}
+          </div>
         </div>
 
         <div className="min-w-0 space-y-3">

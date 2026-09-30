@@ -14,11 +14,14 @@ import {
 } from "../../db/schema.js";
 import { costPer, roas as roasOf } from "../marketing/formulas.js";
 import { getSpendAtRiskByReason } from "../dashboard/dashboard.service.js";
-import type { CampaignFilters, CampaignPerformanceRow, MarketingEfficiencySummary, SpendAtRisk } from "@pulseos/types";
+import type { CampaignFilters, CampaignViewRow, MarketingEfficiencySummary, SpendAtRisk } from "@pulseos/types";
 
 const NON_TERMINAL_TREATMENT = new Set(["ADVISED", "DECISION_PENDING", "ACCEPTED", "SCHEDULED", "COMPLETED"]);
 
-export async function getCampaignPerformance(db: Db, tenantId: string, filters: CampaignFilters): Promise<CampaignPerformanceRow[]> {
+// Rows carry the run window (startDate, endDate, status) so the Campaigns
+// Table / Calendar / Timeline views are three presentations of one query.
+// endDate stays null for an ongoing campaign — never defaulted or guessed.
+export async function getCampaignPerformance(db: Db, tenantId: string, filters: CampaignFilters): Promise<CampaignViewRow[]> {
   const campaigns = await db
     .select()
     .from(marketingCampaigns)
@@ -33,10 +36,15 @@ export async function getCampaignPerformance(db: Db, tenantId: string, filters: 
     (await db.select({ id: connectors.id, mode: connectors.mode }).from(connectors).where(eq(connectors.tenantId, tenantId))).map((c) => [c.id, c.mode]),
   );
 
-  const rows: CampaignPerformanceRow[] = [];
+  const rows: CampaignViewRow[] = [];
 
   for (const campaign of campaigns) {
     const connectorMode = campaign.connectorId ? (connectorModeById.get(campaign.connectorId) ?? null) : null;
+    const runWindow = {
+      startDate: campaign.startDate.toISOString(),
+      endDate: campaign.endDate ? campaign.endDate.toISOString() : null,
+      campaignStatus: campaign.status,
+    };
     const touchpointRows = await db
       .select({ journeyId: campaignTouchpoints.journeyId })
       .from(campaignTouchpoints)
@@ -90,6 +98,7 @@ export async function getCampaignPerformance(db: Db, tenantId: string, filters: 
         costPerTreatment: null,
         roas: null,
         connectorMode,
+        ...runWindow,
       });
       continue;
     }
@@ -123,6 +132,7 @@ export async function getCampaignPerformance(db: Db, tenantId: string, filters: 
       costPerTreatment: costPer(campaign.spendAmount, treatmentCompleted),
       roas: roasOf(revenue, campaign.spendAmount),
       connectorMode,
+      ...runWindow,
     });
   }
 

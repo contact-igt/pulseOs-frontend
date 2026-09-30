@@ -1,18 +1,14 @@
-import { and, desc, eq, gte, inArray, lt } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
+import { inLocalRange, localToday, tenantTimezone, tzLiteral } from "../../lib/hospital-time.js";
 import { appointments, consultationOutcomes, journeys, patients, treatmentOpportunities } from "../../db/schema.js";
 import type { DoctorDashboard, DoctorRecentPatient, DoctorTodayItem } from "@pulseos/types";
 
-function todayRange() {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-  return { start, end };
-}
-
-export async function getDoctorDashboard(db: Db, tenantId: string, doctorUserId: string): Promise<DoctorDashboard> {
-  const { start, end } = todayRange();
+export async function getDoctorDashboard(db: Db, tenantId: string, doctorUserId: string, now: Date = new Date()): Promise<DoctorDashboard> {
+  // "Today" is the hospital's local day (tenants.timezone), not the server clock's.
+  const timezone = await tenantTimezone(db, tenantId);
+  const todayKey = await localToday(db, timezone, now);
+  const beforeToday = sql`${appointments.scheduledAt} < (${todayKey}::date)::timestamp at time zone ${tzLiteral(timezone)}`;
 
   const rows = await db
     .select({
@@ -35,8 +31,7 @@ export async function getDoctorDashboard(db: Db, tenantId: string, doctorUserId:
       and(
         eq(appointments.tenantId, tenantId),
         eq(appointments.doctorUserId, doctorUserId),
-        gte(appointments.scheduledAt, start),
-        lt(appointments.scheduledAt, end),
+        inLocalRange(appointments.scheduledAt, timezone, todayKey, todayKey),
       ),
     )
     .orderBy(appointments.scheduledAt);
@@ -110,7 +105,7 @@ export async function getDoctorDashboard(db: Db, tenantId: string, doctorUserId:
     .innerJoin(patients, eq(appointments.patientId, patients.id))
     .innerJoin(journeys, eq(appointments.journeyId, journeys.id))
     .leftJoin(consultationOutcomes, eq(consultationOutcomes.appointmentId, appointments.id))
-    .where(and(eq(appointments.tenantId, tenantId), eq(appointments.doctorUserId, doctorUserId), eq(appointments.status, "completed"), lt(appointments.scheduledAt, start)))
+    .where(and(eq(appointments.tenantId, tenantId), eq(appointments.doctorUserId, doctorUserId), eq(appointments.status, "completed"), beforeToday))
     .orderBy(desc(appointments.scheduledAt))
     .limit(10);
 

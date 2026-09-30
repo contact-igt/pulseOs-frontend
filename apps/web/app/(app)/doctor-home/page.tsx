@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { CalendarClock, LayoutDashboard } from "lucide-react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@pulseos/api-client";
@@ -12,10 +13,23 @@ import {
   OutcomeActionList,
   RecentPatientsList,
   Skeleton,
+  Toolbar,
+  ViewSwitcher,
+  formatKey,
   type OutcomeTreatmentChoice,
 } from "@pulseos/ui";
 import type { ConsultationOutcomeValue, DoctorTodayItem } from "@pulseos/types";
 import { withFrom } from "@/components/shell/BackLink";
+import { useViewState } from "@/lib/useViewState";
+import { useCalendarContext } from "@/components/appointments/hooks";
+import { DoctorDaySchedule } from "@/components/appointments/DoctorDaySchedule";
+
+const DOCTOR_VIEWS = ["overview", "schedule"] as const;
+type DoctorView = (typeof DOCTOR_VIEWS)[number];
+const VIEW_OPTIONS = [
+  { key: "overview" as const, label: "Overview", icon: <LayoutDashboard size={14} />, controls: "doctor-view-panel" },
+  { key: "schedule" as const, label: "Schedule", icon: <CalendarClock size={14} />, controls: "doctor-view-panel" },
+];
 
 const OUTCOME_NOTICE: Record<ConsultationOutcomeValue, string> = {
   CONSULTED: "Consultation completed",
@@ -47,6 +61,8 @@ function patientLink(item: { patientId?: string }, children: ReactNode) {
 export default function DoctorHomePage() {
   const queryClient = useQueryClient();
   const [notice, setNotice] = useState<Notice | null>(null);
+  const { timeZone, today: todayKey } = useCalendarContext();
+  const { view, setView } = useViewState<DoctorView>({ views: DOCTOR_VIEWS, defaultView: "overview", timeZone });
 
   const dashboard = useQuery({ queryKey: ["dashboard", "doctor"], queryFn: api.doctorDashboard });
   // The tenant's whole catalog, once; each awaiting row is offered only the slice matching its journey's specialty.
@@ -96,77 +112,101 @@ export default function DoctorHomePage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-4" data-testid="doctor-home">
+      <Toolbar>
+        <ViewSwitcher ariaLabel="Doctor home view" value={view} onChange={(v) => setView(v)} options={VIEW_OPTIONS} />
+      </Toolbar>
+
       <DoctorKpiStrip dashboard={data} />
 
-      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[1.25fr_1fr]">
-        <div className="min-w-0 space-y-4">
-          <NextPatientCard patient={data.nextPatient} status={nextStatus} renderPatientLink={patientLink} />
-          <DoctorTodayList
-            items={data.today}
-            title="Today's patient queue"
-            highlightId={data.nextPatient?.appointmentId}
-            emptyMessage="No appointments on your schedule today."
-            renderPatientLink={patientLink}
-            testId="doctor-queue"
-          />
+      {view === "schedule" ? (
+        // Same `today` rows as the queue below, laid out as the doctor's day in hospital time.
+        <div id="doctor-view-panel" role="tabpanel" className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[1.25fr_1fr]">
+          <div className="min-w-0">
+            <DoctorDaySchedule
+              items={data.today}
+              timeZone={timeZone}
+              dayLabel={formatKey(todayKey, { weekday: "short", day: "numeric", month: "short" })}
+              highlightId={data.nextPatient?.appointmentId}
+              renderPatientLink={patientLink}
+            />
+          </div>
+          <div className="min-w-0">
+            <NextPatientCard patient={data.nextPatient} status={nextStatus} renderPatientLink={patientLink} />
+          </div>
         </div>
-
-        <div className="min-w-0 space-y-3">
-          {notice && (
-            <div
-              role={notice.kind === "error" ? "alert" : "status"}
-              className={`flex items-start justify-between gap-3 rounded-card border px-3 py-2 text-xs ${
-                notice.kind === "error" ? "border-danger-500/30 bg-danger-100 text-danger-700" : "border-primary-200 bg-surface-info text-primary-800"
-              }`}
-              data-testid="outcome-notice"
-            >
-              <span className="min-w-0 break-words">{notice.text}</span>
-              <button type="button" onClick={() => setNotice(null)} className="shrink-0 font-medium underline-offset-2 hover:underline">
-                Dismiss
-              </button>
+      ) : (
+        <div id="doctor-view-panel" role="tabpanel" className="space-y-4">
+          <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[1.25fr_1fr]">
+            <div className="min-w-0 space-y-4">
+              <NextPatientCard patient={data.nextPatient} status={nextStatus} renderPatientLink={patientLink} />
+              <DoctorTodayList
+                items={data.today}
+                title="Today's patient queue"
+                highlightId={data.nextPatient?.appointmentId}
+                emptyMessage="No appointments on your schedule today."
+                renderPatientLink={patientLink}
+                testId="doctor-queue"
+              />
             </div>
-          )}
-          <OutcomeActionList
-            title="Consultations awaiting outcome"
-            items={data.awaitingOutcome}
-            emptyMessage="No consultations waiting on an outcome."
-            pendingAppointmentId={recordOutcome.isPending ? recordOutcome.variables?.item.appointmentId : null}
-            renderPatientLink={patientLink}
-            // Only the procedures of this journey's own service; an empty slice falls back to a free-text label.
-            getTreatmentOptions={(item) => (catalog.data ?? []).filter((d) => !!item.specialtyKey && d.specialtyKey === item.specialtyKey)}
-            onRecord={(appointmentId, outcome, treatment) => {
-              const item = data.awaitingOutcome.find((i) => i.appointmentId === appointmentId);
-              if (!item) return;
-              setNotice(null);
-              recordOutcome.mutate({ item, outcome, treatment });
-            }}
-          />
-          <p className="px-1 text-[11px] leading-4 text-ink-2">
-            Outcomes here drive follow-up, treatment tracking and revenue. Clinical notes and prescriptions stay in your hospital&rsquo;s clinical system.
-          </p>
+
+            <div className="min-w-0 space-y-3">
+              {notice && (
+                <div
+                  role={notice.kind === "error" ? "alert" : "status"}
+                  className={`flex items-start justify-between gap-3 rounded-card border px-3 py-2 text-xs ${
+                    notice.kind === "error" ? "border-danger-500/30 bg-danger-100 text-danger-700" : "border-primary-200 bg-surface-info text-primary-800"
+                  }`}
+                  data-testid="outcome-notice"
+                >
+                  <span className="min-w-0 break-words">{notice.text}</span>
+                  <button type="button" onClick={() => setNotice(null)} className="shrink-0 font-medium underline-offset-2 hover:underline">
+                    Dismiss
+                  </button>
+                </div>
+              )}
+              <OutcomeActionList
+                title="Consultations awaiting outcome"
+                items={data.awaitingOutcome}
+                emptyMessage="No consultations waiting on an outcome."
+                pendingAppointmentId={recordOutcome.isPending ? recordOutcome.variables?.item.appointmentId : null}
+                renderPatientLink={patientLink}
+                // Only the procedures of this journey's own service; an empty slice falls back to a free-text label.
+                getTreatmentOptions={(item) => (catalog.data ?? []).filter((d) => !!item.specialtyKey && d.specialtyKey === item.specialtyKey)}
+                onRecord={(appointmentId, outcome, treatment) => {
+                  const item = data.awaitingOutcome.find((i) => i.appointmentId === appointmentId);
+                  if (!item) return;
+                  setNotice(null);
+                  recordOutcome.mutate({ item, outcome, treatment });
+                }}
+              />
+              <p className="px-1 text-[11px] leading-4 text-ink-2">
+                Outcomes here drive follow-up, treatment tracking and revenue. Clinical notes and prescriptions stay in your hospital&rsquo;s clinical system.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
+            <DoctorTodayList
+              items={data.treatmentFollowUps}
+              title="Treatment follow-up"
+              emptyMessage="No treatment follow-ups due."
+              showStatus={false}
+              renderPatientLink={patientLink}
+              testId="doctor-treatment-follow-up"
+            />
+            <DoctorTodayList
+              items={data.postCare}
+              title="Post-care reviews"
+              emptyMessage="No post-care reviews due."
+              showStatus={false}
+              renderPatientLink={patientLink}
+              testId="doctor-post-care"
+            />
+          </div>
+
+          <RecentPatientsList items={data.recentPatients} renderPatientLink={patientLink} />
         </div>
-      </div>
-
-      <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
-        <DoctorTodayList
-          items={data.treatmentFollowUps}
-          title="Treatment follow-up"
-          emptyMessage="No treatment follow-ups due."
-          showStatus={false}
-          renderPatientLink={patientLink}
-          testId="doctor-treatment-follow-up"
-        />
-        <DoctorTodayList
-          items={data.postCare}
-          title="Post-care reviews"
-          emptyMessage="No post-care reviews due."
-          showStatus={false}
-          renderPatientLink={patientLink}
-          testId="doctor-post-care"
-        />
-      </div>
-
-      <RecentPatientsList items={data.recentPatients} renderPatientLink={patientLink} />
+      )}
     </div>
   );
 }

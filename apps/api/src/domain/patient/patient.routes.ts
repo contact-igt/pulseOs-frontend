@@ -3,6 +3,8 @@ import { z } from "zod";
 import { requirePermission } from "../auth/permission.middleware.js";
 import { createPatient, getPatient360, listPatients, searchPatients } from "./patient.service.js";
 import { getPatientTimeline } from "../timeline/timeline.service.js";
+import { hasPermission } from "@pulseos/types";
+import { getPatientUpcoming } from "./upcoming.service.js";
 
 const createPatientBody = z.object({
   name: z.string().min(1),
@@ -48,6 +50,24 @@ export async function patientRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string };
     const { journeyId } = request.query as { journeyId?: string };
     return getPatientTimeline(app.db, tenantId, id, journeyId);
+  });
+
+  // Patient 360 "Upcoming" (read-only). Each item kind is trimmed by the SAME
+  // permission that guards its own list endpoint, so this never widens access:
+  // appointments need VIEW_APPOINTMENTS, treatments VIEW_TREATMENT, tasks
+  // VIEW_TASKS - and a caller without MANAGE_TASKS sees only tasks assigned to
+  // them, exactly as GET /tasks forces. Tenant comes from the session only.
+  app.get("/patients/:id/upcoming", async (request, reply) => {
+    const user = request.sessionUser!;
+    const { id } = request.params as { id: string };
+    const result = await getPatientUpcoming(app.db, user.tenantId, id, {
+      appointments: hasPermission(user.role, "VIEW_APPOINTMENTS"),
+      treatments: hasPermission(user.role, "VIEW_TREATMENT"),
+      tasks: hasPermission(user.role, "VIEW_TASKS"),
+      onlyAssignedTo: hasPermission(user.role, "MANAGE_TASKS") ? undefined : user.id,
+    });
+    if (!result) return reply.status(404).send({ error: "patient_not_found" });
+    return result;
   });
 
   await app.register(async (manageApp) => {

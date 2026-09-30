@@ -1,14 +1,16 @@
-import { and, asc, eq, gte, inArray, lt, max } from "drizzle-orm";
+import { and, asc, eq, inArray, max } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
+import { inLocalRange, localToday, tenantTimezone } from "../../lib/hospital-time.js";
 import { appointments, branches, patients, timelineEvents, users } from "../../db/schema.js";
 import type { AppointmentAction, AppointmentRow, AppointmentStatus, CreateAppointmentInput, FrontDeskDashboard } from "@pulseos/types";
 
-function todayRange() {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-  return { start, end };
+/** Longest from/to span a list request may ask for: a month grid (42 days) plus slack. */
+export const MAX_APPOINTMENT_RANGE_DAYS = 62;
+
+/** The hospital's IANA zone and its current local day - what "today" means for every appointment view. */
+export async function getCalendarContext(db: Db, tenantId: string, now: Date = new Date()): Promise<{ timezone: string; today: string }> {
+  const timezone = await tenantTimezone(db, tenantId);
+  return { timezone, today: await localToday(db, timezone, now) };
 }
 
 export interface AppointmentFilters {
@@ -16,7 +18,11 @@ export interface AppointmentFilters {
   doctorId?: string;
   journeyId?: string;
   status?: AppointmentStatus;
+  /** One local day (YYYY-MM-DD) in the tenant's timezone. */
   date?: string;
+  /** Inclusive local-day range (YYYY-MM-DD) in the tenant's timezone; used by the calendar views. */
+  from?: string;
+  to?: string;
   search?: string;
 }
 
@@ -30,18 +36,11 @@ function toRow(r: {
   };
 }
 
-async function selectAppointments(db: Db, tenantId: string, filters: AppointmentFilters, range?: { start: Date; end: Date }) {
-  const resolvedRange =
-    range ??
-    (filters.date
-      ? (() => {
-          const start = new Date(filters.date + "T00:00:00");
-          const end = new Date(start);
-          end.setDate(end.getDate() + 1);
-          return { start, end };
-        })()
-      : undefined);
-  const dayClause = resolvedRange ? and(gte(appointments.scheduledAt, resolvedRange.start), lt(appointments.scheduledAt, resolvedRange.end)) : undefined;
+async function selectAppointments(db: Db, tenantId: string, filters: AppointmentFilters) {
+  // Day boundaries are the hospital's local midnight (tenants.timezone), never
+  // UTC and never the API server's own clock zone.
+  const days = filters.from && filters.to ? { from: filters.from, to: filters.to } : filters.date ? { from: filters.date, to: filters.date } : undefined;
+  const dayClause = days ? inLocalRange(appointments.scheduledAt, await tenantTimezone(db, tenantId), days.from, days.to) : undefined;
 
   const rows = await db
     .select({
@@ -134,7 +133,7 @@ export async function createAppointment(db: Db, tenantId: string, actorId: strin
 // `appointment_checked_in` Timeline event — take the latest one today per
 // (patient, journey). No event (e.g. seeded status) leaves arrivedAt null so
 // the UI can say so honestly instead of inventing a wait.
-async function withArrivalTimes(db: Db, tenantId: string, rows: AppointmentRow[], dayStart: Date): Promise<AppointmentRow[]> {
+async function withArrivalTimes(db: Db, tenantId: string, rows: AppointmentRow[], timezone: string, today: string): Promise<AppointmentRow[]> {
   if (rows.length === 0) return rows;
   const events = await db
     .select({ patientId: timelineEvents.patientId, journeyId: timelineEvents.journeyId, at: max(timelineEvents.occurredAt) })
@@ -143,7 +142,7 @@ async function withArrivalTimes(db: Db, tenantId: string, rows: AppointmentRow[]
       and(
         eq(timelineEvents.tenantId, tenantId),
         eq(timelineEvents.eventType, "appointment_checked_in"),
-        gte(timelineEvents.occurredAt, dayStart),
+        inLocalRange(timelineEvents.occurredAt, timezone, today, today),
         inArray(timelineEvents.patientId, rows.map((r) => r.patientId)),
       ),
     )
@@ -155,9 +154,9 @@ async function withArrivalTimes(db: Db, tenantId: string, rows: AppointmentRow[]
   });
 }
 
-export async function getFrontDeskDashboard(db: Db, tenantId: string, branchId?: string): Promise<FrontDeskDashboard> {
-  const { start, end } = todayRange();
-  const todayRows = await selectAppointments(db, tenantId, { branchId }, { start, end });
+export async function getFrontDeskDashboard(db: Db, tenantId: string, branchId?: string, now: Date = new Date()): Promise<FrontDeskDashboard> {
+  const { timezone, today: todayKey } = await getCalendarContext(db, tenantId, now);
+  const todayRows = await selectAppointments(db, tenantId, { branchId, from: todayKey, to: todayKey });
 
   const today = todayRows.map(toRow);
   const arrivals = todayRows.filter((r) => r.status === "checked_in" || r.status === "waiting" || r.status === "with_doctor" || r.status === "completed").map(toRow);
@@ -165,7 +164,8 @@ export async function getFrontDeskDashboard(db: Db, tenantId: string, branchId?:
     db,
     tenantId,
     todayRows.filter((r) => r.status === "checked_in" || r.status === "waiting").map(toRow),
-    start,
+    timezone,
+    todayKey,
   );
   const noShows = todayRows.filter((r) => r.status === "no_show").map(toRow);
   const pendingConfirmations = todayRows.filter((r) => r.status === "requested" || r.status === "scheduled").map(toRow);

@@ -1,11 +1,14 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import type { AppointmentAction, AppointmentStatus } from "@pulseos/types";
+import type { AppointmentAction } from "@pulseos/types";
 import { requirePermission } from "../auth/permission.middleware.js";
+import { diffDays, isRealDate } from "../../lib/hospital-time.js";
 import {
+  MAX_APPOINTMENT_RANGE_DAYS,
   applyAppointmentAction,
   completeAppointment,
   createAppointment,
+  getCalendarContext,
   getFrontDeskDashboard,
   listAppointments,
   rescheduleAppointment,
@@ -20,6 +23,24 @@ const createAppointmentBody = z.object({
   reason: z.string().optional(),
 });
 
+const localDay = z.string().refine(isRealDate);
+
+// List filters. Dates are local days in the tenant's timezone; a malformed one
+// is a 400, never a 500 from the database driver.
+const listAppointmentsQuery = z
+  .object({
+    branchId: z.string().uuid().optional(),
+    doctorId: z.string().uuid().optional(),
+    journeyId: z.string().uuid().optional(),
+    status: z.enum(["requested", "scheduled", "confirmed", "checked_in", "waiting", "with_doctor", "completed", "no_show", "cancelled"]).optional(),
+    date: localDay.optional(),
+    from: localDay.optional(),
+    to: localDay.optional(),
+    search: z.string().max(200).optional(),
+  })
+  .refine((q) => !q.from === !q.to, "from and to go together")
+  .refine((q) => !q.from || !q.to || (diffDays(q.from, q.to) >= 0 && diffDays(q.from, q.to) < MAX_APPOINTMENT_RANGE_DAYS), "invalid range");
+
 const REASON_STATUS: Record<string, number> = {
   appointment_not_found: 404,
   appointment_closed: 409,
@@ -30,10 +51,17 @@ const REASON_STATUS: Record<string, number> = {
 export async function appointmentRoutes(app: FastifyInstance) {
   app.addHook("preHandler", requirePermission("VIEW_APPOINTMENTS"));
 
-  app.get("/appointments", async (request) => {
+  app.get("/appointments", async (request, reply) => {
     const tenantId = request.sessionUser!.tenantId;
-    const query = request.query as { branchId?: string; doctorId?: string; status?: AppointmentStatus; date?: string; search?: string };
-    return listAppointments(app.db, tenantId, query);
+    const parsed = listAppointmentsQuery.safeParse(request.query);
+    if (!parsed.success) return reply.status(400).send({ error: "invalid_request" });
+    return listAppointments(app.db, tenantId, parsed.data);
+  });
+
+  // Hospital timezone + its local "today", so every appointment view (list,
+  // calendar, doctor schedule, front desk) draws day boundaries the same way.
+  app.get("/appointments/calendar-context", async (request) => {
+    return getCalendarContext(app.db, request.sessionUser!.tenantId);
   });
 
   app.get("/front-desk", async (request) => {

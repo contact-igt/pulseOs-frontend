@@ -9,14 +9,18 @@ import {
   formatInr, formatMoneyOrDash, formatRoas, fmtDateWithYear as fmtDate, JOURNEY_STAGE_LABEL, JOURNEY_STAGE_TONE,
 } from "@pulseos/ui";
 import { BackLink, withFrom } from "@/components/shell/BackLink";
+import { runLabel, runStatusLabel } from "@/components/campaigns/runs";
+import { useHospitalTimeZone } from "@/lib/useHospitalTimeZone";
 
 export default function CampaignDetailPage() {
+  const timeZone = useHospitalTimeZone();
   const params = useParams<{ id: string }>();
   const campaignId = params.id;
 
   const performance = useQuery({
     queryKey: ["campaign-performance", campaignId],
-    queryFn: () => api.campaignPerformance({ campaignId }),
+    // Same row shape as the Campaigns list (incl. the run window for the header).
+    queryFn: () => api.campaignViewRows({ campaignId }),
   });
   const campaign = performance.data?.[0];
 
@@ -63,6 +67,10 @@ export default function CampaignDetailPage() {
             <p className="mt-1 text-sm text-ink-2">
               {campaign.source}
               {campaign.specialtyLabel ? ` · ${campaign.specialtyLabel}` : ""}
+            </p>
+            <p className="mt-0.5 text-xs text-ink-2" data-testid="campaign-run-window">
+              Runs {runLabel(campaign, timeZone)}
+              {campaign.endDate && <> · {runStatusLabel(campaign)}</>}
             </p>
           </div>
           {journeyList.data && journeyList.data.length > 0 && (

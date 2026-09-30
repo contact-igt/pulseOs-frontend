@@ -1,21 +1,32 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { api } from "@pulseos/api-client";
 import {
-  Badge, Button, Card, EmptyState, ErrorState, MetricStrip, Skeleton, Table, TableBody, TableHead, Tabs, Td, Th, Toolbar, Tr,
+  Badge, Button, Card, EmptyState, ErrorState, MetricStrip, Skeleton, Table, TableBody, TableHead, Tabs, Td, Th, Toolbar, Tr, ViewSwitcher,
   fmtDate, relativeTime, urgencyLabel,
 } from "@pulseos/ui";
 import { hasPermission, type LeadRow, type LeadStatus } from "@pulseos/types";
-import { UserRoundCog } from "lucide-react";
+import { Columns3, Table2, UserRoundCog } from "lucide-react";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import { withFrom } from "@/components/shell/BackLink";
 import { AssignOwnerDialog } from "@/components/journey/AssignOwnerDialog";
 import { OwnerScopeControl, useOwnerScope } from "@/components/journey/OwnerScopeControl";
 import { invalidateJourneyQueries } from "@/components/journey/invalidate";
+import { useViewState } from "@/lib/useViewState";
+import { LeadsStageBoard } from "@/components/leads/LeadsStageBoard";
+import { useHospitalTimeZone } from "@/lib/useHospitalTimeZone";
+
+const VIEWS = ["table", "board"] as const;
+type LeadsView = (typeof VIEWS)[number];
+const VIEW_OPTIONS = [
+  { key: "table" as const, label: "Table", icon: <Table2 size={14} />, controls: "leads-view-panel" },
+  { key: "board" as const, label: "Board", icon: <Columns3 size={14} />, controls: "leads-view-panel" },
+];
+// Leads has no day-bound data; the hook only needs a zone for its (unused) date default.
 
 const STATUS_TABS: { key: LeadStatus | "all"; label: string }[] = [
   { key: "all", label: "All" },
@@ -52,10 +63,26 @@ const STATUS_TONE: Record<LeadStatus, "neutral" | "warning" | "danger" | "primar
 type Assigning = { kind: "one"; row: LeadRow } | { kind: "bulk" } | null;
 
 export default function LeadsPage() {
+  const timeZone = useHospitalTimeZone();
   const router = useRouter();
   const queryClient = useQueryClient();
   const quickCreate = useQuickCreate();
-  const [statusFilter, setStatusFilter] = useState<LeadStatus | "all">("all");
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  // Status lives in the URL (?status=) like owner and view, so reload, back/forward and shared links keep it.
+  const rawStatus = searchParams.get("status");
+  const statusFilter: LeadStatus | "all" = STATUS_TABS.find((t) => t.key === rawStatus)?.key ?? "all";
+  const setStatusFilter = useCallback(
+    (next: LeadStatus | "all") => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (next === "all") params.delete("status");
+      else params.set("status", next);
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [router, pathname, searchParams],
+  );
+  const { view, setView } = useViewState<LeadsView>({ views: VIEWS, defaultView: "table", timeZone });
   const [owner, setOwner] = useOwnerScope();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [assigning, setAssigning] = useState<Assigning>(null);
@@ -132,7 +159,7 @@ export default function LeadsPage() {
         />
       )}
 
-      <Toolbar>
+      <Toolbar actions={<ViewSwitcher ariaLabel="Leads view" value={view} onChange={setView} options={VIEW_OPTIONS} />}>
         <OwnerScopeControl
           value={owner}
           onChange={(next) => {
@@ -143,7 +170,7 @@ export default function LeadsPage() {
         />
       </Toolbar>
 
-      {canAssign && selectedIds.length > 0 && (
+      {view === "table" && canAssign && selectedIds.length > 0 && (
         <Card tone="info" className="flex flex-wrap items-center gap-3 px-4 py-2" data-testid="bulk-bar" role="region" aria-label="Bulk actions">
           <span className="text-sm font-medium text-ink">{selectedIds.length} selected</span>
           <Button variant="primary" size="sm" onClick={() => { setNotice(null); setAssigning({ kind: "bulk" }); }} data-testid="bulk-assign">
@@ -160,7 +187,13 @@ export default function LeadsPage() {
         </p>
       )}
 
-      <Card className="overflow-x-auto p-0">
+      {view === "board" && rows.length > 0 && (
+        <div id="leads-view-panel" role="tabpanel" aria-label="Board">
+          <LeadsStageBoard rows={rows} onOpen={(lead) => router.push(withFrom(`/journeys/${lead.id}`, "leads"))} />
+        </div>
+      )}
+
+      <Card className={`overflow-x-auto p-0 ${view === "board" && rows.length > 0 ? "hidden" : ""}`} id={view === "table" ? "leads-view-panel" : undefined}>
         {leads.isLoading && <div className="space-y-2 p-4">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-8" />)}</div>}
         {leads.isError && <div className="p-4"><ErrorState message="Could not load leads." /></div>}
         {leads.data && leads.data.length === 0 && (
@@ -173,7 +206,7 @@ export default function LeadsPage() {
             </div>
           </div>
         )}
-        {rows.length > 0 && (
+        {rows.length > 0 && view === "table" && (
           <Table className="min-w-[960px]">
             <TableHead>
               <tr>
@@ -202,7 +235,7 @@ export default function LeadsPage() {
               {rows.map((lead: LeadRow) => {
                 const due = lead.nextActionDueAt ? urgencyLabel(lead.nextActionDueAt) : null;
                 return (
-                  <Tr key={lead.id} onClick={() => router.push(withFrom(`/journeys/${lead.id}`, "leads"))} data-testid={`lead-row-${lead.id}`}>
+                  <Tr key={lead.id} onClick={() => router.push(withFrom(`/journeys/${lead.id}`, "leads"))} data-testid={`lead-row-${lead.id}`} data-stage={lead.stage}>
                     {canAssign && (
                       <Td leading className="w-10" onClick={(e) => e.stopPropagation()}>
                         <input

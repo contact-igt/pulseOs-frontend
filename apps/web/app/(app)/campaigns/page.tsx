@@ -1,30 +1,64 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useMemo } from "react";
+import type { ReactNode } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
+import { CalendarDays, GanttChart, Table2 } from "lucide-react";
 import { api } from "@pulseos/api-client";
-import { Card, ConnectorModeBadge, EmptyState, ErrorState, FilterBar, FilterSelect, MetricStrip, Panel, Skeleton, SpendAtRisk, Table, TableBody, TableHead, Td, Th, Tr, formatInr, formatMoneyOrDash, formatRoas } from "@pulseos/ui";
-import type { CampaignFilters, SourceChannel } from "@pulseos/types";
+import { Card, ConnectorModeBadge, EmptyState, ErrorState, FilterBar, FilterSelect, MetricStrip, Panel, Skeleton, SpendAtRisk, Table, TableBody, TableHead, Td, Th, Tr, ViewSwitcher, formatInr, formatMoneyOrDash, formatRoas } from "@pulseos/ui";
+import type { CampaignFilters, CampaignViewRow, SourceChannel } from "@pulseos/types";
 import { withFrom } from "@/components/shell/BackLink";
+import { useViewState } from "@/lib/useViewState";
+import { CampaignCalendar } from "@/components/campaigns/CampaignCalendar";
+import { CampaignTimeline } from "@/components/campaigns/CampaignTimeline";
+import { CAMPAIGN_VIEWS, SOURCE_LABEL, SOURCE_OPTIONS, campaignFilterPatch, readCampaignFilters } from "@/components/campaigns/runs";
+import type { CampaignView } from "@/components/campaigns/runs";
+import { patchSearch } from "@/components/treatments/urlState";
+import { useHospitalTimeZone } from "@/lib/useHospitalTimeZone";
 
-const SOURCE_OPTIONS: SourceChannel[] = ["meta", "google", "website", "whatsapp", "phone", "walk_in", "referral", "organic", "other"];
-const SOURCE_LABEL: Record<SourceChannel, string> = { meta: "Meta", google: "Google", website: "Website", whatsapp: "WhatsApp", phone: "Phone", walk_in: "Walk-in", referral: "Referral", organic: "Organic", other: "Other" };
-const DATE_INPUT = "glass-control h-8 rounded-control px-2 text-xs text-ink outline-none focus-visible:border-primary-500";
+const DATE_INPUT = "glass-control h-8 min-w-0 flex-1 rounded-control px-2 text-xs text-ink outline-none focus-visible:border-primary-500 sm:flex-none";
+// Two selects per row on a phone, the date range on its own row; natural widths from sm up.
+const FILTER_CLASS = "basis-[calc(50%-0.25rem)]! sm:basis-auto!";
+
+const VIEW_OPTIONS: { key: CampaignView; label: string; icon: ReactNode }[] = [
+  { key: "table", label: "Table", icon: <Table2 size={14} /> },
+  { key: "calendar", label: "Calendar", icon: <CalendarDays size={14} /> },
+  { key: "timeline", label: "Timeline", icon: <GanttChart size={14} /> },
+];
+const PANEL_TITLE: Record<CampaignView, string> = { table: "Campaign / Source Performance", calendar: "Campaign Calendar", timeline: "Campaign Timeline" };
 
 export default function CampaignsPage() {
-  const [filters, setFilters] = useState<CampaignFilters>({});
+  const timeZone = useHospitalTimeZone();
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  // View, date and every filter live in the URL (refresh / back / shared link restore them).
+  const { view, date, setView, setDate, calendarMode, setCalendarMode } = useViewState<CampaignView>({ views: CAMPAIGN_VIEWS, defaultView: "table", defaultRange: "month", timeZone });
+  const filters = useMemo(() => readCampaignFilters(new URLSearchParams(params.toString())), [params]);
+  const go = useCallback((qs: string) => router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false }), [pathname, router]);
+  const setFilters = useCallback(
+    (update: (f: CampaignFilters) => CampaignFilters) => {
+      const next = update(filters);
+      const cleared: Partial<CampaignFilters> = { branchId: undefined, specialtyKey: undefined, source: undefined, dateFrom: undefined, dateTo: undefined };
+      go(patchSearch(new URLSearchParams(params.toString()), campaignFilterPatch({ ...cleared, ...next })));
+    },
+    [filters, go, params],
+  );
+  const openCampaign = useCallback((row: CampaignViewRow) => router.push(withFrom(`/campaigns/${row.campaignId}`, "campaigns")), [router]);
 
   const specialties = useQuery({ queryKey: ["specialties"], queryFn: () => api.specialties() });
   const lookups = useQuery({ queryKey: ["lookups"], queryFn: api.lookups });
   const efficiency = useQuery({ queryKey: ["marketing-efficiency", filters], queryFn: () => api.marketingEfficiency(filters) });
-  const performance = useQuery({ queryKey: ["campaign-performance", filters], queryFn: () => api.campaignPerformance(filters) });
+  // ONE query feeds the Table, Calendar and Timeline: a view is a presentation, never a different dataset.
+  const performance = useQuery({ queryKey: ["campaign-view-rows", filters], queryFn: () => api.campaignViewRows(filters) });
   const spendAtRisk = useQuery({ queryKey: ["campaign-spend-at-risk"], queryFn: api.campaignSpendAtRisk });
 
   return (
     <div className="mx-auto max-w-7xl space-y-5" data-testid="campaigns-page">
       <FilterBar data-testid="campaigns-filter-bar">
-        <FilterSelect value={filters.branchId ?? ""} onChange={(e) => setFilters((f) => ({ ...f, branchId: e.target.value || undefined }))} aria-label="Branch">
+        <FilterSelect className={FILTER_CLASS} value={filters.branchId ?? ""} onChange={(e) => setFilters((f) => ({ ...f, branchId: e.target.value || undefined }))} aria-label="Branch">
           <option value="">All branches</option>
           {lookups.data?.branches.map((b) => (
             <option key={b.id} value={b.id}>
@@ -33,6 +67,7 @@ export default function CampaignsPage() {
           ))}
         </FilterSelect>
         <FilterSelect
+          className={FILTER_CLASS}
           value={filters.specialtyKey ?? ""}
           onChange={(e) => setFilters((f) => ({ ...f, specialtyKey: e.target.value || undefined }))}
           aria-label="Specialty"
@@ -45,7 +80,7 @@ export default function CampaignsPage() {
             </option>
           ))}
         </FilterSelect>
-        <FilterSelect value={filters.source ?? ""} onChange={(e) => setFilters((f) => ({ ...f, source: (e.target.value as SourceChannel) || undefined }))} aria-label="Source">
+        <FilterSelect className={FILTER_CLASS} value={filters.source ?? ""} onChange={(e) => setFilters((f) => ({ ...f, source: (e.target.value as SourceChannel) || undefined }))} aria-label="Source" data-testid="campaigns-source-filter">
           <option value="">All sources</option>
           {SOURCE_OPTIONS.map((s) => (
             <option key={s} value={s}>
@@ -53,7 +88,7 @@ export default function CampaignsPage() {
             </option>
           ))}
         </FilterSelect>
-        <div className="flex items-center gap-1.5 text-xs text-ink-2">
+        <div className="flex min-w-0 basis-full items-center gap-1.5 text-xs text-ink-2 sm:basis-auto">
           <label htmlFor="campaigns-date-from">From</label>
           <input
             id="campaigns-date-from"
@@ -74,7 +109,7 @@ export default function CampaignsPage() {
           />
         </div>
         {(filters.branchId || filters.specialtyKey || filters.source || filters.dateFrom || filters.dateTo) && (
-          <button type="button" onClick={() => setFilters({})} className="text-xs font-medium text-primary-700 hover:underline">
+          <button type="button" onClick={() => setFilters(() => ({}))} className="text-xs font-medium text-primary-700 hover:underline">
             Clear filters
           </button>
         )}
@@ -122,11 +157,25 @@ export default function CampaignsPage() {
           no visible scroll affordance. Full width removes the need to
           scroll at all on any desktop viewport this product targets. */}
       <div className="space-y-5">
-        <Panel title="Campaign / Source Performance" subtitle={performance.data ? `${performance.data.length} campaigns` : undefined} padded={false}>
+        <Panel padded={false}>
+          {/* Own header (not Panel's title/action) so the view switcher wraps under the title on a phone instead of squeezing it. */}
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-line px-4 py-3">
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <h2 className="min-w-0 text-sm font-semibold tracking-tight text-ink">{PANEL_TITLE[view]}</h2>
+              {performance.data && <span className="text-xs text-ink-2">{performance.data.length} campaigns</span>}
+            </div>
+            <ViewSwitcher<CampaignView> ariaLabel="Campaigns view" value={view} onChange={setView} options={VIEW_OPTIONS} />
+          </div>
           {performance.isLoading && <div className="space-y-2 p-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-8" />)}</div>}
           {performance.isError && <ErrorState message="Could not load campaign performance." />}
           {performance.data && performance.data.length === 0 && <EmptyState message="No campaigns match these filters." />}
-          {performance.data && performance.data.length > 0 && (
+          {view === "calendar" && performance.data && performance.data.length > 0 && (
+            <CampaignCalendar rows={performance.data} mode={calendarMode} date={date} onDateChange={setDate} onModeChange={setCalendarMode} onOpen={openCampaign} />
+          )}
+          {view === "timeline" && performance.data && performance.data.length > 0 && (
+            <CampaignTimeline rows={performance.data} date={date} onDateChange={setDate} onOpen={openCampaign} />
+          )}
+          {view === "table" && performance.data && performance.data.length > 0 && (
             <div className="overflow-x-auto">
             <Table className="min-w-[860px]">
               <TableHead>

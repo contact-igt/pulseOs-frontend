@@ -1,14 +1,42 @@
 "use client";
 
-import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
 import Link from "next/link";
-import { Badge, Button, EmptyState, ErrorState, Panel, Skeleton, Tabs, Toolbar, TASK_REASON_LABEL, TASK_REASON_TONE, fmtDateTime as fmtDate, urgencyLabel } from "@pulseos/ui";
+import { Badge, Button, EmptyState, ErrorState, Panel, Skeleton, Tabs, Toolbar, TASK_REASON_LABEL, TASK_REASON_TONE, ViewSwitcher, fmtDateTime as fmtDate, urgencyLabel } from "@pulseos/ui";
+import { CalendarDays, Columns3, List } from "lucide-react";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import { withFrom } from "@/components/shell/BackLink";
 import { hasPermission } from "@pulseos/types";
-import type { TaskReason, TaskRow, TaskType, TaskView } from "@pulseos/types";
+import type { TaskReason, TaskRow, TaskView } from "@pulseos/types";
+import { pathAllowedForRole } from "@/components/shell/nav";
+import { useViewState } from "@/lib/useViewState";
+import { SOURCE_LABEL, TYPE_LABEL } from "@/components/my-work/labels";
+import { useTaskActions } from "@/components/my-work/useTaskActions";
+import { rescheduleTarget, type DueBucket } from "@/components/my-work/taskBuckets";
+import { TaskBoard } from "@/components/my-work/TaskBoard";
+import { TaskCalendar } from "@/components/my-work/TaskCalendar";
+import { TaskDrawer } from "@/components/my-work/TaskDrawer";
+import { useHospitalTimeZone } from "@/lib/useHospitalTimeZone";
+
+const VIEWS = ["list", "board", "calendar"] as const;
+type WorkView = (typeof VIEWS)[number];
+const VIEW_OPTIONS = [
+  { key: "list" as const, label: "List", icon: <List size={14} />, controls: "my-work-view-panel" },
+  { key: "board" as const, label: "Board", icon: <Columns3 size={14} />, controls: "my-work-view-panel" },
+  { key: "calendar" as const, label: "Calendar", icon: <CalendarDays size={14} />, controls: "my-work-view-panel" },
+];
+/** Used until the hospital's zone arrives (and if it can't be read); tenants default to it too. */
+/** Current time, re-read every minute so due buckets roll over without a reload. */
+function useMinuteClock(): Date {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
 
 const TABS: { key: TaskView | "mine"; label: string }[] = [
   { key: "mine", label: "My Work" },
@@ -34,21 +62,6 @@ const REASON_GROUPS: { key: string; label: string; reasons: TaskReason[] }[] = [
   { key: "no_show", label: "No-Shows", reasons: ["no_show"] },
 ];
 
-const TYPE_LABEL: Record<TaskType, string> = {
-  CALLBACK: "Callback",
-  FOLLOW_UP: "Follow-up",
-  APPOINTMENT_CONFIRMATION: "Appointment confirmation",
-  NO_SHOW_RECOVERY: "No-show recovery",
-  TREATMENT_DECISION: "Treatment decision",
-  POST_CARE: "Post-care",
-  RECALL: "Recall",
-  OTHER: "Other",
-};
-
-const SOURCE_LABEL: Record<string, string> = {
-  meta: "Meta", google: "Google", website: "Website", whatsapp: "WhatsApp", phone: "Phone", walk_in: "Walk-in", referral: "Referral", organic: "Organic", other: "Other",
-};
-
 // One grid shared by the column-header row and every task row (xl and up) — the
 // actions column is a fixed width so columns line up across rows;
 // below xl each row reflows into a two-line card instead of a squeezed table.
@@ -60,7 +73,6 @@ function isOverdue(task: TaskRow) {
 }
 
 export default function MyWorkPage() {
-  const queryClient = useQueryClient();
   const quickCreate = useQuickCreate();
   const [tab, setTab] = useState<(typeof TABS)[number]["key"]>("mine");
   const [reasonKey, setReasonKey] = useState<(typeof REASON_GROUPS)[number]["key"]>("all");
@@ -85,8 +97,17 @@ export default function MyWorkPage() {
   // is the real authorization boundary either way.
   const effectiveTab = tab === "unassigned" && !canManageTasks ? "mine" : tab;
 
+  // Hospital timezone decides Today / Overdue / Upcoming and calendar days - never the browser's zone.
+  const timeZone = useHospitalTimeZone();
+  const now = useMinuteClock();
+  const { view, setView, date, setDate, range, calendarMode, setCalendarMode } = useViewState<WorkView>({ views: VIEWS, defaultView: "list", timeZone });
+  const canOpenJourney = !!session.data && pathAllowedForRole(session.data.user.role, "/journeys");
+
+  // ONE tasks query feeds List, Board and Calendar: a view is a presentation, never a different dataset.
+  const tasksKey = ["tasks", effectiveTab, currentUserId] as const;
+  const actions = useTaskActions(tasksKey);
   const tasks = useQuery({
-    queryKey: ["tasks", effectiveTab, currentUserId],
+    queryKey: tasksKey,
     // "Unassigned" is tenant-wide by definition — never force it down to the
     // caller's own assignments the way every other tab does.
     queryFn: () =>
@@ -118,40 +139,47 @@ export default function MyWorkPage() {
     reasonCounts[group.key] = tasks.data?.filter((t) => group.reasons.includes(t.reason)).length ?? 0;
   }
 
-  function invalidate() {
-    queryClient.invalidateQueries({ queryKey: ["tasks"] });
-    // A completed/rescheduled task changes Command Centre's Attention/SLA
-    // queue — keep it in sync, not just this list.
-    queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+  // Every action goes through its existing endpoint (useTaskActions): optimistic on the shared
+  // query, reverted with an inline error when the server rejects it. Invalidation also refreshes
+  // Command Centre's Attention/SLA queue ("dashboard"), as before.
+  const [busy, setBusy] = useState<Record<string, boolean>>({});
+  async function act(task: TaskRow, run: () => Promise<TaskRow | null>) {
+    setBusy((b) => ({ ...b, [task.id]: true }));
+    const saved = await run();
+    setBusy((b) => ({ ...b, [task.id]: false }));
+    return saved;
   }
+  const complete = (task: TaskRow) => act(task, () => actions.complete(task));
+  const plusOneDay = (task: TaskRow) => act(task, () => actions.reschedule(task, new Date(Date.now() + 86_400_000).toISOString()));
+  const assignToMe = (task: TaskRow) => (currentUserId ? act(task, () => actions.assignTo(task, currentUserId, session.data?.user.name ?? null)) : Promise.resolve(null));
 
-  async function complete(id: string) {
-    await api.completeTask(id);
-    invalidate();
-  }
-
-  async function reschedule(id: string, days: number) {
-    const dueAt = new Date(Date.now() + days * 86400000).toISOString();
-    await api.rescheduleTask(id, dueAt);
-    invalidate();
-  }
-
-  async function assignToMe(id: string) {
-    if (!currentUserId) return;
-    await api.reassignTask(id, currentUserId);
-    invalidate();
-  }
-
-  async function saveNote(id: string) {
-    const notes = noteDraft[id];
+  async function saveNote(task: TaskRow) {
+    const notes = noteDraft[task.id];
     if (notes === undefined) return;
-    await api.addTaskNote(id, notes);
+    const saved = await act(task, () => actions.addNote(task, notes));
+    if (!saved) return;
     setNoteDraft((d) => {
       const next = { ...d };
-      delete next[id];
+      delete next[task.id];
       return next;
     });
-    invalidate();
+  }
+
+  /** Board moves map to real endpoints only: Today/Upcoming = reschedule, Done = complete. */
+  function moveCard(task: TaskRow, to: DueBucket) {
+    if (to === "done") return actions.moveStrict(() => api.completeTask(task.id));
+    if (to === "today" || to === "upcoming") return actions.moveStrict(() => api.rescheduleTask(task.id, rescheduleTarget(task, to, new Date(), timeZone)));
+    return Promise.reject(new Error("Tasks cannot be moved into Overdue."));
+  }
+
+  // Board card / calendar event -> the task's detail drawer. The last-seen copy is kept so the
+  // drawer can show the result even when a refetch drops the task from the current tab.
+  const [selected, setSelected] = useState<TaskRow | null>(null);
+  const selectedTask = selected ? (tasks.data?.find((t) => t.id === selected.id) ?? selected) : null;
+  async function drawerAction(run: (task: TaskRow) => Promise<TaskRow | null>) {
+    if (!selectedTask) return;
+    const saved = await run(selectedTask);
+    if (saved) setSelected(saved);
   }
 
   // Tabs only takes a plain-text `count`, which has no test id; the label is
@@ -186,6 +214,7 @@ export default function MyWorkPage() {
         <Tabs items={tabItems} value={effectiveTab} onChange={(k) => setTab(k as typeof tab)} ariaLabel="Work queue" />
       </Toolbar>
 
+      <div className="flex flex-wrap items-center justify-between gap-2">
       <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filter by reason">
         <span className="mr-1 text-[11px] font-semibold uppercase tracking-wide text-ink-2">Reason</span>
         {REASON_GROUPS.map((g) => {
@@ -209,11 +238,14 @@ export default function MyWorkPage() {
           );
         })}
       </div>
+        <ViewSwitcher ariaLabel="My Work view" value={view} onChange={setView} options={VIEW_OPTIONS} />
+      </div>
 
       <Panel padded={false}>
+        <div id="my-work-view-panel" role="tabpanel" aria-label={VIEW_OPTIONS.find((o) => o.key === view)?.label} className="min-w-0">
         {(tasks.isLoading || session.isLoading) && <div className="space-y-2 p-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-14" />)}</div>}
         {tasks.isError && <div className="p-4"><ErrorState message="Could not load tasks." /></div>}
-        {visibleTasks && visibleTasks.length === 0 && (
+        {view === "list" && visibleTasks && visibleTasks.length === 0 && (
           <div className="p-6">
             <EmptyState
               message="You're all caught up."
@@ -228,7 +260,13 @@ export default function MyWorkPage() {
             />
           </div>
         )}
-        {visibleTasks && visibleTasks.length > 0 && (
+        {view === "board" && visibleTasks && (
+          <TaskBoard tasks={visibleTasks} now={now} timeZone={timeZone} canManage={canManageTasks} onOpen={setSelected} onMove={moveCard} />
+        )}
+        {view === "calendar" && visibleTasks && (
+          <TaskCalendar tasks={visibleTasks} now={now} timeZone={timeZone} date={date} range={range} mode={calendarMode} onDateChange={setDate} onModeChange={setCalendarMode} onOpen={setSelected} />
+        )}
+        {view === "list" && visibleTasks && visibleTasks.length > 0 && (
           <div>
             <div className={`hidden gap-x-4 border-b border-line bg-surface-muted px-4 py-2 text-[11px] font-semibold uppercase tracking-wide text-ink-2 xl:grid ${ROW_GRID}`} aria-hidden="true">
               <span>Patient / Journey</span>
@@ -296,14 +334,14 @@ export default function MyWorkPage() {
                       <div className="flex min-w-0 flex-col gap-1.5 xl:items-end">
                         <div className="flex shrink-0 flex-wrap items-center gap-1.5">
                           {!task.assignedTo && (
-                            <Button size="sm" variant="secondary" onClick={() => assignToMe(task.id)} data-testid={`task-assign-me-${task.id}`}>
+                            <Button size="sm" variant="secondary" disabled={busy[task.id]} onClick={() => assignToMe(task)} data-testid={`task-assign-me-${task.id}`}>
                               Assign to me
                             </Button>
                           )}
-                          <Button size="sm" variant="secondary" onClick={() => reschedule(task.id, 1)} data-testid={`task-reschedule-${task.id}`}>
+                          <Button size="sm" variant="secondary" disabled={busy[task.id]} onClick={() => plusOneDay(task)} data-testid={`task-reschedule-${task.id}`}>
                             +1 day
                           </Button>
-                          <Button size="sm" variant="primary" onClick={() => complete(task.id)} data-testid={`task-complete-${task.id}`}>
+                          <Button size="sm" variant="primary" disabled={busy[task.id]} onClick={() => complete(task)} data-testid={`task-complete-${task.id}`}>
                             Complete
                           </Button>
                         </div>
@@ -318,12 +356,17 @@ export default function MyWorkPage() {
                             data-testid={`task-note-input-${task.id}`}
                           />
                           {noteDraft[task.id] !== undefined && (
-                            <button type="button" onClick={() => saveNote(task.id)} className="text-xs font-medium text-primary-700 hover:underline">
+                            <button type="button" onClick={() => saveNote(task)} className="text-xs font-medium text-primary-700 hover:underline">
                               Save
                             </button>
                           )}
                         </div>
                       </div>
+                    )}
+                    {actions.errors[task.id] && (
+                      <p role="alert" className="text-xs font-medium text-danger-700 xl:col-span-6" data-testid={`task-error-${task.id}`}>
+                        Not saved: {actions.errors[task.id]}
+                      </p>
                     )}
                   </li>
                 );
@@ -331,7 +374,25 @@ export default function MyWorkPage() {
             </ul>
           </div>
         )}
+        </div>
       </Panel>
+
+      {selectedTask && (
+        <TaskDrawer
+          task={selectedTask}
+          timeZone={timeZone}
+          now={now}
+          canManage={canManageTasks}
+          canOpenJourney={canOpenJourney}
+          currentUserId={currentUserId}
+          error={actions.errors[selectedTask.id]}
+          busy={!!busy[selectedTask.id]}
+          onClose={() => setSelected(null)}
+          onComplete={() => drawerAction(complete)}
+          onPlusOneDay={() => drawerAction(plusOneDay)}
+          onAssignToMe={() => drawerAction(assignToMe)}
+        />
+      )}
     </div>
   );
 }
