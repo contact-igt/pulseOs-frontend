@@ -228,6 +228,7 @@ export async function getJourneysSummary(db: Db, tenantId: string): Promise<Jour
 export interface JourneyViewer {
   id: string;
   role: Role;
+  timezone: string;
 }
 
 function nextActionLabel(type: string): string {
@@ -294,7 +295,7 @@ export async function getJourneyDetail(db: Db, tenantId: string, journeyId: stri
     canViewTasks
       ? // Same rule as GET /tasks: without MANAGE_TASKS the caller only ever
         // sees tasks assigned to themselves (task notes are PHI-adjacent).
-        listTasks(db, tenantId, { patientId: j.patientId, assignedTo: canManageTasks ? undefined : viewer.id })
+        listTasks(db, tenantId, { patientId: j.patientId, assignedTo: canManageTasks ? undefined : viewer.id }, viewer.timezone)
       : Promise.resolve([]),
     listAppointments(db, tenantId, { journeyId }),
     getNextActionForJourney(db, journeyId),

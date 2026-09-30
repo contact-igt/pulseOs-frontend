@@ -39,7 +39,7 @@ export async function journeyRoutes(app: FastifyInstance) {
     const { tenantId, id: userId, role } = request.sessionUser!;
     const id = idParam.safeParse((request.params as { id: string }).id);
     if (!id.success) return reply.status(404).send({ error: "journey_not_found" });
-    const detail = await getJourneyDetail(app.db, tenantId, id.data, { id: userId, role });
+    const detail = await getJourneyDetail(app.db, tenantId, id.data, { id: userId, role, timezone: request.sessionUser!.timezone });
     if (!detail) return reply.status(404).send({ error: "journey_not_found" });
     return detail;
   });
@@ -55,7 +55,7 @@ export async function journeyRoutes(app: FastifyInstance) {
 
     const result = await assignJourneyOwner(app.db, tenantId, actorId, [id.data], body.data.ownerUserId);
     if (!result.ok) return reply.status(ASSIGN_FAILURE_STATUS[result.reason]).send({ error: result.reason });
-    return getJourneyDetail(app.db, tenantId, id.data, { id: actorId, role });
+    return getJourneyDetail(app.db, tenantId, id.data, { id: actorId, role, timezone: request.sessionUser!.timezone });
   });
 
   // All-or-nothing: one transaction; any id outside the caller's tenant (404)

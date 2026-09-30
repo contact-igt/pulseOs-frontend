@@ -1,6 +1,5 @@
-import { eq, sql, type SQL } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
-import { tenants } from "../../db/schema.js";
+import { addDays, diffDays, isRealDate, localToday, tenantTimezone } from "../../lib/hospital-time.js";
 import type { AnalyticsBucket, AnalyticsGranularity, AnalyticsPeriod, AnalyticsQuery } from "@pulseos/types";
 
 /** A malformed filter (bad range, inverted dates...) — the route maps this to HTTP 400. */
@@ -8,60 +7,8 @@ export class AnalyticsInputError extends Error {}
 
 const MAX_RANGE_DAYS = 366;
 const PRESET_DAYS = { "7d": 7, "14d": 14, "30d": 30, "90d": 90 } as const;
-const YMD = /^\d{4}-\d{2}-\d{2}$/;
-const DAY_MS = 86_400_000;
 
-// --- Pure calendar arithmetic on YYYY-MM-DD strings (no timezone involved) ---
-
-export function isRealDate(ymd: string): boolean {
-  if (!YMD.test(ymd)) return false;
-  const d = new Date(`${ymd}T00:00:00Z`);
-  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === ymd;
-}
-
-export function addDays(ymd: string, n: number): string {
-  return new Date(new Date(`${ymd}T00:00:00Z`).getTime() + n * DAY_MS).toISOString().slice(0, 10);
-}
-
-/** b - a in whole calendar days. */
-export function diffDays(a: string, b: string): number {
-  return Math.round((new Date(`${b}T00:00:00Z`).getTime() - new Date(`${a}T00:00:00Z`).getTime()) / DAY_MS);
-}
-
-// --- Timezone SQL ---
-
-/**
- * The tenant timezone as an inlined SQL string literal. It is inlined (not a
- * bind parameter) so `GROUP BY` / `SELECT` expressions containing it are
- * textually identical. The value comes from tenants.timezone — never from a
- * request — and is still whitelisted by shape.
- */
-export function tzLiteral(timezone: string): SQL {
-  if (!/^[A-Za-z][A-Za-z0-9_+-]*(?:\/[A-Za-z0-9_+-]+)*$/.test(timezone)) throw new Error(`Invalid timezone: ${timezone}`);
-  return sql.raw(`'${timezone}'`);
-}
-
-/** Local calendar day (YYYY-MM-DD, in the tenant's zone) of a timestamptz column. */
-export function localDay(column: unknown, timezone: string): SQL<string> {
-  return sql<string>`to_char(${column} at time zone ${tzLiteral(timezone)}, 'YYYY-MM-DD')`;
-}
-
-/** `column` falls on a local day between `from` and `to` inclusive, in the tenant's zone (DST-safe). */
-export function inLocalRange(column: unknown, timezone: string, from: string, to: string): SQL {
-  const tz = tzLiteral(timezone);
-  return sql`${column} >= (${from}::date)::timestamp at time zone ${tz} and ${column} < ((${to}::date + 1))::timestamp at time zone ${tz}`;
-}
-
-export async function tenantTimezone(db: Db, tenantId: string): Promise<string> {
-  const [row] = await db.select({ timezone: tenants.timezone }).from(tenants).where(eq(tenants.id, tenantId));
-  return row?.timezone ?? "Asia/Kolkata";
-}
-
-/** The local calendar day `now` falls on in `timezone`. */
-export async function localToday(db: Db, timezone: string, now: Date): Promise<string> {
-  const rows = await db.execute<{ d: string }>(sql`select to_char(${now.toISOString()}::timestamptz at time zone ${tzLiteral(timezone)}, 'YYYY-MM-DD') as d`);
-  return [...rows][0].d;
-}
+export { addDays, diffDays, inLocalRange, isRealDate, localDay, localToday, tenantTimezone, tzLiteral } from "../../lib/hospital-time.js";
 
 export async function resolvePeriod(db: Db, tenantId: string, query: Pick<AnalyticsQuery, "range" | "from" | "to">, now: Date = new Date()): Promise<AnalyticsPeriod> {
   const timezone = await tenantTimezone(db, tenantId);

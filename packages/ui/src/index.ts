@@ -37,7 +37,7 @@ export * from "./views/ViewSwitcher";
 export * from "./views/CalendarView";
 export * from "./views/KanbanBoard";
 export * from "./views/GanttTimeline";
-export { VIEW_MOBILE_BREAKPOINT } from "./views/useContainerWidth";
+export { VIEW_MOBILE_BREAKPOINT, useContainerWidth } from "./views/useContainerWidth";
 export { addDays, dayStartInstant, diffDays, formatKey, isDayKey, localDayKey, shiftDate, visibleRange } from "./views/dates";
 export type { CalendarSpan, DayKey, WeekStart } from "./views/dates";
 export { inProgressIndex, splitInProgress } from "./trend";

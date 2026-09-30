@@ -16,6 +16,7 @@ import {
 const REASON_STATUS: Record<string, number> = {
   task_not_found: 404,
   already_completed: 409,
+  invalid_due_at: 400,
 };
 
 export async function taskRoutes(app: FastifyInstance) {
@@ -47,7 +48,7 @@ export async function taskRoutes(app: FastifyInstance) {
     // tasks.integration.test.ts's "unassigned view" describe block for proof).
     const canManageTasks = hasPermission(request.sessionUser!.role, "MANAGE_TASKS");
     const assignedTo = canManageTasks ? query.assignedTo : request.sessionUser!.id;
-    return listTasks(app.db, tenantId, { view: query.view, assignedTo, patientId: query.patientId, reason: query.reason });
+    return listTasks(app.db, tenantId, { view: query.view, assignedTo, patientId: query.patientId, reason: query.reason }, request.sessionUser!.timezone);
   });
 
   // Registered ahead of nothing conflicting — "/tasks/:id/..." mutation
@@ -56,7 +57,7 @@ export async function taskRoutes(app: FastifyInstance) {
     const tenantId = request.sessionUser!.tenantId;
     const userId = request.sessionUser!.id;
     const canManageTasks = hasPermission(request.sessionUser!.role, "MANAGE_TASKS");
-    return getTaskCounts(app.db, tenantId, userId, canManageTasks);
+    return getTaskCounts(app.db, tenantId, userId, canManageTasks, request.sessionUser!.timezone);
   });
 
   app.post("/tasks", { preHandler: requirePermission("MANAGE_TASKS") }, async (request) => {
@@ -80,7 +81,7 @@ export async function taskRoutes(app: FastifyInstance) {
     const actorId = request.sessionUser!.id;
     const { id } = request.params as { id: string };
     const { dueAt } = request.body as { dueAt: string };
-    const result = await rescheduleTask(app.db, tenantId, id, actorId, dueAt);
+    const result = await rescheduleTask(app.db, tenantId, id, actorId, dueAt, request.sessionUser!.timezone);
     if (!result.ok) return reply.status(REASON_STATUS[result.reason] ?? 400).send({ error: result.reason });
     return getTaskById(app.db, tenantId, id);
   });

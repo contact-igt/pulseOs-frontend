@@ -172,6 +172,8 @@ function EventButton<T>({
         <span className="flex min-w-0 items-center gap-1">
           <StateIcon state={event.state} />
           <span className="truncate tabular-nums text-ink-2">{p.timeLabel}</span>
+          {/* Compact blocks drop the status line, so status rides on the time line — never colour alone. */}
+          {compact && event.status && <span className="ml-auto shrink-0 text-[10px] font-medium text-ink-2">{event.status}</span>}
         </span>
         {!compact && (
           <>

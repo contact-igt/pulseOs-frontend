@@ -1,15 +1,8 @@
 import { and, eq, gte, isNull, lt, or, sql } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
+import { hospitalTodayBounds } from "../../lib/hospital-time.js";
 import { journeys, patients, tasks, timelineEvents, users } from "../../db/schema.js";
 import type { CreateTaskInput, TaskCounts, TaskReason, TaskRow, TaskView } from "@pulseos/types";
-
-function todayRange() {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-  return { start, end };
-}
 
 function toRow(r: {
   id: string; patientId: string; patientName: string; journeyId: string | null; journeyType: string | null; source?: TaskRow["source"];
@@ -31,8 +24,8 @@ export interface TaskFilters {
   reason?: TaskReason;
 }
 
-export async function listTasks(db: Db, tenantId: string, filters: TaskFilters): Promise<TaskRow[]> {
-  const { start, end } = todayRange();
+export async function listTasks(db: Db, tenantId: string, filters: TaskFilters, timezone: string): Promise<TaskRow[]> {
+  const { start, end } = hospitalTodayBounds(timezone);
   const now = new Date();
 
   const viewCondition =
@@ -86,8 +79,8 @@ export async function listTasks(db: Db, tenantId: string, filters: TaskFilters):
  * task.routes.ts applies to the `unassigned` view itself — a VIEW_TASKS-only
  * caller (e.g. Doctor) gets `unassigned: undefined`, never a tenant count.
  */
-export async function getTaskCounts(db: Db, tenantId: string, userId: string, canManageTasks: boolean): Promise<TaskCounts> {
-  const { start, end } = todayRange();
+export async function getTaskCounts(db: Db, tenantId: string, userId: string, canManageTasks: boolean, timezone: string): Promise<TaskCounts> {
+  const { start, end } = hospitalTodayBounds(timezone);
   const now = new Date();
 
   const overdueCond = and(eq(tasks.status, "pending"), lt(tasks.dueAt, now));
@@ -165,15 +158,18 @@ export async function completeTask(db: Db, tenantId: string, taskId: string, com
   return { ok: true };
 }
 
-export async function rescheduleTask(db: Db, tenantId: string, taskId: string, actorId: string, newDueAt: string): Promise<{ ok: true } | { ok: false; reason: string }> {
+export async function rescheduleTask(db: Db, tenantId: string, taskId: string, actorId: string, newDueAt: string, timezone: string): Promise<{ ok: true } | { ok: false; reason: string }> {
   const [existing] = await db.select().from(tasks).where(and(eq(tasks.tenantId, tenantId), eq(tasks.id, taskId))).limit(1);
   if (!existing) return { ok: false, reason: "task_not_found" };
+  if (existing.status === "completed") return { ok: false, reason: "already_completed" };
+  const dueAt = new Date(newDueAt);
+  if (Number.isNaN(dueAt.getTime())) return { ok: false, reason: "invalid_due_at" };
 
-  await db.update(tasks).set({ dueAt: new Date(newDueAt) }).where(eq(tasks.id, taskId));
+  await db.update(tasks).set({ dueAt }).where(eq(tasks.id, taskId));
   await db.insert(timelineEvents).values({
     tenantId, patientId: existing.patientId, journeyId: existing.journeyId,
     actorType: "user", actorId, eventType: "task_rescheduled",
-    title: `Task rescheduled to ${new Date(newDueAt).toLocaleDateString("en-IN")}`,
+    title: `Task rescheduled to ${dueAt.toLocaleDateString("en-IN", { timeZone: timezone })}`,
   });
   return { ok: true };
 }

@@ -179,6 +179,10 @@ export const api = {
   createPatient: (input: CreatePatientInput) => request<CreatePatientResult>("/patients", { method: "POST", body: JSON.stringify(input) }),
   patient360: (id: string) => request<Patient360>(`/patients/${id}/360`),
   patientTimeline: (id: string, journeyId?: string) => request<TimelineEventVm[]>(`/patients/${id}/timeline${toQuery({ journeyId })}`),
+  // --- P2 view additions ---
+  /** Patient 360 "Upcoming": open appointments, open tasks, scheduled treatments for one patient (permission-trimmed server-side). */
+  patientUpcoming: (id: string) => request<import("@pulseos/types").PatientUpcoming>(`/patients/${id}/upcoming`),
+  // --- end P2 view additions ---
   journeys: (filters: JourneyFilters = {}) => request<JourneyListRow[]>(`/journeys${toQuery({ ...filters })}`),
   journeysSummary: () => request<JourneysSummary>("/journeys/summary"),
   journeyDetail: (id: string) => request<JourneyDetailVm>(`/journeys/${id}`),
@@ -207,6 +211,11 @@ export const api = {
   completeAppointment: (id: string) => request<{ ok: true }>(`/appointments/${id}/complete`, { method: "PATCH", body: JSON.stringify({}) }),
   rescheduleAppointment: (id: string, scheduledAt: string) =>
     request<{ ok: true }>(`/appointments/${id}/reschedule`, { method: "PATCH", body: JSON.stringify({ scheduledAt }) }),
+  // --- P1 view additions ---
+  /** Same endpoint/rows as `appointments`, plus the from/to local-day range the calendar views use. */
+  appointmentsInRange: (filters: import("@pulseos/types").AppointmentRangeFilters) => request<AppointmentRow[]>(`/appointments${toQuery({ ...filters })}`),
+  appointmentCalendarContext: () => request<import("@pulseos/types").AppointmentCalendarContext>("/appointments/calendar-context"),
+  // --- end P1 view additions ---
   treatments: (filters: TreatmentFilters = {}) => request<TreatmentRow[]>(`/treatments${toQuery({ ...filters })}`),
   treatmentCatalog: (specialtyKey?: string) => request<TreatmentDefinitionVm[]>(`/treatment-catalog${toQuery({ specialtyKey })}`),
   updateTreatmentStatus: (id: string, status: TreatmentStatus, plannedDate?: string) =>
@@ -260,6 +269,10 @@ export const api = {
   campaignPerformance: (filters: CampaignFilters = {}) => request<CampaignPerformanceRow[]>(`/campaigns/performance${toQuery({ ...filters })}`),
   marketingEfficiency: (filters: CampaignFilters = {}) => request<MarketingEfficiencySummary>(`/campaigns/marketing-efficiency${toQuery({ ...filters })}`),
   campaignSpendAtRisk: () => request<SpendAtRisk>("/campaigns/spend-at-risk"),
+  // --- P3 view additions ---
+  /** Same endpoint and rows as campaignPerformance, typed with the run window (startDate / endDate|null / status) the Calendar and Timeline views need. */
+  campaignViewRows: (filters: CampaignFilters = {}) => request<import("@pulseos/types").CampaignViewRow[]>(`/campaigns/performance${toQuery({ ...filters })}`),
+  // --- end P3 view additions ---
 
   // Analytics workspace — every call takes the same AnalyticsQuery so all panels agree.
   analyticsSummary: (q: AnalyticsQuery = {}) => request<AnalyticsSummary>(`/analytics/summary${toQuery({ ...q })}`),

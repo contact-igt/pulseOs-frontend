@@ -280,6 +280,11 @@ function MoveMenu({
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
+  // The menu only mounts once its position is measured, so focus follows `pos`.
+  useEffect(() => {
+    if (open && pos) menuRef.current?.querySelector<HTMLButtonElement>("[role=menuitem]")?.focus();
+  }, [open, pos]);
+
   useEffect(() => {
     if (!open) return;
     const trigger = triggerRef.current;
@@ -289,7 +294,6 @@ function MoveMenu({
       // eslint-disable-next-line react-hooks/set-state-in-effect -- measure trigger once when the menu opens
       setPos({ top: r.bottom + 4, left: Math.max(8, Math.min(r.right - menuW, window.innerWidth - menuW - 8)) });
     }
-    menuRef.current?.querySelector<HTMLButtonElement>("[role=menuitem]")?.focus();
     const onDown = (e: MouseEvent) => {
       const t = e.target as Node;
       if (!menuRef.current?.contains(t) && !triggerRef.current?.contains(t)) onOpenChange(false);

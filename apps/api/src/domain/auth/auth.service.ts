@@ -36,6 +36,7 @@ async function createSessionFor(db: Db, user: typeof users.$inferSelect) {
       id: user.id,
       tenantId: user.tenantId,
       tenantName: tenant?.name ?? "",
+      timezone: tenant?.timezone ?? "Asia/Kolkata",
       branchId: user.branchId,
       branchName: branch?.name ?? null,
       name: user.name,
@@ -79,9 +80,10 @@ export async function loginByRole(db: Db, role: Role, environment: DemoEnvironme
 
 export async function resolveSession(db: Db, sessionId: string) {
   const [row] = await db
-    .select({ session: sessions, user: users, branch: branches })
+    .select({ session: sessions, user: users, branch: branches, timezone: tenants.timezone })
     .from(sessions)
     .innerJoin(users, eq(sessions.userId, users.id))
+    .innerJoin(tenants, eq(users.tenantId, tenants.id))
     .leftJoin(branches, eq(users.branchId, branches.id))
     .where(eq(sessions.id, sessionId))
     .limit(1);
@@ -97,6 +99,7 @@ export async function resolveSession(db: Db, sessionId: string) {
     name: row.user.name,
     email: row.user.email,
     role: row.user.role,
+    timezone: row.timezone,
   };
 }
 

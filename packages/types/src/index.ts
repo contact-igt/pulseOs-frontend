@@ -8,6 +8,8 @@ export interface SessionUser {
   role: Role;
   branchId: string | null;
   branchName: string | null;
+  /** Hospital IANA timezone (tenants.timezone) — every "today" and day boundary uses it. */
+  timezone: string;
 }
 
 export interface Branch {
@@ -459,6 +461,36 @@ export interface Patient360 {
   };
 }
 
+// --- P2 view additions ---
+// Patient 360 "Upcoming": a read-only projection of EXISTING records for one
+// patient (no new data concept). Items span every journey the patient has.
+export type PatientUpcomingKind = "appointment" | "task" | "treatment";
+
+export interface PatientUpcomingItem {
+  kind: PatientUpcomingKind;
+  /** The source record's id (appointment / task / treatment opportunity). */
+  id: string;
+  /** ISO instant: appointment scheduledAt, task dueAt, treatment plannedDate. */
+  at: string;
+  /** appointment: its reason (may be null); task: its TaskType; treatment: its label. */
+  label: string | null;
+  /** AppointmentStatus / TaskStatus / TreatmentStatus of the source record. */
+  status: string;
+  /** Only an open task can be overdue (its due time has passed). */
+  overdue: boolean;
+  journeyId: string | null;
+  journeyType: string | null;
+  /** appointment: doctor; task: assignee; treatment: owner. */
+  personName: string | null;
+}
+
+export interface PatientUpcoming {
+  /** Hospital (tenant) IANA timezone the UI must group days in. */
+  timezone: string;
+  items: PatientUpcomingItem[];
+}
+// --- end P2 view additions ---
+
 export interface JourneyListRow {
   id: string;
   patientId: string;
@@ -658,6 +690,24 @@ export interface FrontDeskDashboard {
   noShows: AppointmentRow[];
   pendingConfirmations: AppointmentRow[];
 }
+
+// --- P1 view additions ---
+/** GET /appointments/calendar-context: the hospital's IANA zone and its current local day (YYYY-MM-DD). */
+export interface AppointmentCalendarContext {
+  timezone: string;
+  today: string;
+}
+
+/** GET /appointments filters incl. the inclusive local-day range (tenant timezone) the calendar views use. */
+export interface AppointmentRangeFilters {
+  branchId?: string;
+  doctorId?: string;
+  status?: AppointmentStatus;
+  date?: string;
+  from?: string;
+  to?: string;
+}
+// --- end P1 view additions ---
 
 // ---------------------------------------------------------------------------
 // Treatment (Group N)
@@ -1068,6 +1118,23 @@ export interface CampaignFilters {
   dateFrom?: string;
   dateTo?: string;
 }
+
+// --- P3 view additions ---
+export type CampaignRunStatus = "active" | "paused" | "ended";
+/**
+ * A /campaigns/performance row plus the campaign's run window, so the Campaigns
+ * Table, Calendar and Timeline views all render ONE query. `endDate: null` means
+ * the campaign is ongoing — an end date is never invented.
+ */
+export interface CampaignViewRow extends CampaignPerformanceRow {
+  campaignId: string;
+  /** ISO instant. */
+  startDate: string;
+  /** ISO instant, or null while the campaign is ongoing. */
+  endDate: string | null;
+  campaignStatus: CampaignRunStatus;
+}
+// --- end P3 view additions ---
 
 // ---------------------------------------------------------------------------
 // Analytics workspace (/analytics) — historical, comparative, filter-driven.

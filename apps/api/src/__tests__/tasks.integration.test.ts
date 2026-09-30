@@ -1,7 +1,8 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { eq } from "drizzle-orm";
 import { buildApp } from "../app.js";
 import { db, queryClient } from "../db/client.js";
-import { patients, tasks, tenants } from "../db/schema.js";
+import { patients, tasks, tenants, timelineEvents } from "../db/schema.js";
 import type { FastifyInstance } from "fastify";
 import type { JourneyListRow, SessionUser, TaskRow } from "@pulseos/types";
 
@@ -142,15 +143,26 @@ describe.skipIf(!DEMO_PASSWORD)("tasks / follow-ups / my work (integration)", ()
     expect(typeof row.source).toBe("string");
     expect(row.source).toBe(journey.source);
 
-    const noJourney = await app.inject({
-      method: "POST",
-      url: "/tasks",
-      cookies: { pulseos_session: coordinatorCookie },
-      payload: { patientId: somePatientId, type: "OTHER", dueAt: new Date(Date.now() + 86400000).toISOString() },
-    });
-    const noJourneyId = (noJourney.json() as TaskRow).id;
-    const list2 = await app.inject({ method: "GET", url: "/tasks", cookies: { pulseos_session: coordinatorCookie } });
-    expect((list2.json() as TaskRow[]).find((t) => t.id === noJourneyId)!.source).toBeNull();
+    // A scratch patient with no journey at all: attaching a journey-less task to
+    // a real (single-journey) patient would leave a row the seed-integrity check
+    // rightly flags, and other files run against the same DB in parallel.
+    const tenantId = (await app.inject({ method: "GET", url: "/auth/session", cookies: { pulseos_session: coordinatorCookie } })).json().user.tenantId as string;
+    const [scratch] = await db.insert(patients).values({ tenantId, name: "Scratch No-Journey Patient", phone: "+910000000001" }).returning();
+    try {
+      const noJourney = await app.inject({
+        method: "POST",
+        url: "/tasks",
+        cookies: { pulseos_session: coordinatorCookie },
+        payload: { patientId: scratch.id, type: "OTHER", dueAt: new Date(Date.now() + 86400000).toISOString() },
+      });
+      const noJourneyId = (noJourney.json() as TaskRow).id;
+      const list2 = await app.inject({ method: "GET", url: "/tasks", cookies: { pulseos_session: coordinatorCookie } });
+      expect((list2.json() as TaskRow[]).find((t) => t.id === noJourneyId)!.source).toBeNull();
+    } finally {
+      await db.delete(tasks).where(eq(tasks.patientId, scratch.id));
+      await db.delete(timelineEvents).where(eq(timelineEvents.patientId, scratch.id));
+      await db.delete(patients).where(eq(patients.id, scratch.id));
+    }
   });
 
   it("creates a task with the full field set and returns it", async () => {

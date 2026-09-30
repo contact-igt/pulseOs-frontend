@@ -53,6 +53,12 @@ describe("CalendarView", () => {
     expect(cancelled.querySelector(".line-through")).not.toBeNull();
   });
 
+  it("a short (compact) block still shows its status as text, not colour alone", () => {
+    const events: CalendarEvent[] = [{ id: "s", start: "2026-09-29T04:30:00Z", end: "2026-09-29T05:00:00Z", title: "Asha Rao", status: "Checked in" }];
+    render(<CalendarView {...base} mode="day" events={events} />);
+    expect(within(screen.getByTestId("calendar-event-s")).getByText("Checked in")).toBeTruthy();
+  });
+
   it("lays overlapping events out side by side", () => {
     const events: CalendarEvent[] = [
       { id: "a", start: "2026-09-29T04:30:00Z", end: "2026-09-29T05:30:00Z", title: "A" },
@@ -157,6 +163,13 @@ describe("KanbanBoard", () => {
     expect(screen.getByRole("status").textContent).toContain("Moving to Active");
     resolve();
     await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+  });
+
+  it("opening the Move menu puts focus on its first item (keyboard users need no extra Tab)", async () => {
+    render(<KanbanBoard {...common} getAllowedMoves={() => ["active", "done"]} onMove={vi.fn(() => Promise.resolve())} />);
+    fireEvent.click(screen.getByRole("button", { name: "Move Asha to..." }));
+    const items = await screen.findAllByRole("menuitem");
+    await waitFor(() => expect(document.activeElement).toBe(items[0]));
   });
 
   it("rolls back and shows the error when onMove rejects", async () => {

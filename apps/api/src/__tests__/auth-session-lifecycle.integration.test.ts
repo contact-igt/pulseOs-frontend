@@ -58,6 +58,13 @@ describe.skipIf(!DEMO_PASSWORD)("auth session lifecycle (integration)", () => {
     expect(protectedRes.statusCode).toBe(200);
   });
 
+  it("the session user carries the hospital timezone (from the tenant, never the client)", async () => {
+    const res = await login("eye.admin@pulseos.local");
+    expect(res.json().user.timezone).toBe("Asia/Kolkata");
+    const session = await app.inject({ method: "GET", url: "/auth/session", cookies: { pulseos_session: sessionCookie(res)!.value } });
+    expect(session.json().user.timezone).toBe("Asia/Kolkata");
+  });
+
   it("logout revokes the session server-side: the same cookie is rejected afterwards", async () => {
     const cookie = sessionCookie(await login("eye.coordinator@pulseos.local"))!.value;
     expect(await sessionStatus(cookie)).toBe(200);
