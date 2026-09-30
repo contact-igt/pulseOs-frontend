@@ -9,7 +9,8 @@ import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import type { AppointmentRow, PatientFlowCount } from "@pulseos/types";
 import { useViewState } from "@/lib/useViewState";
 import { matchesSearch } from "@/components/appointments/appointmentViews";
-import { useAppointmentActions, useCalendarContext, useUrlFilters } from "@/components/appointments/hooks";
+import { useAppointmentActions, useCalendarContext } from "@/components/appointments/hooks";
+import { useUrlFilters } from "@/lib/useUrlFilters";
 import { InlineNotice } from "@/components/appointments/InlineNotice";
 import { TodayFlow } from "@/components/appointments/TodayFlow";
 
@@ -54,8 +55,11 @@ export default function FrontDeskPage() {
   const urlFilters = useUrlFilters();
   const [search, setSearch] = useState(() => urlFilters.get("q"));
   const [selected, setSelected] = useState<AppointmentRow | null>(null);
-  // Clicking a Patient Flow stage narrows the Today list to that stage.
-  const [flowFilter, setFlowFilter] = useState<PatientFlowCount["bucket"] | null>(null);
+  // Clicking a Patient Flow stage narrows the Today list to that stage (kept in the URL as ?stage=).
+  type FlowBucket = PatientFlowCount["bucket"];
+  const rawStage = urlFilters.get("stage");
+  const flowFilter: FlowBucket | null = rawStage in FLOW_LABEL ? (rawStage as FlowBucket) : null;
+  const setFlowFilter = (update: (cur: FlowBucket | null) => FlowBucket | null) => urlFilters.set({ stage: update(flowFilter) ?? undefined });
 
   const dashboard = useQuery({ queryKey: ["front-desk"], queryFn: () => api.frontDesk() });
   const timeline = useQuery({
@@ -67,6 +71,7 @@ export default function FrontDeskPage() {
   const invalidate = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["front-desk"] });
     queryClient.invalidateQueries({ queryKey: ["timeline"] });
+    queryClient.invalidateQueries({ queryKey: ["patient360"] });
   }, [queryClient]);
   const closeDrawer = useCallback(() => setSelected(null), [setSelected]);
   // Same actions as before; a server rejection (stale status) is an inline message, never an unhandled error.
@@ -209,7 +214,7 @@ export default function FrontDeskPage() {
                 onRowClick={(row) => setSelected(row)}
                 actions={
                   flowFilter ? (
-                    <button type="button" onClick={() => setFlowFilter(null)} className="text-xs font-medium text-primary-700 hover:underline" data-testid="front-desk-clear-stage">
+                    <button type="button" onClick={() => setFlowFilter(() => null)} className="text-xs font-medium text-primary-700 hover:underline" data-testid="front-desk-clear-stage">
                       Show all
                     </button>
                   ) : undefined
@@ -228,6 +233,7 @@ export default function FrontDeskPage() {
         onAction={handleAction}
         onComplete={handleComplete}
         onReschedule={handleReschedule}
+        error={actionError}
       />
     </div>
   );

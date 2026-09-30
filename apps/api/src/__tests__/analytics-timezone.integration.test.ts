@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq, inArray } from "drizzle-orm";
 import { db, queryClient } from "../db/client.js";
-import { journeys, marketingCampaigns, patients, revenueEvents, tenants } from "../db/schema.js";
-import { getAnalyticsCampaigns, getAnalyticsRevenue, getLeadsBySource, resolvePeriod } from "../domain/analytics/analytics.service.js";
+import { campaignTouchpoints, journeys, marketingCampaigns, patients, revenueEvents, tenants } from "../db/schema.js";
+import { getAnalyticsCampaigns, getAnalyticsRevenue, getAnalyticsSummary, getLeadsBySource, resolvePeriod } from "../domain/analytics/analytics.service.js";
 
 // Day boundaries. Every analytics bucket is a calendar day in the HOSPITAL's
 // timezone (tenants.timezone), not UTC and not the server clock. Each case
@@ -17,6 +17,7 @@ describe("analytics day boundaries follow the tenant timezone (integration)", ()
   const created: { tenantIds: string[] } = { tenantIds: [] };
   let ist: string;
   let la: string;
+  let istPatient: string;
 
   async function makeTenant(name: string, timezone: string) {
     const [t] = await db.insert(tenants).values({ name, timezone }).returning();
@@ -37,6 +38,7 @@ describe("analytics day boundaries follow the tenant timezone (integration)", ()
     const a = await makeTenant("TZ Scratch IST", "Asia/Kolkata");
     const b = await makeTenant("TZ Scratch LA", "America/Los_Angeles");
     ist = a.tenantId;
+    istPatient = a.patientId;
     la = b.tenantId;
 
     // IST = UTC+5:30. 18:30Z is exactly local midnight.
@@ -56,6 +58,7 @@ describe("analytics day boundaries follow the tenant timezone (integration)", ()
     const ids = created.tenantIds;
     if (ids.length) {
       await db.delete(revenueEvents).where(inArray(revenueEvents.tenantId, ids));
+      await db.delete(campaignTouchpoints).where(inArray(campaignTouchpoints.tenantId, ids));
       await db.delete(journeys).where(inArray(journeys.tenantId, ids));
       await db.delete(marketingCampaigns).where(inArray(marketingCampaigns.tenantId, ids));
       await db.delete(patients).where(inArray(patients.tenantId, ids));
@@ -162,6 +165,38 @@ describe("analytics day boundaries follow the tenant timezone (integration)", ()
     expect(row.spend).toBe(1000); // 10 / 30 of 3000
     const outside = await getAnalyticsCampaigns(db, ist, range("2025-04-01", "2025-04-10"));
     expect(outside.rows.find((r) => r.campaignId === c.id)?.spend ?? 0).toBe(0);
+  });
+
+  it("a sliced view keeps a campaign's spend when it had no enquiries in the period (lifetime enquiry mix), so slices add up", async () => {
+    const [c] = await db
+      .insert(marketingCampaigns)
+      .values({ tenantId: ist, source: "google", name: "Slice campaign", spendAmount: 1000, startDate: new Date("2025-04-30T18:30:00Z"), endDate: new Date("2025-05-10T10:00:00Z") })
+      .returning(); // local run: 2025-05-01 .. 2025-05-10
+    // Its enquiries arrived before the period: one Cataract, one LASIK.
+    for (const service of ["Cataract", "LASIK"]) {
+      const j = await addJourney(ist, istPatient, "2025-04-20T06:00:00Z", { journeyType: service, source: "google" });
+      await db.insert(campaignTouchpoints).values({ tenantId: ist, patientId: istPatient, journeyId: j.id, campaignId: c.id, source: "google", touchType: "first_touch", occurredAt: j.createdAt });
+    }
+    const q = { ...range("2025-05-01", "2025-05-10"), source: "google" as const };
+    const whole = (await getAnalyticsSummary(db, ist, q)).spend;
+    const cataract = (await getAnalyticsSummary(db, ist, { ...q, service: "Cataract" })).spend;
+    const lasik = (await getAnalyticsSummary(db, ist, { ...q, service: "LASIK" })).spend;
+    expect(whole).toBe(1000);
+    expect(cataract).toBe(500);
+    expect(cataract + lasik).toBe(whole);
+  });
+
+  it("a range ending today is compared with the previous period only up to the same elapsed point", async () => {
+    const now = new Date("2025-03-11T04:30:00Z"); // 10:00 IST on the 11th; 7D = 5..11 Mar, previous = 26 Feb..4 Mar
+    const prevTotal = async () => (await getLeadsBySource(db, ist, { range: "7d" }, now)).previousTotal;
+    const before = await prevTotal();
+    await addJourney(ist, istPatient, "2025-03-04T03:30:00Z"); // 09:00 IST on 4 Mar — before the elapsed point
+    await addJourney(ist, istPatient, "2025-03-04T06:30:00Z"); // 12:00 IST on 4 Mar — after it (today has not reached 12:00 yet)
+    expect(await prevTotal()).toBe(before + 1);
+  });
+
+  it("rejects a custom range that ends in the future (it would be compared with a full previous period)", async () => {
+    await expect(resolvePeriod(db, ist, { range: "custom", from: "2025-03-01", to: "2025-03-20" }, new Date("2025-03-11T04:30:00Z"))).rejects.toThrow(/future/i);
   });
 
   it("rejects an inverted or oversized custom range", async () => {

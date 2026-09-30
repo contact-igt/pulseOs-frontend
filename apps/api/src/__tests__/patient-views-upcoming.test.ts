@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { buildApp } from "../app.js";
 import { db, queryClient } from "../db/client.js";
 import { tasks, treatmentOpportunities } from "../db/schema.js";
@@ -89,6 +89,14 @@ describe.skipIf(!DEMO_PASSWORD)("GET /patients/:id/upcoming (integration)", () =
   });
 
   afterAll(async () => {
+    // The fixture patient (two journeys, an appointment, tasks, treatments) is removed with
+    // everything attached, so repeated runs never accumulate rows in the demo tenant.
+    if (patientId) {
+      for (const table of ["revenue_events", "conversion_feedback_events", "treatment_opportunities", "consultation_outcomes", "campaign_touchpoints", "timeline_events", "tasks", "appointments", "journeys"]) {
+        await db.execute(sql`delete from ${sql.identifier(table)} where patient_id = ${patientId}`);
+      }
+      await db.execute(sql`delete from patients where id = ${patientId}`);
+    }
     await app.close();
     await queryClient.end();
   });

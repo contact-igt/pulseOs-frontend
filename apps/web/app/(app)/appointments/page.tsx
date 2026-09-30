@@ -24,7 +24,8 @@ import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import { useViewState } from "@/lib/useViewState";
 import { APPOINTMENT_VIEWS, LIST_TABS, appointmentQuery, matchesSearch, toCalendarEvent } from "@/components/appointments/appointmentViews";
 import type { AppointmentView, ListTab } from "@/components/appointments/appointmentViews";
-import { useAppointmentActions, useCalendarContext, useUrlFilters } from "@/components/appointments/hooks";
+import { useAppointmentActions, useCalendarContext } from "@/components/appointments/hooks";
+import { useUrlFilters } from "@/lib/useUrlFilters";
 import { DoctorScheduleView } from "@/components/appointments/DoctorScheduleView";
 import { InlineNotice } from "@/components/appointments/InlineNotice";
 import { renderAppointmentEvent } from "@/components/appointments/AppointmentEventBody";
@@ -44,7 +45,7 @@ export default function AppointmentsPage() {
   const queryClient = useQueryClient();
   const quickCreate = useQuickCreate();
   const { timeZone, today } = useCalendarContext();
-  const { view, date, setView, setDate } = useViewState<AppointmentView>({ views: APPOINTMENT_VIEWS, defaultView: "list", timeZone });
+  const { view, date, setView, setDate, setState: setViewState } = useViewState<AppointmentView>({ views: APPOINTMENT_VIEWS, defaultView: "list", timeZone });
   const filters = useUrlFilters();
   const rawTab = filters.get("tab");
   const tab: ListTab = LIST_TABS.find((t) => t === rawTab) ?? "today";
@@ -83,6 +84,7 @@ export default function AppointmentsPage() {
     // it's shown, not only where it was taken).
     queryClient.invalidateQueries({ queryKey: ["front-desk"] });
     queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    queryClient.invalidateQueries({ queryKey: ["patient360"] });
   }, [queryClient]);
   const closeDrawer = useCallback(() => setSelected(null), [setSelected]);
   const actions = useAppointmentActions({ refresh: invalidate, onDone: closeDrawer });
@@ -180,6 +182,7 @@ export default function AppointmentsPage() {
             mode={view}
             date={date}
             onDateChange={setDate}
+            onOpenDay={(day) => setViewState({ view: "day", date: day })}
             timeZone={timeZone}
             onEventClick={(e) => e.data && setSelected(e.data)}
             renderEvent={renderAppointmentEvent}
@@ -197,6 +200,7 @@ export default function AppointmentsPage() {
         onComplete={actions.handleComplete}
         onReschedule={actions.handleReschedule}
         readOnly={!canManage}
+        error={actions.error}
       />
     </div>
   );

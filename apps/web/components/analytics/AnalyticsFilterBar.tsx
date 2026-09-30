@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { SlidersHorizontal, X } from "lucide-react";
 import type { AnalyticsFilterOptions, Branch } from "@pulseos/types";
-import { Button, FilterSelect, SOURCE_LABELS, Tabs, useDialogFocus } from "@pulseos/ui";
+import { Button, FilterSelect, SOURCE_LABELS, Tabs, localDayKey, useDialogFocus } from "@pulseos/ui";
+import { useHospitalTimeZone } from "@/lib/useHospitalTimeZone";
 import { RANGE_OPTIONS, activeFilters, type AnalyticsFilters } from "./filters";
 
 const DATE_INPUT = "glass-control h-8 min-w-0 flex-1 rounded-control px-2 text-xs text-ink outline-none focus-visible:border-primary-500 sm:flex-none";
@@ -40,14 +41,17 @@ function RangeTabs({ filters, onChange }: Pick<BarProps, "filters" | "onChange">
 }
 
 function CustomDates({ filters, onChange }: Pick<BarProps, "filters" | "onChange">) {
+  // A range cannot end after the hospital's today (the API rejects it: a future day
+  // would be compared with a full previous period).
+  const today = localDayKey(new Date(), useHospitalTimeZone());
   if (filters.range !== "custom") return null;
   return (
     <div className="flex items-center gap-1.5" data-testid="custom-dates">
-      <input type="date" aria-label="From date" className={DATE_INPUT} value={filters.from ?? ""} max={filters.to} onChange={(e) => e.target.value && onChange({ from: e.target.value })} />
+      <input type="date" aria-label="From date" className={DATE_INPUT} value={filters.from ?? ""} max={filters.to ?? today} onChange={(e) => e.target.value && onChange({ from: e.target.value })} />
       <span className="text-xs text-ink-2" aria-hidden="true">
         –
       </span>
-      <input type="date" aria-label="To date" className={DATE_INPUT} value={filters.to ?? ""} min={filters.from} onChange={(e) => e.target.value && onChange({ to: e.target.value })} />
+      <input type="date" aria-label="To date" className={DATE_INPUT} value={filters.to ?? ""} min={filters.from} max={today} onChange={(e) => e.target.value && onChange({ to: e.target.value })} />
     </div>
   );
 }

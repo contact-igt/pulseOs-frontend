@@ -53,6 +53,12 @@ describe.skipIf(!DEMO_PASSWORD)("task day boundaries + reschedule validation (in
     expect(upcomingIds).not.toContain(late.id);
   });
 
+  it("the My Work Today badge (/tasks/counts) uses the same hospital day as the Today list", async () => {
+    const before = (await inject("GET", "/tasks/counts")).json().today as number;
+    await createTask(`${istDay(new Date())}T02:00:00+05:30`);
+    expect((await inject("GET", "/tasks/counts")).json().today).toBe(before + 1);
+  });
+
   it("rejects an unparseable due date with 400 instead of a 500", async () => {
     const task = await createTask(new Date(Date.now() + 86_400_000).toISOString());
     const res = await inject("PATCH", `/tasks/${task.id}/reschedule`, { dueAt: "not-a-date" });

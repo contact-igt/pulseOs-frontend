@@ -19,6 +19,7 @@ import { TaskBoard } from "@/components/my-work/TaskBoard";
 import { TaskCalendar } from "@/components/my-work/TaskCalendar";
 import { TaskDrawer } from "@/components/my-work/TaskDrawer";
 import { useHospitalTimeZone } from "@/lib/useHospitalTimeZone";
+import { useUrlFilters } from "@/lib/useUrlFilters";
 
 const VIEWS = ["list", "board", "calendar"] as const;
 type WorkView = (typeof VIEWS)[number];
@@ -74,8 +75,15 @@ function isOverdue(task: TaskRow) {
 
 export default function MyWorkPage() {
   const quickCreate = useQuickCreate();
-  const [tab, setTab] = useState<(typeof TABS)[number]["key"]>("mine");
-  const [reasonKey, setReasonKey] = useState<(typeof REASON_GROUPS)[number]["key"]>("all");
+  // Queue tab and reason live in the URL beside view/date, so a refresh, a shared link or
+  // back/forward restores the same dataset in the same view (defaults stay out of the URL).
+  const urlFilters = useUrlFilters();
+  type TabKey = (typeof TABS)[number]["key"];
+  type ReasonKey = (typeof REASON_GROUPS)[number]["key"];
+  const tab: TabKey = TABS.find((t) => t.key === urlFilters.get("tab"))?.key ?? "mine";
+  const reasonKey: ReasonKey = REASON_GROUPS.find((g) => g.key === urlFilters.get("reason"))?.key ?? "all";
+  const setTab = (k: TabKey) => urlFilters.set({ tab: k === "mine" ? undefined : k });
+  const setReasonKey = (k: ReasonKey) => urlFilters.set({ reason: k === "all" ? undefined : k });
   const [noteDraft, setNoteDraft] = useState<Record<string, string>>({});
 
   const session = useQuery({ queryKey: ["session"], queryFn: api.session });
@@ -211,7 +219,7 @@ export default function MyWorkPage() {
           )
         }
       >
-        <Tabs items={tabItems} value={effectiveTab} onChange={(k) => setTab(k as typeof tab)} ariaLabel="Work queue" />
+        <Tabs items={tabItems} value={effectiveTab} onChange={(k) => setTab(k as TabKey)} ariaLabel="Work queue" />
       </Toolbar>
 
       <div className="flex flex-wrap items-center justify-between gap-2">

@@ -72,6 +72,12 @@ export function KanbanBoard<T>({
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  // Keyboard moves re-mount the card in its new column (and hide its Move button
+  // while pending): focus follows the card there, and one persistent polite live
+  // region announces the outcome.
+  const boardRef = useRef<HTMLDivElement>(null);
+  const [focusId, setFocusId] = useState<string | null>(null);
+  const [announcement, setAnnouncement] = useState("");
 
   // A finished move keeps its optimistic position until the caller's data agrees (or SETTLE_MS elapses).
   useEffect(() => {
@@ -103,20 +109,35 @@ export function KanbanBoard<T>({
   );
 
   const run = useCallback(
-    async (card: T, to: string) => {
+    async (card: T, to: string, refocus = false) => {
       if (!onMove) return;
       const id = getCardId(card);
+      const name = getCardLabel(card);
+      const title = columns.find((c) => c.key === to)?.title ?? to;
       setMoves((p) => ({ ...p, [id]: { to, status: "pending" } }));
+      setAnnouncement(`Moving ${name} to ${title}…`);
+      if (refocus) setFocusId(id);
       try {
         await onMove(card, to);
         setMoves((p) => ({ ...p, [id]: { to, status: "done" } }));
+        setAnnouncement(`Moved ${name} to ${title}.`);
       } catch (err) {
         const msg = err instanceof Error && err.message ? err.message : "Could not move this card.";
         setMoves((p) => ({ ...p, [id]: { to, status: "error", error: msg } }));
+        setAnnouncement(`Not moved: ${msg}`);
       }
+      if (refocus) setFocusId(id);
     },
-    [onMove, getCardId],
+    [onMove, getCardId, getCardLabel, columns],
   );
+
+  useEffect(() => {
+    if (!focusId) return;
+    const li = Array.from(boardRef.current?.querySelectorAll<HTMLElement>("li[data-testid]") ?? []).find((el) => el.dataset.testid === `kanban-card-${focusId}`);
+    if (li && !li.contains(document.activeElement)) li.querySelector<HTMLElement>("button")?.focus();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot focus request
+    setFocusId(null);
+  }, [focusId, moves]);
 
   const columnOf = (card: T): string => {
     const m = moves[getCardId(card)];
@@ -128,12 +149,16 @@ export function KanbanBoard<T>({
 
   return (
     <div
+      ref={boardRef}
       role="group"
       aria-label={ariaLabel}
       data-testid="kanban-board"
       data-readonly={movable ? "false" : "true"}
       className={`flex min-w-0 snap-x snap-mandatory gap-3 overflow-x-auto pb-2 [scrollbar-width:thin] ${className}`}
     >
+      <p className="sr-only" aria-live="polite" data-testid="kanban-announce">
+        {announcement}
+      </p>
       {columns.map((col) => {
         const list = cards.filter((c) => columnOf(c) === col.key);
         const canDrop = draggingCard !== undefined && draggingAllowed.includes(col.key);
@@ -222,12 +247,12 @@ export function KanbanBoard<T>({
                         targets={targets.map((k) => ({ key: k, title: columns.find((c) => c.key === k)?.title ?? k }))}
                         open={openMenuId === id}
                         onOpenChange={(o) => setOpenMenuId(o ? id : null)}
-                        onPick={(to) => void run(card, to)}
+                        onPick={(to) => void run(card, to, true)}
                       />
                     )}
 
                     {state.pending && (
-                      <p role="status" className="flex items-center gap-1.5 border-t border-line px-2.5 py-1.5 text-[11px] font-medium text-primary-700">
+                      <p className="flex items-center gap-1.5 border-t border-line px-2.5 py-1.5 text-[11px] font-medium text-primary-700">
                         <Loader2 size={12} aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
                         Moving to {columns.find((c) => c.key === move?.to)?.title ?? move?.to}...
                       </p>

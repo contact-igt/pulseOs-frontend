@@ -1,4 +1,5 @@
 import { and, eq, ne, or } from "drizzle-orm";
+import { dayKeyIn } from "../../lib/hospital-time.js";
 import type { Db } from "../../db/client.js";
 import {
   appointments,
@@ -162,12 +163,8 @@ export interface LeadFilters {
   owner?: OwnerFilter;
 }
 
-function isToday(d: Date): boolean {
-  const now = new Date();
-  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
-}
-
-async function buildLeadRows(db: Db, tenantId: string): Promise<LeadRow[]> {
+async function buildLeadRows(db: Db, tenantId: string, timezone: string): Promise<LeadRow[]> {
+  const today = dayKeyIn(new Date(), timezone);
   const rows = await db
     .select({
       id: journeys.id,
@@ -240,7 +237,7 @@ async function buildLeadRows(db: Db, tenantId: string): Promise<LeadRow[]> {
     } else if (journeysWithAppointment.has(r.id)) {
       leadStatus = "appointment_booked";
     } else if (!r.contactedAt) {
-      leadStatus = isToday(r.createdAt) ? "new" : "uncontacted";
+      leadStatus = dayKeyIn(r.createdAt, timezone) === today ? "new" : "uncontacted";
     } else if (nextTaskByJourney.has(r.id)) {
       leadStatus = "follow_up_due";
     } else {
@@ -271,8 +268,8 @@ async function buildLeadRows(db: Db, tenantId: string): Promise<LeadRow[]> {
   });
 }
 
-export async function listLeads(db: Db, tenantId: string, filters: LeadFilters): Promise<LeadRow[]> {
-  const rows = await buildLeadRows(db, tenantId);
+export async function listLeads(db: Db, tenantId: string, filters: LeadFilters, timezone: string): Promise<LeadRow[]> {
+  const rows = await buildLeadRows(db, tenantId, timezone);
   return rows
     .filter((r) => !filters.status || r.leadStatus === filters.status)
     .filter((r) => !filters.specialtyKey || r.specialtyKey === filters.specialtyKey)
@@ -280,8 +277,8 @@ export async function listLeads(db: Db, tenantId: string, filters: LeadFilters):
     .filter((r) => !filters.owner || (filters.owner.kind === "unassigned" ? r.ownerId === null : r.ownerId === filters.owner.userId));
 }
 
-export async function getLeadsSummary(db: Db, tenantId: string): Promise<LeadsSummary> {
-  const rows = await buildLeadRows(db, tenantId);
+export async function getLeadsSummary(db: Db, tenantId: string, timezone: string): Promise<LeadsSummary> {
+  const rows = await buildLeadRows(db, tenantId, timezone);
   const count = (status: LeadStatus) => rows.filter((r) => r.leadStatus === status).length;
   return {
     newToday: count("new"),

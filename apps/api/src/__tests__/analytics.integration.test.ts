@@ -3,6 +3,7 @@ import { and, count, eq, sql, sum } from "drizzle-orm";
 import { buildApp } from "../app.js";
 import { db, queryClient } from "../db/client.js";
 import { campaignTouchpoints, journeys, marketingCampaigns, patients, revenueEvents } from "../db/schema.js";
+import { addDays } from "../lib/hospital-time.js";
 import { roas as roasOf } from "../domain/marketing/formulas.js";
 import type { FastifyInstance } from "fastify";
 import type {
@@ -22,11 +23,13 @@ import type {
 } from "@pulseos/types";
 
 // Every analytics figure is re-derived from raw rows, per tenant, and compared
-// with what the API reports. The window is deliberately wider than the demo
-// data so "everything in range" equals "everything the tenant has".
+// with what the API reports. The window is the longest allowed (366 hospital-local
+// days ending today) — the seed dates everything relative to "now", so this covers
+// everything the tenant has whatever year the suite runs in (no fixed calendar year).
 
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD;
-const ALL = "range=custom&from=2026-01-01&to=2026-12-31";
+const istToday = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+const ALL = `range=custom&from=${addDays(istToday, -365)}&to=${istToday}`;
 
 interface Session { cookie: string; tenantId: string }
 

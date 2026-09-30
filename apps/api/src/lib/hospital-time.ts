@@ -71,3 +71,8 @@ export function hospitalTodayBounds(timezone: string): { start: SQL; end: SQL } 
     end: sql`((now() at time zone ${tz})::date + 1)::timestamp at time zone ${tz}`,
   };
 }
+
+/** Local calendar day (YYYY-MM-DD) of an instant in `timezone` — the JS twin of `localDay`. */
+export function dayKeyIn(instant: Date, timezone: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(instant);
+}

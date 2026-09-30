@@ -41,7 +41,12 @@ export function useDialogFocus<T extends HTMLElement>(active: boolean, onClose: 
       if (els.length === 0) return;
       const first = els[0];
       const last = els[els.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
+      // An action can unmount or disable the focused control (focus falls to
+      // <body>); the next Tab must land back inside the dialog, not behind it.
+      if (!container.contains(document.activeElement)) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+      } else if (e.shiftKey && document.activeElement === first) {
         e.preventDefault();
         last.focus();
       } else if (!e.shiftKey && document.activeElement === last) {

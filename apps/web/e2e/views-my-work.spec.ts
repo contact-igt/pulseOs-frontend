@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import type { SessionUser, TaskRow } from "@pulseos/types";
+import { purgePatients, sql } from "./support/fixtures";
 
 // My Work: List (default) | Board (due buckets) | Calendar (by due date).
 // All three render the SAME tasks query. Buckets / calendar days are the
@@ -38,10 +39,25 @@ async function call<T>(page: Page, method: string, path: string, body?: unknown)
   ) as Promise<{ status: number; json: T }>;
 }
 
+// Tasks hang off a fictional patient + journey made for this run (never a real demo
+// patient), removed with everything attached in afterAll.
+const FIXTURE_PREFIX = "E2E My Work ";
+let fixture: { patientId: string; journeyId: string } | null = null;
+function ensureFixture() {
+  if (fixture) return fixture;
+  const [journeyId, patientId] = sql(`
+    WITH t AS (SELECT id FROM tenants WHERE name = 'PulseOS Ophthalmology Demo'),
+    p AS (INSERT INTO patients (tenant_id, name, phone, marketing_consent) SELECT t.id, '${FIXTURE_PREFIX}${MARK}', '97' || lpad((extract(epoch from now())::bigint % 100000000)::text, 8, '0'), false FROM t RETURNING id, tenant_id),
+    j AS (INSERT INTO journeys (tenant_id, patient_id, journey_type, source, stage) SELECT p.tenant_id, p.id, 'Cataract', 'walk_in', 'contacted' FROM p RETURNING id, patient_id)
+    SELECT j.id, j.patient_id FROM j;`).split("|");
+  fixture = { patientId, journeyId };
+  return fixture;
+}
+
 async function createTask(page: Page, dueAt: string, label: string): Promise<TaskRow> {
   const me = (await call<{ user: SessionUser }>(page, "GET", "/auth/session")).json.user;
-  const patients = (await call<{ id: string }[]>(page, "GET", "/patients")).json;
-  const res = await call<TaskRow>(page, "POST", "/tasks", { patientId: patients[0].id, assignedTo: me.id, type: "CALLBACK", dueAt, notes: `${MARK} ${label}` });
+  const { patientId, journeyId } = ensureFixture();
+  const res = await call<TaskRow>(page, "POST", "/tasks", { patientId, journeyId, assignedTo: me.id, type: "CALLBACK", dueAt, notes: `${MARK} ${label}` });
   expect(res.status).toBe(200);
   return res.json;
 }
@@ -54,6 +70,7 @@ async function noPageOverflow(page: Page) {
 }
 
 test.describe("My Work views", () => {
+  test.afterAll(() => purgePatients(FIXTURE_PREFIX));
   test.skip(!DEMO_PASSWORD, "DEMO_PASSWORD must be set");
   test.describe.configure({ mode: "serial" });
 

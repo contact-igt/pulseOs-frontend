@@ -1,4 +1,5 @@
 import { and, count, eq, gte, inArray, lt, sql, sum, isNotNull } from "drizzle-orm";
+import { hospitalTodayBounds } from "../../lib/hospital-time.js";
 import type { Db } from "../../db/client.js";
 import {
   appointments,
@@ -40,14 +41,6 @@ export interface DashboardFilters {
   journeyType?: string;
 }
 
-function todayRange() {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-  return { start, end };
-}
-
 export async function listBranches(db: Db, tenantId: string): Promise<Branch[]> {
   const rows = await db.select().from(branches).where(eq(branches.tenantId, tenantId));
   return rows.map((r) => ({ id: r.id, name: r.name, city: r.city }));
@@ -58,8 +51,8 @@ export async function listJourneyTypes(db: Db, tenantId: string): Promise<string
   return rows.map((r) => r.journeyType).sort();
 }
 
-export async function getTodayStrip(db: Db, tenantId: string, filters: DashboardFilters = {}): Promise<TodayStrip> {
-  const { start, end } = todayRange();
+export async function getTodayStrip(db: Db, tenantId: string, filters: DashboardFilters, timezone: string): Promise<TodayStrip> {
+  const { start, end } = hospitalTodayBounds(timezone);
   const branchClause = filters.branchId ? eq(patients.branchId, filters.branchId) : undefined;
   const apptBranchClause = filters.branchId ? eq(appointments.branchId, filters.branchId) : undefined;
   const journeyTypeClause = filters.journeyType ? eq(journeys.journeyType, filters.journeyType) : undefined;
@@ -193,9 +186,9 @@ export async function getJourneyHealth(db: Db, tenantId: string, filters: Dashbo
 }
 
 
-export async function getPatientFlow(db: Db, tenantId: string, filters: DashboardFilters = {}): Promise<PatientFlowCount[]> {
+export async function getPatientFlow(db: Db, tenantId: string, filters: DashboardFilters, timezone: string): Promise<PatientFlowCount[]> {
   const apptBranchClause = filters.branchId ? eq(appointments.branchId, filters.branchId) : undefined;
-  const { start, end } = todayRange();
+  const { start, end } = hospitalTodayBounds(timezone);
 
   const rows = await db
     .select({ status: appointments.status, c: count() })

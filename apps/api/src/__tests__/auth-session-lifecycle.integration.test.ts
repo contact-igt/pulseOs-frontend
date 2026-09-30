@@ -58,6 +58,14 @@ describe.skipIf(!DEMO_PASSWORD)("auth session lifecycle (integration)", () => {
     expect(protectedRes.statusCode).toBe(200);
   });
 
+  it("a malformed session cookie is treated as signed out: login, logout and session still work", async () => {
+    const bad = { pulseos_session: "not-a-uuid" };
+    expect((await app.inject({ method: "GET", url: "/auth/session", cookies: bad })).statusCode).toBe(401);
+    expect((await app.inject({ method: "POST", url: "/auth/logout", cookies: bad })).statusCode).toBeLessThan(400);
+    const res = await app.inject({ method: "POST", url: "/auth/login", cookies: bad, payload: { email: "eye.admin@pulseos.local", password: DEMO_PASSWORD } });
+    expect(res.statusCode).toBe(200);
+  });
+
   it("the session user carries the hospital timezone (from the tenant, never the client)", async () => {
     const res = await login("eye.admin@pulseos.local");
     expect(res.json().user.timezone).toBe("Asia/Kolkata");

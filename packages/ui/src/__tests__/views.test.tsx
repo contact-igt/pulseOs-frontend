@@ -57,6 +57,9 @@ describe("CalendarView", () => {
     const events: CalendarEvent[] = [{ id: "s", start: "2026-09-29T04:30:00Z", end: "2026-09-29T05:00:00Z", title: "Asha Rao", status: "Checked in" }];
     render(<CalendarView {...base} mode="day" events={events} />);
     expect(within(screen.getByTestId("calendar-event-s")).getByText("Checked in")).toBeTruthy();
+    // One line (time, title, status): a 30-minute block is ~26px, too short for two stacked lines.
+    const title = within(screen.getByTestId("calendar-event-s")).getByText("Asha Rao");
+    expect(title.parentElement?.textContent).toMatch(/^10:00a.*Asha Rao.*Checked in$/);
   });
 
   it("lays overlapping events out side by side", () => {
@@ -81,6 +84,26 @@ describe("CalendarView", () => {
     expect(screen.getByTestId("calendar-more-2026-09-29").textContent).toBe("+2 more");
     expect(onDateChange).toHaveBeenCalledWith("2026-09-29");
     expect(onModeChange).toHaveBeenCalledWith("day");
+  });
+
+  it("onOpenDay, when given, owns 'open this day' (pages whose views are not calendar modes)", () => {
+    const events: CalendarEvent[] = Array.from({ length: 5 }, (_, i) => ({ id: `o${i}`, start: `2026-09-29T0${4 + i}:00:00Z`, title: `Event ${i}` }));
+    const onOpenDay = vi.fn();
+    const onDateChange = vi.fn();
+    render(<CalendarView {...base} onDateChange={onDateChange} onOpenDay={onOpenDay} mode="month" events={events} maxMonthEvents={3} />);
+    fireEvent.click(screen.getByTestId("calendar-more-2026-09-29"));
+    expect(onOpenDay).toHaveBeenCalledWith("2026-09-29");
+    expect(onDateChange).not.toHaveBeenCalled();
+  });
+
+  it("an early event widens the grid but the view still opens at the working-day start", () => {
+    const events: CalendarEvent[] = [
+      { id: "early", start: "2026-09-28T18:45:00Z", title: "Night task" }, // 00:15 IST on 29 Sep
+      { id: "day", start: "2026-09-29T04:30:00Z", end: "2026-09-29T05:00:00Z", title: "Morning" },
+    ];
+    render(<CalendarView {...base} mode="week" events={events} />);
+    expect(screen.getByTestId("calendar-event-early")).toBeTruthy();
+    expect(screen.getByTestId("calendar-scroll").scrollTop).toBe(8 * 56);
   });
 
   it("shows the current-time line only on today's column", () => {
@@ -160,9 +183,10 @@ describe("KanbanBoard", () => {
     fireEvent.click(items[0]);
     expect(onMove).toHaveBeenCalledWith(cards[0], "active");
     expect(within(screen.getByTestId("kanban-col-active")).getByTestId("kanban-card-1")).toBeTruthy();
-    expect(screen.getByRole("status").textContent).toContain("Moving to Active");
+    expect(screen.getByTestId("kanban-announce").textContent).toBe("Moving Asha to Active…");
+    expect(screen.getByTestId("kanban-card-1").textContent).toContain("Moving to Active");
     resolve();
-    await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+    await waitFor(() => expect(screen.getByTestId("kanban-announce").textContent).toBe("Moved Asha to Active."));
   });
 
   it("opening the Move menu puts focus on its first item (keyboard users need no extra Tab)", async () => {
@@ -170,6 +194,15 @@ describe("KanbanBoard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Move Asha to..." }));
     const items = await screen.findAllByRole("menuitem");
     await waitFor(() => expect(document.activeElement).toBe(items[0]));
+  });
+
+  it("after a keyboard move, focus follows the card to its new column and the move is announced", async () => {
+    render(<KanbanBoard {...common} onCardClick={() => {}} getAllowedMoves={() => ["active"]} onMove={vi.fn(() => Promise.resolve())} />);
+    fireEvent.click(screen.getByRole("button", { name: "Move Asha to..." }));
+    fireEvent.click((await screen.findAllByRole("menuitem"))[0]);
+    const moved = within(screen.getByTestId("kanban-col-active")).getByTestId("kanban-card-1");
+    await waitFor(() => expect(moved.contains(document.activeElement)).toBe(true));
+    await waitFor(() => expect(screen.getByTestId("kanban-announce").textContent).toBe("Moved Asha to Active."));
   });
 
   it("rolls back and shows the error when onMove rejects", async () => {

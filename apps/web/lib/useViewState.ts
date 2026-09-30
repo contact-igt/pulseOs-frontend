@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { isDayKey, localDayKey, type CalendarMode } from "@pulseos/ui";
 
@@ -43,6 +43,14 @@ export function useViewState<V extends string>({ views, defaultView, defaultRang
   const rawView = params.get("view");
   const rawDate = params.get("date");
   const rawRange = params.get("range");
+  // The URL this hook last wrote but the router has not surfaced yet: a second
+  // update in the same handler (e.g. open a day = date + Day mode) builds on it
+  // instead of on the stale `params`, so neither update is lost.
+  const pending = useRef<string | null>(null);
+  const current = params.toString();
+  useEffect(() => {
+    pending.current = null;
+  }, [current]);
   const agenda = params.get("cal") === "agenda";
 
   const state = useMemo<ViewState<V>>(() => {
@@ -62,7 +70,7 @@ export function useViewState<V extends string>({ views, defaultView, defaultRang
   /** Patch any of view/date/range in one navigation. A value equal to its default (view, range) is dropped from the URL. */
   const setState = useCallback(
     (patch: Partial<Omit<ViewState<V>, "calendarMode">> & { agenda?: boolean }) => {
-      const next = new URLSearchParams(params.toString());
+      const next = new URLSearchParams(pending.current ?? params.toString());
       const put = (key: string, value: string | undefined, isDefault: boolean) => {
         if (value === undefined || isDefault) next.delete(key);
         else next.set(key, value);
@@ -72,6 +80,7 @@ export function useViewState<V extends string>({ views, defaultView, defaultRang
       if ("range" in patch) put("range", patch.range, patch.range === defaultRange);
       if ("agenda" in patch) put("cal", "agenda", !patch.agenda);
       const qs = next.toString();
+      pending.current = qs;
       router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
     },
     [params, pathname, router, defaultView, defaultRange],

@@ -6,6 +6,10 @@ import type { Role } from "@pulseos/types";
 import { DEFAULT_DEMO_ENVIRONMENT, DEMO_ENVIRONMENTS, demoEmailForRole, type DemoEnvironmentKey } from "./demo-environments.js";
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 12;
+// Session ids are uuids. Anything else in the cookie (tampered, truncated, set by a
+// sibling domain) is simply "no session" — never a database error that would
+// 500 every request, including the login and logout that would clear it.
+const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function hashPassword(plain: string): Promise<string> {
   return hash(plain, { memoryCost: 19456, timeCost: 2, parallelism: 1 });
@@ -79,6 +83,7 @@ export async function loginByRole(db: Db, role: Role, environment: DemoEnvironme
 }
 
 export async function resolveSession(db: Db, sessionId: string) {
+  if (!SESSION_ID.test(sessionId)) return null;
   const [row] = await db
     .select({ session: sessions, user: users, branch: branches, timezone: tenants.timezone })
     .from(sessions)
@@ -104,5 +109,6 @@ export async function resolveSession(db: Db, sessionId: string) {
 }
 
 export async function revokeSession(db: Db, sessionId: string) {
+  if (!SESSION_ID.test(sessionId)) return;
   await db.delete(sessions).where(eq(sessions.id, sessionId));
 }

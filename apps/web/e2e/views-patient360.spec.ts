@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { purgePatients } from "./support/fixtures";
 import type { CreateLeadResult, Lookups, PatientUpcoming, SessionUser, TaskRow } from "@pulseos/types";
 
 // Patient 360: Timeline (default) | Upcoming. Upcoming is derived only from
@@ -46,6 +47,8 @@ async function seedPatient(page: Page) {
 }
 
 test.describe("Patient 360 Upcoming", () => {
+  // Fictional "Upcoming Demo …" patients (and their journeys, appointments, tasks) are removed after the run.
+  test.afterAll(() => purgePatients("Upcoming Demo "));
   test.skip(!DEMO_PASSWORD, "DEMO_PASSWORD must be set");
 
   test("lists the patient's upcoming items in hospital time order, each with its journey and a link to it", async ({ page }) => {

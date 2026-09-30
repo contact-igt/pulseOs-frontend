@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { Ban, ChevronLeft, ChevronRight, CircleCheck } from "lucide-react";
 import { Badge, Button, EmptyState } from "../primitives";
@@ -58,6 +58,8 @@ export interface CalendarViewProps<T = unknown> {
   date: DayKey;
   onDateChange: (date: DayKey) => void;
   onModeChange?: (mode: CalendarMode) => void;
+  /** "Open this day" (week header, "+k more"). Default: onDateChange(day) then onModeChange("day"). */
+  onOpenDay?: (date: DayKey) => void;
   /** REQUIRED tenant/hospital IANA zone (e.g. "Asia/Kolkata"). Events are bucketed by the local day in this zone, never UTC. */
   timeZone: string;
   weekStartsOn?: WeekStart;
@@ -167,22 +169,24 @@ function EventButton<T>({
         <span className="shrink-0 tabular-nums text-ink-2">{formatTimeShort(p.timeLabel)}</span>
         <span className={`min-w-0 truncate font-medium ${cancelled ? "line-through" : ""}`}>{event.title}</span>
       </span>
+    ) : compact ? (
+      // A short block (~26px for 30 minutes) fits one line only: time, title and
+      // status inline — status stays as text, never colour alone.
+      <span className="flex min-w-0 items-center gap-1">
+        <StateIcon state={event.state} />
+        <span className="shrink-0 tabular-nums text-ink-2">{formatTimeShort(p.timeLabel)}</span>
+        <span className={`min-w-0 truncate font-medium ${cancelled ? "line-through" : ""}`}>{event.title}</span>
+        {event.status && <span className="ml-auto shrink-0 text-[10px] font-medium text-ink-2">{event.status}</span>}
+      </span>
     ) : (
       <span className="flex min-w-0 flex-col gap-px">
         <span className="flex min-w-0 items-center gap-1">
           <StateIcon state={event.state} />
           <span className="truncate tabular-nums text-ink-2">{p.timeLabel}</span>
-          {/* Compact blocks drop the status line, so status rides on the time line — never colour alone. */}
-          {compact && event.status && <span className="ml-auto shrink-0 text-[10px] font-medium text-ink-2">{event.status}</span>}
         </span>
-        {!compact && (
-          <>
-            <span className={`truncate font-medium ${cancelled ? "line-through" : ""}`}>{event.title}</span>
-            {event.subtitle && <span className="truncate text-ink-2">{event.subtitle}</span>}
-            {event.status && <span className="truncate text-[10px] font-medium uppercase tracking-wide text-ink-2">{event.status}</span>}
-          </>
-        )}
-        {compact && <span className={`truncate font-medium ${cancelled ? "line-through" : ""}`}>{event.title}</span>}
+        <span className={`truncate font-medium ${cancelled ? "line-through" : ""}`}>{event.title}</span>
+        {event.subtitle && <span className="truncate text-ink-2">{event.subtitle}</span>}
+        {event.status && <span className="truncate text-[10px] font-medium uppercase tracking-wide text-ink-2">{event.status}</span>}
       </span>
     );
 
@@ -230,6 +234,7 @@ export function CalendarView<T = unknown>({
   date,
   onDateChange,
   onModeChange,
+  onOpenDay,
   timeZone,
   weekStartsOn = 1,
   onEventClick,
@@ -268,6 +273,7 @@ export function CalendarView<T = unknown>({
   }, [events, timeZone]);
 
   const openDay = (key: DayKey) => {
+    if (onOpenDay) return onOpenDay(key);
     onDateChange(key);
     onModeChange?.("day");
   };
@@ -400,9 +406,17 @@ function TimeGrid<T>({
   const nowTop = ((today.minutes - startH * 60) / 60) * HOUR_PX;
   const nowVisible = nowTop >= 0 && nowTop <= totalPx;
 
+  // An early event widens the grid upward; still open on the working day, not on
+  // hours of empty night. The early event stays reachable by scrolling up.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const workdayOffset = Math.max(0, hours.start - startH) * HOUR_PX;
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = workdayOffset;
+  }, [workdayOffset, date]);
+
   return (
     <div className="overflow-hidden rounded-card border border-line bg-surface">
-      <div className="max-h-[calc(100vh-15rem)] min-h-[22rem] overflow-y-auto">
+      <div ref={scrollRef} className="max-h-[calc(100vh-15rem)] min-h-[22rem] overflow-y-auto" data-testid="calendar-scroll">
         <div className="sticky top-0 z-30 grid border-b border-line bg-surface" style={{ gridTemplateColumns: gridCols }}>
           <div />
           {days.map((key) => {

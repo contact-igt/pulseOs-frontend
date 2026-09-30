@@ -47,6 +47,7 @@ export function QuickCreateProvider({ role, children }: { role: Role; children: 
     queryClient.invalidateQueries({ queryKey: ["journeys"] });
     queryClient.invalidateQueries({ queryKey: ["patients"] });
     queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    queryClient.invalidateQueries({ queryKey: ["patient360"] });
     queryClient.invalidateQueries({ queryKey: ["tasks"] });
     queryClient.invalidateQueries({ queryKey: ["front-desk"] });
     queryClient.invalidateQueries({ queryKey: ["appointments"] });

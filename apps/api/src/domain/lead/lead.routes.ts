@@ -40,12 +40,12 @@ export async function leadRoutes(app: FastifyInstance) {
     // owner = mine | unassigned | <userId>; "mine" is the SESSION user, never client-supplied.
     const owner = parseOwnerFilter(query.owner, request.sessionUser!.id);
     if (owner === "invalid") return reply.status(400).send({ error: "invalid_owner_filter" });
-    return listLeads(app.db, tenantId, { status: query.status, specialtyKey: query.specialtyKey, source: query.source, owner });
+    return listLeads(app.db, tenantId, { status: query.status, specialtyKey: query.specialtyKey, source: query.source, owner }, request.sessionUser!.timezone);
   });
 
   app.get("/leads/summary", async (request) => {
     const tenantId = request.sessionUser!.tenantId;
-    return getLeadsSummary(app.db, tenantId);
+    return getLeadsSummary(app.db, tenantId, request.sessionUser!.timezone);
   });
 
   app.post("/leads/lookup", async (request, reply) => {

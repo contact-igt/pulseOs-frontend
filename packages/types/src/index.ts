@@ -1170,6 +1170,12 @@ export interface AnalyticsPeriod {
   timezone: string;
   /** The tenant-local day at request time. A bucket containing it is still in progress. */
   today: string;
+  /**
+   * When the period ends today, the previous period is counted only up to the same
+   * elapsed point (ISO instant: now minus the period length) so a half-finished today
+   * is never compared with a full day. Null for a range that is already complete.
+   */
+  previousUntil: string | null;
 }
 
 /** One chart bucket: a local day, or a 7-day block anchored at the period start (last block may be partial). */

@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { api, ApiError } from "@pulseos/api-client";
 import { localDayKey } from "@pulseos/ui";
@@ -13,31 +12,6 @@ export function useCalendarContext() {
   const timeZone = useHospitalTimeZone();
   const q = useQuery({ queryKey: ["calendar-context"], queryFn: api.appointmentCalendarContext, staleTime: 5 * 60_000 });
   return { timeZone, today: q.data?.today ?? localDayKey(new Date(), timeZone), ready: q.isSuccess };
-}
-
-/**
- * Page filters (branch, doctor, tab, search...) kept in the URL next to the
- * view/date that useViewState owns. `router.replace`, so filtering never adds
- * history entries; refresh and back/forward restore the same filtered view.
- */
-export function useUrlFilters() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const params = useSearchParams();
-  const get = useCallback((key: string) => params.get(key) ?? "", [params]);
-  const set = useCallback(
-    (patch: Record<string, string | undefined>) => {
-      const next = new URLSearchParams(params.toString());
-      for (const [k, v] of Object.entries(patch)) {
-        if (v) next.set(k, v);
-        else next.delete(k);
-      }
-      const qs = next.toString();
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-    },
-    [params, pathname, router],
-  );
-  return { get, set };
 }
 
 const ACTION_ERROR: Record<string, string> = {
@@ -61,12 +35,16 @@ export function useAppointmentActions({ refresh, onDone }: { refresh: () => void
       setError(null);
       try {
         await fn();
+        onDone();
       } catch (err) {
         const code = err instanceof ApiError ? err.message : "";
-        setError(ACTION_ERROR[code] ?? "Could not update the appointment. Please try again.");
+        const changed = ACTION_ERROR[code];
+        setError(changed ?? "Could not update the appointment. Please try again.");
+        // The appointment changed on the server: close so the refreshed row is what the user sees.
+        // Anything else (network, 5xx) is recoverable: keep the drawer and what was typed in it.
+        if (changed) onDone();
       } finally {
         refresh();
-        onDone();
       }
     },
     [refresh, onDone],

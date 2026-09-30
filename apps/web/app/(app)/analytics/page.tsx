@@ -18,7 +18,7 @@ const CHART_H = 250;
 
 function periodCaption(p: AnalyticsPeriod) {
   const range = p.from === p.to ? fmtDayShort(p.from) : `${fmtDayShort(p.from)} – ${fmtDayShort(p.to)}`;
-  return `${range} · ${p.days} ${p.days === 1 ? "day" : "days"} · ${p.timezone.replace("_", " ")} · compared with ${fmtDayShort(p.previousFrom)} – ${fmtDayShort(p.previousTo)}`;
+  return `${range} · ${p.days} ${p.days === 1 ? "day" : "days"} · ${p.timezone.replace("_", " ")} · compared with ${fmtDayShort(p.previousFrom)} – ${fmtDayShort(p.previousTo)}${p.previousUntil ? " (to the same time of day, as today is still in progress)" : ""}`;
 }
 
 function AnalyticsWorkspace() {

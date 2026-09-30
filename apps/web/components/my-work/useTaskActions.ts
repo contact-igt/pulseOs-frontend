@@ -31,7 +31,8 @@ export function useTaskActions(tasksKey: QueryKey) {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const refresh = useCallback(async () => {
-    await Promise.all([queryClient.invalidateQueries({ queryKey: ["tasks"] }), queryClient.invalidateQueries({ queryKey: ["dashboard"] })]);
+    // patient360 covers Patient 360 (incl. its Upcoming list) for the task's patient.
+    await Promise.all(["tasks", "dashboard", "patient360"].map((key) => queryClient.invalidateQueries({ queryKey: [key] })));
   }, [queryClient]);
 
   const run = useCallback(

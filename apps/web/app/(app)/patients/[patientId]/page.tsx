@@ -258,7 +258,7 @@ export default function Patient360Page() {
 
   // Upcoming: existing future appointments / open tasks / scheduled treatments for THIS patient,
   // permission-trimmed server-side; grouped in the hospital's timezone the response names.
-  const upcoming = useQuery({ queryKey: ["patient-upcoming", patientId], queryFn: () => api.patientUpcoming(patientId), enabled: patient360.isSuccess });
+  const upcoming = useQuery({ queryKey: ["patient360", patientId, "upcoming"], queryFn: () => api.patientUpcoming(patientId), enabled: patient360.isSuccess });
   const timeZone = useHospitalTimeZone();
   const { view, setView } = useViewState<P360View>({ views: VIEWS, defaultView: "timeline", timeZone });
   const upcomingCount = upcoming.data ? upcoming.data.items.filter((i) => !selectedJourney || i.journeyId === selectedJourney.id).length : null;

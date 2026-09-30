@@ -33,6 +33,7 @@ export function AppointmentDrawer({
   onComplete,
   onReschedule,
   readOnly = false,
+  error = null,
 }: {
   appointment: AppointmentRow | null;
   recentEvents?: TimelineEventVm[];
@@ -42,6 +43,8 @@ export function AppointmentDrawer({
   onReschedule: (row: AppointmentRow, newIso: string) => void;
   /** Hide the Confirm/Check-In/Complete/Reschedule/No-show/Cancel actions for a viewer who can't call them (e.g. Doctor, VIEW_APPOINTMENTS only). */
   readOnly?: boolean;
+  /** A failed action that left the drawer open (e.g. network error) — shown beside the actions; typed input is kept. */
+  error?: string | null;
 }) {
   const [rescheduling, setRescheduling] = useState(false);
   const [newDateTime, setNewDateTime] = useState("");
@@ -126,6 +129,11 @@ export function AppointmentDrawer({
         {/* Actions */}
         {!readOnly && (
         <div className="sticky bottom-0 space-y-2 border-t border-line bg-white/90 p-4">
+          {error && (
+            <p role="alert" className="rounded-control bg-danger-100 px-2.5 py-1.5 text-xs text-danger-700" data-testid="appointment-drawer-error">
+              {error}
+            </p>
+          )}
           {rescheduling ? (
             <div className="space-y-2">
               <input

@@ -41,7 +41,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
 
   app.get("/dashboard/today", async (request) => {
     const tenantId = request.sessionUser!.tenantId;
-    return getTodayStrip(app.db, tenantId, dashboardFilters(request));
+    return getTodayStrip(app.db, tenantId, dashboardFilters(request), request.sessionUser!.timezone);
   });
 
   app.get("/dashboard/executive", async (request) => {
@@ -61,7 +61,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
 
   app.get("/dashboard/patient-flow", async (request) => {
     const tenantId = request.sessionUser!.tenantId;
-    return getPatientFlow(app.db, tenantId, dashboardFilters(request));
+    return getPatientFlow(app.db, tenantId, dashboardFilters(request), request.sessionUser!.timezone);
   });
 
   app.get("/dashboard/attention", async (request) => {

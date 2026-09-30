@@ -43,4 +43,14 @@ describe("useViewState calendar mode", () => {
     renderHook(() => useViewState(opts)).result.current.setCalendarMode("week");
     expect(search).toBe("view=calendar");
   });
+
+  it("two updates in one handler both land (open a day from month view: date + Day mode)", () => {
+    search = "view=calendar&range=month&date=2026-09-01";
+    const s = renderHook(() => useViewState(opts)).result.current;
+    s.setDate("2026-09-29");
+    s.setCalendarMode("day");
+    const url = new URLSearchParams(search);
+    expect(url.get("date")).toBe("2026-09-29");
+    expect(url.get("range")).toBe("day");
+  });
 });

@@ -1,4 +1,4 @@
-import { and, count, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { and, count, eq, inArray, lt, sql, type SQL } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { journeys, marketingCampaigns, patients, revenueEvents, tasks, users } from "../../db/schema.js";
 import { costPer, roas as roasOf } from "../marketing/formulas.js";
@@ -100,7 +100,8 @@ interface JourneyFact {
   campaignId: string | null;
 }
 
-async function fetchJourneys(db: Db, tenantId: string, timezone: string, from: string, to: string, f: ScopeFilters): Promise<JourneyFact[]> {
+/** `before` (ISO instant) additionally cuts the window short — used for the previous period's elapsed point. */
+async function fetchJourneys(db: Db, tenantId: string, timezone: string, from: string, to: string, f: ScopeFilters, before?: string | null): Promise<JourneyFact[]> {
   return db
     .select({
       id: journeys.id,
@@ -113,7 +114,7 @@ async function fetchJourneys(db: Db, tenantId: string, timezone: string, from: s
     })
     .from(journeys)
     .innerJoin(patients, eq(journeys.patientId, patients.id))
-    .where(and(...scopeConditions(tenantId, f), inLocalRange(journeys.createdAt, timezone, from, to)));
+    .where(and(...scopeConditions(tenantId, f), inLocalRange(journeys.createdAt, timezone, from, to), before ? lt(journeys.createdAt, new Date(before)) : undefined));
 }
 
 interface RevenueFact {
@@ -128,7 +129,7 @@ interface RevenueFact {
   campaignId: string | null;
 }
 
-async function fetchRevenue(db: Db, tenantId: string, timezone: string, from: string, to: string, f: ScopeFilters): Promise<RevenueFact[]> {
+async function fetchRevenue(db: Db, tenantId: string, timezone: string, from: string, to: string, f: ScopeFilters, before?: string | null): Promise<RevenueFact[]> {
   return db
     .select({
       id: revenueEvents.id,
@@ -144,7 +145,7 @@ async function fetchRevenue(db: Db, tenantId: string, timezone: string, from: st
     .from(revenueEvents)
     .innerJoin(journeys, eq(revenueEvents.journeyId, journeys.id))
     .innerJoin(patients, eq(journeys.patientId, patients.id))
-    .where(and(eq(revenueEvents.tenantId, tenantId), ...scopeConditions(tenantId, f), inLocalRange(revenueEvents.occurredAt, timezone, from, to)));
+    .where(and(eq(revenueEvents.tenantId, tenantId), ...scopeConditions(tenantId, f), inLocalRange(revenueEvents.occurredAt, timezone, from, to), before ? lt(revenueEvents.occurredAt, new Date(before)) : undefined));
 }
 
 // --------------------------------------------------------------------------
@@ -173,6 +174,9 @@ export function proratedSpend(spend: number, runStart: string, runEnd: string, f
   return overlap <= 0 ? 0 : (spend * overlap) / runDays;
 }
 
+/** Earliest day a "lifetime" lookup considers — before any PulseOS data can exist. */
+const LIFETIME_FROM = "2000-01-01";
+
 async function fetchCampaignSpend(db: Db, tenantId: string, period: AnalyticsPeriod, f: ScopeFilters, journeyFacts: JourneyFact[]): Promise<CampaignSpend[]> {
   const tz = tzLiteral(period.timezone);
   // An open-ended campaign is still running: its run extends to today (local).
@@ -188,15 +192,31 @@ async function fetchCampaignSpend(db: Db, tenantId: string, period: AnalyticsPer
     .from(marketingCampaigns)
     .where(and(eq(marketingCampaigns.tenantId, tenantId), f.source ? eq(marketingCampaigns.source, f.source) : undefined, f.campaignId ? eq(marketingCampaigns.id, f.campaignId) : undefined));
 
-  // Lead share inside the slice, per campaign (only needed when sliced by branch/service).
+  // Enquiry share inside the slice, per campaign (only needed when sliced by branch/service).
+  // A campaign with no enquiries in the period falls back to its lifetime enquiry mix, so
+  // its spend is not silently dropped from every slice (slices must add up to the whole).
+  // A campaign that has never produced an enquiry has no mix to split by and stays out of slices.
   let shareByCampaign: Map<string, number> | null = null;
   if (hasSliceFilter(f)) {
-    const whole = await fetchJourneys(db, tenantId, period.timezone, period.from, period.to, { source: f.source, campaignId: f.campaignId });
-    const wholeCount = new Map<string, number>();
-    for (const j of whole) if (j.campaignId) wholeCount.set(j.campaignId, (wholeCount.get(j.campaignId) ?? 0) + 1);
-    const sliceCount = new Map<string, number>();
-    for (const j of journeyFacts) if (j.campaignId) sliceCount.set(j.campaignId, (sliceCount.get(j.campaignId) ?? 0) + 1);
-    shareByCampaign = new Map([...wholeCount].map(([id, total]) => [id, total > 0 ? (sliceCount.get(id) ?? 0) / total : 0]));
+    const countBy = (facts: JourneyFact[]) => {
+      const m = new Map<string, number>();
+      for (const j of facts) if (j.campaignId) m.set(j.campaignId, (m.get(j.campaignId) ?? 0) + 1);
+      return m;
+    };
+    const wholeFilter = { source: f.source, campaignId: f.campaignId };
+    const wholeCount = countBy(await fetchJourneys(db, tenantId, period.timezone, period.from, period.to, wholeFilter));
+    const sliceCount = countBy(journeyFacts);
+    shareByCampaign = new Map([...wholeCount].map(([id, total]) => [id, (sliceCount.get(id) ?? 0) / total]));
+    const idle = rows.filter((r) => !wholeCount.has(r.id)).map((r) => r.id);
+    if (idle.length) {
+      const lifetime = (filter: ScopeFilters) => fetchJourneys(db, tenantId, period.timezone, LIFETIME_FROM, period.to, filter);
+      const lifeWhole = countBy(await lifetime(wholeFilter));
+      const lifeSlice = countBy(await lifetime(f));
+      for (const id of idle) {
+        const total = lifeWhole.get(id) ?? 0;
+        if (total > 0) shareByCampaign.set(id, (lifeSlice.get(id) ?? 0) / total);
+      }
+    }
   }
 
   return rows.map((r) => {
@@ -242,7 +262,7 @@ export async function getLeadsBySource(db: Db, tenantId: string, query: Analytic
   const scope = scopeOf(query);
   const [current, previous] = await Promise.all([
     fetchJourneys(db, tenantId, period.timezone, period.from, period.to, scope),
-    fetchJourneys(db, tenantId, period.timezone, period.previousFrom, period.previousTo, scope),
+    fetchJourneys(db, tenantId, period.timezone, period.previousFrom, period.previousTo, scope, period.previousUntil),
   ]);
 
   const granularity = leadsGranularity(period.days);
@@ -273,8 +293,8 @@ export async function getLeadsBySource(db: Db, tenantId: string, query: Analytic
 export async function getAnalyticsSummary(db: Db, tenantId: string, query: AnalyticsQuery, now?: Date): Promise<AnalyticsSummary> {
   const s = await loadScope(db, tenantId, query, now);
   const [previousJourneys, previousRevenue] = await Promise.all([
-    fetchJourneys(db, tenantId, s.period.timezone, s.period.previousFrom, s.period.previousTo, s.scope),
-    fetchRevenue(db, tenantId, s.period.timezone, s.period.previousFrom, s.period.previousTo, s.scope),
+    fetchJourneys(db, tenantId, s.period.timezone, s.period.previousFrom, s.period.previousTo, s.scope, s.period.previousUntil),
+    fetchRevenue(db, tenantId, s.period.timezone, s.period.previousFrom, s.period.previousTo, s.scope, s.period.previousUntil),
   ]);
   const { spend, attributedRevenue, roas } = spendAndRoas(s);
   const appointments = s.journeys.filter((j) => reached(j.stage, "booked")).length;
@@ -335,7 +355,7 @@ export async function getSourceConversion(db: Db, tenantId: string, query: Analy
 
 export async function getAnalyticsRevenue(db: Db, tenantId: string, query: AnalyticsQuery, now?: Date): Promise<AnalyticsRevenue> {
   const s = await loadScope(db, tenantId, query, now);
-  const previous = await fetchRevenue(db, tenantId, s.period.timezone, s.period.previousFrom, s.period.previousTo, s.scope);
+  const previous = await fetchRevenue(db, tenantId, s.period.timezone, s.period.previousFrom, s.period.previousTo, s.scope, s.period.previousUntil);
   const granularity = revenueGranularity(s.period.days);
   const buckets = buildBuckets(s.period.from, s.period.days, granularity).map((b) => ({ ...b, revenue: 0, events: 0 }));
   for (const r of s.revenue) {

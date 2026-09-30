@@ -1,4 +1,5 @@
 import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
+import { purgePatients } from "./support/fixtures";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -62,6 +63,8 @@ async function expectNoPageOverflow(page: Page) {
 }
 
 test.describe("Front Desk views", () => {
+  // Fictional "P1 …" patients (and their journeys, appointments, tasks) are removed after the run.
+  test.afterAll(() => purgePatients("P1 "));
   test.skip(!DEMO_PASSWORD, "DEMO_PASSWORD must be set");
   test.afterEach(async ({ page }) => parkCreated(page.request));
 
