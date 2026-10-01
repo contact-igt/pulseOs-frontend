@@ -7,11 +7,11 @@ export type Tone = "neutral" | "warning" | "danger" | "primary" | "success";
 
 export const APPOINTMENT_STATUS_LABEL: Record<AppointmentStatus, string> = {
   requested: "Requested",
-  scheduled: "Confirmed",
+  scheduled: "Booked",
   confirmed: "Confirmed",
-  checked_in: "Checked In",
+  checked_in: "Checked in",
   waiting: "Waiting",
-  with_doctor: "With Doctor",
+  with_doctor: "With doctor",
   completed: "Completed",
   no_show: "No-show",
   cancelled: "Cancelled",

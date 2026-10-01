@@ -899,6 +899,13 @@ export interface AppointmentRow {
   statusReason?: { code: AppointmentReasonCode; label: string; note: string | null } | null;
   /** An unresolved Appointment Risk task exists for this appointment. */
   atRisk?: boolean;
+  /** The Journey's service line ("Cataract", "Laser Vision Correction"). */
+  service?: string | null;
+  /** The service's stable key (matches treatment-catalog specialtyKey), when the Journey has one. */
+  serviceKey?: string | null;
+  branchId?: string;
+  /** Who booked it (from the Timeline), when known. */
+  bookedBy?: string | null;
 }
 
 export type AppointmentAction = "confirm" | "check_in" | "mark_waiting" | "send_to_doctor" | "mark_no_show" | "cancel";

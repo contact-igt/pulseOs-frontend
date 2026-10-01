@@ -11,8 +11,17 @@ import type {
   LeadsBySourceResponse,
   SourceConversionResponse,
   AppointmentAction,
+  AppointmentActionResult,
+  AppointmentReasonCode,
   AppointmentRow,
   AppointmentStatus,
+  CompleteAppointmentInput,
+  CompleteAppointmentResult,
+  CreateScheduleResourceInput,
+  RescheduleAppointmentInput,
+  ScheduleResourceVm,
+  ScheduleSurgeryInput,
+  UpdateScheduleResourceInput,
   AttentionItem,
   Branch,
   BranchDoctorRow,
@@ -238,11 +247,19 @@ export const api = {
   appointments: (filters: { branchId?: string; doctorId?: string; status?: AppointmentStatus; date?: string; search?: string } = {}) =>
     request<AppointmentRow[]>(`/appointments${toQuery({ ...filters })}`),
   frontDesk: (branchId?: string) => request<FrontDeskDashboard>(`/front-desk${toQuery({ branchId })}`),
-  appointmentAction: (id: string, action: AppointmentAction) =>
-    request<{ ok: true; status: AppointmentStatus }>(`/appointments/${id}/action`, { method: "PATCH", body: JSON.stringify({ action }) }),
-  completeAppointment: (id: string) => request<{ ok: true }>(`/appointments/${id}/complete`, { method: "PATCH", body: JSON.stringify({}) }),
-  rescheduleAppointment: (id: string, scheduledAt: string) =>
-    request<{ ok: true }>(`/appointments/${id}/reschedule`, { method: "PATCH", body: JSON.stringify({ scheduledAt }) }),
+  appointmentAction: (id: string, action: AppointmentAction, reason?: { reasonCode?: AppointmentReasonCode; note?: string }) =>
+    request<AppointmentActionResult>(`/appointments/${id}/action`, { method: "PATCH", body: JSON.stringify({ action, ...reason }) }),
+  completeAppointment: (id: string, input: CompleteAppointmentInput = {}) => request<CompleteAppointmentResult>(`/appointments/${id}/complete`, { method: "PATCH", body: JSON.stringify(input) }),
+  rescheduleAppointment: (id: string, input: RescheduleAppointmentInput) =>
+    request<{ ok: true; alreadyApplied?: boolean }>(`/appointments/${id}/reschedule`, { method: "PATCH", body: JSON.stringify(input) }),
+  /** Doctors / resources appointments and surgeries are scheduled with (a login is optional). */
+  resources: (opts: { includeInactive?: boolean } = {}) => request<ScheduleResourceVm[]>(`/resources${toQuery({ includeInactive: opts.includeInactive ? "true" : undefined })}`),
+  createResource: (input: CreateScheduleResourceInput) => request<ScheduleResourceVm>("/resources", { method: "POST", body: JSON.stringify(input) }),
+  updateResource: (id: string, input: UpdateScheduleResourceInput) => request<ScheduleResourceVm>(`/resources/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
+  /** Schedule a procedure for a Journey (the same record the Treatments views show). */
+  scheduleSurgery: (journeyId: string, input: ScheduleSurgeryInput) => request<{ ok: true; treatmentId: string }>(`/journeys/${journeyId}/surgery`, { method: "POST", body: JSON.stringify(input) }),
+  rescheduleSurgery: (treatmentId: string, input: Partial<ScheduleSurgeryInput> & { scheduledAt: string }) =>
+    request<{ ok: true; alreadyApplied?: boolean }>(`/treatments/${treatmentId}/schedule`, { method: "PATCH", body: JSON.stringify(input) }),
   // --- P1 view additions ---
   /** Same endpoint/rows as `appointments`, plus the from/to local-day range the calendar views use. */
   appointmentsInRange: (filters: import("@pulseos/types").AppointmentRangeFilters) => request<AppointmentRow[]>(`/appointments${toQuery({ ...filters })}`),

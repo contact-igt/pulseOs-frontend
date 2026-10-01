@@ -17,6 +17,9 @@ import { AssignOwnerDialog } from "@/components/journey/AssignOwnerDialog";
 import { LogOutcomeSheet } from "@/components/outcomes/LogOutcomeSheet";
 import { AddFollowUpSheet } from "@/components/followups/AddFollowUpSheet";
 import { AppointmentContext } from "@/components/followups/AppointmentContext";
+import { useAppointmentWorkflow } from "@/components/appointments/AppointmentWorkflow";
+import { SurgeryCard } from "@/components/surgery/SurgeryCard";
+import { InlineNotice } from "@/components/appointments/InlineNotice";
 import { NextActionCard } from "@/components/followups/NextActionCard";
 import { useQuickCreate } from "@/components/shell/QuickCreateProvider";
 import { LogCallSheet } from "@/components/calls/LogCallSheet";
@@ -89,6 +92,8 @@ export default function JourneyDetailPage() {
   const [loggingCall, setLoggingCall] = useState(false);
   const [addingFollowUp, setAddingFollowUp] = useState(false);
   const quickCreate = useQuickCreate();
+  // The same drawer, steps and "What happens next?" sheet the Appointments and Front Desk pages use.
+  const workflow = useAppointmentWorkflow();
 
   const session = useQuery({ queryKey: ["session"], queryFn: api.session, retry: false });
   const lookups = useQuery({ queryKey: ["lookups"], queryFn: api.lookups, staleTime: 60_000 });
@@ -104,6 +109,7 @@ export default function JourneyDetailPage() {
   const canLogCall = role ? hasPermission(role, "LOG_CALL") : false;
   const canAddFollowUp = role ? hasPermission(role, "MANAGE_TASKS") : false;
   const canBook = role ? hasPermission(role, "MANAGE_APPOINTMENTS") : false;
+  const canManageTreatment = role ? hasPermission(role, "MANAGE_TREATMENT") : false;
   // Hooks must run on every render, before the loading/error early returns below.
   const callDetail = useCallDetail(detail.data?.patient.name ?? "");
 
@@ -156,8 +162,18 @@ export default function JourneyDetailPage() {
       {/* What to do next, and the visit it leads to — right under the actions. */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.5fr_1fr]">
         <NextActionCard journey={journey} canManage={canAddFollowUp} onAdd={() => setAddingFollowUp(true)} />
-        <AppointmentContext appointments={appointments} canBook={canBook} onBook={() => quickCreate.openNewAppointment({ patient: { id: patient.id, name: patient.name, phone: patient.phone }, journeyId: journey.id })} />
+        <AppointmentContext
+          appointments={appointments}
+          canBook={canBook}
+          canManage={workflow.canManage}
+          onBook={() => quickCreate.openNewAppointment({ patient: { id: patient.id, name: patient.name, phone: patient.phone }, journeyId: journey.id })}
+          onOpen={workflow.select}
+          onAction={workflow.handleAction}
+          onComplete={workflow.handleComplete}
+        />
       </div>
+      <SurgeryCard treatments={treatments} canManage={canManageTreatment} />
+      {workflow.error && <InlineNotice message={workflow.error} onDismiss={workflow.clearError} testId="journey-appointment-error" />}
 
       {/* Journey summary: what this enquiry is, where it stands, who owns the next move. */}
       <Card className="p-4 sm:p-5">
@@ -276,12 +292,14 @@ export default function JourneyDetailPage() {
             ) : (
               <ul className="divide-y divide-line">
                 {appointments.map((a) => (
-                  <li key={a.id} className="flex items-start justify-between gap-3 px-4 py-2.5 text-sm">
-                    <div className="min-w-0">
-                      <p className="truncate text-ink">{fmtDateTime(a.scheduledAt)}</p>
-                      <p className="truncate text-xs text-ink-2">{a.doctorName ?? "Doctor not set"}{a.reason ? ` · ${a.reason}` : ""}</p>
-                    </div>
-                    <Badge tone={APPOINTMENT_STATUS_TONE[a.status] ?? "neutral"}>{APPOINTMENT_STATUS_LABEL[a.status] ?? a.status}</Badge>
+                  <li key={a.id} className="text-sm">
+                    <button type="button" onClick={() => workflow.select(a)} className="flex min-h-11 w-full items-start justify-between gap-3 px-4 py-2.5 text-left hover:bg-primary-50/50 sm:min-h-0" data-testid={`journey-appointment-${a.id}`}>
+                      <span className="min-w-0">
+                        <span className="block truncate text-ink">{fmtDateTime(a.scheduledAt)}</span>
+                        <span className="block truncate text-xs text-ink-2">{a.doctorName ?? "Doctor not set"}{a.reason ? ` · ${a.reason}` : ""}</span>
+                      </span>
+                      <Badge tone={APPOINTMENT_STATUS_TONE[a.status] ?? "neutral"}>{APPOINTMENT_STATUS_LABEL[a.status] ?? a.status}</Badge>
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -338,6 +356,7 @@ export default function JourneyDetailPage() {
         </div>
       </div>
 
+      {workflow.element}
       {loggingCall && canLogCall && <LogCallSheet target={{ kind: "log", journeyId: journey.id }} patientName={patient.name} onClose={() => setLoggingCall(false)} />}
       {callDetail.sheet}
       {addingFollowUp && canAddFollowUp && <AddFollowUpSheet journeyId={journey.id} patientName={patient.name} ownerName={journey.owner?.name ?? null} onClose={() => setAddingFollowUp(false)} />}

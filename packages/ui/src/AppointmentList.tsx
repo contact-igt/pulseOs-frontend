@@ -2,24 +2,15 @@
 
 import { useEffect, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
-import type { AppointmentAction, AppointmentRow, AppointmentStatus } from "@pulseos/types";
+import { allowedAppointmentOps, APPOINTMENT_PRIMARY_OP, type AppointmentAction, type AppointmentRow } from "@pulseos/types";
 import { Badge, Button, EmptyState, Panel } from "./primitives";
 import { Table, TableBody, TableHead, Td, Th, Tr } from "./Table";
 import { APPOINTMENT_STATUS_LABEL as STATUS_LABEL, APPOINTMENT_STATUS_TONE as STATUS_TONE } from "./status";
 import { fmtSmartDateTime, fmtTime } from "./format";
 
-// The single valid forward step per status. Mirrors the server's
-// VALID_FROM_STATUSES graph (apps/api appointment.service.ts) so a row only
-// ever offers an action the API will accept.
-const NEXT_ACTION: Partial<Record<AppointmentStatus, { action: AppointmentAction; label: string }>> = {
-  requested: { action: "confirm", label: "Confirm" },
-  scheduled: { action: "confirm", label: "Confirm" },
-  confirmed: { action: "check_in", label: "Check In" },
-  checked_in: { action: "mark_waiting", label: "Mark Waiting" },
-  waiting: { action: "send_to_doctor", label: "Send to Doctor" },
-};
-
-const CAN_MARK_NO_SHOW: ReadonlySet<AppointmentStatus> = new Set(["requested", "scheduled", "confirmed"]);
+// The one forward step per status comes from the shared transition graph (@pulseos/types), the same table the API
+// enforces, so a row only ever offers a step the server will accept. Short labels for a dense table.
+const SHORT_LABEL: Record<string, string> = { confirm: "Confirm", check_in: "Check in", mark_waiting: "Move to waiting", send_to_doctor: "Send to doctor" };
 
 /** "12 min" / "1h 05m" — whole minutes, never negative. */
 export function formatWaitDuration(fromIso: string, now: number): string {
@@ -63,7 +54,7 @@ export function AppointmentList({
   subtitle?: string;
   rows: AppointmentRow[];
   emptyMessage?: string;
-  onAction?: (row: AppointmentRow, action: AppointmentAction) => void;
+  onAction?: (row: AppointmentRow, action: AppointmentAction, reason?: { reasonCode: string; note?: string }) => void;
   onComplete?: (row: AppointmentRow) => void;
   onRowClick?: (row: AppointmentRow) => void;
   showDoctor?: boolean;
@@ -108,7 +99,9 @@ export function AppointmentList({
             </TableHead>
             <TableBody>
               {rows.map((row) => {
-                const next = NEXT_ACTION[row.status];
+                const primaryOp = APPOINTMENT_PRIMARY_OP[row.status]?.op;
+                const next = primaryOp && primaryOp !== "complete" ? { action: primaryOp as AppointmentAction, label: SHORT_LABEL[primaryOp] ?? "Next" } : undefined;
+                const canNoShow = allowedAppointmentOps(row.status).includes("mark_no_show");
                 const wait = showWait ? waitCell(row, now) : null;
                 return (
                   <Tr key={row.id} onClick={onRowClick ? () => onRowClick(row) : undefined} data-testid={`appointment-row-${row.id}`}>
@@ -130,6 +123,7 @@ export function AppointmentList({
                     {showDoctor && <Td className="hidden text-ink md:table-cell">{row.doctorName ?? "—"}</Td>}
                     <Td>
                       <Badge tone={STATUS_TONE[row.status]}>{STATUS_LABEL[row.status]}</Badge>
+                      {row.atRisk && <span className="mt-0.5 block text-[11px] font-medium text-warning-700" data-testid={`appointment-risk-${row.id}`}>Needs attention</span>}
                     </Td>
                     {wait && (
                       <Td nowrap className="hidden tabular-nums text-ink sm:table-cell" title={wait.hint} data-testid={`appointment-wait-${row.id}`}>
@@ -147,7 +141,7 @@ export function AppointmentList({
                           )}
                           {onComplete && row.status === "with_doctor" && (
                             <Button size="sm" variant="primary" onClick={() => onComplete(row)} data-testid={`appointment-complete-${row.id}`}>
-                              Complete
+                              Complete consultation
                             </Button>
                           )}
                           {onAction && onRowClick && row.status === "no_show" && (
@@ -155,7 +149,7 @@ export function AppointmentList({
                               Reschedule
                             </Button>
                           )}
-                          {onAction && CAN_MARK_NO_SHOW.has(row.status) && (
+                          {onAction && canNoShow && (
                             <Button size="sm" variant="danger" onClick={() => onAction(row, "mark_no_show")} data-testid={`appointment-noshow-${row.id}`}>
                               No-show
                             </Button>

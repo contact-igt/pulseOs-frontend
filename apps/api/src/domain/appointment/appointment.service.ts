@@ -73,13 +73,17 @@ const rowColumns = {
   statusReasonCode: appointments.statusReasonCode,
   statusReasonNote: appointments.statusReasonNote,
   atRisk: sql<boolean>`exists (select 1 from tasks rt where rt.appointment_id = ${appointments.id} and rt.status in ('pending', 'in_progress'))`,
+  service: journeys.journeyType,
+  serviceKey: journeys.specialtyKey,
+  branchId: appointments.branchId,
+  bookedBy: sql<string | null>`(select u.name from timeline_events te join users u on u.id = te.actor_id where te.related_entity_id = ${appointments.id} and te.event_type = 'appointment_created' order by te.occurred_at limit 1)`,
 };
 
 type SelectedRow = {
   id: string; patientId: string; patientName: string; journeyId: string; branchName: string | null;
   doctorId: string | null; doctorName: string | null; status: AppointmentStatus; scheduledAt: Date; reason: string | null;
   checkedInAt: Date | null; waitingStartedAt: Date | null; consultationStartedAt: Date | null; completedAt: Date | null;
-  statusReasonCode: string | null; statusReasonNote: string | null; atRisk: boolean;
+  statusReasonCode: string | null; statusReasonNote: string | null; atRisk: boolean; service: string | null; serviceKey: string | null; branchId: string; bookedBy: string | null;
 };
 
 function toRow(r: SelectedRow): AppointmentRow {
@@ -94,6 +98,10 @@ function toRow(r: SelectedRow): AppointmentRow {
     completedAt: r.completedAt?.toISOString() ?? null,
     statusReason: code ? { code, label: REASON_LABEL.get(code) ?? code, note: r.statusReasonNote } : null,
     atRisk: !!r.atRisk,
+    service: r.service,
+    serviceKey: r.serviceKey,
+    branchId: r.branchId,
+    bookedBy: r.bookedBy,
   };
 }
 
@@ -107,6 +115,7 @@ async function selectAppointments(db: Db | Tx, tenantId: string, filters: Appoin
     .select(rowColumns)
     .from(appointments)
     .innerJoin(patients, eq(appointments.patientId, patients.id))
+    .innerJoin(journeys, eq(appointments.journeyId, journeys.id))
     .innerJoin(branches, eq(appointments.branchId, branches.id))
     .innerJoin(scheduleResources, eq(appointments.resourceId, scheduleResources.id))
     .where(
@@ -135,6 +144,7 @@ export async function getAppointmentRow(db: Db | Tx, tenantId: string, id: strin
     .select(rowColumns)
     .from(appointments)
     .innerJoin(patients, eq(appointments.patientId, patients.id))
+    .innerJoin(journeys, eq(appointments.journeyId, journeys.id))
     .innerJoin(branches, eq(appointments.branchId, branches.id))
     .innerJoin(scheduleResources, eq(appointments.resourceId, scheduleResources.id))
     .where(and(eq(appointments.tenantId, tenantId), eq(appointments.id, id)))

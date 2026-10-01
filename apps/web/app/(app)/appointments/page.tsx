@@ -1,11 +1,10 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
 import { Search } from "lucide-react";
 import {
-  AppointmentDrawer,
   AppointmentList,
   Button,
   CalendarView,
@@ -18,13 +17,12 @@ import {
   ViewSwitcher,
   formatKey,
 } from "@pulseos/ui";
-import { hasPermission } from "@pulseos/types";
-import type { AppointmentRow } from "@pulseos/types";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import { useViewState } from "@/lib/useViewState";
 import { APPOINTMENT_VIEWS, LIST_TABS, appointmentQuery, matchesSearch, toCalendarEvent } from "@/components/appointments/appointmentViews";
 import type { AppointmentView, ListTab } from "@/components/appointments/appointmentViews";
-import { useAppointmentActions, useCalendarContext } from "@/components/appointments/hooks";
+import { useCalendarContext } from "@/components/appointments/hooks";
+import { useAppointmentWorkflow } from "@/components/appointments/AppointmentWorkflow";
 import { useUrlFilters } from "@/lib/useUrlFilters";
 import { DoctorScheduleView } from "@/components/appointments/DoctorScheduleView";
 import { InlineNotice } from "@/components/appointments/InlineNotice";
@@ -42,7 +40,6 @@ const VIEW_OPTIONS: { key: AppointmentView; label: string; controls: string }[] 
 ];
 
 export default function AppointmentsPage() {
-  const queryClient = useQueryClient();
   const quickCreate = useQuickCreate();
   const { timeZone, today } = useCalendarContext();
   const { view, date, setView, setDate, setState: setViewState } = useViewState<AppointmentView>({ views: APPOINTMENT_VIEWS, defaultView: "list", timeZone });
@@ -52,21 +49,11 @@ export default function AppointmentsPage() {
   const branchId = filters.get("branch");
   const doctorId = filters.get("doctor");
   const [search, setSearch] = useState(() => filters.get("q"));
-  const [selected, setSelected] = useState<AppointmentRow | null>(null);
-
-  const timeline = useQuery({
-    queryKey: ["timeline", selected?.patientId, selected?.journeyId],
-    queryFn: () => api.patientTimeline(selected!.patientId, selected!.journeyId),
-    enabled: !!selected,
-  });
+  // The drawer, its reasons and the "What happens next?" completion sheet — shared with Front Desk and the Journey.
+  const workflow = useAppointmentWorkflow();
+  const { select: setSelected, canManage } = workflow;
 
   const lookups = useQuery({ queryKey: ["lookups"], queryFn: api.lookups });
-
-  // MANAGE_APPOINTMENTS gates every action endpoint server-side (Doctor has
-  // only VIEW_APPOINTMENTS) — mirrored here only to avoid showing dead
-  // controls, never as the actual authorization boundary.
-  const session = useQuery({ queryKey: ["session"], queryFn: api.session });
-  const canManage = !!session.data && hasPermission(session.data.user.role, "MANAGE_APPOINTMENTS");
 
   // One query for every view: same endpoint, same filters; only the day range follows the view + ?date.
   const query = appointmentQuery({ view, tab, date, branchId, doctorId });
@@ -74,20 +61,6 @@ export default function AppointmentsPage() {
     queryKey: ["appointments", query],
     queryFn: () => api.appointmentsInRange(query),
   });
-
-  const invalidate = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ["appointments"] });
-    queryClient.invalidateQueries({ queryKey: ["timeline"] });
-    // Check-in/status changes move Front Desk's Patient Flow counts and the
-    // Command Centre's today/patient-flow KPIs — keep both in sync, not just
-    // this table (the sync rule: an action's effect must be visible wherever
-    // it's shown, not only where it was taken).
-    queryClient.invalidateQueries({ queryKey: ["front-desk"] });
-    queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-    queryClient.invalidateQueries({ queryKey: ["patient360"] });
-  }, [queryClient]);
-  const closeDrawer = useCallback(() => setSelected(null), [setSelected]);
-  const actions = useAppointmentActions({ refresh: invalidate, onDone: closeDrawer });
 
   const rows = useMemo(() => appointments.data ?? [], [appointments.data]);
   const visibleRows = useMemo(() => {
@@ -156,7 +129,7 @@ export default function AppointmentsPage() {
         </div>
       </Toolbar>
 
-      {actions.error && <InlineNotice message={actions.error} onDismiss={actions.clearError} testId="appointments-action-error" />}
+      {workflow.error && <InlineNotice message={workflow.error} onDismiss={workflow.clearError} testId="appointments-action-error" />}
 
       <div id="appointments-view-panel" role="tabpanel" data-testid={`appointments-view-${view}`} data-from={query.from} data-to={query.to} className="min-w-0">
         {appointments.isLoading ? (
@@ -167,8 +140,8 @@ export default function AppointmentsPage() {
           <AppointmentList
             title={tabLabel(tab)}
             rows={visibleRows}
-            onAction={canManage ? actions.handleAction : undefined}
-            onComplete={canManage ? actions.handleComplete : undefined}
+            onAction={canManage ? workflow.handleAction : undefined}
+            onComplete={canManage ? workflow.handleComplete : undefined}
             onRowClick={(row) => setSelected(row)}
             showBranch
             showDate={tab !== "today"}
@@ -192,19 +165,7 @@ export default function AppointmentsPage() {
         )}
       </div>
 
-      <AppointmentDrawer
-        appointment={selected}
-        recentEvents={timeline.data}
-        onClose={() => {
-          actions.clearDrawerError();
-          closeDrawer();
-        }}
-        onAction={actions.handleAction}
-        onComplete={actions.handleComplete}
-        onReschedule={actions.handleReschedule}
-        readOnly={!canManage}
-        error={actions.drawerErrorFor(selected?.id)}
-      />
+      {workflow.element}
     </div>
   );
 }

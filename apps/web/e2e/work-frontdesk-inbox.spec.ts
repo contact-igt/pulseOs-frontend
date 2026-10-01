@@ -81,19 +81,19 @@ test.describe("Work surfaces", () => {
       const text = (await row.innerText()).replace(/\s+/g, " ");
       const has = async (id: string) => (await row.locator(`[data-testid^="${id}-"]`).count()) > 0;
       // Match on the status badge text; check the more specific statuses first
-      // ("Checked In" rows carry a "Mark Waiting" button, so "Waiting" is tested last).
-      if (/With Doctor/.test(text)) {
+      // ("Checked in" rows carry a "Move to waiting" button, so "Waiting" is tested last).
+      if (/With doctor/.test(text)) {
         expect(await has("appointment-complete")).toBe(true);
         expect(await has("appointment-action")).toBe(false);
-      } else if (/Checked In/.test(text)) {
-        await expect(row.locator('[data-testid^="appointment-action-"]')).toHaveText("Mark Waiting");
+      } else if (/Checked in/.test(text)) {
+        await expect(row.locator('[data-testid^="appointment-action-"]')).toHaveText("Move to waiting");
         expect(await has("appointment-noshow")).toBe(false);
       } else if (/Completed/.test(text)) {
         expect(await has("appointment-action")).toBe(false);
         expect(await has("appointment-noshow")).toBe(false);
         expect(await has("appointment-complete")).toBe(false);
       } else if (/Waiting/.test(text)) {
-        await expect(row.locator('[data-testid^="appointment-action-"]')).toHaveText("Send to Doctor");
+        await expect(row.locator('[data-testid^="appointment-action-"]')).toHaveText("Send to doctor");
         expect(await has("appointment-noshow")).toBe(false);
       }
     }

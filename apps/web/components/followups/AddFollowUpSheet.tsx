@@ -4,10 +4,10 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@pulseos/api-client";
 import { Button, ErrorState, SideSheet, Skeleton } from "@pulseos/ui";
-import { FOLLOW_UP_OWNER_LABEL } from "@pulseos/types";
-import { CONTROL, FormError, FormField, TextInput } from "@/components/settings/FormBits";
+import { FormError } from "@/components/settings/FormBits";
+import { FollowUpFields } from "./FollowUpFields";
 import { useHospitalTimeZone } from "@/lib/useHospitalTimeZone";
-import { NO_OWNER, buildFollowUpInput, initialFollowUpForm, type FollowUpFormState } from "./followUpForm";
+import { buildFollowUpInput, initialFollowUpForm, type FollowUpFormState } from "./followUpForm";
 
 
 const SERVER_ERRORS: Record<string, string> = {
@@ -41,7 +41,6 @@ export function AddFollowUpSheet({ journeyId, patientName, ownerName, preset, on
   if (types.data && state === null) setState(initialFollowUpForm(types.data, preset));
   const form = state;
   const set = <K extends keyof FollowUpFormState>(key: K, value: FollowUpFormState[K]) => setState((s) => (s ? { ...s, [key]: value } : s));
-  const type = types.data?.find((t) => t.id === form?.typeId) ?? null;
 
   async function save() {
     if (saving || !form || !types.data) return;
@@ -59,7 +58,6 @@ export function AddFollowUpSheet({ journeyId, patientName, ownerName, preset, on
     }
   }
 
-  const ownerHint = type ? `Default: ${type.defaultOwner === "JOURNEY_OWNER" ? (ownerName ? `${ownerName} (journey owner)` : "the person adding it — this journey has no owner") : FOLLOW_UP_OWNER_LABEL[type.defaultOwner].toLowerCase()}` : undefined;
 
   return (
     <SideSheet
@@ -84,44 +82,7 @@ export function AddFollowUpSheet({ journeyId, patientName, ownerName, preset, on
         {types.isError && <ErrorState message="Could not load follow-up types." />}
         {form && types.data && (
           <>
-            <FormField label="Type">
-              <select className={CONTROL} value={form.typeId} onChange={(e) => set("typeId", e.target.value)} data-testid="add-followup-type">
-                {types.data.map((ty) => (
-                  <option key={ty.id} value={ty.id}>
-                    {ty.label}
-                  </option>
-                ))}
-              </select>
-            </FormField>
-
-            <div className="grid grid-cols-2 gap-3">
-              <TextInput label="Due date" type="date" value={form.date} onChange={(e) => set("date", e.target.value)} data-testid="add-followup-date" />
-              <TextInput label="Due time" type="time" value={form.time} onChange={(e) => set("time", e.target.value)} data-testid="add-followup-time" />
-            </div>
-
-            <FormField label="Owner" hint={ownerHint}>
-              <select className={CONTROL} value={form.ownerId} onChange={(e) => set("ownerId", e.target.value)} data-testid="add-followup-owner">
-                <option value="">Use the default</option>
-                {(lookups.data?.owners ?? []).map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.name}
-                  </option>
-                ))}
-                <option value={NO_OWNER}>Unassigned</option>
-              </select>
-            </FormField>
-
-            <FormField label="Priority" hint={type ? `Default for ${type.label}: ${type.defaultPriority === "high" ? "High" : "Normal"}` : undefined}>
-              <select className={CONTROL} value={form.priority} onChange={(e) => set("priority", e.target.value as FollowUpFormState["priority"])} data-testid="add-followup-priority">
-                <option value="">Use the default</option>
-                <option value="normal">Normal</option>
-                <option value="high">High</option>
-              </select>
-            </FormField>
-
-            <FormField label={type?.requiresNote ? "Note (required)" : "Note"} hint={type?.requiresNote ? "Say what's happening — this type always needs a reason." : "Optional. What the person needs to know."}>
-              <textarea className={`${CONTROL} h-24! py-2`} maxLength={500} value={form.note} onChange={(e) => set("note", e.target.value)} data-testid="add-followup-note" />
-            </FormField>
+            <FollowUpFields form={form} onChange={set} types={types.data} owners={lookups.data?.owners ?? []} ownerName={ownerName} />
           </>
         )}
       </div>

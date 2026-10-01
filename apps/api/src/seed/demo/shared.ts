@@ -168,6 +168,40 @@ export interface DemoContext {
   endpoints: Record<string, EndpointRow>;
 }
 
+/**
+ * Real event timestamps for a seeded appointment, so the queue shows honest waiting times and "completed at"
+ * lines. Same-day visits still in flight are timed from NOW (a patient who has waited 14 minutes), the rest from
+ * their booked time. `ordinal` staggers several same-status visits.
+ */
+function lifecycleStamps(status: string, scheduledAt: Date, ordinal: number) {
+  const min = (m: number) => new Date(Date.now() + m * 60_000);
+  const at = (m: number) => new Date(scheduledAt.getTime() + m * 60_000);
+  switch (status) {
+    case "checked_in":
+      return { checkedInAt: min(-(6 + 5 * ordinal)) };
+    case "waiting": {
+      const arrived = min(-(16 + 7 * ordinal));
+      return { checkedInAt: arrived, waitingStartedAt: new Date(arrived.getTime() + 60_000) };
+    }
+    case "with_doctor": {
+      const arrived = min(-(48 + 6 * ordinal));
+      return { checkedInAt: arrived, waitingStartedAt: new Date(arrived.getTime() + 2 * 60_000), consultationStartedAt: min(-(12 + 5 * ordinal)) };
+    }
+    case "completed": {
+      const done = new Date(Math.min(at(40).getTime(), Date.now() - 5 * 60_000));
+      const started = new Date(done.getTime() - 20 * 60_000);
+      const waited = new Date(started.getTime() - 12 * 60_000);
+      return { checkedInAt: new Date(waited.getTime() - 2 * 60_000), waitingStartedAt: waited, consultationStartedAt: started, completedAt: done };
+    }
+    case "no_show":
+      return { noShowAt: at(30), statusReasonCode: "patient_no_show" };
+    case "cancelled":
+      return { cancelledAt: at(-24 * 60), statusReasonCode: "patient_requested" };
+    default:
+      return {};
+  }
+}
+
 export async function createDemoTenant(name: string, edition: Edition = "BETA_V2_GROWTH") {
   const [tenant] = await db.insert(tenants).values({ name, timezone: "Asia/Kolkata", edition }).returning();
   return tenant;
@@ -505,6 +539,7 @@ export async function seedJourneys(ctx: DemoContext, configs: DemoJourneyConfig[
         .values({
           ...base, branchId: branch.id, doctorUserId: doctor.id, status: config.appt.status,
           scheduledAt, reason: config.appt.reason ?? "Consultation",
+          ...lifecycleStamps(config.appt.status, scheduledAt, config.appt.offsetDays === 0 ? (todayOrdinals.get(config.appt.status) ?? 1) - 1 : 0),
         })
         .returning();
       appointmentId = appt.id;

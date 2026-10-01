@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactNode } from "react";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }), usePathname: () => "/appointments", useSearchParams: () => new URLSearchParams("") }));
 
@@ -11,8 +13,12 @@ const row = { id: "a1" } as AppointmentRow;
 async function reschedule(fetchImpl: () => Promise<Response>) {
   vi.stubGlobal("fetch", vi.fn(fetchImpl));
   const onDone = vi.fn();
-  const { result } = renderHook(() => useAppointmentActions({ refresh: vi.fn(), onDone }));
-  await act(() => result.current.handleReschedule(row, "2026-10-02T04:30:00.000Z"));
+  // The hospital's clock comes from the session; seed it so the stubbed fetch only sees the reschedule call.
+  const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
+  client.setQueryData(["session"], { user: { timezone: "Asia/Kolkata" } });
+  const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  const { result } = renderHook(() => useAppointmentActions({ refresh: vi.fn(), onDone }), { wrapper });
+  await act(() => result.current.handleReschedule(row, { date: "2026-10-02", time: "10:00", reasonCode: "patient_requested" }));
   return { onDone, error: result.current.error, drawerError: result.current.drawerErrorFor(row.id), drawerErrorElsewhere: result.current.drawerErrorFor("another-appointment") };
 }
 

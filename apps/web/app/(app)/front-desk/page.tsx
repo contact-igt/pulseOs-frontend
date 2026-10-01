@@ -1,15 +1,16 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
 import { ListOrdered, Search, Users } from "lucide-react";
-import { AppointmentDrawer, AppointmentList, Button, ErrorState, MetricStrip, PatientFlowBoard, Skeleton, Toolbar, ViewSwitcher, formatKey } from "@pulseos/ui";
+import { AppointmentList, Button, ErrorState, MetricStrip, PatientFlowBoard, Skeleton, Toolbar, ViewSwitcher, formatKey } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import type { AppointmentRow, PatientFlowCount } from "@pulseos/types";
 import { useViewState } from "@/lib/useViewState";
 import { matchesSearch } from "@/components/appointments/appointmentViews";
-import { useAppointmentActions, useCalendarContext } from "@/components/appointments/hooks";
+import { useCalendarContext } from "@/components/appointments/hooks";
+import { useAppointmentWorkflow } from "@/components/appointments/AppointmentWorkflow";
 import { useUrlFilters } from "@/lib/useUrlFilters";
 import { InlineNotice } from "@/components/appointments/InlineNotice";
 import { TodayFlow } from "@/components/appointments/TodayFlow";
@@ -48,13 +49,14 @@ function buildFlow(today: AppointmentRow[]): PatientFlowCount[] {
 }
 
 export default function FrontDeskPage() {
-  const queryClient = useQueryClient();
   const quickCreate = useQuickCreate();
   const { timeZone, today: todayKey } = useCalendarContext();
   const { view, setView } = useViewState<FrontDeskView>({ views: FRONT_DESK_VIEWS, defaultView: "queue", timeZone });
   const urlFilters = useUrlFilters();
   const [search, setSearch] = useState(() => urlFilters.get("q"));
-  const [selected, setSelected] = useState<AppointmentRow | null>(null);
+  // One drawer + completion sheet for every appointment on this page (and the same ones the Appointments page and Journey use).
+  const workflow = useAppointmentWorkflow();
+  const { select: setSelected, handleAction, handleComplete } = workflow;
   // Clicking a Patient Flow stage narrows the Today list to that stage (kept in the URL as ?stage=).
   type FlowBucket = PatientFlowCount["bucket"];
   const rawStage = urlFilters.get("stage");
@@ -62,20 +64,6 @@ export default function FrontDeskPage() {
   const setFlowFilter = (update: (cur: FlowBucket | null) => FlowBucket | null) => urlFilters.set({ stage: update(flowFilter) ?? undefined });
 
   const dashboard = useQuery({ queryKey: ["front-desk"], queryFn: () => api.frontDesk() });
-  const timeline = useQuery({
-    queryKey: ["timeline", selected?.patientId, selected?.journeyId],
-    queryFn: () => api.patientTimeline(selected!.patientId, selected!.journeyId),
-    enabled: !!selected,
-  });
-
-  const invalidate = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ["front-desk"] });
-    queryClient.invalidateQueries({ queryKey: ["timeline"] });
-    queryClient.invalidateQueries({ queryKey: ["patient360"] });
-  }, [queryClient]);
-  const closeDrawer = useCallback(() => setSelected(null), [setSelected]);
-  // Same actions as before; a server rejection (stale status) is an inline message, never an unhandled error.
-  const { handleAction, handleComplete, handleReschedule, error: actionError, clearError, drawerErrorFor, clearDrawerError } = useAppointmentActions({ refresh: invalidate, onDone: closeDrawer });
 
   const today = useMemo(() => dashboard.data?.today ?? [], [dashboard.data]);
   const filteredToday = useMemo(() => {
@@ -87,12 +75,13 @@ export default function FrontDeskPage() {
 
   const kpis = useMemo(
     () => [
-      { label: "Today", value: today.length },
-      { label: "Confirmed", value: today.filter((a) => a.status === "confirmed" || a.status === "scheduled" || a.status === "requested").length },
-      { label: "Checked In", value: today.filter((a) => a.status === "checked_in").length },
+      { label: "Upcoming", value: today.filter((a) => a.status === "confirmed" || a.status === "scheduled" || a.status === "requested").length },
+      { label: "Checked in", value: today.filter((a) => a.status === "checked_in").length },
       { label: "Waiting", value: today.filter((a) => a.status === "waiting").length },
-      { label: "With Doctor", value: today.filter((a) => a.status === "with_doctor").length },
+      { label: "With doctor", value: today.filter((a) => a.status === "with_doctor").length },
+      { label: "Completed", value: today.filter((a) => a.status === "completed").length },
       { label: "No-shows", value: today.filter((a) => a.status === "no_show").length },
+      { label: "Needs attention", value: today.filter((a) => a.atRisk).length },
     ],
     [today],
   );
@@ -100,7 +89,7 @@ export default function FrontDeskPage() {
   if (dashboard.isLoading) {
     return (
       <div className="mx-auto max-w-7xl space-y-4">
-        <div className="grid grid-cols-3 gap-2 lg:grid-cols-6">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-16" />)}</div>
+        <div className="grid grid-cols-3 gap-2 lg:grid-cols-7">{Array.from({ length: 7 }).map((_, i) => <Skeleton key={i} className="h-16" />)}</div>
         <Skeleton className="h-24" />
       </div>
     );
@@ -146,7 +135,7 @@ export default function FrontDeskPage() {
         </div>
       </Toolbar>
 
-      {actionError && <InlineNotice message={actionError} onDismiss={clearError} testId="front-desk-action-error" />}
+      {workflow.error && <InlineNotice message={workflow.error} onDismiss={workflow.clearError} testId="front-desk-action-error" />}
 
       <MetricStrip
         testId="front-desk-kpi-strip"
@@ -205,6 +194,20 @@ export default function FrontDeskPage() {
                 emptyMessage="No one waiting."
               />
             </div>
+            {(dashboard.data.atRisk ?? []).length > 0 && (
+              <div className="order-1 min-w-0 xl:order-none" data-testid="front-desk-at-risk">
+                <AppointmentList
+                  title="Needs attention"
+                  subtitle="Appointments with an open Appointment Risk follow-up"
+                  rows={dashboard.data.atRisk ?? []}
+                  onAction={handleAction}
+                  onComplete={handleComplete}
+                  onRowClick={(row) => setSelected(row)}
+                  showDoctor={false}
+                  emptyMessage="Nothing needs attention."
+                />
+              </div>
+            )}
             <div className="order-3 min-w-0 xl:order-none" data-testid="front-desk-today">
               <AppointmentList
                 title={flowFilter ? `Today · ${FLOW_LABEL[flowFilter]}` : "Today's Appointments"}
@@ -226,18 +229,7 @@ export default function FrontDeskPage() {
         </div>
       )}
 
-      <AppointmentDrawer
-        appointment={selected}
-        recentEvents={timeline.data}
-        onClose={() => {
-          clearDrawerError();
-          closeDrawer();
-        }}
-        onAction={handleAction}
-        onComplete={handleComplete}
-        onReschedule={handleReschedule}
-        error={drawerErrorFor(selected?.id)}
-      />
+      {workflow.element}
     </div>
   );
 }

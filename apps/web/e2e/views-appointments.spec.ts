@@ -184,16 +184,16 @@ test.describe("Appointments views", () => {
     await event.click();
     const drawer = page.getByTestId("appointment-drawer");
     await expect(drawer).toContainText(`P1 View Action ${RUN}`);
-    await drawer.getByRole("button", { name: "Check In", exact: true }).click();
+    await drawer.getByRole("button", { name: "Check in patient", exact: true }).click();
     await expect(drawer).toBeHidden();
-    await expect(event).toHaveAttribute("aria-label", /Checked In/);
-    await expect(event).toContainText("Checked In");
+    await expect(event).toHaveAttribute("aria-label", /Checked in/);
+    await expect(event).toContainText("Checked in");
 
-    // Stale drawer: someone else moves the patient on; our "Mark Waiting" is now invalid server-side (409).
+    // Stale drawer: someone else moves the patient on; our "Move to waiting" is now invalid server-side (409).
     await event.click();
-    await expect(drawer.getByRole("button", { name: "Mark Waiting", exact: true })).toBeVisible();
+    await expect(drawer.getByRole("button", { name: "Move to waiting", exact: true })).toBeVisible();
     expect((await page.request.patch(`${API}/appointments/${appt.id}/action`, { data: { action: "mark_waiting" } })).ok()).toBeTruthy();
-    await drawer.getByRole("button", { name: "Mark Waiting", exact: true }).click();
+    await drawer.getByRole("button", { name: "Move to waiting", exact: true }).click();
     await expect(page.getByTestId("appointments-action-error")).toContainText(/changed|not allowed/i);
     await expect(event).toHaveAttribute("aria-label", /Waiting/);
     await expectNoOverlay(page);

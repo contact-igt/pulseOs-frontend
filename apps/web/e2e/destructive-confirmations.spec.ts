@@ -19,7 +19,7 @@ async function login(page: Page, email: string) {
 test.describe("Destructive-action confirmations", () => {
   test.skip(!DEMO_PASSWORD, "DEMO_PASSWORD must be set");
 
-  test("Cancel Appointment requires confirmation with real consequence copy, and Keep appointment aborts it", async ({ page }) => {
+  test("Cancel Appointment asks for a reason with real consequence copy, and Keep appointment aborts it", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await login(page, "gyn.admin@pulseos.local");
     await page.goto("/appointments");
@@ -29,17 +29,22 @@ test.describe("Destructive-action confirmations", () => {
     await page.locator('[data-testid^="appointment-row-"] button').first().click();
     const drawer = page.getByTestId("appointment-drawer");
     await expect(drawer).toBeVisible();
+    const statusBefore = await drawer.getByTestId("appointment-drawer-details").innerText();
 
     await page.getByTestId("drawer-action-cancel").click();
-    const dialog = page.getByTestId("confirm-dialog");
-    await expect(dialog).toBeVisible();
-    await expect(dialog).toContainText("frees");
-    await expect(dialog).toContainText("does not notify the patient automatically");
+    const panel = page.getByTestId("appointment-drawer-panel");
+    await expect(panel).toBeVisible();
+    await expect(panel).toContainText("frees");
+    await expect(panel).toContainText("does not notify the patient automatically");
+    // A reason is required: confirming without one explains what is missing and cancels nothing.
+    await page.getByTestId("drawer-reason-confirm").click();
+    await expect(page.getByTestId("drawer-reason-error")).toContainText(/why it is being cancelled/i);
 
-    // Cancelling the confirmation must not touch the appointment.
-    await page.getByTestId("confirm-dialog-cancel").click();
-    await expect(dialog).toBeHidden();
-    await expect(drawer).toContainText("Confirmed");
+    // Keeping the appointment must not touch it.
+    await page.getByTestId("drawer-reason-back").click();
+    await expect(panel).toBeHidden();
+    expect(await drawer.getByTestId("appointment-drawer-details").innerText()).toBe(statusBefore);
+    await expect(drawer).not.toContainText("Cancelled");
   });
 
   test("Decline Treatment requires confirmation naming the patient, treatment and value", async ({ page }) => {

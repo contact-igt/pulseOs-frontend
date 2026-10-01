@@ -123,20 +123,20 @@ test.describe("Front Desk views", () => {
     await expect(page.getByTestId("front-desk-flow-group-expected").getByTestId(`front-desk-flow-item-${id}`)).toBeVisible();
     await item.click();
     const drawer = page.getByTestId("appointment-drawer");
-    await drawer.getByRole("button", { name: "Check In", exact: true }).click();
+    await drawer.getByRole("button", { name: "Check in patient", exact: true }).click();
     await expect(drawer).toBeHidden();
-    await expect(page.getByTestId("front-desk-flow-group-arrived").getByTestId(`front-desk-flow-item-${id}`)).toContainText("Checked In");
+    await expect(page.getByTestId("front-desk-flow-group-arrived").getByTestId(`front-desk-flow-item-${id}`)).toContainText("Checked in");
 
     // The Queue view shows the same new state (same data).
     await page.getByTestId("view-switch-queue").click();
-    await expect(page.getByTestId("front-desk-today").getByTestId(`appointment-row-${id}`)).toContainText("Checked In");
+    await expect(page.getByTestId("front-desk-today").getByTestId(`appointment-row-${id}`)).toContainText("Checked in");
 
-    // Stale: the patient is moved on elsewhere, then our Mark Waiting is rejected by the server.
+    // Stale: the patient is moved on elsewhere, then our Move to waiting is rejected by the server.
     await page.getByTestId("view-switch-flow").click();
     await item.click();
-    await expect(drawer.getByRole("button", { name: "Mark Waiting", exact: true })).toBeVisible();
+    await expect(drawer.getByRole("button", { name: "Move to waiting", exact: true })).toBeVisible();
     expect((await page.request.patch(`${API}/appointments/${id}/action`, { data: { action: "mark_waiting" } })).ok()).toBeTruthy();
-    await drawer.getByRole("button", { name: "Mark Waiting", exact: true }).click();
+    await drawer.getByRole("button", { name: "Move to waiting", exact: true }).click();
     await expect(page.getByTestId("front-desk-action-error")).toContainText(/changed|not allowed/i);
     await expect(item).toContainText("Waiting");
     await expect(page.locator("[data-nextjs-dialog]")).toHaveCount(0);
