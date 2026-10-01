@@ -18,6 +18,7 @@ import { rescheduleTarget, type DueBucket } from "@/components/my-work/taskBucke
 import { TaskBoard } from "@/components/my-work/TaskBoard";
 import { TaskCalendar } from "@/components/my-work/TaskCalendar";
 import { TaskDrawer } from "@/components/my-work/TaskDrawer";
+import { LogOutcomeSheet } from "@/components/outcomes/LogOutcomeSheet";
 import { useHospitalTimeZone } from "@/lib/useHospitalTimeZone";
 import { useUrlFilters } from "@/lib/useUrlFilters";
 
@@ -183,6 +184,8 @@ export default function MyWorkPage() {
   // Board card / calendar event -> the task's detail drawer. The last-seen copy is kept so the
   // drawer can show the result even when a refetch drops the task from the current tab.
   const [selected, setSelected] = useState<TaskRow | null>(null);
+  // The task whose outcome is being logged (Log outcome closes it and can schedule the next follow-up).
+  const [logging, setLogging] = useState<TaskRow | null>(null);
   const selectedTask = selected ? (tasks.data?.find((t) => t.id === selected.id) ?? selected) : null;
   async function drawerAction(run: (task: TaskRow) => Promise<TaskRow | null>) {
     if (!selectedTask) return;
@@ -349,7 +352,12 @@ export default function MyWorkPage() {
                           <Button size="sm" variant="secondary" disabled={busy[task.id]} onClick={() => plusOneDay(task)} data-testid={`task-reschedule-${task.id}`}>
                             +1 day
                           </Button>
-                          <Button size="sm" variant="primary" disabled={busy[task.id]} onClick={() => complete(task)} data-testid={`task-complete-${task.id}`}>
+                          {task.journeyId && (
+                            <Button size="sm" variant="primary" disabled={busy[task.id]} onClick={() => setLogging(task)} data-testid={`task-log-outcome-${task.id}`}>
+                              Log outcome
+                            </Button>
+                          )}
+                          <Button size="sm" variant={task.journeyId ? "secondary" : "primary"} disabled={busy[task.id]} onClick={() => complete(task)} data-testid={`task-complete-${task.id}`}>
                             Complete
                           </Button>
                         </div>
@@ -399,6 +407,16 @@ export default function MyWorkPage() {
           onComplete={() => drawerAction(complete)}
           onPlusOneDay={() => drawerAction(plusOneDay)}
           onAssignToMe={() => drawerAction(assignToMe)}
+          onLogOutcome={selectedTask.journeyId ? () => { setLogging(selectedTask); setSelected(null); } : undefined}
+        />
+      )}
+
+      {logging && logging.journeyId && (
+        <LogOutcomeSheet
+          journeyId={logging.journeyId}
+          patient={{ id: logging.patientId, name: logging.patientName }}
+          taskId={logging.id}
+          onClose={() => setLogging(null)}
         />
       )}
     </div>

@@ -127,6 +127,13 @@
       "when": 1790848735850,
       "tag": "0017_shallow_zombie",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790849482948,
+      "tag": "0018_massive_patriot",
+      "breakpoints": true
     }
   ]
 }

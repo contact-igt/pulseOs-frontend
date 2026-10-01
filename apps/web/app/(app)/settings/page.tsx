@@ -6,12 +6,14 @@ import { api } from "@pulseos/api-client";
 import { Badge, ErrorState, Panel, Skeleton, Tabs } from "@pulseos/ui";
 import { hasPermission } from "@pulseos/types";
 import { CrmFieldsSection } from "@/components/settings/CrmFieldsSection";
+import { OutcomesSection } from "@/components/outcomes/OutcomesSection";
 import { useUrlFilters } from "@/lib/useUrlFilters";
 
-type Section = "services" | "fields";
+type Section = "services" | "fields" | "outcomes";
 const SECTIONS: { key: Section; label: string; manageOnly: boolean }[] = [
   { key: "services", label: "Services", manageOnly: false },
   { key: "fields", label: "CRM Fields", manageOnly: true },
+  { key: "outcomes", label: "Workflow Outcomes", manageOnly: true },
 ];
 
 /** A service's name and default Journey type. Its CRM fields live in the CRM Fields section. */
@@ -109,6 +111,12 @@ export default function SettingsPage() {
           {specialties.isLoading && <Skeleton className="h-24" />}
           {specialties.isError && <ErrorState message="Could not load services." />}
           {specialties.data && <CrmFieldsSection services={specialties.data} />}
+        </Panel>
+      )}
+
+      {section === "outcomes" && canManage && (
+        <Panel title="Workflow Outcomes" subtitle="What staff can record after a call or follow-up">
+          <OutcomesSection />
         </Panel>
       )}
 

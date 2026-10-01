@@ -159,6 +159,16 @@ describe.skipIf(!DEMO_PASSWORD)("CRM fields (integration)", () => {
     expect((await call(coordinator, "GET", "/crm/fields/for?placement=lobby_tv&specialtyKey=CATARACT")).statusCode).toBe(400);
   });
 
+  it("entry fields can be asked for by Journey (its service decides the scope); another hospital's Journey is not found", async () => {
+    await createField({ key: `${PREFIX}by_journey`, label: "By journey", fieldType: "TEXT", placements: ["followup_outcome"] });
+    const lead = (await addLead({ [`${PREFIX}must`]: "ok" })).json() as CreateLeadResult;
+    const viaJourney = (await call(coordinator, "GET", `/crm/fields/for?placement=followup_outcome&journeyId=${lead.journeyId}`)).json() as CrmFieldVm[];
+    expect(viaJourney.map((f) => f.key)).toContain(`${PREFIX}by_journey`);
+    expect((await call(gynAdmin, "GET", `/crm/fields/for?placement=followup_outcome&journeyId=${lead.journeyId}`)).statusCode).toBe(404);
+    expect((await call(coordinator, "GET", "/crm/fields/for?placement=followup_outcome")).statusCode).toBe(400);
+    expect((await call(coordinator, "GET", "/crm/fields/for?placement=followup_outcome&journeyId=not-a-uuid")).statusCode).toBe(400);
+  });
+
   it("role visibility is enforced on the server for definitions and for values", async () => {
     const clinical = (await createField({ key: `${PREFIX}clin`, label: "Clinical note", fieldType: "TEXT", visibleTo: "clinical" })).json() as CrmFieldVm;
     const frontOffice = (await createField({ key: `${PREFIX}fo`, label: "Front office note", fieldType: "TEXT", visibleTo: "front_office" })).json() as CrmFieldVm;

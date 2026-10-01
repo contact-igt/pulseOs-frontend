@@ -5,6 +5,7 @@ import {
   appointments,
   branches,
   campaignTouchpoints,
+  crmOutcomes,
   customFieldDefinitions,
   customFieldValues,
   journeys,
@@ -252,11 +253,14 @@ export async function getJourneyDetail(db: Db, tenantId: string, journeyId: stri
       patientName: patients.name,
       patientPhone: patients.phone,
       branchName: branches.name,
+      lastOutcomeLabel: crmOutcomes.label,
+      lastOutcomeAt: journeys.lastOutcomeAt,
     })
     .from(journeys)
     .innerJoin(patients, eq(journeys.patientId, patients.id))
     .leftJoin(branches, eq(patients.branchId, branches.id))
     .leftJoin(users, eq(journeys.ownerUserId, users.id))
+    .leftJoin(crmOutcomes, eq(journeys.lastOutcomeId, crmOutcomes.id))
     .where(and(eq(journeys.tenantId, tenantId), eq(journeys.id, journeyId)))
     .limit(1);
   if (!j) return null;
@@ -366,6 +370,7 @@ export async function getJourneyDetail(db: Db, tenantId: string, journeyId: stri
       createdAt: j.createdAt.toISOString(),
       lastInteractionAt,
       nextAction,
+      lastOutcome: j.lastOutcomeLabel && j.lastOutcomeAt ? { label: j.lastOutcomeLabel, at: j.lastOutcomeAt.toISOString() } : null,
     },
     customFields,
     timeline,

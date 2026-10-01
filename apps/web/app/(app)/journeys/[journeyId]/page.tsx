@@ -6,7 +6,7 @@ import { useParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
 import {
-  APPOINTMENT_STATUS_LABEL, APPOINTMENT_STATUS_TONE, Badge, Card, CustomFieldValueGrid, EmptyState, ErrorState, JOURNEY_STAGE_LABEL, JOURNEY_STAGE_TONE,
+  APPOINTMENT_STATUS_LABEL, APPOINTMENT_STATUS_TONE, Badge, Button, Card, CustomFieldValueGrid, EmptyState, ErrorState, JOURNEY_STAGE_LABEL, JOURNEY_STAGE_TONE,
   PageHeader, Panel, Skeleton, TREATMENT_STATUS_LABEL, TREATMENT_STATUS_TONE, Timeline,
   fmtDate, fmtDateTime, formatInr, relativeTime, urgencyLabel,
 } from "@pulseos/ui";
@@ -14,6 +14,7 @@ import { hasPermission, type JourneyDetailVm, type RevenueEventVm, type TaskType
 import { ChevronRight, UserRoundCog } from "lucide-react";
 import { BackLink, withFrom } from "@/components/shell/BackLink";
 import { AssignOwnerDialog } from "@/components/journey/AssignOwnerDialog";
+import { LogOutcomeSheet } from "@/components/outcomes/LogOutcomeSheet";
 import { JourneyStageFlow } from "@/components/journey/JourneyStageFlow";
 import { invalidateJourneyQueries } from "@/components/journey/invalidate";
 
@@ -87,6 +88,8 @@ export default function JourneyDetailPage() {
   const journeyId = params.journeyId;
   const queryClient = useQueryClient();
   const [assigning, setAssigning] = useState(false);
+  // "Log outcome" sheet; `taskId` is set when it is opened from one of the open follow-ups.
+  const [logging, setLogging] = useState<{ taskId?: string } | null>(null);
 
   const session = useQuery({ queryKey: ["session"], queryFn: api.session, retry: false });
   const lookups = useQuery({ queryKey: ["lookups"], queryFn: api.lookups, staleTime: 60_000 });
@@ -98,6 +101,7 @@ export default function JourneyDetailPage() {
 
   const role = session.data?.user.role;
   const canAssign = role ? hasPermission(role, "MANAGE_JOURNEYS") : false;
+  const canLogOutcome = role ? hasPermission(role, "MANAGE_TASKS") : false;
 
   if (detail.isLoading) return <JourneyPageSkeleton />;
   if (detail.isError) {
@@ -144,6 +148,11 @@ export default function JourneyDetailPage() {
           </span>
           <h2 className="text-base font-semibold tracking-tight text-ink" data-testid="journey-service">{journey.journeyType}</h2>
           <span data-testid="journey-stage"><Badge tone={stageTone}>{JOURNEY_STAGE_LABEL[journey.stage] ?? journey.stage}</Badge></span>
+          {journey.lastOutcome && (
+            <span data-testid="journey-sub-status" title={`Last outcome logged ${fmtDateTime(journey.lastOutcome.at)}`}>
+              <Badge tone="neutral">{journey.lastOutcome.label}</Badge>
+            </span>
+          )}
         </div>
 
         {journey.stage !== "lost" && (
@@ -201,7 +210,19 @@ export default function JourneyDetailPage() {
         </div>
 
         <div className="space-y-4">
-          <Panel title="Follow-ups" subtitle={openTasks.length ? `${openTasks.length} open` : undefined} data-testid="journey-tasks" padded={false}>
+          <Panel
+            title="Follow-ups"
+            subtitle={openTasks.length ? `${openTasks.length} open` : undefined}
+            data-testid="journey-tasks"
+            padded={false}
+            action={
+              canLogOutcome ? (
+                <Button size="sm" variant="secondary" onClick={() => setLogging({})} data-testid="journey-log-outcome">
+                  Log outcome
+                </Button>
+              ) : undefined
+            }
+          >
             {openTasks.length === 0 ? (
               <p className="px-4 py-3 text-xs text-ink-2">No open follow-ups{doneTasks ? ` · ${doneTasks} completed` : ""}.</p>
             ) : (
@@ -217,6 +238,11 @@ export default function JourneyDetailPage() {
                       <div className="shrink-0 text-right">
                         <p className={`text-xs ${due.overdue ? "font-medium text-danger-700" : "text-ink-2"}`}>{due.text}</p>
                         <p className="text-[11px] text-neutral-500">{fmtDate(t.dueAt)}</p>
+                        {canLogOutcome && (
+                          <button type="button" onClick={() => setLogging({ taskId: t.id })} className="mt-0.5 min-h-11 text-[11px] font-medium text-primary-700 hover:underline sm:min-h-0" data-testid={`journey-task-log-${t.id}`}>
+                            Log outcome
+                          </button>
+                        )}
                       </div>
                     </li>
                   );
@@ -293,6 +319,8 @@ export default function JourneyDetailPage() {
           )}
         </div>
       </div>
+
+      {logging && canLogOutcome && <LogOutcomeSheet journeyId={journey.id} patient={{ id: patient.id, name: patient.name, phone: patient.phone }} taskId={logging.taskId} onClose={() => setLogging(null)} />}
 
       {assigning && canAssign && (
         <AssignOwnerDialog

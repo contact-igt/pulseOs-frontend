@@ -23,7 +23,7 @@ const PAGE_META: Record<string, { title: string; subtitle: string }> = {
   "/leads": { title: "Leads", subtitle: "Track every enquiry from source to appointment" },
   "/campaigns": { title: "Campaigns / Sources", subtitle: "Where spend turns into treatment revenue" },
   "/analytics": { title: "Analytics", subtitle: "Historical trends, comparisons and drill-downs" },
-  "/settings": { title: "Settings", subtitle: "Specialties, custom fields and hospital configuration" },
+  "/settings": { title: "Settings", subtitle: "CRM configuration: services, fields, outcomes and messaging" },
 };
 
 function greeting() {

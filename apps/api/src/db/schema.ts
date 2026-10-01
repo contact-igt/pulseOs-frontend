@@ -82,6 +82,26 @@ export const journeyStageEnum = pgEnum("journey_stage", [
 // below can reuse the same enum for lead priority instead of duplicating it.
 export const taskPriorityEnum = pgEnum("task_priority", ["normal", "high"]);
 
+// Tenant-configurable outcomes (sub-status / disposition / follow-up reason). The canonical Journey stage
+// stays fixed; an outcome only maps to CONTACTED or LOST and carries three simple rules.
+export const crmOutcomes = pgTable("crm_outcomes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  key: text("key").notNull(),
+  label: text("label").notNull(),
+  stage: text("stage").notNull().default("contacted"),
+  requiresFollowUp: boolean("requires_follow_up").notNull().default(false),
+  allowsAppointment: boolean("allows_appointment").notNull().default(false),
+  asksReason: boolean("asks_reason").notNull().default(false),
+  followUpType: text("follow_up_type").notNull().default("FOLLOW_UP"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  archived: boolean("archived").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  tenantIdx: index("crm_outcomes_tenant_idx").on(t.tenantId),
+  tenantKeyUnique: uniqueIndex("crm_outcomes_tenant_key_unique").on(t.tenantId, t.key),
+}));
+
 export const journeys = pgTable("journeys", {
   id: uuid("id").primaryKey().defaultRandom(),
   tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
@@ -96,6 +116,9 @@ export const journeys = pgTable("journeys", {
   priority: taskPriorityEnum("priority").notNull().default("normal"),
   notes: text("notes"),
   contactedAt: timestamp("contacted_at", { withTimezone: true }),
+  // The latest configured outcome logged on this Journey (its sub-status).
+  lastOutcomeId: uuid("last_outcome_id").references(() => crmOutcomes.id),
+  lastOutcomeAt: timestamp("last_outcome_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   tenantIdx: index("journeys_tenant_idx").on(t.tenantId),

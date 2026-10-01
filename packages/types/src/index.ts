@@ -545,6 +545,8 @@ export interface JourneyDetailVm {
     lastInteractionAt: string;
     /** Nearest-due open task on this journey (any assignee); type label + due date only, never notes. */
     nextAction: { dueAt: string; label: string } | null;
+    /** The latest configured outcome logged on this Journey (its sub-status), or null. */
+    lastOutcome: { label: string; at: string } | null;
   };
   customFields: JourneyCustomFieldVm[];
   timeline: TimelineEventVm[];
@@ -1045,6 +1047,71 @@ export interface CreateCustomFieldInput {
   fieldType: CustomFieldType;
   options?: string[];
   required?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Configurable outcomes (sub-status / disposition / follow-up reason). The canonical Journey stages are
+// NOT tenant-editable: an outcome maps to CONTACTED or LOST and a Journey only ever moves forward.
+// ---------------------------------------------------------------------------
+
+export type OutcomeStage = "contacted" | "lost";
+
+export interface CrmOutcomeVm {
+  id: string;
+  key: string;
+  label: string;
+  stage: OutcomeStage;
+  /** Logging it needs a follow-up date and time, which creates the follow-up Task. */
+  requiresFollowUp: boolean;
+  /** The logging form offers to book an appointment. */
+  allowsAppointment: boolean;
+  /** The logging form asks (optionally) why. */
+  asksReason: boolean;
+  /** Task type of the follow-up this outcome creates. */
+  followUpType: TaskType;
+  sortOrder: number;
+  archived: boolean;
+}
+
+export interface CreateCrmOutcomeInput {
+  key: string;
+  label: string;
+  stage: OutcomeStage;
+  requiresFollowUp?: boolean;
+  allowsAppointment?: boolean;
+  asksReason?: boolean;
+  followUpType?: TaskType;
+}
+
+export interface UpdateCrmOutcomeInput {
+  label?: string;
+  stage?: OutcomeStage;
+  requiresFollowUp?: boolean;
+  allowsAppointment?: boolean;
+  asksReason?: boolean;
+  followUpType?: TaskType;
+  archived?: boolean;
+}
+
+export interface LogInteractionInput {
+  outcomeKey: string;
+  note?: string;
+  reason?: string;
+  /** ISO instant. Required when the outcome requires a follow-up; optional otherwise. */
+  followUpAt?: string;
+  /** The open Task this outcome closes. */
+  taskId?: string;
+  /** Values for CRM fields placed on "Follow-up outcome". */
+  fieldValues?: Record<string, unknown>;
+}
+
+export interface LogInteractionResult {
+  journeyId: string;
+  stage: JourneyStage;
+  stageChanged: boolean;
+  outcome: CrmOutcomeVm;
+  followUpTaskId: string | null;
+  completedTaskId: string | null;
 }
 
 /** A configurable CRM field definition (what Settings → CRM Fields edits). */

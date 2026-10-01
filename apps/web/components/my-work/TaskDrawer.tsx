@@ -27,6 +27,7 @@ export function TaskDrawer({
   onComplete,
   onPlusOneDay,
   onAssignToMe,
+  onLogOutcome,
 }: {
   task: TaskRow;
   timeZone: string;
@@ -40,6 +41,8 @@ export function TaskDrawer({
   onComplete: () => void;
   onPlusOneDay: () => void;
   onAssignToMe: () => void;
+  /** Opens "Log outcome" for this task (only offered when the task belongs to a journey). */
+  onLogOutcome?: () => void;
 }) {
   const ref = useDialogFocus<HTMLDivElement>(true, onClose);
   const bucket = dueBucket(task, now, timeZone);
@@ -109,7 +112,12 @@ export function TaskDrawer({
             <Button variant="secondary" size="sm" disabled={busy} onClick={onPlusOneDay} data-testid={`task-reschedule-${task.id}`}>
               +1 day
             </Button>
-            <Button variant="primary" size="sm" disabled={busy} onClick={onComplete} data-testid={`task-complete-${task.id}`}>
+            {onLogOutcome && (
+              <Button variant="primary" size="sm" disabled={busy} onClick={onLogOutcome} data-testid={`task-log-outcome-${task.id}`}>
+                Log outcome
+              </Button>
+            )}
+            <Button variant={onLogOutcome ? "secondary" : "primary"} size="sm" disabled={busy} onClick={onComplete} data-testid={`task-complete-${task.id}`}>
               Complete
             </Button>
           </div>

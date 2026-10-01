@@ -1,5 +1,7 @@
 import type { FastifyInstance } from "fastify";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
+import { journeys } from "../../db/schema.js";
 import { CUSTOM_FIELD_TYPES, FIELD_GROUPS, FIELD_PLACEMENTS, FIELD_VISIBILITY } from "@pulseos/types";
 import { requirePermission } from "../auth/permission.middleware.js";
 import { createCrmField, listCrmFields, listFieldsForEntry, reorderCrmFields, updateCrmField } from "./crm-field.service.js";
@@ -42,7 +44,10 @@ const updateBody = z
 
 const reorderBody = z.object({ specialtyKey: z.string().min(1).max(60), groupKey, orderedIds: z.array(z.string().uuid()).min(1).max(200) });
 const listQuery = z.object({ specialtyKey: z.string().min(1).max(60).optional(), includeArchived: z.enum(["true", "false"]).optional() });
-const forQuery = z.object({ placement, specialtyKey: z.string().min(1).max(60) });
+// Ask by service, or by Journey (the Journey's own service decides the scope).
+const forQuery = z
+  .object({ placement, specialtyKey: z.string().min(1).max(60).optional(), journeyId: z.string().uuid().optional() })
+  .refine((q) => !!q.specialtyKey !== !!q.journeyId, "give a specialtyKey or a journeyId");
 
 const REASON_STATUS: Record<string, number> = {
   field_not_found: 404,
@@ -58,7 +63,14 @@ export async function crmFieldRoutes(app: FastifyInstance) {
     const parsed = forQuery.safeParse(request.query);
     if (!parsed.success) return reply.status(400).send({ error: "invalid_request" });
     const user = request.sessionUser!;
-    return listFieldsForEntry(app.db, user.tenantId, user.role, parsed.data);
+    let specialtyKey = parsed.data.specialtyKey;
+    if (parsed.data.journeyId) {
+      const [journey] = await app.db.select({ specialtyKey: journeys.specialtyKey }).from(journeys).where(and(eq(journeys.tenantId, user.tenantId), eq(journeys.id, parsed.data.journeyId))).limit(1);
+      if (!journey) return reply.status(404).send({ error: "journey_not_found" });
+      specialtyKey = journey.specialtyKey ?? undefined;
+    }
+    if (!specialtyKey) return [];
+    return listFieldsForEntry(app.db, user.tenantId, user.role, { placement: parsed.data.placement, specialtyKey });
   });
 
   app.get("/crm/fields", { preHandler: requirePermission("MANAGE_SPECIALTIES") }, async (request, reply) => {
