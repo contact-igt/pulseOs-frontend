@@ -61,9 +61,11 @@ export async function leadRoutes(app: FastifyInstance) {
     const parsed = createLeadBody.safeParse(request.body);
     if (!parsed.success) return reply.status(400).send({ error: "invalid_request", details: parsed.error.flatten() });
 
-    const result = await createLead(app.db, tenantId, actorId, parsed.data);
+    const result = await createLead(app.db, tenantId, actorId, parsed.data, request.sessionUser!.role);
     if ("validationError" in result) {
-      return reply.status(422).send({ error: "missing_required_fields", fields: result.missingRequiredFields });
+      // Required fields missing wins; otherwise the values that do not fit their field type.
+      if (result.missingRequiredFields.length > 0) return reply.status(422).send({ error: "missing_required_fields", fields: result.missingRequiredFields });
+      return reply.status(422).send({ error: "invalid_field_values", fields: result.invalidFields });
     }
     return reply.status(201).send(result);
   });

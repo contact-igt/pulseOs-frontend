@@ -214,9 +214,9 @@ describe.skipIf(!DEMO_PASSWORD)("multi-specialty demo tenants (integration)", ()
       const cataractJourney = p360.journeys.find((j) => j.id === journey.id)!;
       expect(cataractJourney.customFields).toEqual(
         expect.arrayContaining([
-          { label: "Laterality", value: "Right" },
-          { label: "Recorded cataract status", value: "Confirmed" },
-          { label: "Surgery advised", value: "Yes" },
+          expect.objectContaining({ label: "Laterality", value: "Right" }),
+          expect.objectContaining({ label: "Recorded cataract status", value: "Confirmed" }),
+          expect.objectContaining({ label: "Surgery advised", value: "Yes" }),
         ]),
       );
       expect(p360.calls.length).toBeGreaterThanOrEqual(2);

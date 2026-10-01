@@ -17,6 +17,7 @@ import { connectorRoutes, communicationEndpointReadRoutes } from "./domain/conne
 import { webhookRoutes } from "./domain/connector/webhook.routes.js";
 import { leadRoutes } from "./domain/lead/lead.routes.js";
 import { specialtyRoutes } from "./domain/specialty/specialty.routes.js";
+import { crmFieldRoutes } from "./domain/crm/crm-field.routes.js";
 import { campaignRoutes } from "./domain/campaign/campaign.routes.js";
 import { analyticsRoutes } from "./domain/analytics/analytics.routes.js";
 import { websiteFormRoutes } from "./domain/acquisition/website-form.routes.js";
@@ -86,6 +87,7 @@ export async function buildApp() {
     await protectedApp.register(communicationEndpointReadRoutes);
     await protectedApp.register(leadRoutes);
     await protectedApp.register(specialtyRoutes);
+    await protectedApp.register(crmFieldRoutes);
     await protectedApp.register(campaignRoutes);
     await protectedApp.register(analyticsRoutes);
   });

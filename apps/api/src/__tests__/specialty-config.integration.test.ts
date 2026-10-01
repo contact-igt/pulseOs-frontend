@@ -1,8 +1,8 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { buildApp } from "../app.js";
 import { db, queryClient } from "../db/client.js";
-import { customFieldValues } from "../db/schema.js";
+import { customFieldDefinitions, customFieldValues } from "../db/schema.js";
 import type { FastifyInstance } from "fastify";
 import type { CreateLeadResult, CustomFieldDefinitionVm, Patient360, SpecialtyDetailVm, SpecialtyTemplateVm } from "@pulseos/types";
 
@@ -33,6 +33,16 @@ describe.skipIf(!DEMO_PASSWORD)("specialty configuration (integration)", () => {
   });
 
   afterAll(async () => {
+    // The fields this suite adds (fixed keys) are removed with their values, so the suite is repeatable.
+    const created = await db
+      .select({ id: customFieldDefinitions.id })
+      .from(customFieldDefinitions)
+      .where(inArray(customFieldDefinitions.key, ["allergy_notes", "referral_source", "insurance_provider", "referred_by"]));
+    const ids = created.map((c) => c.id);
+    if (ids.length) {
+      await db.delete(customFieldValues).where(inArray(customFieldValues.fieldDefinitionId, ids));
+      await db.delete(customFieldDefinitions).where(and(inArray(customFieldDefinitions.id, ids)));
+    }
     await app.close();
     await queryClient.end();
   });
@@ -207,7 +217,7 @@ describe.skipIf(!DEMO_PASSWORD)("specialty configuration (integration)", () => {
     // patient.service.ts::getPatient360).
     const before360 = await app.inject({ method: "GET", url: `/patients/${patientId}/360`, cookies: { pulseos_session: adminCookie } });
     const beforeJourney = (before360.json() as Patient360).journeys.find((j) => j.id === journeyId);
-    expect(beforeJourney?.customFields).toContainEqual({ label: "Insurance provider", value: "Star Health" });
+    expect(beforeJourney?.customFields).toContainEqual(expect.objectContaining({ label: "Insurance provider", value: "Star Health" }));
 
     await app.inject({ method: "PATCH", url: `/specialties/fields/${field.id}`, cookies: { pulseos_session: adminCookie }, payload: { archived: true } });
 
@@ -223,7 +233,7 @@ describe.skipIf(!DEMO_PASSWORD)("specialty configuration (integration)", () => {
     // hide what was already recorded against an existing journey.
     const after360 = await app.inject({ method: "GET", url: `/patients/${patientId}/360`, cookies: { pulseos_session: adminCookie } });
     const afterJourney = (after360.json() as Patient360).journeys.find((j) => j.id === journeyId);
-    expect(afterJourney?.customFields).toContainEqual({ label: "Insurance provider", value: "Star Health" });
+    expect(afterJourney?.customFields).toContainEqual(expect.objectContaining({ label: "Insurance provider", value: "Star Health" }));
   });
 
   it("a specialty key that does not exist for this tenant 404s rather than leaking another tenant's config", async () => {

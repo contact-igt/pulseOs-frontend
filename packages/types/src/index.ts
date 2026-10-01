@@ -362,6 +362,9 @@ export interface PatientSearchRow {
 export interface JourneyCustomFieldVm {
   label: string;
   value: string;
+  /** Field definition key and group, so pages can render values in the configured groups. */
+  fieldKey?: string;
+  groupKey?: FieldGroupKey;
 }
 
 export interface JourneyCardVm {
@@ -947,7 +950,59 @@ export interface UpdateCommunicationEndpointInput {
 // of specialty enquiry fields, rendered in the Add Lead drawer.
 // ---------------------------------------------------------------------------
 
-export type CustomFieldType = "TEXT" | "NUMBER" | "DATE" | "BOOLEAN" | "SELECT" | "MULTI_SELECT" | "PHONE";
+export type CustomFieldType = "TEXT" | "LONG_TEXT" | "NUMBER" | "PHONE" | "EMAIL" | "DATE" | "DATETIME" | "BOOLEAN" | "SELECT" | "MULTI_SELECT";
+export const CUSTOM_FIELD_TYPES: { key: CustomFieldType; label: string }[] = [
+  { key: "TEXT", label: "Text" },
+  { key: "LONG_TEXT", label: "Long text" },
+  { key: "NUMBER", label: "Number" },
+  { key: "PHONE", label: "Phone" },
+  { key: "EMAIL", label: "Email" },
+  { key: "DATE", label: "Date" },
+  { key: "DATETIME", label: "Date and time" },
+  { key: "BOOLEAN", label: "Yes / No" },
+  { key: "SELECT", label: "Single choice" },
+  { key: "MULTI_SELECT", label: "Multiple choice" },
+];
+
+// CRM field configuration (extends the field system above — one definition, reused everywhere).
+export type FieldGroupKey = "patient_information" | "enquiry_details" | "service_details" | "qualification" | "follow_up_details" | "appointment_details" | "treatment_context";
+export const FIELD_GROUPS: { key: FieldGroupKey; label: string }[] = [
+  { key: "patient_information", label: "Patient Information" },
+  { key: "enquiry_details", label: "Enquiry Details" },
+  { key: "service_details", label: "Service Details" },
+  { key: "qualification", label: "Qualification" },
+  { key: "follow_up_details", label: "Follow-up Details" },
+  { key: "appointment_details", label: "Appointment Details" },
+  { key: "treatment_context", label: "Treatment Context" },
+];
+
+export type FieldPlacement = "add_lead" | "journey_detail" | "patient_360" | "followup_outcome" | "appointment" | "treatment";
+export const FIELD_PLACEMENTS: { key: FieldPlacement; label: string }[] = [
+  { key: "add_lead", label: "Add Lead" },
+  { key: "journey_detail", label: "Journey Detail" },
+  { key: "patient_360", label: "Patient 360" },
+  { key: "followup_outcome", label: "Follow-up outcome" },
+  { key: "appointment", label: "Appointment" },
+  { key: "treatment", label: "Treatment" },
+];
+export const DEFAULT_FIELD_PLACEMENTS: FieldPlacement[] = ["add_lead", "journey_detail", "patient_360"];
+
+/** Who may see a field and its values. everyone | front office (admin, front desk, coordinator) | clinical (admin, doctor). */
+export type FieldVisibility = "everyone" | "front_office" | "clinical";
+export const FIELD_VISIBILITY: { key: FieldVisibility; label: string }[] = [
+  { key: "everyone", label: "Everyone" },
+  { key: "front_office", label: "Front office and admin" },
+  { key: "clinical", label: "Doctors and admin" },
+];
+/** specialtyKey value meaning "every service". */
+export const ALL_SERVICES_KEY = "*";
+
+const FRONT_OFFICE_ROLES: Role[] = ["SUPER_ADMIN", "HOSPITAL_ADMIN", "FRONT_DESK", "PATIENT_COORDINATOR"];
+const CLINICAL_ROLES: Role[] = ["SUPER_ADMIN", "HOSPITAL_ADMIN", "DOCTOR"];
+/** Server-side and UI use the same rule: may this role see a field (and its values)? */
+export function canRoleSeeField(role: Role, visibleTo: FieldVisibility): boolean {
+  return visibleTo === "everyone" || (visibleTo === "front_office" ? FRONT_OFFICE_ROLES : CLINICAL_ROLES).includes(role);
+}
 
 export interface CustomFieldDefinitionVm {
   id: string;
@@ -959,6 +1014,10 @@ export interface CustomFieldDefinitionVm {
   required: boolean;
   sortOrder: number;
   archived: boolean;
+  groupKey?: FieldGroupKey;
+  placements?: FieldPlacement[];
+  defaultValue?: unknown;
+  visibleTo?: FieldVisibility;
 }
 
 export interface SpecialtyTemplateVm {
@@ -986,6 +1045,40 @@ export interface CreateCustomFieldInput {
   fieldType: CustomFieldType;
   options?: string[];
   required?: boolean;
+}
+
+/** A configurable CRM field definition (what Settings → CRM Fields edits). */
+export interface CrmFieldVm extends CustomFieldDefinitionVm {
+  groupKey: FieldGroupKey;
+  placements: FieldPlacement[];
+  defaultValue: unknown;
+  visibleTo: FieldVisibility;
+}
+
+export interface CreateCrmFieldInput {
+  /** A service key, or "*" for every service. */
+  specialtyKey: string;
+  key: string;
+  label: string;
+  fieldType: CustomFieldType;
+  options?: string[];
+  required?: boolean;
+  groupKey?: FieldGroupKey;
+  placements?: FieldPlacement[];
+  defaultValue?: unknown;
+  visibleTo?: FieldVisibility;
+}
+
+export interface UpdateCrmFieldInput {
+  label?: string;
+  fieldType?: CustomFieldType;
+  options?: string[];
+  required?: boolean;
+  archived?: boolean;
+  groupKey?: FieldGroupKey;
+  placements?: FieldPlacement[];
+  defaultValue?: unknown;
+  visibleTo?: FieldVisibility;
 }
 
 export interface UpdateCustomFieldInput {

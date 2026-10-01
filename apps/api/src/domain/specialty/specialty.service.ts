@@ -1,6 +1,7 @@
 import { and, asc, eq } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { customFieldDefinitions, specialtyTemplates } from "../../db/schema.js";
+import { createCrmField } from "../crm/crm-field.service.js";
 import type {
   CreateCustomFieldInput,
   CustomFieldDefinitionVm,
@@ -104,34 +105,10 @@ export async function updateSpecialty(db: Db, tenantId: string, key: string, inp
 }
 
 export async function createCustomField(db: Db, tenantId: string, specialtyKey: string, input: CreateCustomFieldInput): Promise<{ ok: true; field: CustomFieldDefinitionVm } | { ok: false; reason: string }> {
-  const [template] = await db
-    .select({ id: specialtyTemplates.id })
-    .from(specialtyTemplates)
-    .where(and(eq(specialtyTemplates.tenantId, tenantId), eq(specialtyTemplates.key, specialtyKey)))
-    .limit(1);
-  if (!template) return { ok: false, reason: "specialty_not_found" };
-
-  const existingFields = await db
-    .select({ sortOrder: customFieldDefinitions.sortOrder })
-    .from(customFieldDefinitions)
-    .where(and(eq(customFieldDefinitions.tenantId, tenantId), eq(customFieldDefinitions.specialtyKey, specialtyKey)));
-  const nextSortOrder = existingFields.reduce((max, f) => Math.max(max, f.sortOrder), -1) + 1;
-
-  const [row] = await db
-    .insert(customFieldDefinitions)
-    .values({
-      tenantId,
-      specialtyKey,
-      key: input.key,
-      label: input.label,
-      fieldType: input.fieldType,
-      options: input.options ?? null,
-      required: input.required ?? false,
-      sortOrder: nextSortOrder,
-    })
-    .returning();
-
-  return { ok: true, field: toFieldVm(row) };
+  // One field system: creation goes through the CRM field service (key rules, uniqueness, validation).
+  const created = await createCrmField(db, tenantId, { ...input, specialtyKey });
+  if (!created.ok) return { ok: false, reason: created.reason };
+  return { ok: true, field: created.field };
 }
 
 export async function updateCustomField(db: Db, tenantId: string, fieldId: string, input: UpdateCustomFieldInput): Promise<{ ok: true } | { ok: false; reason: string }> {

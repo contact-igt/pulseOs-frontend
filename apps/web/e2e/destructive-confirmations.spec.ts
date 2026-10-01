@@ -63,11 +63,10 @@ test.describe("Destructive-action confirmations", () => {
   test("Archive field requires confirmation stating historical values are kept", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await login(page, "gyn.admin@pulseos.local");
-    await page.goto("/settings");
-    await expect(page.getByTestId("settings-page")).toBeVisible();
+    await page.goto("/settings?section=fields&service=GYNECOLOGY");
+    await expect(page.getByTestId("crm-fields-section")).toBeVisible();
 
-    await page.getByRole("button", { name: "Edit" }).nth(1).click();
-    await page.getByRole("button", { name: "Archive" }).first().click();
+    await page.locator('[data-testid^="field-archive-"]').first().click();
 
     const dialog = page.getByTestId("confirm-dialog");
     await expect(dialog).toBeVisible();

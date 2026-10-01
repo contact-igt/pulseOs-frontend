@@ -6,7 +6,7 @@ import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
 import {
-  Badge, Card, ConnectorModeBadge, EmptyState, ErrorState, Panel, Skeleton, Tabs, Timeline, ViewSwitcher,
+  Badge, Card, ConnectorModeBadge, CustomFieldValueGrid, EmptyState, ErrorState, Panel, Skeleton, Tabs, Timeline, ViewSwitcher,
   JOURNEY_STAGE_LABEL, JOURNEY_STAGE_TONE, APPOINTMENT_STATUS_LABEL, TREATMENT_STATUS_LABEL,
   CALL_STATUS_LABEL, CALL_STATUS_TONE,
 } from "@pulseos/ui";
@@ -170,11 +170,9 @@ function JourneyCard({ journey, active, canOpen, onSelect }: { journey: JourneyC
           configured in Settings, captured on Add Lead. A compact grid, not a
           card or a row per field. */}
       {journey.customFields.length > 0 && (
-        <dl className="mt-3.5 grid grid-cols-2 gap-x-4 gap-y-2.5 border-t border-line pt-3" data-testid="journey-custom-fields">
-          {journey.customFields.map((f) => (
-            <Fact key={f.label} label={f.label}>{f.value}</Fact>
-          ))}
-        </dl>
+        <div className="mt-3.5 border-t border-line pt-3" data-testid="journey-custom-fields">
+          <CustomFieldValueGrid fields={journey.customFields} testId={`journey-custom-field-values-${journey.id}`} />
+        </div>
       )}
       <p className="mt-3 text-[11px] text-ink-2">
         Last interaction {journey.lastInteractionAt ? fmtSmartDateTime(journey.lastInteractionAt) : "—"}

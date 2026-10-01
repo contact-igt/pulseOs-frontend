@@ -40,7 +40,7 @@ export async function patientRoutes(app: FastifyInstance) {
   app.get("/patients/:id/360", async (request, reply) => {
     const tenantId = request.sessionUser!.tenantId;
     const { id } = request.params as { id: string };
-    const result = await getPatient360(app.db, tenantId, id);
+    const result = await getPatient360(app.db, tenantId, id, request.sessionUser!.role, request.sessionUser!.timezone);
     if (!result) return reply.status(404).send({ error: "patient_not_found" });
     return result;
   });

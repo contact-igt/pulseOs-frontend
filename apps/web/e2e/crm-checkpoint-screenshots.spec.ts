@@ -63,11 +63,8 @@ test.describe("CRM + specialty + marketing-efficiency checkpoint screenshots", (
     await shot(page, "08-specialties-settings.png");
 
     await page.getByTestId("specialty-toggle-FERTILITY").waitFor();
-    const editButtons = page.getByRole("button", { name: "Edit" });
-    await editButtons.nth(1).click(); // Fertility row
-    // Field labels render inside an uncontrolled <input defaultValue>, so their
-    // text is a form-control value, never matchable by getByText — use the
-    // row's own testid instead.
+    // A service's fields live in Settings → CRM Fields.
+    await page.goto("/settings?section=fields&service=FERTILITY");
     await expect(page.getByTestId("field-row-trying_duration")).toBeVisible();
     await shot(page, "09-specialty-fields.png");
 

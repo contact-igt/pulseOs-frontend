@@ -4,16 +4,17 @@ import { requirePermission } from "../auth/permission.middleware.js";
 import {
   createCustomField,
   getSpecialtyDetail,
-  listActiveFields,
   listSpecialties,
   updateCustomField,
   updateSpecialty,
 } from "./specialty.service.js";
 import { listActiveTreatmentDefinitions } from "./treatment-catalog.service.js";
+import { listFieldsForEntry } from "../crm/crm-field.service.js";
 
 const REASON_STATUS: Record<string, number> = {
   specialty_not_found: 404,
   field_not_found: 404,
+  key_exists: 409,
 };
 
 const updateSpecialtyBody = z.object({
@@ -49,7 +50,8 @@ export async function specialtyRoutes(app: FastifyInstance) {
   app.get("/specialties/:key/fields", async (request) => {
     const tenantId = request.sessionUser!.tenantId;
     const { key } = request.params as { key: string };
-    return listActiveFields(app.db, tenantId, key);
+    // The Add Lead form: fields placed on Add Lead for this service (plus all-services fields), visible to this role.
+    return listFieldsForEntry(app.db, tenantId, request.sessionUser!.role, { placement: "add_lead", specialtyKey: key });
   });
 
   // The tenant's active treatment catalog — read by every role (a doctor picks from it when recording an

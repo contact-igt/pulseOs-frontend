@@ -1,6 +1,8 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { buildApp } from "../app.js";
-import { queryClient } from "../db/client.js";
+import { eq } from "drizzle-orm";
+import { db, queryClient } from "../db/client.js";
+import { customFieldDefinitions, customFieldValues } from "../db/schema.js";
 import type { FastifyInstance } from "fastify";
 import type { CreateLeadResult, LeadRow, LeadsSummary, Lookups } from "@pulseos/types";
 
@@ -188,7 +190,9 @@ describe.skipIf(!DEMO_PASSWORD)("leads (integration)", () => {
       });
       expect(provided.statusCode).toBe(201);
     } finally {
-      await app.inject({ method: "PATCH", url: `/specialties/fields/${field.id}`, cookies: { pulseos_session: adminCookie }, payload: { archived: true } });
+      // Remove the test field and its values entirely (archiving would leave the key behind and collide on the next run).
+      await db.delete(customFieldValues).where(eq(customFieldValues.fieldDefinitionId, field.id));
+      await db.delete(customFieldDefinitions).where(eq(customFieldDefinitions.id, field.id));
     }
   });
 

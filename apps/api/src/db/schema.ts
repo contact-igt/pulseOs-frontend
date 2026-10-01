@@ -699,7 +699,7 @@ export const calls = pgTable("calls", {
 // plain text (not a FK — see `journeys.specialtyKey` above) stay valid.
 // ---------------------------------------------------------------------------
 
-export const customFieldTypeEnum = pgEnum("custom_field_type", ["TEXT", "NUMBER", "DATE", "BOOLEAN", "SELECT", "MULTI_SELECT", "PHONE"]);
+export const customFieldTypeEnum = pgEnum("custom_field_type", ["TEXT", "NUMBER", "DATE", "BOOLEAN", "SELECT", "MULTI_SELECT", "PHONE", "LONG_TEXT", "EMAIL", "DATETIME"]);
 
 export const specialtyTemplates = pgTable("specialty_templates", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -726,10 +726,16 @@ export const customFieldDefinitions = pgTable("custom_field_definitions", {
   required: boolean("required").notNull().default(false),
   sortOrder: integer("sort_order").notNull().default(0),
   archived: boolean("archived").notNull().default(false),
+  // CRM configuration: one definition, reused wherever it is placed. specialty_key "*" = every service.
+  groupKey: text("group_key").notNull().default("enquiry_details"),
+  placements: jsonb("placements").notNull().default(["add_lead", "journey_detail", "patient_360"]),
+  defaultValue: jsonb("default_value"),
+  visibleTo: text("visible_to").notNull().default("everyone"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   tenantIdx: index("custom_field_definitions_tenant_idx").on(t.tenantId),
   specialtyIdx: index("custom_field_definitions_specialty_idx").on(t.tenantId, t.specialtyKey),
+  tenantSpecialtyKeyUnique: uniqueIndex("custom_field_definitions_tenant_specialty_key_unique").on(t.tenantId, t.specialtyKey, t.key),
 }));
 
 // ---------------------------------------------------------------------------

@@ -36,3 +36,13 @@ export function purgePatients(namePrefix: string) {
     DELETE FROM patients WHERE id IN (${ps});
     COMMIT;`);
 }
+
+/** Delete CRM fields whose key starts with `keyPrefix` (and any values recorded against them). Run after purgePatients. */
+export function purgeCrmFields(keyPrefix: string) {
+  if (!/^[a-z0-9_]{4,}$/.test(keyPrefix)) throw new Error("purgeCrmFields needs a specific key prefix");
+  sql(`
+    BEGIN;
+    DELETE FROM custom_field_values WHERE field_definition_id IN (SELECT id FROM custom_field_definitions WHERE key LIKE '${keyPrefix}%');
+    DELETE FROM custom_field_definitions WHERE key LIKE '${keyPrefix}%';
+    COMMIT;`);
+}

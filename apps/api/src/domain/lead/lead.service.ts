@@ -19,8 +19,9 @@ import { normalizePhone, resolveDefaultPhoneRegion } from "../patient/phone.js";
 import { resolveOrCreatePatient } from "../patient/identity.service.js";
 import { recordTouchpoint } from "../acquisition/attribution.service.js";
 import { createTask } from "../task/task.service.js";
+import { listFieldsForEntry, resolveSubmittedValues } from "../crm/crm-field.service.js";
 import type { OwnerFilter } from "../journey/journey.service.js";
-import type { CreateLeadInput, CreateLeadResult, LeadPhoneLookupResult, LeadRow, LeadStatus, LeadsSummary } from "@pulseos/types";
+import type { CreateLeadInput, CreateLeadResult, LeadPhoneLookupResult, LeadRow, LeadStatus, LeadsSummary, Role } from "@pulseos/types";
 
 export async function lookupPatientByPhone(db: Db, tenantId: string, rawPhone: string): Promise<LeadPhoneLookupResult> {
   const defaultRegion = await resolveDefaultPhoneRegion(db, tenantId);
@@ -38,20 +39,18 @@ export async function lookupPatientByPhone(db: Db, tenantId: string, rawPhone: s
   return { patient: { id: patient.id, name: patient.name, phone: patient.phone, activeJourneyCount: journeyRows.length } };
 }
 
-export type CreateLeadOutcome = CreateLeadResult | { validationError: true; missingRequiredFields: string[] };
+export type CreateLeadOutcome = CreateLeadResult | { validationError: true; missingRequiredFields: string[]; invalidFields: string[] };
 
-export async function createLead(db: Db, tenantId: string, actorId: string, input: CreateLeadInput): Promise<CreateLeadOutcome> {
+export async function createLead(db: Db, tenantId: string, actorId: string, input: CreateLeadInput, actorRole: Role = "HOSPITAL_ADMIN"): Promise<CreateLeadOutcome> {
   // Required-field enforcement happens before any write — server-side, not
   // just the Add Lead form's `required` attribute, so an API call that
   // bypasses the UI can't silently skip data Settings marked mandatory.
-  const specialtyFields = await db
-    .select({ key: customFieldDefinitions.key, required: customFieldDefinitions.required })
-    .from(customFieldDefinitions)
-    .where(and(eq(customFieldDefinitions.tenantId, tenantId), eq(customFieldDefinitions.specialtyKey, input.specialtyKey), eq(customFieldDefinitions.archived, false)));
-  const provided = input.customFieldValues ?? {};
-  const missingRequiredFields = specialtyFields.filter((f) => f.required && (provided[f.key] === undefined || provided[f.key] === null || provided[f.key] === "")).map((f) => f.key);
-  if (missingRequiredFields.length > 0) {
-    return { validationError: true, missingRequiredFields };
+  // The fields on this form are the ones configured for Add Lead in this service scope, not
+  // archived, and visible to the person submitting. Values are validated by field type.
+  const entryFields = await listFieldsForEntry(db, tenantId, actorRole, { placement: "add_lead", specialtyKey: input.specialtyKey });
+  const submitted = resolveSubmittedValues(entryFields, input.customFieldValues);
+  if (!submitted.ok) {
+    return { validationError: true, missingRequiredFields: submitted.missing, invalidFields: submitted.invalid };
   }
 
   // Canonical duplicate-prevention check: always resolve by phone through
@@ -112,18 +111,8 @@ export async function createLead(db: Db, tenantId: string, actorId: string, inpu
     });
   }
 
-  if (input.customFieldValues) {
-    const definitions = await db
-      .select()
-      .from(customFieldDefinitions)
-      .where(and(eq(customFieldDefinitions.tenantId, tenantId), eq(customFieldDefinitions.specialtyKey, input.specialtyKey), eq(customFieldDefinitions.archived, false)));
-    const defByKey = new Map(definitions.map((d) => [d.key, d]));
-
-    for (const [key, value] of Object.entries(input.customFieldValues)) {
-      const def = defByKey.get(key);
-      if (!def || value === undefined || value === null || value === "") continue;
-      await db.insert(customFieldValues).values({ tenantId, journeyId: journey.id, fieldDefinitionId: def.id, value });
-    }
+  for (const { field, value } of submitted.values) {
+    await db.insert(customFieldValues).values({ tenantId, journeyId: journey.id, fieldDefinitionId: field.id, value });
   }
 
   await db.insert(timelineEvents).values({

@@ -29,9 +29,9 @@ import type {
 } from "@pulseos/types";
 import { getSpendAtRisk, SPEND_AT_RISK_CATEGORIES } from "../dashboard/dashboard.service.js";
 import { listAppointments } from "../appointment/appointment.service.js";
-import { formatCustomFieldValue } from "../patient/patient.service.js";
 import { listTasks, getNextActionForJourney } from "../task/task.service.js";
 import { getPatientTimeline } from "../timeline/timeline.service.js";
+import { loadJourneyFieldValues } from "../crm/crm-field.service.js";
 
 /**
  * Server-side `owner` list filter shared by GET /journeys and GET /leads.
@@ -281,14 +281,8 @@ export async function getJourneyDetail(db: Db, tenantId: string, journeyId: stri
     campaign = c ?? null;
   }
 
-  // Deliberately NOT filtered to archived = false — same rule as Patient 360's
-  // journey card: a value recorded while a field was active stays visible.
-  const customFieldRows = await db
-    .select({ label: customFieldDefinitions.label, value: customFieldValues.value })
-    .from(customFieldValues)
-    .innerJoin(customFieldDefinitions, eq(customFieldValues.fieldDefinitionId, customFieldDefinitions.id))
-    .where(and(eq(customFieldValues.tenantId, tenantId), eq(customFieldValues.journeyId, journeyId)))
-    .orderBy(asc(customFieldDefinitions.sortOrder));
+  // Archived fields keep their recorded values here; fields placed elsewhere or not visible to this role are left out.
+  const customFields = await loadJourneyFieldValues(db, tenantId, journeyId, viewer.role, "journey_detail", viewer.timezone);
 
   const [timeline, taskRows, appointmentRows, nextTask] = await Promise.all([
     getPatientTimeline(db, tenantId, j.patientId, journeyId),
@@ -373,7 +367,7 @@ export async function getJourneyDetail(db: Db, tenantId: string, journeyId: stri
       lastInteractionAt,
       nextAction,
     },
-    customFields: customFieldRows.map((f) => ({ label: f.label, value: formatCustomFieldValue(f.value) })),
+    customFields,
     timeline,
     tasks: journeyTasks,
     appointments: appointmentRows,

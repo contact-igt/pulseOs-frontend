@@ -41,3 +41,6 @@ export { VIEW_MOBILE_BREAKPOINT, useContainerWidth } from "./views/useContainerW
 export { addDays, dayStartInstant, diffDays, formatKey, isDayKey, localDayKey, shiftDate, visibleRange } from "./views/dates";
 export type { CalendarSpan, DayKey, WeekStart } from "./views/dates";
 export { inProgressIndex, splitInProgress } from "./trend";
+export * from "./SideSheet";
+export * from "./CustomFieldInputs";
+export * from "./CustomFieldValueGrid";

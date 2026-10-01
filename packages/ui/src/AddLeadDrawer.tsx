@@ -13,6 +13,7 @@ import type {
   TaskType,
 } from "@pulseos/types";
 import { useDialogFocus } from "./useDialogFocus";
+import { CustomFieldInputs, defaultsFor, normalizeFieldValues } from "./CustomFieldInputs";
 
 const SOURCE_OPTIONS: { value: SourceChannel; label: string }[] = [
   { value: "meta", label: "Meta Ads" },
@@ -46,7 +47,7 @@ interface FormState {
   ownerId: string;
   priority: TaskPriority;
   notes: string;
-  customFieldValues: Record<string, string | boolean>;
+  customFieldValues: Record<string, unknown>;
   createFollowUp: boolean;
   followUpType: TaskType;
   followUpDueAt: string;
@@ -132,9 +133,11 @@ export function AddLeadDrawer({
     setForm((f) => ({ ...f, specialtyKey: key, journeyType: template?.defaultJourneyType ?? f.journeyType, customFieldValues: {} }));
     const activeFields = key ? await onLoadCustomFields(key) : [];
     setFields(activeFields);
+    // Pre-fill the defaults configured for these fields (Settings → CRM Fields).
+    setForm((f) => (f.specialtyKey === key ? { ...f, customFieldValues: defaultsFor(activeFields) } : f));
   }
 
-  function setCustomField(key: string, value: string | boolean) {
+  function setCustomField(key: string, value: unknown) {
     setForm((f) => ({ ...f, customFieldValues: { ...f.customFieldValues, [key]: value } }));
   }
 
@@ -161,7 +164,7 @@ export function AddLeadDrawer({
         ownerId: form.ownerId || undefined,
         priority: form.priority,
         notes: form.notes.trim() || undefined,
-        customFieldValues: Object.keys(form.customFieldValues).length > 0 ? form.customFieldValues : undefined,
+        customFieldValues: normalizeFieldValues(fields, form.customFieldValues),
         followUp: form.createFollowUp ? { type: form.followUpType, dueAt: new Date(form.followUpDueAt).toISOString(), assignedTo: form.followUpAssignedTo || undefined } : null,
       };
       const result = await onSubmit(input);
@@ -383,42 +386,7 @@ export function AddLeadDrawer({
           {fields.length > 0 && (
             <section data-testid="lead-custom-fields">
               <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-400">{specialties.find((s) => s.key === form.specialtyKey)?.displayName} Details</h3>
-              <div className="grid grid-cols-2 gap-3">
-                {fields.map((field) => (
-                  <div key={field.id} className={field.fieldType === "TEXT" ? "col-span-2" : ""}>
-                    <label className={labelClass} htmlFor={`field-${field.id}`}>
-                      {field.label} {field.required && <span className="text-danger-500">*</span>}
-                    </label>
-                    {field.fieldType === "BOOLEAN" ? (
-                      <label className="flex items-center gap-2 rounded-lg border border-neutral-200 px-3 py-2 text-sm text-slate-700">
-                        <input
-                          id={`field-${field.id}`}
-                          type="checkbox"
-                          checked={!!form.customFieldValues[field.key]}
-                          onChange={(e) => setCustomField(field.key, e.target.checked)}
-                          className="h-3.5 w-3.5 rounded border-neutral-300 text-primary-600"
-                        />
-                        Yes
-                      </label>
-                    ) : field.fieldType === "SELECT" ? (
-                      <select id={`field-${field.id}`} required={field.required} value={(form.customFieldValues[field.key] as string) ?? ""} onChange={(e) => setCustomField(field.key, e.target.value)} className={inputClass}>
-                        <option value="">Select…</option>
-                        {(field.options ?? []).map((opt) => (
-                          <option key={opt} value={opt}>
-                            {opt}
-                          </option>
-                        ))}
-                      </select>
-                    ) : field.fieldType === "NUMBER" ? (
-                      <input id={`field-${field.id}`} type="number" required={field.required} value={(form.customFieldValues[field.key] as string) ?? ""} onChange={(e) => setCustomField(field.key, e.target.value)} className={inputClass} />
-                    ) : field.fieldType === "DATE" ? (
-                      <input id={`field-${field.id}`} type="date" required={field.required} value={(form.customFieldValues[field.key] as string) ?? ""} onChange={(e) => setCustomField(field.key, e.target.value)} className={inputClass} />
-                    ) : (
-                      <input id={`field-${field.id}`} type="text" required={field.required} value={(form.customFieldValues[field.key] as string) ?? ""} onChange={(e) => setCustomField(field.key, e.target.value)} className={inputClass} />
-                    )}
-                  </div>
-                ))}
-              </div>
+              <CustomFieldInputs fields={fields} values={form.customFieldValues} onChange={setCustomField} idPrefix="lead-field" testId="lead-custom-field-inputs" />
             </section>
           )}
 

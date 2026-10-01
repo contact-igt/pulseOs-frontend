@@ -6,7 +6,7 @@ import { useParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
 import {
-  APPOINTMENT_STATUS_LABEL, APPOINTMENT_STATUS_TONE, Badge, Card, EmptyState, ErrorState, JOURNEY_STAGE_LABEL, JOURNEY_STAGE_TONE,
+  APPOINTMENT_STATUS_LABEL, APPOINTMENT_STATUS_TONE, Badge, Card, CustomFieldValueGrid, EmptyState, ErrorState, JOURNEY_STAGE_LABEL, JOURNEY_STAGE_TONE,
   PageHeader, Panel, Skeleton, TREATMENT_STATUS_LABEL, TREATMENT_STATUS_TONE, Timeline,
   fmtDate, fmtDateTime, formatInr, relativeTime, urgencyLabel,
 } from "@pulseos/ui";
@@ -189,15 +189,8 @@ export default function JourneyDetailPage() {
 
         {customFields.length > 0 && (
           <div className="mt-5 border-t border-line pt-4" data-testid="journey-custom-fields">
-            <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-2">Specialty details</h3>
-            <dl className="grid grid-cols-2 gap-x-6 gap-y-2.5 sm:grid-cols-3 lg:grid-cols-4">
-              {customFields.map((f) => (
-                <div key={f.label} className="min-w-0">
-                  <dt className="truncate text-[11px] text-ink-2">{f.label}</dt>
-                  <dd className="truncate text-sm text-ink" title={f.value}>{f.value}</dd>
-                </div>
-              ))}
-            </dl>
+            <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-2">Details</h3>
+            <CustomFieldValueGrid fields={customFields} testId="journey-custom-field-values" />
           </div>
         )}
       </Card>
