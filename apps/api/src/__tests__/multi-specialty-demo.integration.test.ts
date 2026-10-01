@@ -279,8 +279,9 @@ describe.skipIf(!DEMO_PASSWORD)("multi-specialty demo tenants (integration)", ()
     it("calls and WhatsApp threads seeded for the eye tenant read as ophthalmology conversations", async () => {
       const p = (await getJson<{ id: string; name: string }[]>(app, "/patients?search=Ramesh", eye.admin)).find((x) => x.name === "Ramesh Hegde")!;
       const p360 = await getJson<Patient360>(app, `/patients/${p.id}/360`, eye.admin);
-      const inbound = p360.calls.find((c) => c.direction === "inbound");
-      expect(inbound?.endpointLabel).toBe("Cataract Enquiry Line");
+      // The seeded call names its line; the IVR call added by the call demo story honestly has none (several lines are active).
+      const inbound = p360.calls.filter((c) => c.direction === "inbound");
+      expect(inbound.map((c) => c.endpointLabel)).toContain("Cataract Enquiry Line");
       const timeline = await getJson<TimelineEventVm[]>(app, `/patients/${p.id}/timeline`, eye.admin);
       expect(timeline.map((t) => t.description ?? "").join(" ")).toContain("Can I send my previous eye reports before the appointment?");
     });

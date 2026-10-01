@@ -22,7 +22,11 @@ import type {
   FrontDeskDashboard,
   CommunicationEndpointVm,
   ConnectorDetail,
+  CallFeedbackInput,
+  CallTranscriptVm,
   CreateLeadSourceInput,
+  LogCallInput,
+  LogCallResult,
   DepartmentTemplateVm,
   DepartmentVm,
   LeadSourceVm,
@@ -252,8 +256,6 @@ export const api = {
   conversationAutomation: (id: string) => request<ConversationAutomationPreference>(`/conversations/${id}/automation`),
   setConversationAutomation: (id: string, input: { mode: ConversationAutomationMode; scheduledStart?: string; scheduledEnd?: string; timezone?: string }) =>
     request<ConversationAutomationPreference>(`/conversations/${id}/automation`, { method: "PATCH", body: JSON.stringify(input) }),
-  /** The provider's recording URL, only for a role allowed to play it (`download` additionally needs the download permission). */
-  callRecording: (id: string, opts: { download?: boolean } = {}) => request<{ url: string; download: boolean }>(`/calls/${id}/recording${opts.download ? "?download=1" : ""}`),
   leadSources: (opts: { includeArchived?: boolean } = {}) => request<LeadSourceVm[]>(`/lead-sources${opts.includeArchived ? "?includeArchived=true" : ""}`),
   createLeadSource: (input: CreateLeadSourceInput) => request<LeadSourceVm>("/lead-sources", { method: "POST", body: JSON.stringify(input) }),
   updateLeadSource: (id: string, input: UpdateLeadSourceInput) => request<LeadSourceVm>(`/lead-sources/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
@@ -261,6 +263,12 @@ export const api = {
   departmentTemplates: () => request<DepartmentTemplateVm[]>("/department-templates"),
   installDepartment: (templateKey: string) => request<{ departmentId: string; created: boolean }>("/departments/install", { method: "POST", body: JSON.stringify({ templateKey }) }),
   updateDepartment: (id: string, input: UpdateDepartmentInput) => request<{ ok: true }>(`/departments/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
+  logCall: (journeyId: string, input: LogCallInput) => request<LogCallResult>(`/journeys/${journeyId}/calls`, { method: "POST", body: JSON.stringify(input) }),
+  callFeedback: (callId: string, input: CallFeedbackInput) => request<{ ok: true; callbackTaskId: string | null }>(`/calls/${callId}/feedback`, { method: "POST", body: JSON.stringify(input) }),
+  callTranscript: (callId: string) => request<CallTranscriptVm>(`/calls/${callId}/transcript`),
+  retryCallIntelligence: (callId: string) => request<{ queued: boolean }>(`/calls/${callId}/intelligence/retry`, { method: "POST", body: JSON.stringify({}) }),
+  /** URL of the authenticated recording stream (play in an <audio> tag, or download). The provider URL is never exposed. */
+  callRecordingUrl: (callId: string, opts: { download?: boolean } = {}) => `${API_BASE}/calls/${callId}/recording${opts.download ? "?download=1" : ""}`,
   connectors: () => request<ConnectorRow[]>("/connectors"),
   connector: (id: string) => request<ConnectorDetail>(`/connectors/${id}`),
   updateConnector: (id: string, input: { displayName?: string; configuration?: Record<string, unknown>; secrets?: Record<string, unknown> }) =>

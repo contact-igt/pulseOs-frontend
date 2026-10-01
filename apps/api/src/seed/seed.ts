@@ -2,6 +2,7 @@ import "dotenv/config";
 import { db, queryClient } from "../db/client.js";
 import {
   sessions,
+  callIntelligence,
   calls,
   connectorEvents,
   messages,
@@ -62,6 +63,7 @@ async function main() {
 
   console.log("Clearing existing demo data...");
   await db.delete(sessions);
+  await db.delete(callIntelligence);
   await db.delete(calls);
   await db.delete(connectorEvents);
   await db.delete(conversationSummaries);

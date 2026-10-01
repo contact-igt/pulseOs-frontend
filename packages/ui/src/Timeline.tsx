@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { CalendarCheck, IndianRupee, ListChecks, MessageCircle, Phone, Stethoscope, UserCog, Circle, type LucideIcon } from "lucide-react";
 import { Badge, Card, EmptyState, Tabs, type TabItem } from "./primitives";
 import { fmtDate, fmtTime } from "./format";
@@ -99,7 +99,7 @@ function groupByDay(events: TimelineEventVm[]): DayGroup[] {
  * `order` defaults to the API's chronological order; pass "desc" for a
  * newest-first feed. Props are additive-only: Journey Detail consumes this too.
  */
-export function Timeline({ events, order = "asc", className = "" }: { events: TimelineEventVm[]; order?: "asc" | "desc"; className?: string }) {
+export function Timeline({ events, order = "asc", className = "", renderEventDetail }: { events: TimelineEventVm[]; order?: "asc" | "desc"; className?: string; /** Extra body under an event (the app renders a call card for call events). */ renderEventDetail?: (event: TimelineEventVm) => ReactNode }) {
   const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("all");
 
   const counts = useMemo(() => {
@@ -146,6 +146,7 @@ export function Timeline({ events, order = "asc", className = "" }: { events: Ti
                         <span className="shrink-0 pt-0.5 text-[11px] tabular-nums text-ink-2">{fmtTime(event.occurredAt)}</span>
                       </div>
                       {event.description && <p className="mt-0.5 break-words text-xs leading-5 text-ink-2">{event.description}</p>}
+                      {renderEventDetail?.(event)}
                       <span className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-ink-2">
                         <Badge tone={CATEGORY_CHIP_TONE[event.category]}>{CATEGORY_LABEL[event.category]}</Badge>
                         {/* How it happened (the channel), and which hospital line a call/WhatsApp message came in on. A lead's source is shown only where no channel is recorded. */}

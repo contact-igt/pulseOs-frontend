@@ -98,6 +98,7 @@ describe.skipIf(!DEMO_PASSWORD)("calls: manual log, IVR, intelligence, recording
     provider = createServer((req, res) => {
       providerHits.push({ range: req.headers.range });
       if (req.url === "/missing.mp3") { res.statusCode = 404; res.end(); return; }
+      if (req.url === "/page.html") { res.writeHead(200, { "content-type": "text/html" }); res.end("<script>alert(1)</script>"); return; }
       const m = /^bytes=(\d+)-(\d*)$/.exec(String(req.headers.range ?? ""));
       if (m) {
         const start = Number(m[1]); const end = m[2] ? Number(m[2]) : body.length - 1;
@@ -510,6 +511,23 @@ describe.skipIf(!DEMO_PASSWORD)("calls: manual log, IVR, intelligence, recording
       expect((await get(t, "HOSPITAL_ADMIN", "/calls/00000000-0000-0000-0000-000000000000/recording")).statusCode).toBe(404);
       await db.update(calls).set({ recordingUrl: null }).where(eq(calls.id, callId));
       expect((await get(t, "HOSPITAL_ADMIN", `/calls/${callId}/recording`)).statusCode).toBe(404); // no recording
+    });
+
+    it("a provider that answers with something other than audio is never rendered by the browser: opaque type, nosniff, forced download", async () => {
+      await db.update(calls).set({ recordingUrl: `${providerUrl}/page.html` }).where(eq(calls.id, callId));
+      const res = await get(t, "HOSPITAL_ADMIN", `/calls/${callId}/recording`);
+      expect(res.statusCode).toBe(200);
+      expect(res.headers["content-type"]).toBe("application/octet-stream");
+      expect(res.headers["x-content-type-options"]).toBe("nosniff");
+      expect(res.headers["content-disposition"]).toContain("attachment");
+    });
+
+    it("only a plain single byte range is forwarded to the provider", async () => {
+      await db.update(calls).set({ recordingUrl: `${providerUrl}/rec.mp3` }).where(eq(calls.id, callId));
+      providerHits.length = 0;
+      await get(t, "HOSPITAL_ADMIN", `/calls/${callId}/recording`, { range: "bytes=0-1,5-9" });
+      await get(t, "HOSPITAL_ADMIN", `/calls/${callId}/recording`, { range: "garbage" });
+      expect(providerHits.every((h) => h.range === undefined)).toBe(true);
     });
 
     it("the built-in fixture recording is a playable silent sample with Range support", async () => {

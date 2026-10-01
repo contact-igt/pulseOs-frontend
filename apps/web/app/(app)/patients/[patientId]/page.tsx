@@ -17,6 +17,7 @@ import { hasPermission } from "@pulseos/types";
 import { pathAllowedForRole } from "@/components/shell/nav";
 import type { AppointmentStatus, CallVm, JourneyCardVm, JourneyStage, TreatmentStatus } from "@pulseos/types";
 import { useViewState } from "@/lib/useViewState";
+import { useCallDetail } from "@/components/calls/useCallDetail";
 import { PatientUpcomingList } from "@/components/patient360/PatientUpcomingList";
 import { useHospitalTimeZone } from "@/lib/useHospitalTimeZone";
 
@@ -191,22 +192,12 @@ const CALL_DIRECTION_ICON = { inbound: PhoneIncoming, outbound: PhoneOutgoing } 
 // story" design. Recording is a plain link-out, not an inline player — an
 // embedded player/transcript view is real future scope (see the omnichannel
 // audit), not built this pass.
+/** Opens the authenticated recording stream (PulseOS checks the permission and streams the audio — never the provider's URL). */
 function RecordingButton({ callId }: { callId: string }) {
-  const [state, setState] = useState<"idle" | "loading" | "error">("idle");
-  async function play() {
-    setState("loading");
-    try {
-      const { url } = await api.callRecording(callId);
-      window.open(url, "_blank", "noopener,noreferrer");
-      setState("idle");
-    } catch {
-      setState("error");
-    }
-  }
   return (
-    <button type="button" onClick={play} disabled={state === "loading"} className="mt-1 inline-block text-xs font-medium text-primary-700 hover:underline disabled:opacity-60" data-testid={`call-recording-${callId}`}>
-      {state === "loading" ? "Opening…" : state === "error" ? "Recording unavailable — retry" : "Recording"}
-    </button>
+    <a href={api.callRecordingUrl(callId)} target="_blank" rel="noreferrer" className="mt-1 inline-block text-xs font-medium text-primary-700 hover:underline" data-testid={`call-recording-${callId}`}>
+      Recording
+    </a>
   );
 }
 
@@ -273,6 +264,7 @@ export default function Patient360Page() {
   // permission-trimmed server-side; grouped in the hospital's timezone the response names.
   const upcoming = useQuery({ queryKey: ["patient360", patientId, "upcoming"], queryFn: () => api.patientUpcoming(patientId), enabled: patient360.isSuccess });
   const timeZone = useHospitalTimeZone();
+  const callDetail = useCallDetail(patient360.data?.patient.name ?? "");
   const { view, setView } = useViewState<P360View>({ views: VIEWS, defaultView: "timeline", timeZone });
   const upcomingCount = upcoming.data ? upcoming.data.items.filter((i) => !selectedJourney || i.journeyId === selectedJourney.id).length : null;
 
@@ -379,7 +371,7 @@ export default function Patient360Page() {
           ) : timeline.isError ? (
             <ErrorState message="Could not load the timeline." />
           ) : (
-            timeline.data && <Timeline events={timeline.data} order="desc" />
+            timeline.data && <Timeline events={timeline.data} order="desc" renderEventDetail={callDetail.renderEventDetail} />
           )}
           </div>
         </div>
@@ -415,6 +407,7 @@ export default function Patient360Page() {
           </div>
         )}
       </Panel>
+      {callDetail.sheet}
     </div>
   );
 }

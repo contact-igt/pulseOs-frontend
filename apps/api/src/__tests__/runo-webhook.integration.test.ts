@@ -159,9 +159,11 @@ describe.skipIf(!DEMO_PASSWORD)("Runo webhook (integration, fixture mode)", () =
 
     const taskRes = await app.inject({ method: "GET", url: `/tasks?patientId=${patient.id}`, cookies: { pulseos_session: adminCookie } });
     const taskRows = taskRes.json() as { type: string; notes: string | null }[];
-    const callbackTasks = taskRows.filter((t) => t.type === "CALLBACK");
+    // Other suites may add unrelated manual tasks to a shared demo patient: assert on the tasks THIS call produces.
+    const callbackTasks = taskRows.filter((t) => t.type === "CALLBACK" && /missed call|disposition/i.test(t.notes ?? ""));
     expect(callbackTasks.length).toBe(1);
     expect(callbackTasks[0].notes).toMatch(/missed call/i);
+    expect(callbackTasks[0].notes).not.toMatch(/disposition/i);
   });
 
   it("a CALL_BACK_LATER disposition creates a CALLBACK task (deterministic disposition mapping)", async () => {

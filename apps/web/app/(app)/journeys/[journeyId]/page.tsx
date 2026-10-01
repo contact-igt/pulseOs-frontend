@@ -11,10 +11,13 @@ import {
   fmtDate, fmtDateTime, formatInr, relativeTime, urgencyLabel,
 } from "@pulseos/ui";
 import { hasPermission, type JourneyDetailVm, type RevenueEventVm, type TaskType } from "@pulseos/types";
-import { ChevronRight, UserRoundCog } from "lucide-react";
+import { ChevronRight, Phone, UserRoundCog } from "lucide-react";
 import { BackLink, withFrom } from "@/components/shell/BackLink";
 import { AssignOwnerDialog } from "@/components/journey/AssignOwnerDialog";
 import { LogOutcomeSheet } from "@/components/outcomes/LogOutcomeSheet";
+import { LogCallSheet } from "@/components/calls/LogCallSheet";
+import { CallStatsStrip } from "@/components/calls/CallStatsStrip";
+import { useCallDetail } from "@/components/calls/useCallDetail";
 import { JourneyStageFlow } from "@/components/journey/JourneyStageFlow";
 import { invalidateJourneyQueries } from "@/components/journey/invalidate";
 
@@ -90,6 +93,7 @@ export default function JourneyDetailPage() {
   const [assigning, setAssigning] = useState(false);
   // "Log outcome" sheet; `taskId` is set when it is opened from one of the open follow-ups.
   const [logging, setLogging] = useState<{ taskId?: string } | null>(null);
+  const [loggingCall, setLoggingCall] = useState(false);
 
   const session = useQuery({ queryKey: ["session"], queryFn: api.session, retry: false });
   const lookups = useQuery({ queryKey: ["lookups"], queryFn: api.lookups, staleTime: 60_000 });
@@ -102,6 +106,9 @@ export default function JourneyDetailPage() {
   const role = session.data?.user.role;
   const canAssign = role ? hasPermission(role, "MANAGE_JOURNEYS") : false;
   const canLogOutcome = role ? hasPermission(role, "MANAGE_TASKS") : false;
+  const canLogCall = role ? hasPermission(role, "LOG_CALL") : false;
+  // Hooks must run on every render, before the loading/error early returns below.
+  const callDetail = useCallDetail(detail.data?.patient.name ?? "");
 
   if (detail.isLoading) return <JourneyPageSkeleton />;
   if (detail.isError) {
@@ -129,6 +136,12 @@ export default function JourneyDetailPage() {
         title={patient.name}
         subtitle={`${patient.age !== null ? `${patient.age} yrs · ` : ""}${patient.phone}${patient.branchName ? ` · ${patient.branchName}` : ""}`}
         actions={
+          <div className="flex flex-wrap items-center gap-2">
+            {canLogCall && (
+              <Button variant="primary" className="min-h-11 sm:min-h-0" onClick={() => setLoggingCall(true)} data-testid="journey-log-call">
+                <Phone size={14} aria-hidden="true" /> Log call
+              </Button>
+            )}
           <Link
             href={withFrom(`/patients/${patient.id}`, "journeys")}
             className="inline-flex items-center gap-1 rounded-control border border-line-strong bg-white/85 px-3 py-2 text-sm font-medium text-neutral-700 shadow-panel transition hover:bg-white"
@@ -137,6 +150,7 @@ export default function JourneyDetailPage() {
             Open Patient 360
             <ChevronRight size={14} aria-hidden="true" />
           </Link>
+          </div>
         }
       />
 
@@ -197,6 +211,10 @@ export default function JourneyDetailPage() {
           </Fact>
         </dl>
 
+        <div className="mt-4 border-t border-line pt-3">
+          <CallStatsStrip stats={journey.callStats} />
+        </div>
+
         {customFields.length > 0 && (
           <div className="mt-5 border-t border-line pt-4" data-testid="journey-custom-fields">
             <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-2">Details</h3>
@@ -206,11 +224,11 @@ export default function JourneyDetailPage() {
       </Card>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.5fr_1fr]">
-        <div data-testid="journey-timeline">
-          <Timeline events={timeline} />
+        <div className="min-w-0" data-testid="journey-timeline">
+          <Timeline events={timeline} renderEventDetail={callDetail.renderEventDetail} />
         </div>
 
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <Panel
             title="Follow-ups"
             subtitle={openTasks.length ? `${openTasks.length} open` : undefined}
@@ -321,6 +339,8 @@ export default function JourneyDetailPage() {
         </div>
       </div>
 
+      {loggingCall && canLogCall && <LogCallSheet target={{ kind: "log", journeyId: journey.id }} patientName={patient.name} onClose={() => setLoggingCall(false)} />}
+      {callDetail.sheet}
       {logging && canLogOutcome && <LogOutcomeSheet journeyId={journey.id} patient={{ id: patient.id, name: patient.name, phone: patient.phone }} taskId={logging.taskId} onClose={() => setLogging(null)} />}
 
       {assigning && canAssign && (

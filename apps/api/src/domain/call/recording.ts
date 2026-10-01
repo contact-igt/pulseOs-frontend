@@ -1,3 +1,5 @@
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 import { Readable } from "node:stream";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
@@ -53,7 +55,7 @@ export function isSafeProviderUrl(raw: string, env: Record<string, string | unde
 
 function sendFixture(request: FastifyRequest, reply: FastifyReply, opts: { download: boolean; filename: string }) {
   const bytes = fixtureRecordingBytes();
-  reply.header("content-type", "audio/wav").header("accept-ranges", "bytes").header("cache-control", "private, no-store");
+  reply.header("content-type", "audio/wav").header("x-content-type-options", "nosniff").header("accept-ranges", "bytes").header("cache-control", "private, no-store");
   if (opts.download) reply.header("content-disposition", `attachment; filename="${opts.filename}.wav"`);
   const range = /^bytes=(\d*)-(\d*)$/.exec(String(request.headers.range ?? ""));
   if (range && (range[1] || range[2])) {
@@ -67,6 +69,22 @@ function sendFixture(request: FastifyRequest, reply: FastifyReply, opts: { downl
   return reply.status(200).header("content-length", bytes.length).send(bytes);
 }
 
+/**
+ * In production, a hostname must also RESOLVE to public addresses (a public-looking name that points at an internal
+ * host is refused). Not a full defence against DNS rebinding between this check and the fetch — see the report.
+ */
+async function resolvesToPublicHosts(rawUrl: string, env: Record<string, string | undefined> = process.env): Promise<boolean> {
+  if (env.NODE_ENV !== "production") return true;
+  const host = new URL(rawUrl).hostname.replace(/^\[|\]$/g, "");
+  try {
+    const addrs = isIP(host) ? [{ address: host }] : await lookup(host, { all: true });
+    return addrs.length > 0 && addrs.every((a) => isSafeProviderUrl(`https://${a.address.includes(":") ? `[${a.address}]` : a.address}/`, env));
+  } catch {
+    return false;
+  }
+}
+
+const SINGLE_RANGE = /^bytes=\d*-\d*$/;
 const MAX_REDIRECTS = 3;
 const HEADERS_TIMEOUT_MS = 15_000;
 
@@ -84,10 +102,10 @@ export async function streamRecording(request: FastifyRequest, reply: FastifyRep
   let target = recordingRef;
   let upstream: Response | null = null;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    if (!isSafeProviderUrl(target)) return unavailable();
+    if (!isSafeProviderUrl(target) || !(await resolvesToPublicHosts(target))) return unavailable();
     const timer = setTimeout(() => controller.abort(), HEADERS_TIMEOUT_MS);
     try {
-      upstream = await fetch(target, { headers: request.headers.range ? { range: String(request.headers.range) } : {}, redirect: "manual", signal: controller.signal });
+      upstream = await fetch(target, { headers: SINGLE_RANGE.test(String(request.headers.range ?? "")) ? { range: String(request.headers.range) } : {}, redirect: "manual", signal: controller.signal });
     } catch {
       return unavailable();
     } finally {
@@ -102,11 +120,14 @@ export async function streamRecording(request: FastifyRequest, reply: FastifyRep
   }
   if (!upstream || (upstream.status !== 200 && upstream.status !== 206) || !upstream.body) return unavailable();
 
-  reply.status(upstream.status).header("content-type", upstream.headers.get("content-type") ?? "audio/mpeg").header("accept-ranges", upstream.headers.get("accept-ranges") ?? "bytes").header("cache-control", "private, no-store");
+  // Only audio is served as audio; anything else a provider returns is forced to an opaque download, never rendered by the browser.
+  const upstreamType = upstream.headers.get("content-type") ?? "";
+  const contentType = /^audio\/[\w.+-]+/i.test(upstreamType) ? upstreamType : "application/octet-stream";
+  reply.status(upstream.status).header("content-type", contentType).header("x-content-type-options", "nosniff").header("accept-ranges", upstream.headers.get("accept-ranges") ?? "bytes").header("cache-control", "private, no-store");
   for (const h of ["content-length", "content-range"]) {
     const v = upstream.headers.get(h);
     if (v) reply.header(h, v);
   }
-  if (opts.download) reply.header("content-disposition", `attachment; filename="${opts.filename}.${/wav/i.test(upstream.headers.get("content-type") ?? "") ? "wav" : "mp3"}"`);
+  if (opts.download || contentType === "application/octet-stream") reply.header("content-disposition", `attachment; filename="${opts.filename}.${/wav/i.test(contentType) ? "wav" : "mp3"}"`);
   return reply.send(Readable.fromWeb(upstream.body as never));
 }
