@@ -223,7 +223,7 @@ describe.skipIf(!DEMO_PASSWORD)("multi-specialty demo tenants (integration)", ()
       const timeline = await getJson<TimelineEventVm[]>(app, `/patients/${journey.patientId}/timeline`, eye.admin);
       const timelineTitles = timeline.map((t) => t.title);
       expect(timelineTitles.some((t) => t.includes("Cataract journey opened"))).toBe(true);
-      expect(timelineTitles.some((t) => t.startsWith("WhatsApp message"))).toBe(true);
+      expect(timelineTitles.some((t) => t.startsWith("WhatsApp conversation"))).toBe(true);
       expect(timelineTitles.some((t) => t.startsWith("Treatment \"Cataract Surgery"))).toBe(true);
     });
 

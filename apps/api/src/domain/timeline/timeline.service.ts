@@ -7,6 +7,7 @@ const CATEGORY_BY_EVENT_TYPE: Record<string, "communication" | "appointments" | 
   journey_created: "other",
   source_captured: "other",
   whatsapp_message: "communication",
+  whatsapp_conversation: "communication",
   call_logged: "communication",
   note_added: "communication",
   appointment_scheduled: "appointments",

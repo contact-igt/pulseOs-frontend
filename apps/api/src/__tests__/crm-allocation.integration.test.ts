@@ -3,6 +3,7 @@ import { like } from "drizzle-orm";
 import { buildApp } from "../app.js";
 import { db, queryClient } from "../db/client.js";
 import { allocationRules } from "../db/schema.js";
+import { purgePatientData } from "./helpers/purge.js";
 import { ingestNormalizedLead } from "../domain/acquisition/lead-ingestion.service.js";
 import type { FastifyInstance } from "fastify";
 import type { AllocationRuleVm, CreateLeadResult, JourneyDetailVm, SessionUser } from "@pulseos/types";
@@ -27,6 +28,7 @@ describe.skipIf(!DEMO_PASSWORD)("CRM allocation rules (integration)", () => {
   let gynAdmin: { cookie: string; user: SessionUser };
   let branchId: string;
   let otherBranchId: string;
+  const patientIds: string[] = [];
 
   const call = (who: { cookie: string }, method: "GET" | "POST" | "PATCH" | "DELETE", url: string, payload?: unknown) => app.inject({ method, url, payload: payload as object | undefined, cookies: { pulseos_session: who.cookie } });
   const rules = async (who = admin) => (await call(who, "GET", "/crm/allocation-rules")).json() as AllocationRuleVm[];
@@ -37,7 +39,9 @@ describe.skipIf(!DEMO_PASSWORD)("CRM allocation rules (integration)", () => {
   async function lead(over: Record<string, unknown> = {}): Promise<CreateLeadResult> {
     const res = await call(admin, "POST", "/leads", { name: "Alloc Patient", phone: phone(), specialtyKey: "CATARACT", branchId, source: "meta", journeyType: "Cataract", ...over });
     expect(res.statusCode, res.body).toBe(201);
-    return res.json() as CreateLeadResult;
+    const made = res.json() as CreateLeadResult;
+    patientIds.push(made.patientId);
+    return made;
   }
   const ownerOf = async (journeyId: string) => ((await call(admin, "GET", `/journeys/${journeyId}`)).json() as JourneyDetailVm).journey.owner?.id ?? null;
 
@@ -61,6 +65,7 @@ describe.skipIf(!DEMO_PASSWORD)("CRM allocation rules (integration)", () => {
 
   afterAll(async () => {
     await db.delete(allocationRules).where(like(allocationRules.name, `${PREFIX}%`));
+    await purgePatientData(db, patientIds);
     await app.close();
     await queryClient.end();
   });
@@ -144,6 +149,7 @@ describe.skipIf(!DEMO_PASSWORD)("CRM allocation rules (integration)", () => {
       },
       { journeyTypeFallback: "General enquiry", campaignNameFallback: "Website", sourceLabel: "Website", taskDueInHours: 4, firstTouchEventType: "source_captured", firstTouchTitle: "Captured", additionalTouchEventType: "source_captured", additionalTouchTitle: "Captured again" },
     );
+    patientIds.push(result.patientId);
     expect(await ownerOf(result.journeyId)).toBe(frontDesk.user.id);
   });
 
@@ -156,6 +162,7 @@ describe.skipIf(!DEMO_PASSWORD)("CRM allocation rules (integration)", () => {
     // A gynecology Meta lead is not assigned by the eye hospital's rule.
     const gynBranch = ((await call(gynAdmin, "GET", "/lookups")).json() as { branches: { id: string }[] }).branches[0]!.id;
     const res = await call(gynAdmin, "POST", "/leads", { name: "Gyn Alloc", phone: phone(), specialtyKey: "GYNECOLOGY", branchId: gynBranch, source: "meta", journeyType: "Gynecology Consultation" });
+    patientIds.push((res.json() as CreateLeadResult).patientId);
     const gynJourney = (await call(gynAdmin, "GET", `/journeys/${(res.json() as CreateLeadResult).journeyId}`)).json() as JourneyDetailVm;
     expect(gynJourney.journey.owner).toBeNull();
   });

@@ -3,6 +3,7 @@ import { inArray, like, eq } from "drizzle-orm";
 import { buildApp } from "../app.js";
 import { db, queryClient } from "../db/client.js";
 import { crmOutcomes, customFieldDefinitions, customFieldValues, journeys, tasks, timelineEvents } from "../db/schema.js";
+import { purgePatientData } from "./helpers/purge.js";
 import type { FastifyInstance } from "fastify";
 import type { CreateLeadResult, CrmFieldVm, CrmOutcomeVm, JourneyDetailVm, LogInteractionResult, TaskRow } from "@pulseos/types";
 
@@ -28,13 +29,16 @@ describe.skipIf(!DEMO_PASSWORD)("CRM outcomes (integration)", () => {
   let branchId: string;
   const outcomeIds: string[] = [];
   const fieldIds: string[] = [];
+  const patientIds: string[] = [];
 
   const call = (cookie: string, method: "GET" | "POST" | "PATCH", url: string, payload?: unknown) => app.inject({ method, url, payload: payload as object | undefined, cookies: { pulseos_session: cookie } });
   const outcomes = async (cookie = coordinator, qs = "") => (await call(cookie, "GET", `/crm/outcomes${qs}`)).json() as CrmOutcomeVm[];
   async function newJourney(): Promise<CreateLeadResult> {
     const res = await call(admin, "POST", "/leads", { name: "Outcome Patient", phone: phone(), specialtyKey: "CATARACT", branchId, source: "walk_in", journeyType: "Cataract" });
     expect(res.statusCode).toBe(201);
-    return res.json() as CreateLeadResult;
+    const made = res.json() as CreateLeadResult;
+    patientIds.push(made.patientId);
+    return made;
   }
   const log = (cookie: string, journeyId: string, body: Record<string, unknown>) => call(cookie, "POST", `/journeys/${journeyId}/interactions`, body);
   const detail = async (journeyId: string) => (await call(admin, "GET", `/journeys/${journeyId}`)).json() as JourneyDetailVm;
@@ -50,6 +54,7 @@ describe.skipIf(!DEMO_PASSWORD)("CRM outcomes (integration)", () => {
   });
 
   afterAll(async () => {
+    await purgePatientData(db, patientIds);
     const created = await db.select({ id: crmOutcomes.id }).from(crmOutcomes).where(like(crmOutcomes.key, `${PREFIX}%`));
     const ids = [...new Set([...outcomeIds, ...created.map((c) => c.id)])];
     if (ids.length) {

@@ -805,9 +805,62 @@ export interface MessageRow {
   sentAt: string;
 }
 
+// ---------------------------------------------------------------------------
+// Conversation sessions and summaries. A session ends after an idle window; each session gets one derived
+// summary (raw messages stay authoritative and are never deleted). Summaries are patient-scoped.
+// ---------------------------------------------------------------------------
+
+export type SummaryMode = "AI" | "PROVIDER" | "FIXTURE" | "MANUAL";
+
+export interface ConversationSummaryVm {
+  id: string;
+  conversationId: string;
+  patientId: string;
+  journeyId: string | null;
+  /** 1-based session number inside the conversation. */
+  segmentNo: number;
+  messageCount: number;
+  firstMessageAt: string;
+  lastMessageAt: string;
+  summary: string;
+  patientIntent: string | null;
+  serviceInterest: string | null;
+  questions: string[];
+  outcome: string | null;
+  promisedAction: string | null;
+  nextAction: string | null;
+  generatedAt: string;
+  /** Which summarizer produced it (e.g. "fixture", "anthropic"). */
+  provider: string;
+  /** AI = a language model; FIXTURE = deterministic stand-in (never presented as AI); PROVIDER / MANUAL for other sources. */
+  mode: SummaryMode;
+}
+
+export interface ConversationSummaryState {
+  latest: ConversationSummaryVm | null;
+  /** How many sessions have a summary. */
+  segments: number;
+  /** New messages are waiting for the idle window to pass (or a summary is being written). */
+  pending: boolean;
+  /** When the pending summary becomes due. */
+  dueAt: string | null;
+  /** Summarizing kept failing; the raw thread is unaffected. */
+  failed: boolean;
+  /** Messages not yet covered by any summary. */
+  unsummarizedCount: number;
+}
+
+export const CONVERSATION_IDLE_RANGE = { min: 5, max: 10, default: 7 } as const;
+export interface ConversationSettings {
+  idleMinutes: number;
+}
+
 export interface ConversationDetail {
   conversation: ConversationRow;
   messages: MessageRow[];
+  summary: ConversationSummaryState;
+  /** Last patient message + 24h: free-form replies are only allowed inside this window. Null if the patient has not written yet. */
+  serviceWindowExpiresAt: string | null;
   patientContext: {
     patientId: string;
     journeyType: string | null;

@@ -3,6 +3,7 @@ import type { Db } from "../../db/client.js";
 import { appointments, communicationEndpoints, conversationAutomationPreferences, conversations, journeys, messages, patients, tasks, timelineEvents, users } from "../../db/schema.js";
 import { getConnectorById, getConnectorSecrets, touchConnectorError, touchConnectorSuccess } from "../connector/connector.service.js";
 import { getMessagingAdapter } from "../connector/registry.js";
+import { getConversationSummaryState, recordConversationActivity } from "./summary/conversation-session.service.js";
 import type { ConversationAutomationMode, ConversationAutomationPreference, ConversationChannel, ConversationDetail, ConversationRow, OwnershipState } from "@pulseos/types";
 
 export interface ConversationFilters {
@@ -159,6 +160,9 @@ export async function getConversationDetail(db: Db, tenantId: string, conversati
     },
     messages: messageRows.map((m) => ({ id: m.id, senderType: m.senderType, senderName: m.senderName, body: m.body, sentAt: m.sentAt.toISOString() })),
     patientContext,
+    summary: await getConversationSummaryState(db, conv),
+    // WhatsApp customer-service window: free-form replies are only allowed for 24h after the patient's last message.
+    serviceWindowExpiresAt: conv.lastPatientInboundAt ? new Date(conv.lastPatientInboundAt.getTime() + 24 * 3600_000).toISOString() : null,
   };
 }
 
@@ -303,11 +307,10 @@ export async function setConversationAutomation(
   return { ok: true, preference: toAutomationPreference(row) };
 }
 
-export async function sendMessage(db: Db, tenantId: string, conversationId: string, actorId: string, body: string): Promise<{ ok: true } | { ok: false; reason: string }> {
+export async function sendMessage(db: Db, tenantId: string, conversationId: string, actorId: string, body: string, now: Date = new Date()): Promise<{ ok: true } | { ok: false; reason: string }> {
   const existing = await findConversation(db, tenantId, conversationId);
   if (!existing) return { ok: false, reason: "conversation_not_found" };
 
-  const now = new Date();
 
   // Route through the live provider when this conversation is connector-
   // backed (Group T). Demo-seed conversations have no connectorId and stay
@@ -373,26 +376,9 @@ export async function sendMessage(db: Db, tenantId: string, conversationId: stri
   });
   await db.update(conversations).set({ lastMessageAt: now }).where(eq(conversations.id, conversationId));
 
-  // Inbound patient messages have always written a "whatsapp_message"
-  // Timeline event (whatsapp-webhook.service.ts) — this outbound path never
-  // did, so Timeline silently showed only the patient's half of every
-  // thread. Written even when delivery failed (deliveryStatus: "failed") —
-  // the staff member's own action is still a real Timeline event regardless
-  // of provider outcome.
-  await db.insert(timelineEvents).values({
-    tenantId,
-    patientId: existing.patientId,
-    journeyId: existing.journeyId,
-    actorType: "user",
-    actorId,
-    eventType: "whatsapp_message",
-    title: "WhatsApp message sent",
-    description: body,
-    sourceChannel: "whatsapp",
-    occurredAt: now,
-    relatedEntityType: "conversation",
-    relatedEntityId: conversationId,
-  });
+  // Staff messages are part of the same conversation session as the patient's: one Timeline line for the
+  // session, and the idle deadline is pushed out (even when delivery failed — the thread still moved).
+  await recordConversationActivity(db, tenantId, conversationId, { at: now, sender: "staff" });
 
   return { ok: true };
 }

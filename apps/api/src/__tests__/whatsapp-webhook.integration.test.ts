@@ -451,11 +451,11 @@ describe.skipIf(!DEMO_PASSWORD)("WhatsApp webhook (integration, fixture mode)", 
       expect(conv!.journeyId).toBe(journey.id);
 
       const timelineAll = await app.inject({ method: "GET", url: `/patients/${patient.id}/timeline`, cookies: { pulseos_session: adminCookie } });
-      expect((timelineAll.json() as { eventType: string; description: string | null }[]).some((e) => e.eventType === "whatsapp_message" && e.description === "single active journey probe")).toBe(true);
+      expect((timelineAll.json() as { eventType: string; description: string | null }[]).some((e) => e.eventType === "whatsapp_conversation")).toBe(true);
 
       // Patient 360's own per-journey filter — the exact thing the audit found broken.
       const timelineFiltered = await app.inject({ method: "GET", url: `/patients/${patient.id}/timeline?journeyId=${journey.id}`, cookies: { pulseos_session: adminCookie } });
-      expect((timelineFiltered.json() as { eventType: string; description: string | null }[]).some((e) => e.eventType === "whatsapp_message" && e.description === "single active journey probe")).toBe(true);
+      expect((timelineFiltered.json() as { eventType: string; description: string | null }[]).some((e) => e.eventType === "whatsapp_conversation")).toBe(true);
     });
 
     it("(b) a patient with multiple active Journeys and no deterministic tie-breaker stays honestly unresolved (journeyId null), not 'most recent wins'", async () => {

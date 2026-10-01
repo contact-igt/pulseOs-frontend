@@ -448,8 +448,19 @@ export const conversations = pgTable("conversations", {
   // rows and any tenant with only one number never populate this; it only
   // matters once a tenant configures more than one WhatsApp endpoint.
   communicationEndpointId: uuid("communication_endpoint_id").references(() => communicationEndpoints.id),
+  // Conversation sessions (summaries). summary_due_at is the ONLY source of truth for "when is this idle
+  // enough to summarize": every message pushes it out by the tenant idle window, a due-job runner claims
+  // it with a conditional update, so it survives restarts and never runs twice.
+  summaryDueAt: timestamp("summary_due_at", { withTimezone: true }),
+  summaryState: text("summary_state").notNull().default("idle"),
+  summaryAttempts: integer("summary_attempts").notNull().default(0),
+  summaryClaimedAt: timestamp("summary_claimed_at", { withTimezone: true }),
+  summaryError: text("summary_error"),
+  // The WhatsApp customer-service window: last patient message + 24h.
+  lastPatientInboundAt: timestamp("last_patient_inbound_at", { withTimezone: true }),
 }, (t) => ({
   tenantIdx: index("conversations_tenant_idx").on(t.tenantId),
+  summaryDueIdx: index("conversations_summary_due_idx").on(t.summaryDueAt),
   patientIdx: index("conversations_patient_idx").on(t.patientId),
   // Widened from (connectorId, externalThreadId): under one WABA, the same
   // patient (externalThreadId = their wa_id) can legitimately message two
@@ -491,6 +502,13 @@ export const conversationAutomationPreferences = pgTable("conversation_automatio
   conversationUnique: uniqueIndex("conversation_automation_preferences_conversation_unique").on(t.conversationId),
 }));
 
+// One row per tenant of small hospital-wide settings (conversation idle window, 5-10 minutes, default 7).
+export const tenantSettings = pgTable("tenant_settings", {
+  tenantId: uuid("tenant_id").primaryKey().references(() => tenants.id),
+  conversationIdleMinutes: integer("conversation_idle_minutes").notNull().default(7),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const messageSenderEnum = pgEnum("message_sender", ["patient", "staff", "ai", "system"]);
 export const messageDeliveryStatusEnum = pgEnum("message_delivery_status", ["queued", "sent", "delivered", "read", "failed"]);
 
@@ -511,6 +529,38 @@ export const messages = pgTable("messages", {
 }, (t) => ({
   conversationIdx: index("messages_conversation_idx").on(t.conversationId),
   providerMessageUnique: uniqueIndex("messages_connector_provider_message_unique").on(t.connectorId, t.providerMessageId),
+}));
+
+// A derived summary of one conversation session (messages between two idle gaps). Raw messages stay
+// authoritative; this is never the source of truth and never replaces them. Scoped by tenant + conversation
+// + patient (+ journey when the conversation is linked to one).
+export const conversationSummaries = pgTable("conversation_summaries", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  conversationId: uuid("conversation_id").notNull().references(() => conversations.id),
+  patientId: uuid("patient_id").notNull().references(() => patients.id),
+  journeyId: uuid("journey_id").references(() => journeys.id),
+  segmentNo: integer("segment_no").notNull(),
+  firstMessageId: uuid("first_message_id").notNull().references(() => messages.id),
+  lastMessageId: uuid("last_message_id").notNull().references(() => messages.id),
+  firstMessageAt: timestamp("first_message_at", { withTimezone: true }).notNull(),
+  lastMessageAt: timestamp("last_message_at", { withTimezone: true }).notNull(),
+  messageCount: integer("message_count").notNull(),
+  summary: text("summary").notNull(),
+  patientIntent: text("patient_intent"),
+  serviceInterest: text("service_interest"),
+  questions: jsonb("questions").notNull().default([]),
+  outcome: text("outcome"),
+  promisedAction: text("promised_action"),
+  nextAction: text("next_action"),
+  generatedAt: timestamp("generated_at", { withTimezone: true }).notNull().defaultNow(),
+  provider: text("provider").notNull(),
+  mode: text("mode").notNull(),
+}, (t) => ({
+  conversationIdx: index("conversation_summaries_conversation_idx").on(t.conversationId),
+  patientIdx: index("conversation_summaries_patient_idx").on(t.patientId),
+  // Idempotency: a session ending at the same last message is summarized exactly once.
+  sessionUnique: uniqueIndex("conversation_summaries_session_unique").on(t.conversationId, t.lastMessageId),
 }));
 
 // ---------------------------------------------------------------------------

@@ -3,6 +3,7 @@ import { inArray, like } from "drizzle-orm";
 import { buildApp } from "../app.js";
 import { db, queryClient } from "../db/client.js";
 import { customFieldDefinitions, customFieldValues } from "../db/schema.js";
+import { purgePatientData } from "./helpers/purge.js";
 import type { FastifyInstance } from "fastify";
 import type { CrmFieldVm, CreateLeadResult, JourneyDetailVm, Patient360 } from "@pulseos/types";
 
@@ -26,6 +27,7 @@ describe.skipIf(!DEMO_PASSWORD)("CRM fields (integration)", () => {
   let gynAdmin: string;
   let branchId: string;
   const createdIds: string[] = [];
+  const patientIds: string[] = [];
 
   const call = (cookie: string, method: "GET" | "POST" | "PATCH", url: string, payload?: unknown) => app.inject({ method, url, payload: payload as object | undefined, cookies: { pulseos_session: cookie } });
   async function createField(input: Record<string, unknown>, cookie = admin) {
@@ -37,6 +39,7 @@ describe.skipIf(!DEMO_PASSWORD)("CRM fields (integration)", () => {
     (await call(cookie, "GET", `/crm/fields/for?placement=${placement}&specialtyKey=${specialtyKey}`)).json() as CrmFieldVm[];
   async function addLead(values: Record<string, unknown>, specialtyKey = "CATARACT") {
     const res = await call(admin, "POST", "/leads", { name: "CRM Field Patient", phone: phone(), specialtyKey, branchId, source: "walk_in", journeyType: "Cataract", customFieldValues: values });
+    if (res.statusCode === 201) patientIds.push((res.json() as CreateLeadResult).patientId);
     return res;
   }
 
@@ -51,6 +54,7 @@ describe.skipIf(!DEMO_PASSWORD)("CRM fields (integration)", () => {
   });
 
   afterAll(async () => {
+    await purgePatientData(db, patientIds);
     const stray = await db.select({ id: customFieldDefinitions.id }).from(customFieldDefinitions).where(like(customFieldDefinitions.key, `${PREFIX}%`));
     const ids = [...new Set([...createdIds, ...stray.map((s) => s.id)])];
     if (ids.length) {

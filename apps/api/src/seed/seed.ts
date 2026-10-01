@@ -5,6 +5,10 @@ import {
   calls,
   connectorEvents,
   messages,
+  conversationSummaries,
+  allocationRules,
+  crmOutcomes,
+  tenantSettings,
   conversationAutomationPreferences,
   conversations,
   timelineEvents,
@@ -35,6 +39,7 @@ import { hashPassword } from "../domain/auth/auth.service.js";
 import { DEMO_ENVIRONMENTS, DEMO_STAFF_SLUGS } from "../domain/auth/demo-environments.js";
 import { seedGynecologyTenant } from "./demo/gynecology.js";
 import { seedOphthalmologyTenant } from "./demo/ophthalmology.js";
+import { seedConversationSessions } from "./demo/conversation-sessions.js";
 
 function requireDemoPassword(): string {
   const value = process.env.DEMO_PASSWORD;
@@ -57,6 +62,7 @@ async function main() {
   await db.delete(sessions);
   await db.delete(calls);
   await db.delete(connectorEvents);
+  await db.delete(conversationSummaries);
   await db.delete(messages);
   await db.delete(conversationAutomationPreferences);
   await db.delete(conversations);
@@ -71,6 +77,8 @@ async function main() {
   await db.delete(appointments);
   await db.delete(customFieldValues);
   await db.delete(journeys);
+  await db.delete(crmOutcomes);
+  await db.delete(allocationRules);
   await db.delete(marketingCampaigns);
   await db.delete(patients);
   await db.delete(users);
@@ -81,11 +89,15 @@ async function main() {
   await db.delete(connectors);
   await db.delete(customFieldDefinitions);
   await db.delete(specialtyTemplates);
+  await db.delete(tenantSettings);
   await db.delete(tenants);
 
   const passwordHash = await hashPassword(demoPassword);
   await seedGynecologyTenant(passwordHash);
   await seedOphthalmologyTenant(passwordHash);
+  // Each WhatsApp thread gets its session line on the Timeline and a (FIXTURE-labelled) summary, exactly as
+  // live traffic does once a conversation has been idle.
+  await seedConversationSessions();
 
   console.log("Seed complete. Password for every demo account: value of DEMO_PASSWORD env var");
   for (const env of DEMO_ENVIRONMENTS) {

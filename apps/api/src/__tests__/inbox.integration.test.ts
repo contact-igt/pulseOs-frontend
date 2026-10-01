@@ -109,12 +109,12 @@ describe.skipIf(!DEMO_PASSWORD)("inbox / conversations (integration)", () => {
     expect(eventTypes).toContain("conversation_returned_to_ai");
     expect(eventTypes).toContain("conversation_closed");
 
-    // Inbound WhatsApp messages have always written a "whatsapp_message"
-    // Timeline event — sendMessage (the STAFF REPLY path) never did, so
-    // Timeline silently showed only the patient's half of every WhatsApp
-    // thread. The reply sent above must appear here too.
-    const outboundEvent = events.find((e) => e.eventType === "whatsapp_message" && e.description?.includes("here's the update"));
-    expect(outboundEvent).toBeDefined();
+    // The staff reply is part of the same conversation session as the patient's messages: the Timeline has ONE
+    // concise line for the session (not one per message), and the raw reply stays in the conversation.
+    expect(events.filter((e) => e.eventType === "whatsapp_message")).toHaveLength(0);
+    expect(events.some((e) => e.eventType === "whatsapp_conversation")).toBe(true);
+    const threadAfter = (await app.inject({ method: "GET", url: `/conversations/${target.id}`, cookies: { pulseos_session: coordinatorCookie } })).json() as { messages: { body: string }[] };
+    expect(threadAfter.messages.some((m) => m.body.includes("here's the update"))).toBe(true);
   });
 
   it("assigning a conversation writes a distinct conversation_assigned Timeline event (not conversation_claimed)", async () => {

@@ -613,17 +613,8 @@ export async function seedJourneys(ctx: DemoContext, configs: DemoJourneyConfig[
             connectorId: ctx.whatsappConnectorId, providerMessageId: `wamid.fixture-${ctx.tenantId.slice(0, 8)}-${journey.id.slice(0, 8)}-${i}`,
           })),
         );
-        // Patient 360's Timeline reads timelineEvents, not conversations — same
-        // write processInboundWhatsAppMessage makes, or the thread would never appear there.
-        for (const m of interaction.messages) {
-          timelineRows.push({
-            ...base, actorType: m.sender === "staff" ? "user" : "system", actorId: m.sender === "staff" ? ctx.coordinator.id : undefined,
-            eventType: "whatsapp_message",
-            title: m.sender === "patient" ? "WhatsApp message received" : "WhatsApp message sent",
-            description: m.body, sourceChannel: "whatsapp", occurredAt: at(m),
-            relatedEntityType: "conversation", relatedEntityId: conversation.id,
-          });
-        }
+        // The Timeline line for this thread (one per conversation session, with its summary) is built after
+        // seeding by seedConversationSessions — never one event per message.
       }
     }
   }

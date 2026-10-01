@@ -1,8 +1,9 @@
 import { and, desc, eq, isNull, ne } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
-import { conversations, journeys, messages, timelineEvents } from "../../db/schema.js";
+import { conversations, journeys, messages } from "../../db/schema.js";
 import { findOrCreatePatientByPhone } from "../patient/identity.service.js";
 import { resolveEndpointByProviderRef } from "./communication-endpoint.service.js";
+import { recordConversationActivity } from "../conversation/summary/conversation-session.service.js";
 import type { InboundMessageEvent, MessageStatusEvent } from "./types.js";
 
 // Journey resolution for a WhatsApp conversation is deliberately more
@@ -131,19 +132,9 @@ export async function processInboundWhatsAppMessage(db: Db, tenantId: string, co
     .set({ lastMessageAt: event.occurredAt })
     .where(eq(conversations.id, conversation.id));
 
-  await db.insert(timelineEvents).values({
-    tenantId,
-    patientId: patient.id,
-    journeyId: conversation.journeyId,
-    actorType: "system",
-    eventType: "whatsapp_message",
-    title: "WhatsApp message received",
-    description: event.body,
-    sourceChannel: "whatsapp",
-    occurredAt: event.occurredAt,
-    relatedEntityType: "conversation",
-    relatedEntityId: conversation.id,
-  });
+  // The Timeline gets one concise line per conversation session (kept up to date here), not one per message;
+  // the summary deadline is pushed out by the idle window.
+  await recordConversationActivity(db, tenantId, conversation.id, { at: event.occurredAt, sender: "patient" });
 
   return { conversationId: conversation.id, patientId: patient.id };
 }

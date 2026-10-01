@@ -66,7 +66,7 @@ describe.skipIf(!DEMO_PASSWORD)("Timeline endpointLabel (integration, fixture mo
     await queryClient.end();
   });
 
-  it("surfaces the resolved communication endpoint's display label on the matching whatsapp_message Timeline event", async () => {
+  it("surfaces the resolved communication endpoint's display label on the conversation's Timeline line", async () => {
     // Unique per run — this connector's endpoint set is shared with other
     // suites/agents running concurrently against this dev DB, so a fixed
     // providerRef could collide with one they already created.
@@ -104,7 +104,9 @@ describe.skipIf(!DEMO_PASSWORD)("Timeline endpointLabel (integration, fixture mo
     const timeline = await app.inject({ method: "GET", url: `/patients/${patient.id}/timeline`, cookies: { pulseos_session: adminCookie } });
     expect(timeline.statusCode).toBe(200);
     const events = timeline.json() as TimelineEventVm[];
-    const messageEvent = events.find((e) => e.eventType === "whatsapp_message");
+    // One concise line per conversation session — no per-message events.
+    expect(events.filter((e) => e.eventType === "whatsapp_message")).toHaveLength(0);
+    const messageEvent = events.find((e) => e.eventType === "whatsapp_conversation");
     expect(messageEvent).toBeDefined();
     expect(messageEvent!.endpointLabel).toBe(displayLabel);
   });
@@ -130,7 +132,7 @@ describe.skipIf(!DEMO_PASSWORD)("Timeline endpointLabel (integration, fixture mo
 
     const timeline = await app.inject({ method: "GET", url: `/patients/${patient.id}/timeline`, cookies: { pulseos_session: adminCookie } });
     const events = timeline.json() as TimelineEventVm[];
-    const messageEvent = events.find((e) => e.eventType === "whatsapp_message");
+    const messageEvent = events.find((e) => e.eventType === "whatsapp_conversation");
     expect(messageEvent).toBeDefined();
     expect(messageEvent!.endpointLabel).toBeNull();
   });
