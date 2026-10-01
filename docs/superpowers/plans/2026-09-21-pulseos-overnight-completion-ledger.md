@@ -435,3 +435,36 @@ Playwright full run 207 passed / 1 skipped / 0 failed; the 9 affected specs re-r
 
 **Fixed on the way (pre-existing, not M4).** `tasks` counts test used the process timezone instead of the hospital's
 (failed after ~18:30 IST under TZ=UTC); Runo missed-call test assumed a shared demo patient had no other manual tasks.
+
+---
+
+## M5 — Follow-up types + Journey workspace — 2026-10-01
+
+Follow-ups remain Tasks (no FollowUp table, no second queue). Extends the Task engine, My Work, Journey Detail and the
+existing appointment drawer.
+
+**Schema (0024).** `followup_types` (tenant-owned: key, label, canonical task type, default priority/owner, requires note,
+department scope, active, order) + `tasks.followup_type_id`. Defaults backfilled per tenant (Callback, Appointment
+Follow-up, Appointment Risk, General Follow-up, Surgery Follow-up) and existing CALLBACK / FOLLOW_UP tasks linked.
+Verified from the live schema with data (15 types, 23 untyped tasks all of other canonical types) and on a fresh DB.
+
+**Configuration.** `GET/POST/PATCH /followup-types`, `/reorder` — Admin/Super Admin only (`MANAGE_SPECIALTIES`); keys never
+change; archive not delete (old tasks keep their label); the last active type cannot be archived; department-scoped types.
+Settings → Follow-up Types (SideSheet editor, plain-language "Works like", no internal names).
+
+**Task model.** Every task resolves a product label: its type, else the tenant's Callback / General Follow-up by stable type
+(so M4 callbacks and missed-call tasks read "Callback" and follow a rename). `POST /journeys/:id/follow-ups` validates
+type (active, this hospital, offered for the journey's department), future due time, required note, owner (default per
+type; explicit owner must be in this hospital). Tenant validation added to generic task creation, reassignment and
+appointment booking (patient/journey/branch/doctor/assignee). Past times refused for follow-ups and reschedules; the
+generic Add Task still accepts already-overdue work. Timeline: one line per schedule / complete / reschedule / reassign.
+
+**Next Action.** Derived from open tasks (overdue → today in the hospital's clock → upcoming; high priority first inside a
+bucket); `nextTask` only from tasks the viewer may see, never stored. Journey Detail: Log call / Add follow-up / Book
+appointment together, Next Action card (Complete / Reschedule / Reassign; journey owner shown when it differs), compact
+appointment context. My Work: Appointment Risk bucket + type and priority filters over the same dataset.
+
+**Evidence.** lint 2/2, typecheck 7/7, build OK. API 802 (twice), web 101, ui 86, api-client 9, tokens 6. Playwright full
+run 217 passed / 1 skipped / 1 failed → the failure was a stale text expectation ("Task created: callback") — fixed; the
+10 affected specs re-run with no reseed: 57/57. New `followups-m5.spec.ts` 11/11 (flows A–D, reschedule/reassign,
+Settings, Doctor, 3 viewports incl. 390).

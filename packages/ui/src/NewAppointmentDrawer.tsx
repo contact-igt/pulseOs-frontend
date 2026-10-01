@@ -23,6 +23,8 @@ export function NewAppointmentDrawer({
   branches,
   doctors,
   initialPatient,
+  initialJourneyId,
+  toInstant,
   onSearchPatients,
   onLoadPatientJourneys,
   onSubmit,
@@ -34,6 +36,10 @@ export function NewAppointmentDrawer({
   branches: LookupOption[];
   doctors: LookupOption[];
   initialPatient?: PatientRef | null;
+  /** Preselects this journey (the one the booking is launched from). */
+  initialJourneyId?: string;
+  /** Converts the picked date-time (YYYY-MM-DDTHH:mm) to an instant in the HOSPITAL's timezone; defaults to the browser's. */
+  toInstant?: (local: string) => string;
   onSearchPatients: (query: string) => Promise<PatientListRow[]>;
   onLoadPatientJourneys: (patientId: string) => Promise<JourneyCardVm[]>;
   onSubmit: (input: CreateAppointmentInput) => Promise<AppointmentRow>;
@@ -63,10 +69,10 @@ export function NewAppointmentDrawer({
     if (initialPatient) {
       onLoadPatientJourneys(initialPatient.id).then((rows) => {
         setJourneys(rows);
-        setJourneyId(rows[0]?.id ?? "");
+        setJourneyId(rows.find((r) => r.id === initialJourneyId)?.id ?? rows[0]?.id ?? "");
       });
     }
-  }, [initialPatient, onLoadPatientJourneys]);
+  }, [initialPatient, initialJourneyId, onLoadPatientJourneys]);
 
   const dialogRef = useDialogFocus<HTMLFormElement>(open, onClose);
 
@@ -98,7 +104,7 @@ export function NewAppointmentDrawer({
     setSubmitting(true);
     setError(null);
     try {
-      const row = await onSubmit({ patientId: patient.id, journeyId, branchId, doctorId, scheduledAt: new Date(scheduledAt).toISOString(), reason: reason.trim() || undefined });
+      const row = await onSubmit({ patientId: patient.id, journeyId, branchId, doctorId, scheduledAt: toInstant ? toInstant(scheduledAt) : new Date(scheduledAt).toISOString(), reason: reason.trim() || undefined });
       onCreated?.(row);
       onClose();
     } catch {

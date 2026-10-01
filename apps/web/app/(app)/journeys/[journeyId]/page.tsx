@@ -10,27 +10,20 @@ import {
   PageHeader, Panel, Skeleton, TREATMENT_STATUS_LABEL, TREATMENT_STATUS_TONE, Timeline,
   fmtDate, fmtDateTime, formatInr, relativeTime, urgencyLabel,
 } from "@pulseos/ui";
-import { hasPermission, type JourneyDetailVm, type RevenueEventVm, type TaskType } from "@pulseos/types";
-import { ChevronRight, Phone, UserRoundCog } from "lucide-react";
+import { hasPermission, type JourneyDetailVm, type RevenueEventVm } from "@pulseos/types";
+import { CalendarPlus, ChevronRight, ListPlus, Phone, UserRoundCog } from "lucide-react";
 import { BackLink, withFrom } from "@/components/shell/BackLink";
 import { AssignOwnerDialog } from "@/components/journey/AssignOwnerDialog";
 import { LogOutcomeSheet } from "@/components/outcomes/LogOutcomeSheet";
+import { AddFollowUpSheet } from "@/components/followups/AddFollowUpSheet";
+import { AppointmentContext } from "@/components/followups/AppointmentContext";
+import { NextActionCard } from "@/components/followups/NextActionCard";
+import { useQuickCreate } from "@/components/shell/QuickCreateProvider";
 import { LogCallSheet } from "@/components/calls/LogCallSheet";
 import { CallStatsStrip } from "@/components/calls/CallStatsStrip";
 import { useCallDetail } from "@/components/calls/useCallDetail";
 import { JourneyStageFlow } from "@/components/journey/JourneyStageFlow";
 import { invalidateJourneyQueries } from "@/components/journey/invalidate";
-
-const TASK_TYPE_LABEL: Record<TaskType, string> = {
-  CALLBACK: "Callback",
-  FOLLOW_UP: "Follow-up",
-  APPOINTMENT_CONFIRMATION: "Confirm appointment",
-  NO_SHOW_RECOVERY: "No-show recovery",
-  TREATMENT_DECISION: "Treatment decision",
-  POST_CARE: "Post-care",
-  RECALL: "Recall",
-  OTHER: "Task",
-};
 
 const REVENUE_TYPE_LABEL: Record<RevenueEventVm["type"], string> = {
   consultation_fee: "Consultation fee",
@@ -94,6 +87,8 @@ export default function JourneyDetailPage() {
   // "Log outcome" sheet; `taskId` is set when it is opened from one of the open follow-ups.
   const [logging, setLogging] = useState<{ taskId?: string } | null>(null);
   const [loggingCall, setLoggingCall] = useState(false);
+  const [addingFollowUp, setAddingFollowUp] = useState(false);
+  const quickCreate = useQuickCreate();
 
   const session = useQuery({ queryKey: ["session"], queryFn: api.session, retry: false });
   const lookups = useQuery({ queryKey: ["lookups"], queryFn: api.lookups, staleTime: 60_000 });
@@ -107,6 +102,8 @@ export default function JourneyDetailPage() {
   const canAssign = role ? hasPermission(role, "MANAGE_JOURNEYS") : false;
   const canLogOutcome = role ? hasPermission(role, "MANAGE_TASKS") : false;
   const canLogCall = role ? hasPermission(role, "LOG_CALL") : false;
+  const canAddFollowUp = role ? hasPermission(role, "MANAGE_TASKS") : false;
+  const canBook = role ? hasPermission(role, "MANAGE_APPOINTMENTS") : false;
   // Hooks must run on every render, before the loading/error early returns below.
   const callDetail = useCallDetail(detail.data?.patient.name ?? "");
 
@@ -127,7 +124,6 @@ export default function JourneyDetailPage() {
   const openTasks = tasks.filter((t) => t.status === "pending" || t.status === "in_progress");
   const doneTasks = tasks.length - openTasks.length;
   const restricted = [treatments === null ? "treatments" : null, revenue === null ? "revenue" : null].filter(Boolean) as string[];
-  const nextDue = journey.nextAction ? urgencyLabel(journey.nextAction.dueAt) : null;
 
   return (
     <div className="mx-auto max-w-6xl space-y-5" data-testid="journey-detail">
@@ -136,23 +132,32 @@ export default function JourneyDetailPage() {
         title={patient.name}
         subtitle={`${patient.age !== null ? `${patient.age} yrs · ` : ""}${patient.phone}${patient.branchName ? ` · ${patient.branchName}` : ""}`}
         actions={
-          <div className="flex flex-wrap items-center gap-2">
+          // The three things Staff do most, in one place: log a call, schedule a follow-up, book a visit.
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center" data-testid="journey-actions">
             {canLogCall && (
               <Button variant="primary" className="min-h-11 sm:min-h-0" onClick={() => setLoggingCall(true)} data-testid="journey-log-call">
                 <Phone size={14} aria-hidden="true" /> Log call
               </Button>
             )}
-          <Link
-            href={withFrom(`/patients/${patient.id}`, "journeys")}
-            className="inline-flex items-center gap-1 rounded-control border border-line-strong bg-white/85 px-3 py-2 text-sm font-medium text-neutral-700 shadow-panel transition hover:bg-white"
-            data-testid="journey-patient-link"
-          >
-            Open Patient 360
-            <ChevronRight size={14} aria-hidden="true" />
-          </Link>
+            {canAddFollowUp && (
+              <Button variant="secondary" className="min-h-11 sm:min-h-0" onClick={() => setAddingFollowUp(true)} data-testid="journey-add-followup">
+                <ListPlus size={14} aria-hidden="true" /> Add follow-up
+              </Button>
+            )}
+            {canBook && (
+              <Button variant="secondary" className="min-h-11 sm:min-h-0" onClick={() => quickCreate.openNewAppointment({ patient: { id: patient.id, name: patient.name, phone: patient.phone }, journeyId: journey.id })} data-testid="journey-book-appointment">
+                <CalendarPlus size={14} aria-hidden="true" /> Book appointment
+              </Button>
+            )}
           </div>
         }
       />
+
+      {/* What to do next, and the visit it leads to — right under the actions. */}
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.5fr_1fr]">
+        <NextActionCard journey={journey} canManage={canAddFollowUp} onAdd={() => setAddingFollowUp(true)} />
+        <AppointmentContext appointments={appointments} canBook={canBook} onBook={() => quickCreate.openNewAppointment({ patient: { id: patient.id, name: patient.name, phone: patient.phone }, journeyId: journey.id })} />
+      </div>
 
       {/* Journey summary: what this enquiry is, where it stands, who owns the next move. */}
       <Card className="p-4 sm:p-5">
@@ -161,6 +166,10 @@ export default function JourneyDetailPage() {
             {initials(patient.name)}
           </span>
           <h2 className="text-base font-semibold tracking-tight text-ink" data-testid="journey-service">{journey.journeyType}</h2>
+          <Link href={withFrom(`/patients/${patient.id}`, "journeys")} className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-primary-700 hover:underline" data-testid="journey-patient-link">
+            Open Patient 360
+            <ChevronRight size={13} aria-hidden="true" />
+          </Link>
           <span data-testid="journey-stage"><Badge tone={stageTone}>{JOURNEY_STAGE_LABEL[journey.stage] ?? journey.stage}</Badge></span>
           {journey.lastOutcome && (
             <span data-testid="journey-sub-status" title={`Last outcome logged ${fmtDateTime(journey.lastOutcome.at)}`}>
@@ -199,16 +208,6 @@ export default function JourneyDetailPage() {
           <Fact label="Doctor">{journey.doctorName ?? "—"}</Fact>
           <Fact label="Enquiry created">{fmtDate(journey.createdAt)} <span className="text-xs text-ink-2">· {relativeTime(journey.createdAt)}</span></Fact>
           <Fact label="Last interaction">{relativeTime(journey.lastInteractionAt)}</Fact>
-          <Fact label="Next Action" testId="journey-next-action">
-            {journey.nextAction && nextDue ? (
-              <span>
-                {journey.nextAction.label}
-                <span className={`ml-1.5 text-xs ${nextDue.overdue ? "font-medium text-danger-700" : "text-ink-2"}`}>{nextDue.text}</span>
-              </span>
-            ) : (
-              <span className="text-ink-2">None scheduled</span>
-            )}
-          </Fact>
         </dl>
 
         <div className="mt-4 border-t border-line pt-3">
@@ -251,7 +250,7 @@ export default function JourneyDetailPage() {
                   return (
                     <li key={t.id} className="flex items-start justify-between gap-3 px-4 py-2.5 text-sm" data-testid={`journey-task-${t.id}`}>
                       <div className="min-w-0">
-                        <p className="truncate text-ink">{TASK_TYPE_LABEL[t.type] ?? t.type}</p>
+                        <p className="truncate text-ink">{t.typeLabel}</p>
                         <p className="truncate text-xs text-ink-2">{t.assignedToName ?? "Unassigned"}</p>
                       </div>
                       <div className="shrink-0 text-right">
@@ -341,6 +340,7 @@ export default function JourneyDetailPage() {
 
       {loggingCall && canLogCall && <LogCallSheet target={{ kind: "log", journeyId: journey.id }} patientName={patient.name} onClose={() => setLoggingCall(false)} />}
       {callDetail.sheet}
+      {addingFollowUp && canAddFollowUp && <AddFollowUpSheet journeyId={journey.id} patientName={patient.name} ownerName={journey.owner?.name ?? null} onClose={() => setAddingFollowUp(false)} />}
       {logging && canLogOutcome && <LogOutcomeSheet journeyId={journey.id} patient={{ id: patient.id, name: patient.name, phone: patient.phone }} taskId={logging.taskId} onClose={() => setLogging(null)} />}
 
       {assigning && canAssign && (

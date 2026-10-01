@@ -12,7 +12,7 @@ import { hasPermission } from "@pulseos/types";
 import type { TaskReason, TaskRow, TaskView } from "@pulseos/types";
 import { pathAllowedForRole } from "@/components/shell/nav";
 import { useViewState } from "@/lib/useViewState";
-import { SOURCE_LABEL, TYPE_LABEL } from "@/components/my-work/labels";
+import { SOURCE_LABEL } from "@/components/my-work/labels";
 import { useTaskActions } from "@/components/my-work/useTaskActions";
 import { rescheduleTarget, type DueBucket } from "@/components/my-work/taskBuckets";
 import { TaskBoard } from "@/components/my-work/TaskBoard";
@@ -45,6 +45,7 @@ const TABS: { key: TaskView | "mine"; label: string }[] = [
   { key: "today", label: "Today" },
   { key: "overdue", label: "Overdue" },
   { key: "upcoming", label: "Upcoming" },
+  { key: "appointment_risk", label: "Appointment Risk" },
   { key: "unassigned", label: "Unassigned" },
   { key: "completed", label: "Completed" },
 ];
@@ -85,6 +86,9 @@ export default function MyWorkPage() {
   const reasonKey: ReasonKey = REASON_GROUPS.find((g) => g.key === urlFilters.get("reason"))?.key ?? "all";
   const setTab = (k: TabKey) => urlFilters.set({ tab: k === "mine" ? undefined : k });
   const setReasonKey = (k: ReasonKey) => urlFilters.set({ reason: k === "all" ? undefined : k });
+  // Follow-up type and priority narrow the SAME dataset the date tabs fetched (client-side, instant, in the URL).
+  const typeFilter = urlFilters.get("type") ?? "";
+  const highOnly = urlFilters.get("priority") === "high";
   const [noteDraft, setNoteDraft] = useState<Record<string, string>>({});
 
   const session = useQuery({ queryKey: ["session"], queryFn: api.session });
@@ -141,7 +145,10 @@ export default function MyWorkPage() {
   // single telecaller's own tasks (small), and this keeps switching pills
   // instant with no extra loading state.
   const activeReasons = REASON_GROUPS.find((g) => g.key === reasonKey)?.reasons ?? [];
-  const visibleTasks = tasks.data && activeReasons.length > 0 ? tasks.data.filter((t) => activeReasons.includes(t.reason)) : tasks.data;
+  const followUpTypes = useQuery({ queryKey: ["followup-types"], queryFn: () => api.followUpTypes(), staleTime: 60_000 });
+  const selectedType = followUpTypes.data?.find((ty) => ty.key === typeFilter) ?? null;
+  const byReason = tasks.data && activeReasons.length > 0 ? tasks.data.filter((t) => activeReasons.includes(t.reason)) : tasks.data;
+  const visibleTasks = byReason?.filter((t) => (!selectedType || t.typeLabel === selectedType.label) && (!highOnly || t.priority === "high"));
   const reasonCounts: Record<string, number> = { all: tasks.data?.length ?? 0 };
   for (const group of REASON_GROUPS) {
     if (group.reasons.length === 0) continue;
@@ -203,7 +210,7 @@ export default function MyWorkPage() {
         {t.label}
         {counts.data && (
           <span className="tabular-nums text-neutral-500" data-testid={`my-work-tab-count-${t.key}`}>
-            {counts.data[t.key]}
+            {t.key === "appointment_risk" ? counts.data.appointmentRisk : counts.data[t.key]}
           </span>
         )}
       </>
@@ -249,7 +256,33 @@ export default function MyWorkPage() {
           );
         })}
       </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <label className="sr-only" htmlFor="my-work-type-filter">Follow-up type</label>
+          <select
+            id="my-work-type-filter"
+            value={selectedType ? selectedType.key : ""}
+            onChange={(e) => urlFilters.set({ type: e.target.value || undefined })}
+            className="h-11 rounded-control border border-line bg-surface px-2 text-xs text-ink outline-none focus:border-primary-500 sm:h-7"
+            data-testid="my-work-type-filter"
+          >
+            <option value="">All types</option>
+            {(followUpTypes.data ?? []).map((ty) => (
+              <option key={ty.id} value={ty.key}>
+                {ty.label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            aria-pressed={highOnly}
+            onClick={() => urlFilters.set({ priority: highOnly ? undefined : "high" })}
+            className={`inline-flex h-11 items-center rounded-control border px-2.5 text-xs font-medium transition sm:h-7 ${highOnly ? "border-primary-300 bg-primary-50 text-primary-800" : "border-line bg-surface text-ink-2 hover:border-primary-200 hover:text-ink"}`}
+            data-testid="my-work-priority-filter"
+          >
+            High priority
+          </button>
         <ViewSwitcher ariaLabel="My Work view" value={view} onChange={setView} options={VIEW_OPTIONS} />
+        </div>
       </div>
 
       <Panel padded={false}>
@@ -259,8 +292,8 @@ export default function MyWorkPage() {
         {view === "list" && visibleTasks && visibleTasks.length === 0 && (
           <div className="p-6">
             <EmptyState
-              message="You're all caught up."
-              hint="Nothing in this queue needs a Next Action right now."
+              message={effectiveTab === "appointment_risk" ? "No appointment risks" : "You're all caught up."}
+              hint={effectiveTab === "appointment_risk" ? "When an appointment may fall through — doctor unavailable, a time change, no confirmation — add an Appointment Risk follow-up to a journey." : "Nothing in this queue needs a Next Action right now."}
               action={
                 canManageTasks ? (
                   <button type="button" onClick={() => quickCreate.openAddTask()} className="text-xs font-medium text-primary-700 hover:underline">
@@ -318,7 +351,7 @@ export default function MyWorkPage() {
                       </div>
                       <p className="mt-1 text-xs text-ink">
                         <span className="text-ink-2">Next Action · </span>
-                        {TYPE_LABEL[task.type]}
+                        {task.typeLabel}
                       </p>
                       {task.notes && <p className="mt-0.5 text-xs text-ink-2">{task.notes}</p>}
                     </div>

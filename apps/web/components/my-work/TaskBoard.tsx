@@ -3,7 +3,6 @@
 import { Info } from "lucide-react";
 import { Badge, KanbanBoard } from "@pulseos/ui";
 import type { TaskRow } from "@pulseos/types";
-import { TYPE_LABEL } from "./labels";
 import { allowedBucketMoves, dueBucket, formatDueInZone, type DueBucket } from "./taskBuckets";
 
 const COLUMNS: { key: DueBucket; title: string; hint: string }[] = [
@@ -46,7 +45,7 @@ export function TaskBoard({
         cards={tasks}
         getCardId={(t) => t.id}
         getColumnKey={(t) => dueBucket(t, now, timeZone)}
-        getCardLabel={(t) => `${t.patientName}, ${TYPE_LABEL[t.type]}`}
+        getCardLabel={(t) => `${t.patientName}, ${t.typeLabel}`}
         onCardClick={onOpen}
         getAllowedMoves={canManage ? (t) => allowedBucketMoves(t, true, now, timeZone) : undefined}
         onMove={canManage ? (t, to) => onMove(t, to as DueBucket) : undefined}
@@ -57,7 +56,7 @@ export function TaskBoard({
             <span className="flex min-w-0 flex-col gap-0.5">
               <span className="truncate text-sm font-semibold text-ink">{t.patientName}</span>
               <span className="truncate text-xs text-ink-2">
-                {TYPE_LABEL[t.type]}
+                {t.typeLabel}
                 {t.journeyType ? ` · ${t.journeyType}` : ""}
               </span>
               <span className={`flex items-center gap-1.5 text-[11px] tabular-nums ${overdue ? "font-medium text-danger-700" : "text-ink-2"}`}>

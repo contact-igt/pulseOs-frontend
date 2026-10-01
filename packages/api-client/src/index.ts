@@ -23,6 +23,10 @@ import type {
   CommunicationEndpointVm,
   ConnectorDetail,
   CallFeedbackInput,
+  CreateFollowUpInput,
+  CreateFollowUpTypeInput,
+  FollowUpTypeVm,
+  UpdateFollowUpTypeInput,
   CallTranscriptVm,
   CreateLeadSourceInput,
   LogCallInput,
@@ -218,12 +222,17 @@ export const api = {
   recordOutcome: (appointmentId: string, input: Omit<RecordOutcomeInput, "appointmentId">) =>
     request<{ ok: true }>(`/appointments/${appointmentId}/outcome`, { method: "POST", body: JSON.stringify(input) }),
   lookups: () => request<Lookups>("/lookups"),
-  tasks: (filters: { view?: TaskView; assignedTo?: string; patientId?: string; reason?: TaskReason } = {}) =>
+  tasks: (filters: { view?: TaskView; assignedTo?: string; patientId?: string; reason?: TaskReason; followUpTypeKey?: string } = {}) =>
     request<TaskRow[]>(`/tasks${toQuery({ ...filters })}`),
   taskCounts: () => request<TaskCounts>("/tasks/counts"),
   createTask: (input: CreateTaskInput) => request<TaskRow>("/tasks", { method: "POST", body: JSON.stringify(input) }),
   addTaskNote: (id: string, notes: string) => request<TaskRow>(`/tasks/${id}/note`, { method: "PATCH", body: JSON.stringify({ notes }) }),
-  rescheduleTask: (id: string, dueAt: string) => request<TaskRow>(`/tasks/${id}/reschedule`, { method: "PATCH", body: JSON.stringify({ dueAt }) }),
+  rescheduleTask: (id: string, dueAt: string, note?: string) => request<TaskRow>(`/tasks/${id}/reschedule`, { method: "PATCH", body: JSON.stringify({ dueAt, ...(note ? { note } : {}) }) }),
+  followUpTypes: (opts: { includeInactive?: boolean; journeyId?: string } = {}) => request<FollowUpTypeVm[]>(`/followup-types${toQuery({ includeInactive: opts.includeInactive ? "true" : undefined, journeyId: opts.journeyId })}`),
+  createFollowUpType: (input: CreateFollowUpTypeInput) => request<FollowUpTypeVm>("/followup-types", { method: "POST", body: JSON.stringify(input) }),
+  updateFollowUpType: (id: string, input: UpdateFollowUpTypeInput) => request<FollowUpTypeVm>(`/followup-types/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
+  reorderFollowUpTypes: (orderedIds: string[]) => request<{ ok: true }>("/followup-types/reorder", { method: "POST", body: JSON.stringify({ orderedIds }) }),
+  createFollowUp: (journeyId: string, input: CreateFollowUpInput) => request<TaskRow>(`/journeys/${journeyId}/follow-ups`, { method: "POST", body: JSON.stringify(input) }),
   reassignTask: (id: string, assignedTo: string) => request<TaskRow>(`/tasks/${id}/reassign`, { method: "PATCH", body: JSON.stringify({ assignedTo }) }),
   completeTask: (id: string) => request<TaskRow>(`/tasks/${id}/complete`, { method: "PATCH", body: JSON.stringify({}) }),
   appointments: (filters: { branchId?: string; doctorId?: string; status?: AppointmentStatus; date?: string; search?: string } = {}) =>

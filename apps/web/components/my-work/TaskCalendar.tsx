@@ -4,7 +4,6 @@ import { useMemo } from "react";
 import { CalendarView, type CalendarEvent, type CalendarMode } from "@pulseos/ui";
 import type { TaskRow } from "@pulseos/types";
 import type { ViewRange } from "@/lib/useViewState";
-import { TYPE_LABEL } from "./labels";
 import { dueBucket } from "./taskBuckets";
 
 /**
@@ -40,7 +39,7 @@ export function TaskCalendar({
           id: t.id,
           start: t.dueAt,
           title: t.patientName,
-          subtitle: `${TYPE_LABEL[t.type]}${t.journeyType ? ` · ${t.journeyType}` : ""}`,
+          subtitle: `${t.typeLabel}${t.journeyType ? ` · ${t.journeyType}` : ""}`,
           status: bucket === "overdue" ? "Overdue" : t.status === "completed" ? "Completed" : t.status === "cancelled" ? "Cancelled" : undefined,
           state: t.status === "completed" ? "completed" : t.status === "cancelled" ? "cancelled" : "default",
           tone: bucket === "overdue" ? "warning" : bucket === "done" ? "neutral" : "primary",

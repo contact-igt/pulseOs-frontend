@@ -7,6 +7,7 @@ const IST = "Asia/Kolkata";
 function task(dueAt: string, status: TaskRow["status"] = "pending"): TaskRow {
   return {
     id: dueAt, patientId: "p", patientName: "Test", journeyId: null, journeyType: null, source: null, assignedTo: "u", assignedToName: "U",
+    followUpTypeId: null, followUpTypeKey: null, typeLabel: "Callback",
     type: "CALLBACK", priority: "normal", status, reason: "manual_task", notes: null, dueAt, completedAt: null, createdAt: dueAt,
   };
 }

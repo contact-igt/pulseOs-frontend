@@ -7,18 +7,20 @@ import { Badge, ErrorState, Panel, Skeleton, Tabs } from "@pulseos/ui";
 import { hasPermission } from "@pulseos/types";
 import { CrmFieldsSection } from "@/components/settings/CrmFieldsSection";
 import { DepartmentsSection } from "@/components/settings/DepartmentsSection";
+import { FollowUpTypesSection } from "@/components/settings/FollowUpTypesSection";
 import { LeadSourcesSection } from "@/components/settings/LeadSourcesSection";
 import { OutcomesSection } from "@/components/outcomes/OutcomesSection";
 import { AllocationSection } from "@/components/allocation/AllocationSection";
 import { useUrlFilters } from "@/lib/useUrlFilters";
 
-type Section = "services" | "departments" | "fields" | "sources" | "outcomes" | "allocation";
+type Section = "services" | "departments" | "fields" | "sources" | "outcomes" | "followups" | "allocation";
 const SECTIONS: { key: Section; label: string; manageOnly: boolean }[] = [
   { key: "services", label: "Services", manageOnly: false },
   { key: "departments", label: "Departments", manageOnly: true },
   { key: "fields", label: "CRM Fields", manageOnly: true },
   { key: "sources", label: "Lead Sources", manageOnly: true },
   { key: "outcomes", label: "Workflow Outcomes", manageOnly: true },
+  { key: "followups", label: "Follow-up Types", manageOnly: true },
   { key: "allocation", label: "Allocation Rules", manageOnly: true },
 ];
 
@@ -136,6 +138,11 @@ export default function SettingsPage() {
         </Panel>
       )}
 
+      {section === "followups" && canManage && (
+        <Panel title="Follow-up Types" subtitle="The kinds of follow-up staff can schedule">
+          <FollowUpTypesSection />
+        </Panel>
+      )}
       {section === "allocation" && canManage && (
         <Panel title="Allocation Rules" subtitle="Who owns a new enquiry">
           {specialties.data ? <AllocationSection services={specialties.data} /> : <Skeleton className="h-24" />}

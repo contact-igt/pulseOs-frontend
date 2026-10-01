@@ -5,7 +5,6 @@ import { X } from "lucide-react";
 import { Badge, Button, TASK_REASON_LABEL, TASK_REASON_TONE, useDialogFocus } from "@pulseos/ui";
 import type { TaskRow } from "@pulseos/types";
 import { withFrom } from "@/components/shell/BackLink";
-import { TYPE_LABEL } from "./labels";
 import { dueBucket, formatDueInZone } from "./taskBuckets";
 
 const STATUS_LABEL: Record<TaskRow["status"], string> = { pending: "Open", in_progress: "In progress", completed: "Completed", cancelled: "Cancelled" };
@@ -55,7 +54,7 @@ export function TaskDrawer({
       <div ref={ref} tabIndex={-1} className="relative flex h-full w-full max-w-md flex-col overflow-hidden drawer-panel focus:outline-none" data-testid="task-drawer">
         <div className="flex items-start justify-between gap-2 border-b border-line p-5">
           <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-2">Next Action · {TYPE_LABEL[task.type]}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-2">Next Action · {task.typeLabel}</p>
             <h2 className="mt-0.5 truncate text-lg font-semibold text-ink">{task.patientName}</h2>
           </div>
           <button type="button" onClick={onClose} aria-label="Close task" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-control text-ink-2 hover:bg-primary-50 hover:text-ink sm:h-8 sm:w-8">

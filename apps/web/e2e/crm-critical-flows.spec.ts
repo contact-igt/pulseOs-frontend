@@ -63,7 +63,7 @@ test.describe("CRM critical business flows", () => {
     await expect(page.getByTestId("journey-detail")).toBeVisible();
     await expect(page.getByTestId("journey-service")).toContainText("Pregnancy Care");
     await expect(page.getByText("Lead created — Pregnancy Care")).toBeVisible();
-    await expect(page.getByText("Task created: callback")).toBeVisible();
+    await expect(page.getByText("Follow-up scheduled · Callback")).toBeVisible();
   });
 
   test("FLOW 2: Add Lead with a phone that matches an existing patient warns and creates a new Journey, not a duplicate Patient", async ({ page }) => {
