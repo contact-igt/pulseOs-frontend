@@ -31,6 +31,8 @@ import {
   gbpPerformanceMetrics,
   connectors,
   customFieldDefinitions,
+  departments,
+  leadSources,
   specialtyTemplates,
   tenants,
 } from "../db/schema.js";
@@ -89,6 +91,8 @@ async function main() {
   await db.delete(connectors);
   await db.delete(customFieldDefinitions);
   await db.delete(specialtyTemplates);
+  await db.delete(departments);
+  await db.delete(leadSources);
   await db.delete(tenantSettings);
   await db.delete(tenants);
 

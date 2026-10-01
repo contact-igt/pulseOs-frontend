@@ -155,6 +155,13 @@
       "when": 1790853130072,
       "tag": "0021_beta_v1_tenant_edition",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1790853857054,
+      "tag": "0022_beta_v1_department_source_intake",
+      "breakpoints": true
     }
   ]
 }

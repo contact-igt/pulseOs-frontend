@@ -1,4 +1,5 @@
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { patientNameSql } from "../../lib/patient-name.js";
 import { z } from "zod";
 import type { Db } from "../../db/client.js";
 import {
@@ -6,7 +7,9 @@ import {
   branches,
   campaignTouchpoints,
   crmOutcomes,
+  departments,
   journeys,
+  leadSources,
   marketingCampaigns,
   patients,
   revenueEvents,
@@ -16,6 +19,8 @@ import {
   users,
 } from "../../db/schema.js";
 import { allocatedAcquisitionCost } from "../marketing/formulas.js";
+import { displayAge } from "../../lib/age.js";
+import { dayKeyIn } from "../../lib/hospital-time.js";
 import { hasPermission } from "@pulseos/types";
 import type {
   BulkAssignJourneyOwnerResult,
@@ -62,7 +67,7 @@ export async function listJourneys(db: Db, tenantId: string, filters: JourneyFil
     .select({
       id: journeys.id,
       patientId: journeys.patientId,
-      patientName: patients.name,
+      patientName: patientNameSql,
       journeyType: journeys.journeyType,
       source: journeys.source,
       stage: journeys.stage,
@@ -245,10 +250,14 @@ export async function getJourneyDetail(db: Db, tenantId: string, journeyId: stri
       journeyType: journeys.journeyType,
       stage: journeys.stage,
       source: journeys.source,
+      sourceLabel: leadSources.label,
+      departmentName: departments.displayName,
       createdAt: journeys.createdAt,
       ownerUserId: journeys.ownerUserId,
       ownerName: users.name,
-      patientName: patients.name,
+      patientName: patientNameSql,
+      patientDateOfBirth: patients.dateOfBirth,
+      patientReportedAge: patients.reportedAge,
       patientPhone: patients.phone,
       branchName: branches.name,
       lastOutcomeLabel: crmOutcomes.label,
@@ -259,6 +268,8 @@ export async function getJourneyDetail(db: Db, tenantId: string, journeyId: stri
     .leftJoin(branches, eq(patients.branchId, branches.id))
     .leftJoin(users, eq(journeys.ownerUserId, users.id))
     .leftJoin(crmOutcomes, eq(journeys.lastOutcomeId, crmOutcomes.id))
+    .leftJoin(leadSources, eq(journeys.sourceId, leadSources.id))
+    .leftJoin(departments, eq(journeys.departmentId, departments.id))
     .where(and(eq(journeys.tenantId, tenantId), eq(journeys.id, journeyId)))
     .limit(1);
   if (!j) return null;
@@ -356,12 +367,14 @@ export async function getJourneyDetail(db: Db, tenantId: string, journeyId: stri
   }
 
   return {
-    patient: { id: j.patientId, name: j.patientName, phone: j.patientPhone, branchName: j.branchName },
+    patient: { id: j.patientId, name: j.patientName, age: displayAge(j.patientDateOfBirth, j.patientReportedAge, dayKeyIn(new Date(), viewer.timezone)), phone: j.patientPhone, branchName: j.branchName },
     journey: {
       id: j.id,
       journeyType: j.journeyType,
       stage: j.stage,
       source: j.source,
+      sourceLabel: j.sourceLabel ?? null,
+      departmentName: j.departmentName ?? null,
       campaign,
       owner: j.ownerUserId ? { id: j.ownerUserId, name: j.ownerName ?? "" } : null,
       doctorName,

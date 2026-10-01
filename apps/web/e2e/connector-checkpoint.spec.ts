@@ -117,7 +117,8 @@ test.describe("Communication connectors checkpoint (Group Y)", () => {
     await page.getByTestId("patient-search").fill("E2E Fixture Patient");
     await page.getByText("E2E Fixture Patient").first().click();
     await expect(page.getByTestId("patient-360")).toBeVisible();
-    await expect(page.getByText("WhatsApp message received")).toBeVisible();
+    // One line per conversation session (not per message), since the idle-window session change.
+    await expect(page.getByText(/WhatsApp conversation · \d+ message/).first()).toBeVisible();
     await expect(page.getByText(/Call completed/)).toBeVisible();
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "06-patient-360-communication-timeline.png"), fullPage: true });
 

@@ -109,7 +109,7 @@ async function findOrCreateConversation(
 }
 
 export async function processInboundWhatsAppMessage(db: Db, tenantId: string, connectorId: string, event: InboundMessageEvent): Promise<{ conversationId: string; patientId: string }> {
-  const patient = await findOrCreatePatientByPhone(db, tenantId, event.fromPhone, event.fromName ?? "WhatsApp Contact");
+  const patient = await findOrCreatePatientByPhone(db, tenantId, event.fromPhone, event.fromName ?? null);
   // Best-effort, exact match only: resolves when an admin has configured a
   // CommunicationEndpoint whose providerRef equals this message's real
   // phone_number_id. No match (not configured yet, or an unrecognized

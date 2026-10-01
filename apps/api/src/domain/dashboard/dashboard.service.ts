@@ -1,4 +1,5 @@
 import { and, count, eq, gte, inArray, lt, sql, sum, isNotNull } from "drizzle-orm";
+import { patientNameSql } from "../../lib/patient-name.js";
 import { hospitalTodayBounds } from "../../lib/hospital-time.js";
 import type { Db } from "../../db/client.js";
 import {
@@ -236,7 +237,7 @@ export async function getAttentionQueue(db: Db, tenantId: string, filters: Dashb
       id: tasks.id,
       patientId: tasks.patientId,
       journeyId: tasks.journeyId,
-      patientName: patients.name,
+      patientName: patientNameSql,
       journeyType: journeys.journeyType,
       reason: tasks.reason,
       dueAt: tasks.dueAt,

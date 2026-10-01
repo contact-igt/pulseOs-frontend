@@ -1,4 +1,5 @@
 import { and, eq, ne, or } from "drizzle-orm";
+import { patientNameSql } from "../../lib/patient-name.js";
 import { dayKeyIn } from "../../lib/hospital-time.js";
 import type { Db } from "../../db/client.js";
 import {
@@ -6,6 +7,7 @@ import {
   campaignTouchpoints,
   customFieldValues,
   journeys,
+  leadSources,
   marketingCampaigns,
   patients,
   specialtyTemplates,
@@ -16,12 +18,14 @@ import {
 } from "../../db/schema.js";
 import { normalizePhone, resolveDefaultPhoneRegion } from "../patient/phone.js";
 import { resolveOrCreatePatient } from "../patient/identity.service.js";
+import { resolveLeadSource } from "./lead-source.service.js";
+import { isValidPastDate, MAX_AGE_YEARS } from "../../lib/age.js";
 import { recordTouchpoint } from "../acquisition/attribution.service.js";
 import { createTask } from "../task/task.service.js";
 import { listFieldsForEntry, resolveSubmittedValues } from "../crm/crm-field.service.js";
 import { pickOwnerForNewJourney } from "../crm/crm-allocation.service.js";
 import type { OwnerFilter } from "../journey/journey.service.js";
-import type { CreateLeadInput, CreateLeadResult, LeadPhoneLookupResult, LeadRow, LeadStatus, LeadsSummary, Role } from "@pulseos/types";
+import { MANUAL_INTERACTION_CHANNELS, type CreateLeadInput, CreateLeadResult, LeadPhoneLookupResult, LeadRow, LeadStatus, LeadsSummary, Role } from "@pulseos/types";
 
 export async function lookupPatientByPhone(db: Db, tenantId: string, rawPhone: string): Promise<LeadPhoneLookupResult> {
   const defaultRegion = await resolveDefaultPhoneRegion(db, tenantId);
@@ -29,7 +33,7 @@ export async function lookupPatientByPhone(db: Db, tenantId: string, rawPhone: s
   if (!normalized.e164) return { patient: null };
 
   const [patient] = await db
-    .select({ id: patients.id, name: patients.name, phone: patients.phone })
+    .select({ id: patients.id, name: patientNameSql, phone: patients.phone })
     .from(patients)
     .where(and(eq(patients.tenantId, tenantId), eq(patients.phoneE164, normalized.e164)))
     .limit(1);
@@ -41,7 +45,26 @@ export async function lookupPatientByPhone(db: Db, tenantId: string, rawPhone: s
 
 export type CreateLeadOutcome = CreateLeadResult | { validationError: true; missingRequiredFields: string[]; invalidFields: string[] };
 
-export async function createLead(db: Db, tenantId: string, actorId: string, input: CreateLeadInput, actorRole: Role = "HOSPITAL_ADMIN"): Promise<CreateLeadOutcome> {
+export async function createLead(db: Db, tenantId: string, actorId: string, input: CreateLeadInput, actorRole: Role = "HOSPITAL_ADMIN", timezone = "Asia/Kolkata"): Promise<CreateLeadOutcome> {
+  // Intake basics. All validated before any write.
+  const invalid: string[] = [];
+  const todayKey = dayKeyIn(new Date(), timezone);
+  if (input.dateOfBirth !== undefined && !isValidPastDate(input.dateOfBirth, todayKey)) invalid.push("dateOfBirth");
+  if (input.age !== undefined && (!Number.isInteger(input.age) || input.age < 0 || input.age > MAX_AGE_YEARS)) invalid.push("age");
+  if (input.channel !== undefined && !MANUAL_INTERACTION_CHANNELS.includes(input.channel)) invalid.push("channel");
+
+  // SOURCE (where the patient originally came from). A person picks from the hospital's offered sources; the
+  // legacy coarse value is still accepted for older callers and resolves even to an archived entry.
+  const source = input.sourceKey
+    ? await resolveLeadSource(db, tenantId, input.sourceKey, { allowArchived: false })
+    : input.source
+      ? await resolveLeadSource(db, tenantId, input.source, { allowArchived: true })
+      : null;
+  if (!source) {
+    return { validationError: true, missingRequiredFields: input.sourceKey || input.source ? [] : ["source"], invalidFields: [...invalid, ...(input.sourceKey || input.source ? ["source"] : [])] };
+  }
+  if (invalid.length > 0) return { validationError: true, missingRequiredFields: [], invalidFields: invalid };
+
   // Required-field enforcement happens before any write — server-side, not
   // just the Add Lead form's `required` attribute, so an API call that
   // bypasses the UI can't silently skip data Settings marked mandatory.
@@ -61,6 +84,8 @@ export async function createLead(db: Db, tenantId: string, actorId: string, inpu
     tenantId,
     phone: input.phone,
     name: input.name,
+    dateOfBirth: input.dateOfBirth,
+    reportedAge: input.age,
     email: input.email,
     preferredLanguage: input.preferredLanguage,
     branchId: input.branchId,
@@ -75,12 +100,14 @@ export async function createLead(db: Db, tenantId: string, actorId: string, inpu
       actorId,
       eventType: "patient_created",
       title: "Patient created",
-      sourceChannel: input.source,
+      sourceChannel: source.key,
     });
   }
 
+  const [service] = await db.select({ departmentId: specialtyTemplates.departmentId }).from(specialtyTemplates).where(and(eq(specialtyTemplates.tenantId, tenantId), eq(specialtyTemplates.key, input.specialtyKey))).limit(1);
+
   // Nobody chosen: the first matching allocation rule (Settings → Allocation Rules) picks the owner.
-  const allocated = input.ownerId ? null : await pickOwnerForNewJourney(db, tenantId, { source: input.source, specialtyKey: input.specialtyKey, journeyType: input.journeyType, branchId: input.branchId });
+  const allocated = input.ownerId ? null : await pickOwnerForNewJourney(db, tenantId, { source: source.bucket, specialtyKey: input.specialtyKey, journeyType: input.journeyType, branchId: input.branchId });
   const [journey] = await db
     .insert(journeys)
     .values({
@@ -88,7 +115,9 @@ export async function createLead(db: Db, tenantId: string, actorId: string, inpu
       patientId,
       journeyType: input.journeyType,
       specialtyKey: input.specialtyKey,
-      source: input.source,
+      source: source.bucket,
+      sourceId: source.id,
+      departmentId: service?.departmentId ?? null,
       ownerUserId: input.ownerId ?? allocated?.userId ?? null,
       priority: input.priority ?? "normal",
       notes: input.notes ?? null,
@@ -115,7 +144,7 @@ export async function createLead(db: Db, tenantId: string, actorId: string, inpu
       tenantId,
       patientId,
       journeyId: journey.id,
-      details: { source: input.source, occurredAt: new Date() },
+      details: { source: source.bucket, occurredAt: new Date() },
       campaignId: input.campaignId,
     });
   }
@@ -132,7 +161,9 @@ export async function createLead(db: Db, tenantId: string, actorId: string, inpu
     actorId,
     eventType: "lead_created",
     title: `Lead created — ${input.journeyType}`,
-    sourceChannel: input.source,
+    sourceChannel: source.key,
+    // How this first contact happened, when staff said. Never inferred from the source.
+    channel: input.channel ?? null,
   });
 
   if (input.followUp) {
@@ -167,10 +198,11 @@ async function buildLeadRows(db: Db, tenantId: string, timezone: string): Promis
     .select({
       id: journeys.id,
       patientId: journeys.patientId,
-      patientName: patients.name,
+      patientName: patientNameSql,
       phone: patients.phone,
       specialtyKey: journeys.specialtyKey,
       source: journeys.source,
+      sourceLabel: leadSources.label,
       stage: journeys.stage,
       priority: journeys.priority,
       contactedAt: journeys.contactedAt,
@@ -181,6 +213,7 @@ async function buildLeadRows(db: Db, tenantId: string, timezone: string): Promis
     .from(journeys)
     .innerJoin(patients, eq(journeys.patientId, patients.id))
     .leftJoin(users, eq(journeys.ownerUserId, users.id))
+    .leftJoin(leadSources, eq(journeys.sourceId, leadSources.id))
     .where(eq(journeys.tenantId, tenantId));
 
   const specialties = await db.select({ key: specialtyTemplates.key, displayName: specialtyTemplates.displayName }).from(specialtyTemplates).where(eq(specialtyTemplates.tenantId, tenantId));
@@ -252,6 +285,7 @@ async function buildLeadRows(db: Db, tenantId: string, timezone: string): Promis
       specialtyKey: r.specialtyKey,
       specialtyLabel: r.specialtyKey ? (specialtyLabelByKey.get(r.specialtyKey) ?? r.specialtyKey) : null,
       source: r.source,
+      sourceLabel: r.sourceLabel ?? r.source,
       campaignName: campaignId ? (campaignNameById.get(campaignId) ?? null) : null,
       stage: r.stage,
       leadStatus,

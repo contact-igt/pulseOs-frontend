@@ -50,6 +50,7 @@ function toVm(r: Row): CrmFieldVm {
     required: r.required,
     sortOrder: r.sortOrder,
     archived: r.archived,
+    origin: r.origin,
     groupKey: (isGroupKey(r.groupKey) ? r.groupKey : "enquiry_details") as FieldGroupKey,
     placements: ((r.placements as unknown[]) ?? []).filter(isPlacement),
     defaultValue: r.defaultValue ?? null,
@@ -217,6 +218,8 @@ export async function createCrmField(db: Db, tenantId: string, input: CreateCrmF
       label: input.label.trim(),
       fieldType: input.fieldType,
       options: CHOICE_TYPES.has(input.fieldType) ? input.options : null,
+      // A hospital can only ever make CUSTOM fields; TEMPLATE comes from a template install, SYSTEM from the platform.
+      origin: "CUSTOM",
       required: input.required ?? false,
       sortOrder: siblings.reduce((max, s) => Math.max(max, s.sortOrder), -1) + 1,
       groupKey,
@@ -231,6 +234,10 @@ export async function createCrmField(db: Db, tenantId: string, input: CreateCrmF
 export async function updateCrmField(db: Db, tenantId: string, fieldId: string, input: UpdateCrmFieldInput): Promise<Result<{ field: CrmFieldVm }>> {
   const [existing] = await db.select().from(customFieldDefinitions).where(and(eq(customFieldDefinitions.tenantId, tenantId), eq(customFieldDefinitions.id, fieldId))).limit(1);
   if (!existing) return { ok: false, reason: "field_not_found" };
+  // SYSTEM fields are platform-owned: never archived, retyped or made optional by a tenant.
+  if (existing.origin === "SYSTEM" && (input.archived === true || (input.fieldType !== undefined && input.fieldType !== existing.fieldType) || (input.required === false && existing.required))) {
+    return { ok: false, reason: "system_field_locked" };
+  }
 
   const nextType = input.fieldType ?? existing.fieldType;
   if (input.fieldType !== undefined) {

@@ -18,6 +18,8 @@ import { callRoutes } from "./domain/connector/call.routes.js";
 import { webhookRoutes } from "./domain/connector/webhook.routes.js";
 import { leadRoutes } from "./domain/lead/lead.routes.js";
 import { specialtyRoutes } from "./domain/specialty/specialty.routes.js";
+import { departmentRoutes } from "./domain/specialty/department.routes.js";
+import { leadSourceRoutes } from "./domain/lead/lead-source.routes.js";
 import { crmFieldRoutes } from "./domain/crm/crm-field.routes.js";
 import { crmOutcomeRoutes } from "./domain/crm/crm-outcome.routes.js";
 import { crmAllocationRoutes } from "./domain/crm/crm-allocation.routes.js";
@@ -92,6 +94,8 @@ export async function buildApp() {
     await protectedApp.register(callRoutes);
     await protectedApp.register(leadRoutes);
     await protectedApp.register(specialtyRoutes);
+    await protectedApp.register(departmentRoutes);
+    await protectedApp.register(leadSourceRoutes);
     await protectedApp.register(crmFieldRoutes);
     await protectedApp.register(crmOutcomeRoutes);
     await protectedApp.register(crmAllocationRoutes);

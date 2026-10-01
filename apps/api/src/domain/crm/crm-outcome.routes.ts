@@ -35,6 +35,7 @@ const interactionBody = z.object({
   followUpAt: z.string().optional(),
   taskId: z.string().uuid().optional(),
   fieldValues: z.record(z.string(), z.unknown()).optional(),
+  channel: z.enum(["MANUAL_CALL", "WHATSAPP", "INSTAGRAM_DM", "FACEBOOK_DM", "WALK_IN"]).optional(),
 });
 
 const REASON_STATUS: Record<string, number> = {

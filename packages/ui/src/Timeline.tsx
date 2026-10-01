@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { CalendarCheck, IndianRupee, ListChecks, MessageCircle, Phone, Stethoscope, UserCog, Circle, type LucideIcon } from "lucide-react";
 import { Badge, Card, EmptyState, Tabs, type TabItem } from "./primitives";
 import { fmtDate, fmtTime } from "./format";
-import type { TimelineEventVm } from "@pulseos/types";
+import { INTERACTION_CHANNEL_LABEL, type TimelineEventVm } from "@pulseos/types";
 
 export type { TimelineEventVm };
 
@@ -148,10 +148,10 @@ export function Timeline({ events, order = "asc", className = "" }: { events: Ti
                       {event.description && <p className="mt-0.5 break-words text-xs leading-5 text-ink-2">{event.description}</p>}
                       <span className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-ink-2">
                         <Badge tone={CATEGORY_CHIP_TONE[event.category]}>{CATEGORY_LABEL[event.category]}</Badge>
-                        {/* Which hospital line this call/WhatsApp message came in on. */}
-                        {(event.sourceChannel || event.endpointLabel) && (
-                          <span className="min-w-0 break-words">
-                            {[event.sourceChannel, event.endpointLabel].filter(Boolean).join(" · ")}
+                        {/* How it happened (the channel), and which hospital line a call/WhatsApp message came in on. A lead's source is shown only where no channel is recorded. */}
+                        {(event.channel || event.sourceChannel || event.endpointLabel) && (
+                          <span className="min-w-0 break-words" data-testid="timeline-channel">
+                            {[event.channel ? INTERACTION_CHANNEL_LABEL[event.channel] : event.sourceChannel, event.endpointLabel].filter(Boolean).join(" · ")}
                           </span>
                         )}
                       </span>

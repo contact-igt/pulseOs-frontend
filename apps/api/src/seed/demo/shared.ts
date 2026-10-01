@@ -14,9 +14,11 @@ import {
   customFieldDefinitions,
   customFieldValues,
   journeys,
+  leadSources,
   messages,
   patients,
   revenueEvents,
+  specialtyTemplates,
   tasks,
   tenants,
   timelineEvents,
@@ -26,6 +28,7 @@ import {
   type SourceChannelDb,
 } from "../../db/schema.js";
 import { createLead } from "../../domain/lead/lead.service.js";
+import { ensureLeadSources } from "../../domain/lead/lead-source.service.js";
 import { encryptSecret } from "../../domain/security/encryption.js";
 import { todaySlot } from "./demo-clock.js";
 import { normalizePhone } from "../../domain/patient/phone.js";
@@ -400,6 +403,16 @@ function formatDuration(seconds: number) {
 // the real domain services produce. Returns the Journey ids in config order
 // (fixtures elsewhere reference a specific Journey by index) and the Timeline
 // rows for the caller to insert once.
+/**
+ * The demo's journeys carry a coarse platform value (meta/google/…); the catalogue source is more precise. Meta
+ * enquiries alternate Instagram / Facebook and "organic" is Direct, so the demo shows real source variety.
+ */
+function sourceKeyFor(bucket: string, patientIdx: number): string {
+  if (bucket === "meta") return patientIdx % 2 === 0 ? "instagram" : "facebook";
+  if (bucket === "organic") return "direct";
+  return bucket;
+}
+
 export async function seedJourneys(ctx: DemoContext, configs: DemoJourneyConfig[]) {
   const timelineRows: (typeof timelineEvents.$inferInsert)[] = [];
   const journeyIds: string[] = [];
@@ -408,6 +421,9 @@ export async function seedJourneys(ctx: DemoContext, configs: DemoJourneyConfig[
 
   const defs = await db.select().from(customFieldDefinitions).where(eq(customFieldDefinitions.tenantId, ctx.tenantId));
   const defId = new Map(defs.map((d) => [`${d.specialtyKey}:${d.key}`, d.id]));
+  await ensureLeadSources(db, ctx.tenantId);
+  const sourceByKey = new Map((await db.select().from(leadSources).where(eq(leadSources.tenantId, ctx.tenantId))).map((r) => [r.key, r.id]));
+  const departmentByService = new Map((await db.select({ key: specialtyTemplates.key, departmentId: specialtyTemplates.departmentId }).from(specialtyTemplates).where(eq(specialtyTemplates.tenantId, ctx.tenantId))).map((r) => [r.key, r.departmentId]));
   const catalog = new Map((await db.select().from(treatmentDefinitions).where(eq(treatmentDefinitions.tenantId, ctx.tenantId))).map((d) => [d.key, d]));
 
   for (const config of configs) {
@@ -449,6 +465,8 @@ export async function seedJourneys(ctx: DemoContext, configs: DemoJourneyConfig[
         specialtyKey: config.specialtyKey ?? null,
         stage: config.stage,
         source: config.source,
+        sourceId: sourceByKey.get(sourceKeyFor(config.source, config.patientIdx)) ?? null,
+        departmentId: (config.specialtyKey && departmentByService.get(config.specialtyKey)) || null,
         ownerUserId: owner.id,
         contactedAt,
         createdAt,
@@ -460,7 +478,7 @@ export async function seedJourneys(ctx: DemoContext, configs: DemoJourneyConfig[
 
     timelineRows.push({
       ...base, actorType: "system", eventType: "journey_created", title: `${config.journeyType} journey opened`,
-      sourceChannel: config.source, occurredAt: createdAt,
+      sourceChannel: sourceKeyFor(config.source, config.patientIdx), occurredAt: createdAt,
     });
 
     if (config.campaignKey) {
@@ -575,7 +593,7 @@ export async function seedJourneys(ctx: DemoContext, configs: DemoJourneyConfig[
         const dirLabel = interaction.direction === "inbound" ? "Incoming" : "Outbound";
         const statusLabel = interaction.status === "completed" ? "" : ` (${interaction.status.replace("_", " ")})`;
         timelineRows.push({
-          ...base, actorType: "system", eventType: "call_logged",
+          ...base, actorType: "system", eventType: "call_logged", channel: "IVR_CALL",
           title: `${dirLabel} call${statusLabel} · ${formatDuration(interaction.durationSeconds)}${interaction.agent ? ` · ${interaction.agent}` : ""}`,
           description: [interaction.summary, interaction.outcome ? `Outcome: ${interaction.outcome}` : null].filter(Boolean).join(" "),
           occurredAt: startedAt, relatedEntityType: "call", relatedEntityId: call.id,

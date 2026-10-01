@@ -96,7 +96,7 @@ export async function syncSessionTimelineEvent(db: Db, tenantId: string, convers
     await db.update(timelineEvents).set({ title, metadata, journeyId: conv.journeyId }).where(eq(timelineEvents.id, existing.id));
   } else {
     await db.insert(timelineEvents).values({
-      tenantId, patientId: conv.patientId, journeyId: conv.journeyId, actorType: "system", eventType: SESSION_EVENT, sourceChannel: "whatsapp",
+      tenantId, patientId: conv.patientId, journeyId: conv.journeyId, actorType: "system", eventType: SESSION_EVENT, sourceChannel: "whatsapp", channel: "WHATSAPP",
       title, relatedEntityType: "conversation", relatedEntityId: conversationId, metadata, occurredAt: first.sentAt,
     });
   }

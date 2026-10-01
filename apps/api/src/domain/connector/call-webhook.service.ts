@@ -121,6 +121,7 @@ export async function persistInboundCall(db: Db, tenantId: string, connectorId: 
     journeyId: journey?.id ?? null,
     actorType: "system",
     eventType: "call_logged",
+    channel: "IVR_CALL",
     title: `Call ${event.status.replace(/_/g, " ")}${event.agentName ? ` · ${event.agentName}` : ""}`,
     description: event.disposition,
     occurredAt: event.endedAt ?? event.startedAt ?? new Date(),

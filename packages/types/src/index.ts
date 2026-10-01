@@ -485,6 +485,8 @@ export interface TimelineEventVm {
   // fresh guess. Null whenever that row has no resolved endpoint, or the
   // event isn't a call/conversation at all.
   endpointLabel: string | null;
+  /** How this interaction happened (call, WhatsApp, walk-in…). Independent of the patient's original source. */
+  channel: InteractionChannel | null;
   /** How the summary on a whatsapp_conversation line was produced (FIXTURE/AI/…); null for every other event. */
   summaryMode: SummaryMode | null;
 }
@@ -493,6 +495,9 @@ export interface Patient360 {
   patient: {
     id: string;
     name: string;
+    /** Whole years: from the date of birth when known, otherwise the age the patient reported. */
+    age: number | null;
+    dateOfBirth: string | null;
     phone: string;
     preferredLanguage: string;
     branchName: string | null;
@@ -581,12 +586,14 @@ export interface RevenueEventVm {
  *    "none exist".
  */
 export interface JourneyDetailVm {
-  patient: { id: string; name: string; phone: string; branchName: string | null };
+  patient: { id: string; name: string; age: number | null; phone: string; branchName: string | null };
   journey: {
     id: string;
     journeyType: string;
     stage: JourneyStage;
     source: SourceChannel;
+    sourceLabel: string | null;
+    departmentName: string | null;
     campaign: { id: string; name: string } | null;
     owner: { id: string; name: string } | null;
     doctorName: string | null;
@@ -716,7 +723,7 @@ export interface AppointmentRow {
 export type AppointmentAction = "confirm" | "check_in" | "mark_waiting" | "send_to_doctor" | "mark_no_show" | "cancel";
 
 export interface CreatePatientInput {
-  name: string;
+  name?: string;
   phone: string;
   email?: string;
   preferredLanguage?: string;
@@ -1128,6 +1135,8 @@ export interface SpecialtyTemplateVm {
   key: string;
   displayName: string;
   defaultJourneyType: string;
+  /** The department this service belongs to (null for a service made before departments existed). */
+  departmentName: string | null;
   enabled: boolean;
   sortOrder: number;
   fieldCount: number;
@@ -1205,6 +1214,8 @@ export interface LogInteractionInput {
   taskId?: string;
   /** Values for CRM fields placed on "Follow-up outcome". */
   fieldValues?: Record<string, unknown>;
+  /** How this contact happened (phone call, WhatsApp, walk-in…), recorded on the Timeline. */
+  channel?: InteractionChannel;
 }
 
 export interface LogInteractionResult {
@@ -1247,7 +1258,12 @@ export interface CreateAllocationRuleInput {
 export type UpdateAllocationRuleInput = Partial<CreateAllocationRuleInput>;
 
 /** A configurable CRM field definition (what Settings → CRM Fields edits). */
+/** SYSTEM: platform-owned and locked. TEMPLATE: installed with a department template, the hospital may customize or archive it. CUSTOM: made by the hospital. */
+export type FieldOrigin = "SYSTEM" | "TEMPLATE" | "CUSTOM";
+export const FIELD_ORIGIN_LABEL: Record<FieldOrigin, string> = { SYSTEM: "System", TEMPLATE: "Template", CUSTOM: "Custom" };
+
 export interface CrmFieldVm extends CustomFieldDefinitionVm {
+  origin: FieldOrigin;
   groupKey: FieldGroupKey;
   placements: FieldPlacement[];
   defaultValue: unknown;
@@ -1304,6 +1320,8 @@ export interface LeadRow {
   specialtyKey: string | null;
   specialtyLabel: string | null;
   source: SourceChannel;
+  /** The precise original source (e.g. "Instagram"); `source` is only its coarse analytics bucket. */
+  sourceLabel: string;
   campaignName: string | null;
   stage: JourneyStage;
   leadStatus: LeadStatus;
@@ -1336,14 +1354,23 @@ export interface CreateLeadFollowUp {
 
 export interface CreateLeadInput {
   patientId?: string;
-  name: string;
+  /** Optional: a caller may not have given a name yet. */
+  name?: string;
+  /** Exact date of birth (YYYY-MM-DD) and/or the age the patient reported — both optional. */
+  dateOfBirth?: string;
+  age?: number;
   phone: string;
   email?: string;
   preferredLanguage?: string;
   specialtyKey: string;
   branchId: string;
   doctorId?: string;
-  source: SourceChannel;
+  /** Where the patient originally came from: a key from the hospital's lead sources (GET /lead-sources). */
+  sourceKey?: string;
+  /** Legacy coarse bucket, still accepted when `sourceKey` is absent. */
+  source?: SourceChannel;
+  /** How this first contact happened (not where the patient came from). */
+  channel?: InteractionChannel;
   campaignId?: string;
   journeyType: string;
   ownerId?: string;
@@ -1357,6 +1384,70 @@ export interface CreateLeadResult {
   patientId: string;
   journeyId: string;
   isNewPatient: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Source vs Channel, lead sources, departments
+// ---------------------------------------------------------------------------
+
+/** CHANNEL: how one interaction happened. Fixed by the product; never the patient's source. */
+export type InteractionChannel = "IVR_CALL" | "MANUAL_CALL" | "WHATSAPP" | "INSTAGRAM_DM" | "FACEBOOK_DM" | "WALK_IN";
+export const INTERACTION_CHANNELS: { key: InteractionChannel; label: string; /** staff can record it by hand */ manual: boolean }[] = [
+  { key: "IVR_CALL", label: "IVR call", manual: false },
+  { key: "MANUAL_CALL", label: "Phone call", manual: true },
+  { key: "WHATSAPP", label: "WhatsApp", manual: true },
+  { key: "INSTAGRAM_DM", label: "Instagram DM", manual: true },
+  { key: "FACEBOOK_DM", label: "Facebook DM", manual: true },
+  { key: "WALK_IN", label: "Walk-in", manual: true },
+];
+export const INTERACTION_CHANNEL_LABEL: Record<InteractionChannel, string> = Object.fromEntries(INTERACTION_CHANNELS.map((c) => [c.key, c.label])) as Record<InteractionChannel, string>;
+export const MANUAL_INTERACTION_CHANNELS: InteractionChannel[] = INTERACTION_CHANNELS.filter((c) => c.manual).map((c) => c.key);
+
+/** What every screen shows for a patient whose name has not been given yet. A display label only — never stored, never submitted as a name. */
+export const UNKNOWN_PATIENT_NAME = "Unknown patient";
+
+/** SOURCE: where the patient originally came from. A tenant-owned catalogue; `bucket` is its coarse analytics group. */
+export interface LeadSourceVm {
+  id: string;
+  key: string;
+  label: string;
+  bucket: SourceChannel;
+  archived: boolean;
+  sortOrder: number;
+}
+export interface CreateLeadSourceInput {
+  label: string;
+  bucket?: SourceChannel;
+}
+export interface UpdateLeadSourceInput {
+  label?: string;
+  bucket?: SourceChannel;
+  archived?: boolean;
+  sortOrder?: number;
+}
+
+export interface DepartmentVm {
+  id: string;
+  key: string;
+  displayName: string;
+  /** The global template it was installed from; null for a hospital-made department. */
+  templateKey: string | null;
+  archived: boolean;
+  sortOrder: number;
+  services: { key: string; displayName: string; enabled: boolean }[];
+}
+
+export interface DepartmentTemplateVm {
+  key: string;
+  displayName: string;
+  description: string;
+  services: string[];
+  installed: boolean;
+}
+
+export interface UpdateDepartmentInput {
+  displayName?: string;
+  archived?: boolean;
 }
 
 // ---------------------------------------------------------------------------

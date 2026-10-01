@@ -40,6 +40,7 @@ export function QuickCreateProvider({ role, children }: { role: Role; children: 
 
   const specialties = useQuery({ queryKey: ["specialties"], queryFn: () => api.specialties(), staleTime: 60_000 });
   const lookups = useQuery({ queryKey: ["lookups"], queryFn: api.lookups, staleTime: 60_000 });
+  const leadSources = useQuery({ queryKey: ["lead-sources"], queryFn: () => api.leadSources(), staleTime: 60_000 });
 
   function invalidateAfterCreate() {
     queryClient.invalidateQueries({ queryKey: ["leads"] });
@@ -69,7 +70,7 @@ export function QuickCreateProvider({ role, children }: { role: Role; children: 
     <QuickCreateContext.Provider value={value}>
       {children}
 
-      {specialties.data && lookups.data && (
+      {specialties.data && lookups.data && leadSources.data && (
         <>
           {canManageLeads && drawer.kind === "lead" && (
             <AddLeadDrawer
@@ -77,6 +78,7 @@ export function QuickCreateProvider({ role, children }: { role: Role; children: 
               onClose={() => setDrawer({ kind: "none" })}
               specialties={specialties.data}
               lookups={lookups.data}
+              leadSources={leadSources.data}
               defaultSource={drawer.source}
               onPhoneLookup={api.leadPhoneLookup}
               onLoadCustomFields={api.specialtyFields}

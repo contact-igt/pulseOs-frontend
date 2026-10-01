@@ -54,6 +54,7 @@ const REASON_STATUS: Record<string, number> = {
   specialty_not_found: 404,
   key_exists: 409,
   field_has_values: 409,
+  system_field_locked: 403,
 };
 
 export async function crmFieldRoutes(app: FastifyInstance) {

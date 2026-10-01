@@ -1,4 +1,5 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { patientNameSql } from "../../lib/patient-name.js";
 import type { Db } from "../../db/client.js";
 import { inLocalRange, localToday, tenantTimezone, tzLiteral } from "../../lib/hospital-time.js";
 import { appointments, consultationOutcomes, journeys, patients, treatmentOpportunities } from "../../db/schema.js";
@@ -15,7 +16,7 @@ export async function getDoctorDashboard(db: Db, tenantId: string, doctorUserId:
       id: appointments.id,
       status: appointments.status,
       scheduledAt: appointments.scheduledAt,
-      patientName: patients.name,
+      patientName: patientNameSql,
       journeyType: journeys.journeyType,
       specialtyKey: journeys.specialtyKey,
       journeyId: appointments.journeyId,
@@ -93,7 +94,7 @@ export async function getDoctorDashboard(db: Db, tenantId: string, doctorUserId:
       id: appointments.id,
       status: appointments.status,
       scheduledAt: appointments.scheduledAt,
-      patientName: patients.name,
+      patientName: patientNameSql,
       journeyType: journeys.journeyType,
       specialtyKey: journeys.specialtyKey,
       journeyId: appointments.journeyId,

@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, gte, inArray, or } from "drizzle-orm";
+import { patientNameSql } from "../../lib/patient-name.js";
 import type { Db } from "../../db/client.js";
 import { appointments, communicationEndpoints, conversationAutomationPreferences, conversations, journeys, messages, patients, tasks, timelineEvents, users } from "../../db/schema.js";
 import { getConnectorById, getConnectorSecrets, touchConnectorError, touchConnectorSuccess } from "../connector/connector.service.js";
@@ -18,7 +19,7 @@ export async function listConversations(db: Db, tenantId: string, filters: Conve
     .select({
       id: conversations.id,
       patientId: conversations.patientId,
-      patientName: patients.name,
+      patientName: patientNameSql,
       channel: conversations.channel,
       ownershipState: conversations.ownershipState,
       ownerName: users.name,
@@ -75,7 +76,7 @@ export async function getConversationDetail(db: Db, tenantId: string, conversati
   const [conv] = await db.select().from(conversations).where(and(eq(conversations.tenantId, tenantId), eq(conversations.id, conversationId))).limit(1);
   if (!conv) return null;
 
-  const [patient] = await db.select({ name: patients.name }).from(patients).where(eq(patients.id, conv.patientId)).limit(1);
+  const [patient] = await db.select({ name: patientNameSql }).from(patients).where(eq(patients.id, conv.patientId)).limit(1);
   const [assignedUser] = conv.assignedTo
     ? await db.select({ name: users.name }).from(users).where(eq(users.id, conv.assignedTo)).limit(1)
     : [null];

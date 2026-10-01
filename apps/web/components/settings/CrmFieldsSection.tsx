@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, Plus } from "lucide-react";
 import { api } from "@pulseos/api-client";
 import { Badge, Button, ConfirmDialog, EmptyState, ErrorState, Skeleton } from "@pulseos/ui";
-import { ALL_SERVICES_KEY, CUSTOM_FIELD_TYPES, FIELD_GROUPS, FIELD_VISIBILITY, type CrmFieldVm, type SpecialtyTemplateVm } from "@pulseos/types";
+import { ALL_SERVICES_KEY, CUSTOM_FIELD_TYPES, FIELD_GROUPS, FIELD_ORIGIN_LABEL, FIELD_VISIBILITY, type CrmFieldVm, type SpecialtyTemplateVm } from "@pulseos/types";
 import { useUrlFilters } from "@/lib/useUrlFilters";
 import { CheckRow, FormError, SelectInput } from "./FormBits";
 import { FieldEditorSheet } from "./FieldEditorSheet";
@@ -33,6 +33,7 @@ function FieldRow({ field, isFirst, isLast, canMove, onMove, onEdit, onArchive, 
         </span>
       </button>
       <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+        {field.origin !== "CUSTOM" && <Badge tone={field.origin === "SYSTEM" ? "primary" : "neutral"} data-testid={`field-origin-${field.key}`}>{FIELD_ORIGIN_LABEL[field.origin]}</Badge>}
         {field.required && <Badge tone="primary">Required</Badge>}
         {field.visibleTo !== "everyone" && <Badge>{VISIBILITY_LABEL.get(field.visibleTo)}</Badge>}
         {field.archived && <Badge tone="warning">Archived</Badge>}
@@ -41,7 +42,9 @@ function FieldRow({ field, isFirst, isLast, canMove, onMove, onEdit, onArchive, 
         <Button size="sm" variant="ghost" onClick={onEdit}>
           Edit
         </Button>
-        {field.archived ? (
+        {field.origin === "SYSTEM" ? (
+          <span className="px-2 text-[11px] text-ink-2" data-testid={`field-locked-${field.key}`}>Always on</span>
+        ) : field.archived ? (
           <Button size="sm" variant="ghost" onClick={onRestore} data-testid={`field-restore-${field.key}`}>
             Restore
           </Button>

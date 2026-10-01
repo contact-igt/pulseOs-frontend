@@ -1,6 +1,6 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
-import { customFieldDefinitions, specialtyTemplates } from "../../db/schema.js";
+import { customFieldDefinitions, departments, specialtyTemplates } from "../../db/schema.js";
 import { createCrmField } from "../crm/crm-field.service.js";
 import type {
   CreateCustomFieldInput,
@@ -26,11 +26,16 @@ function toFieldVm(r: typeof customFieldDefinitions.$inferSelect): CustomFieldDe
 }
 
 export async function listSpecialties(db: Db, tenantId: string, includeDisabled = false): Promise<SpecialtyTemplateVm[]> {
-  const templates = await db
-    .select()
+  // A service whose department the hospital has archived is not offered for new work (it stays readable on old journeys).
+  const rows = await db
+    .select({ template: specialtyTemplates, departmentArchived: departments.archived, departmentName: departments.displayName })
     .from(specialtyTemplates)
+    .leftJoin(departments, eq(specialtyTemplates.departmentId, departments.id))
     .where(and(eq(specialtyTemplates.tenantId, tenantId), includeDisabled ? undefined : eq(specialtyTemplates.enabled, true)))
     .orderBy(asc(specialtyTemplates.sortOrder));
+  const visible = rows.filter((r) => includeDisabled || !r.departmentArchived);
+  const templates = visible.map((r) => r.template);
+  const departmentNameByKey = new Map(visible.map((r) => [r.template.key, r.departmentName]));
 
   const fields = await db
     .select({ specialtyKey: customFieldDefinitions.specialtyKey })
@@ -44,6 +49,7 @@ export async function listSpecialties(db: Db, tenantId: string, includeDisabled 
     key: t.key,
     displayName: t.displayName,
     defaultJourneyType: t.defaultJourneyType,
+    departmentName: departmentNameByKey.get(t.key) ?? null,
     enabled: t.enabled,
     sortOrder: t.sortOrder,
     fieldCount: fieldCountByKey.get(t.key) ?? 0,
@@ -57,6 +63,7 @@ export async function getSpecialtyDetail(db: Db, tenantId: string, key: string):
     .where(and(eq(specialtyTemplates.tenantId, tenantId), eq(specialtyTemplates.key, key)))
     .limit(1);
   if (!template) return null;
+  const [department] = template.departmentId ? await db.select({ displayName: departments.displayName }).from(departments).where(eq(departments.id, template.departmentId)).limit(1) : [];
 
   const fields = await db
     .select()
@@ -68,6 +75,7 @@ export async function getSpecialtyDetail(db: Db, tenantId: string, key: string):
     key: template.key,
     displayName: template.displayName,
     defaultJourneyType: template.defaultJourneyType,
+    departmentName: department?.displayName ?? null,
     enabled: template.enabled,
     sortOrder: template.sortOrder,
     fieldCount: fields.length,
@@ -113,11 +121,12 @@ export async function createCustomField(db: Db, tenantId: string, specialtyKey: 
 
 export async function updateCustomField(db: Db, tenantId: string, fieldId: string, input: UpdateCustomFieldInput): Promise<{ ok: true } | { ok: false; reason: string }> {
   const [existing] = await db
-    .select({ id: customFieldDefinitions.id })
+    .select({ id: customFieldDefinitions.id, origin: customFieldDefinitions.origin, required: customFieldDefinitions.required })
     .from(customFieldDefinitions)
     .where(and(eq(customFieldDefinitions.tenantId, tenantId), eq(customFieldDefinitions.id, fieldId)))
     .limit(1);
   if (!existing) return { ok: false, reason: "field_not_found" };
+  if (existing.origin === "SYSTEM" && (input.archived === true || (input.required === false && existing.required))) return { ok: false, reason: "system_field_locked" };
 
   await db
     .update(customFieldDefinitions)
@@ -145,36 +154,42 @@ export interface SpecialtyDefinition {
   fields: CreateCustomFieldInput[];
 }
 
-/** Idempotently installs the given specialty definitions for a tenant (existing keys are left untouched). */
-export async function ensureSpecialties(db: Db, tenantId: string, definitions: SpecialtyDefinition[]): Promise<void> {
-  const existing = await db.select({ key: specialtyTemplates.key }).from(specialtyTemplates).where(eq(specialtyTemplates.tenantId, tenantId));
-  const existingKeys = new Set(existing.map((e) => e.key));
-
+/**
+ * Idempotently installs the given specialty definitions for a tenant: a service or field that already exists is
+ * never touched (so a hospital's edits, archives and renames survive a re-install), a missing one is added. Every
+ * field installed here is origin TEMPLATE. Passing `departmentId` also attaches the services to that department
+ * (an existing service with no department is attached; one that already has a department is left alone).
+ */
+export async function ensureSpecialties(db: Db, tenantId: string, definitions: SpecialtyDefinition[], opts: { departmentId?: string } = {}): Promise<void> {
   for (const spec of definitions) {
-    if (existingKeys.has(spec.key)) continue;
+    await db
+      .insert(specialtyTemplates)
+      .values({ tenantId, key: spec.key, displayName: spec.displayName, defaultJourneyType: spec.defaultJourneyType, departmentId: opts.departmentId ?? null, enabled: true, sortOrder: spec.sortOrder })
+      .onConflictDoNothing({ target: [specialtyTemplates.tenantId, specialtyTemplates.key] });
 
-    await db.insert(specialtyTemplates).values({
-      tenantId,
-      key: spec.key,
-      displayName: spec.displayName,
-      defaultJourneyType: spec.defaultJourneyType,
-      enabled: true,
-      sortOrder: spec.sortOrder,
-    });
-
-    for (let i = 0; i < spec.fields.length; i++) {
-      const field = spec.fields[i];
-      await db.insert(customFieldDefinitions).values({
-        tenantId,
-        specialtyKey: spec.key,
-        key: field.key,
-        label: field.label,
-        fieldType: field.fieldType,
-        options: field.options ?? null,
-        required: field.required ?? false,
-        sortOrder: i,
-      });
+    if (opts.departmentId) {
+      await db
+        .update(specialtyTemplates)
+        .set({ departmentId: opts.departmentId })
+        .where(and(eq(specialtyTemplates.tenantId, tenantId), eq(specialtyTemplates.key, spec.key), isNull(specialtyTemplates.departmentId)));
     }
+
+    if (spec.fields.length === 0) continue;
+    await db
+      .insert(customFieldDefinitions)
+      .values(
+        spec.fields.map((field, i) => ({
+          tenantId,
+          specialtyKey: spec.key,
+          key: field.key,
+          label: field.label,
+          fieldType: field.fieldType,
+          origin: "TEMPLATE" as const,
+          options: field.options ?? null,
+          required: field.required ?? false,
+          sortOrder: i,
+        })),
+      )
+      .onConflictDoNothing({ target: [customFieldDefinitions.tenantId, customFieldDefinitions.specialtyKey, customFieldDefinitions.key] });
   }
 }
-

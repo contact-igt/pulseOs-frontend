@@ -1,9 +1,8 @@
 import { db } from "../../db/client.js";
 import type { Edition } from "@pulseos/types";
 import { journeys, marketingCampaigns, tasks, timelineEvents } from "../../db/schema.js";
-import { ensureSpecialties } from "../../domain/specialty/specialty.service.js";
-import { OPHTHALMOLOGY_SPECIALTIES, OPHTHALMOLOGY_TREATMENTS } from "../../domain/specialty/ophthalmology.templates.js";
-import { ensureTreatmentCatalog } from "../../domain/specialty/treatment-catalog.service.js";
+import { installDepartmentTemplate } from "../../domain/specialty/department.service.js";
+import { OPHTHALMOLOGY_TREATMENTS } from "../../domain/specialty/ophthalmology.templates.js";
 import { eq } from "drizzle-orm";
 import { assertJourneyConfigsConsistent } from "./consistency.js";
 import {
@@ -609,8 +608,8 @@ export const OPHTHALMOLOGY_V1: OphthalmologyVariant = { environment: "ophthalmol
 export async function seedOphthalmologyTenant(passwordHash: string, variant: OphthalmologyVariant = OPHTHALMOLOGY_V2) {
   assertJourneyConfigsConsistent("ophthalmology", JOURNEY_CONFIGS, OPHTHALMOLOGY_PATIENT_NAMES, new Set(OPHTHALMOLOGY_TREATMENTS.map((t) => t.key)));
   const tenant = await createDemoTenant(variant.tenantName, variant.edition);
-  await ensureSpecialties(db, tenant.id, OPHTHALMOLOGY_SPECIALTIES);
-  await ensureTreatmentCatalog(db, tenant.id, OPHTHALMOLOGY_TREATMENTS);
+  // The same install a hospital admin runs from Settings: department, services, fields, catalogue, lead sources.
+  await installDepartmentTemplate(db, tenant.id, "ophthalmology");
 
   const branchByKey = await createDemoBranches(tenant.id, [
     { name: "Indiranagar Eye Centre", city: "Bengaluru" },

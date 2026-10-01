@@ -7,14 +7,18 @@ import type { LeadStatus } from "@pulseos/types";
 
 const createLeadBody = z.object({
   patientId: z.string().uuid().optional(),
-  name: z.string().min(1),
+  name: z.string().trim().min(1).max(120).optional(),
+  dateOfBirth: z.string().optional(),
+  age: z.number().int().optional(),
   phone: z.string().min(6),
   email: z.string().email().optional(),
   preferredLanguage: z.string().optional(),
   specialtyKey: z.string().min(1),
   branchId: z.string().uuid(),
   doctorId: z.string().uuid().optional(),
-  source: z.enum(["meta", "google", "website", "whatsapp", "phone", "walk_in", "referral", "organic", "other"]),
+  sourceKey: z.string().min(1).max(60).optional(),
+  source: z.enum(["meta", "google", "website", "whatsapp", "phone", "walk_in", "referral", "organic", "other"]).optional(),
+  channel: z.enum(["MANUAL_CALL", "WHATSAPP", "INSTAGRAM_DM", "FACEBOOK_DM", "WALK_IN"]).optional(),
   campaignId: z.string().uuid().optional(),
   journeyType: z.string().min(1),
   ownerId: z.string().uuid().optional(),
@@ -61,7 +65,7 @@ export async function leadRoutes(app: FastifyInstance) {
     const parsed = createLeadBody.safeParse(request.body);
     if (!parsed.success) return reply.status(400).send({ error: "invalid_request", details: parsed.error.flatten() });
 
-    const result = await createLead(app.db, tenantId, actorId, parsed.data, request.sessionUser!.role);
+    const result = await createLead(app.db, tenantId, actorId, parsed.data, request.sessionUser!.role, request.sessionUser!.timezone);
     if ("validationError" in result) {
       // Required fields missing wins; otherwise the values that do not fit their field type.
       if (result.missingRequiredFields.length > 0) return reply.status(422).send({ error: "missing_required_fields", fields: result.missingRequiredFields });

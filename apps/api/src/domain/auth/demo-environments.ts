@@ -18,9 +18,9 @@ export const DEMO_LOGIN_ROLES: { role: Role; label: string; emailSlug: string }[
 export const DEMO_STAFF_SLUGS = ["superadmin", "admin", "doctor", "doctor2", "frontdesk", "coordinator"] as const;
 
 export const DEMO_ENVIRONMENTS = [
-  { key: "gynecology", label: "Gynecology Demo (V2)", tenantName: "PulseOS Gynecology Demo", emailPrefix: "gyn", edition: "BETA_V2_GROWTH" },
-  { key: "ophthalmology", label: "Ophthalmology V2 (Growth)", tenantName: "PulseOS Ophthalmology Demo", emailPrefix: "eye", edition: "BETA_V2_GROWTH" },
-  { key: "ophthalmology-v1", label: "Ophthalmology V1 (Core CRM)", tenantName: "PulseOS Ophthalmology V1 Demo", emailPrefix: "eyev1", edition: "BETA_V1_CORE" },
+  { key: "gynecology", label: "Gynecology V2", tenantName: "PulseOS Gynecology Demo", emailPrefix: "gyn", edition: "BETA_V2_GROWTH" },
+  { key: "ophthalmology", label: "Ophthalmology V2", tenantName: "PulseOS Ophthalmology Demo", emailPrefix: "eye", edition: "BETA_V2_GROWTH" },
+  { key: "ophthalmology-v1", label: "Ophthalmology V1", tenantName: "PulseOS Ophthalmology V1 Demo", emailPrefix: "eyev1", edition: "BETA_V1_CORE" },
 ] as const;
 
 export type DemoEnvironmentKey = (typeof DEMO_ENVIRONMENTS)[number]["key"];

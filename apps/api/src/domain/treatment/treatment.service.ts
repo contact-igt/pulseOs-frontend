@@ -1,4 +1,5 @@
 import { and, eq, or } from "drizzle-orm";
+import { patientNameSql } from "../../lib/patient-name.js";
 import type { Db } from "../../db/client.js";
 import { appointments, journeys, patients, revenueEvents, tasks, timelineEvents, treatmentOpportunities, users } from "../../db/schema.js";
 import { recordConversionFeedbackEvent } from "../acquisition/conversion-feedback.service.js";
@@ -18,7 +19,7 @@ export async function listTreatments(db: Db, tenantId: string, filters: Treatmen
     .select({
       id: treatmentOpportunities.id,
       patientId: treatmentOpportunities.patientId,
-      patientName: patients.name,
+      patientName: patientNameSql,
       journeyId: treatmentOpportunities.journeyId,
       service: journeys.journeyType,
       treatmentDefinitionId: treatmentOpportunities.treatmentDefinitionId,

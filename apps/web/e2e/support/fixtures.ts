@@ -15,7 +15,18 @@ export function sql(statement: string): string {
 export function purgePatients(namePrefix: string) {
   if (namePrefix.trim().length < 2) throw new Error("purgePatients needs a specific marker prefix");
   const escaped = namePrefix.replace(/'/g, "''").replace(/[\\%_]/g, "\\$&");
-  const ps = `SELECT p.id FROM patients p JOIN tenants t ON t.id = p.tenant_id WHERE t.name LIKE 'PulseOS % Demo' AND p.name LIKE '${escaped}%'`;
+  purgePatientsWhere(`p.name LIKE '${escaped}%'`);
+}
+
+/** Delete test patients by exact phone digits — for patients created WITHOUT a name, which a name prefix cannot find. */
+export function purgePatientsByPhone(phones: string[]) {
+  const safe = phones.filter((p) => /^\+?[0-9 ]{8,16}$/.test(p));
+  if (safe.length === 0) return;
+  purgePatientsWhere(`p.phone IN (${safe.map((p) => `'${p}'`).join(", ")})`);
+}
+
+function purgePatientsWhere(predicate: string) {
+  const ps = `SELECT p.id FROM patients p JOIN tenants t ON t.id = p.tenant_id WHERE t.name LIKE 'PulseOS % Demo' AND ${predicate}`;
   const cs = `SELECT id FROM conversations WHERE patient_id IN (${ps})`;
   sql(`
     BEGIN;

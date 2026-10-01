@@ -15,6 +15,7 @@ const REASON_STATUS: Record<string, number> = {
   specialty_not_found: 404,
   field_not_found: 404,
   key_exists: 409,
+  system_field_locked: 403,
 };
 
 const updateSpecialtyBody = z.object({

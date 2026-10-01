@@ -60,6 +60,7 @@ export async function getPatientTimeline(db: Db, tenantId: string, patientId: st
     relatedEntityType: r.relatedEntityType,
     relatedEntityId: r.relatedEntityId,
     endpointLabel: endpointLabelByEventId.get(r.id) ?? null,
+    channel: r.channel,
     summaryMode: summaryModeByEventId.get(r.id) ?? null,
   }));
 }

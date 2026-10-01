@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { eq, inArray } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import type { Edition, Role } from "@pulseos/types";
 import type { Db } from "../../db/client.js";
-import { branches, calls, connectorSecrets, connectors, patients, tenants, users, sessions } from "../../db/schema.js";
+import { branches, calls, connectors, patients, tenants, users } from "../../db/schema.js";
 import { hashPassword } from "../../domain/auth/auth.service.js";
 import { purgePatientData } from "./purge.js";
 
@@ -56,14 +56,29 @@ export async function createTestTenant(db: Db, app: FastifyInstance, edition: Ed
   return { tenantId: tenant.id, branchId: branch.id, edition, cookie, connectorId: connector.id, patientId: patient.id, callId: call.id, recordingUrl };
 }
 
+/** Removes everything a throwaway tenant owns, in foreign-key order — whatever the test added to it. */
 export async function destroyTestTenant(db: Db, t: TestTenant): Promise<void> {
-  await db.delete(calls).where(eq(calls.tenantId, t.tenantId));
-  await purgePatientData(db, [t.patientId]);
-  await db.delete(connectorSecrets).where(eq(connectorSecrets.connectorId, t.connectorId));
-  await db.delete(connectors).where(eq(connectors.tenantId, t.tenantId));
-  const userRows = await db.select({ id: users.id }).from(users).where(eq(users.tenantId, t.tenantId));
-  if (userRows.length) await db.delete(sessions).where(inArray(sessions.userId, userRows.map((u) => u.id)));
-  await db.delete(users).where(eq(users.tenantId, t.tenantId));
-  await db.delete(branches).where(eq(branches.tenantId, t.tenantId));
-  await db.delete(tenants).where(eq(tenants.id, t.tenantId));
+  const patientIds = (await db.select({ id: patients.id }).from(patients).where(eq(patients.tenantId, t.tenantId))).map((p) => p.id);
+  await purgePatientData(db, patientIds);
+  const tenant = sql`${t.tenantId}::uuid`;
+  const statements = [
+    sql`delete from calls where tenant_id = ${tenant}`,
+    sql`delete from connector_secrets where connector_id in (select id from connectors where tenant_id = ${tenant})`,
+    sql`delete from connector_events where connector_id in (select id from connectors where tenant_id = ${tenant})`,
+    sql`delete from communication_endpoints where tenant_id = ${tenant}`,
+    sql`delete from connectors where tenant_id = ${tenant}`,
+    sql`delete from allocation_rules where tenant_id = ${tenant}`,
+    sql`delete from crm_outcomes where tenant_id = ${tenant}`,
+    sql`delete from custom_field_definitions where tenant_id = ${tenant}`,
+    sql`delete from treatment_definitions where tenant_id = ${tenant}`,
+    sql`delete from specialty_templates where tenant_id = ${tenant}`,
+    sql`delete from departments where tenant_id = ${tenant}`,
+    sql`delete from lead_sources where tenant_id = ${tenant}`,
+    sql`delete from tenant_settings where tenant_id = ${tenant}`,
+    sql`delete from sessions where user_id in (select id from users where tenant_id = ${tenant})`,
+    sql`delete from users where tenant_id = ${tenant}`,
+    sql`delete from branches where tenant_id = ${tenant}`,
+    sql`delete from tenants where id = ${tenant}`,
+  ];
+  for (const st of statements) await db.execute(st);
 }

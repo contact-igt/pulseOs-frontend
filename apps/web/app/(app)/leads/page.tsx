@@ -250,7 +250,7 @@ export default function LeadsPage() {
                     </Td>
                     <Td className="text-ink-2">{lead.specialtyLabel ?? "—"}</Td>
                     <Td className="text-ink-2">
-                      <span className="block">{lead.source}</span>
+                      <span className="block">{lead.sourceLabel}</span>
                       {lead.campaignName && <span className="block max-w-[10rem] truncate text-[11px] text-neutral-500">{lead.campaignName}</span>}
                     </Td>
                     <Td>

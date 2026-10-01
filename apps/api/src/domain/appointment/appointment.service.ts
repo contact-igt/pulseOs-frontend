@@ -1,4 +1,5 @@
 import { and, asc, eq, inArray, max } from "drizzle-orm";
+import { patientNameSql } from "../../lib/patient-name.js";
 import type { Db } from "../../db/client.js";
 import { inLocalRange, localToday, tenantTimezone } from "../../lib/hospital-time.js";
 import { appointments, branches, patients, timelineEvents, users } from "../../db/schema.js";
@@ -46,7 +47,7 @@ async function selectAppointments(db: Db, tenantId: string, filters: Appointment
     .select({
       id: appointments.id,
       patientId: appointments.patientId,
-      patientName: patients.name,
+      patientName: patientNameSql,
       journeyId: appointments.journeyId,
       branchName: branches.name,
       doctorId: appointments.doctorUserId,
@@ -109,7 +110,7 @@ export async function createAppointment(db: Db, tenantId: string, actorId: strin
     .select({
       id: appointments.id,
       patientId: appointments.patientId,
-      patientName: patients.name,
+      patientName: patientNameSql,
       journeyId: appointments.journeyId,
       branchName: branches.name,
       doctorId: appointments.doctorUserId,

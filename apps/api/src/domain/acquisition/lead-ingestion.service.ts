@@ -1,4 +1,5 @@
 import type { Db } from "../../db/client.js";
+import { resolveLeadSource } from "../lead/lead-source.service.js";
 import { journeys, tasks, timelineEvents } from "../../db/schema.js";
 import { findMostRecentActiveJourney, resolveOrCreatePatient } from "../patient/identity.service.js";
 import { recordTouchpoint } from "./attribution.service.js";
@@ -42,11 +43,14 @@ export async function ingestNormalizedLead(
   const { patient } = await resolveOrCreatePatient(db, {
     tenantId,
     phone: lead.phone ?? "",
-    name: lead.name ?? "Unknown contact",
+    name: lead.name ?? null,
     branchId: opts.branchId,
   });
 
   const existingJourney = await findMostRecentActiveJourney(db, tenantId, patient.id);
+  // Integrations report a coarse platform value; it resolves to the tenant's catalogue entry of that key, even if
+  // the hospital has archived it for manual entry.
+  const leadSource = await resolveLeadSource(db, tenantId, lead.source, { allowArchived: true });
   const journeyReused = existingJourney !== null;
 
   // A brand-new Journey is offered to the allocation rules; a reused one keeps its owner.
@@ -58,6 +62,7 @@ export async function ingestNormalizedLead(
       patientId: patient.id,
       journeyType: opts.journeyTypeFallback,
       source: lead.source,
+      sourceId: leadSource?.id ?? null,
       stage: "enquiry",
       ownerUserId: allocated?.userId ?? null,
     })

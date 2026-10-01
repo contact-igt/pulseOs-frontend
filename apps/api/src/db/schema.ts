@@ -1,4 +1,5 @@
-import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, pgEnum, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, pgEnum, index, uniqueIndex, date } from "drizzle-orm/pg-core";
 
 export const roleEnum = pgEnum("role", ["SUPER_ADMIN", "HOSPITAL_ADMIN", "FRONT_DESK", "PATIENT_COORDINATOR", "DOCTOR"]);
 
@@ -60,7 +61,12 @@ export const patients = pgTable("patients", {
   id: uuid("id").primaryKey().defaultRandom(),
   tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
   branchId: uuid("branch_id").references(() => branches.id),
-  name: text("name").notNull(),
+  // NULL while the name is unknown (a caller who has not given one). Never a placeholder string in storage; the
+  // API derives a display label ("Unknown patient") so analytics and search never see an invented name.
+  name: text("name"),
+  // Optional. A date of birth is exact; a reported age is what the patient said at first contact.
+  dateOfBirth: date("date_of_birth"),
+  reportedAge: integer("reported_age"),
   // Raw, as-entered/as-received value — always preserved, still the display value.
   phone: text("phone").notNull(),
   // Canonical E.164 form (null when normalization failed) — the only field
@@ -77,7 +83,48 @@ export const patients = pgTable("patients", {
 }, (t) => ({
   tenantIdx: index("patients_tenant_idx").on(t.tenantId),
   phoneE164Idx: index("patients_phone_e164_idx").on(t.phoneE164),
+  // One Patient per tenant per number, enforced by the database so concurrent webhooks/forms cannot create two.
+  // An un-normalizable number (no E.164) falls back to its exact raw text.
+  tenantPhoneE164Unique: uniqueIndex("patients_tenant_phone_e164_unique").on(t.tenantId, t.phoneE164).where(sql`${t.phoneE164} is not null`),
+  tenantRawPhoneUnique: uniqueIndex("patients_tenant_raw_phone_unique").on(t.tenantId, t.phone).where(sql`${t.phoneE164} is null`),
 }));
+
+// Departments and lead sources are tenant-owned configuration, installed from global definitions in code
+// (domain/specialty/department-templates.ts, domain/lead/lead-source.service.ts) and then edited freely per tenant.
+export const departments = pgTable("departments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  key: text("key").notNull(),
+  displayName: text("display_name").notNull(),
+  // The global template this department was installed from (null for a hospital-made department).
+  templateKey: text("template_key"),
+  archived: boolean("archived").notNull().default(false),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  tenantKeyUnique: uniqueIndex("departments_tenant_key_unique").on(t.tenantId, t.key),
+}));
+
+// SOURCE = where the patient originally came from. `bucket` maps a source onto the coarse platform enum the
+// campaign/attribution/analytics code has always used, so a hospital can add "Newspaper" without touching them.
+export const leadSources = pgTable("lead_sources", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  key: text("key").notNull(),
+  label: text("label").notNull(),
+  // No DB default: an enum value added in an earlier migration cannot be used as a default in the same transaction.
+  bucket: sourceEnum("bucket").notNull(),
+  // Archived sources stay valid on the journeys that already use them but are not offered for new leads.
+  archived: boolean("archived").notNull().default(false),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  tenantKeyUnique: uniqueIndex("lead_sources_tenant_key_unique").on(t.tenantId, t.key),
+}));
+
+// CHANNEL = how one interaction happened. Fixed by the product (never tenant-edited): it keeps interaction
+// analytics comparable across hospitals, and is independent of the patient's original source.
+export const interactionChannelEnum = pgEnum("interaction_channel", ["IVR_CALL", "MANUAL_CALL", "WHATSAPP", "INSTAGRAM_DM", "FACEBOOK_DM", "WALK_IN"]);
 
 export const journeyStageEnum = pgEnum("journey_stage", [
   "enquiry", "contacted", "booked", "attended", "consulted", "treatment_advised", "scheduled", "completed", "lost",
@@ -135,7 +182,10 @@ export const journeys = pgTable("journeys", {
   // may be archived without invalidating historical journeys that used it.
   specialtyKey: text("specialty_key"),
   stage: journeyStageEnum("stage").notNull().default("enquiry"),
+  // Coarse bucket (analytics / attribution); sourceId below is the precise original source.
   source: sourceEnum("source").notNull(),
+  sourceId: uuid("source_id").references(() => leadSources.id),
+  departmentId: uuid("department_id").references(() => departments.id),
   ownerUserId: uuid("owner_user_id").references(() => users.id),
   priority: taskPriorityEnum("priority").notNull().default("normal"),
   notes: text("notes"),
@@ -407,7 +457,9 @@ export const timelineEvents = pgTable("timeline_events", {
   actorType: actorTypeEnum("actor_type").notNull().default("system"),
   actorId: uuid("actor_id"),
   eventType: text("event_type").notNull(),
+  // Legacy: holds the lead's source key on lead events. The interaction channel is `channel`.
   sourceChannel: text("source_channel"),
+  channel: interactionChannelEnum("channel"),
   title: text("title").notNull(),
   description: text("description"),
   relatedEntityType: text("related_entity_type"),
@@ -804,6 +856,7 @@ export const specialtyTemplates = pgTable("specialty_templates", {
   key: text("key").notNull(),
   displayName: text("display_name").notNull(),
   defaultJourneyType: text("default_journey_type").notNull(),
+  departmentId: uuid("department_id").references(() => departments.id),
   enabled: boolean("enabled").notNull().default(true),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -812,6 +865,10 @@ export const specialtyTemplates = pgTable("specialty_templates", {
   tenantKeyUnique: uniqueIndex("specialty_templates_tenant_key_unique").on(t.tenantId, t.key),
 }));
 
+// SYSTEM: platform-owned, cannot be archived or retyped by a tenant. TEMPLATE: installed with a department
+// template, the tenant may customize or archive it. CUSTOM: created by the tenant.
+export const fieldOriginEnum = pgEnum("field_origin", ["SYSTEM", "TEMPLATE", "CUSTOM"]);
+
 export const customFieldDefinitions = pgTable("custom_field_definitions", {
   id: uuid("id").primaryKey().defaultRandom(),
   tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
@@ -819,6 +876,7 @@ export const customFieldDefinitions = pgTable("custom_field_definitions", {
   key: text("key").notNull(),
   label: text("label").notNull(),
   fieldType: customFieldTypeEnum("field_type").notNull(),
+  origin: fieldOriginEnum("origin").notNull().default("CUSTOM"),
   options: jsonb("options"),
   required: boolean("required").notNull().default(false),
   sortOrder: integer("sort_order").notNull().default(0),

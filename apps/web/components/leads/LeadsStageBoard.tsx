@@ -32,7 +32,7 @@ export function LeadsStageBoard({ rows, onOpen }: { rows: LeadRow[]; onOpen: (ro
             <span className="flex min-w-0 flex-col gap-0.5">
               <span className="truncate text-sm font-semibold text-ink">{r.patientName}</span>
               <span className="truncate text-xs text-ink-2">
-                {r.specialtyLabel ?? "Journey"} · {r.source}
+                {r.specialtyLabel ?? "Journey"} · {r.sourceLabel}
               </span>
               <span className="truncate text-[11px] text-ink-2">{r.ownerName ?? "Unassigned"}</span>
               <span className={`truncate text-[11px] ${due?.overdue ? "font-medium text-danger-700" : "text-ink-2"}`}>

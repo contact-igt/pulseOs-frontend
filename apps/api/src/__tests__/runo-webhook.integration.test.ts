@@ -76,7 +76,7 @@ describe.skipIf(!DEMO_PASSWORD)("Runo webhook (integration, fixture mode)", () =
     const patient = rows[0];
 
     const timeline = await app.inject({ method: "GET", url: `/patients/${patient.id}/timeline`, cookies: { pulseos_session: adminCookie } });
-    const events = timeline.json() as { eventType: string; relatedEntityType: string | null; relatedEntityId: string | null }[];
+    const events = timeline.json() as { eventType: string; relatedEntityType: string | null; relatedEntityId: string | null; channel: string | null }[];
     const callEvent = events.find((e) => e.eventType === "call_logged");
     expect(callEvent).toBeDefined();
 
@@ -103,6 +103,8 @@ describe.skipIf(!DEMO_PASSWORD)("Runo webhook (integration, fixture mode)", () =
     // just tagged with a type and no id.
     expect(callEvent!.relatedEntityType).toBe("call");
     expect(callEvent!.relatedEntityId).toBe(calls[0].id);
+    // How it happened (an IVR call) — a channel, not a source.
+    expect(callEvent!.channel).toBe("IVR_CALL");
   });
 
   it("a duplicate delivery of the same call_id is idempotent — only one Timeline event is written", async () => {

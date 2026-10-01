@@ -117,4 +117,11 @@ export const OPHTHALMOLOGY_SPECIALTIES: SpecialtyDefinition[] = [
     sortOrder: SERVICE_LINES.length,
     fields: COMMON_EYE_FIELDS,
   },
+  {
+    key: "OTHER",
+    displayName: "Other",
+    defaultJourneyType: "Other eye enquiry",
+    sortOrder: SERVICE_LINES.length + 1,
+    fields: COMMON_EYE_FIELDS,
+  },
 ];

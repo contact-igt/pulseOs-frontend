@@ -6,14 +6,18 @@ import { api } from "@pulseos/api-client";
 import { Badge, ErrorState, Panel, Skeleton, Tabs } from "@pulseos/ui";
 import { hasPermission } from "@pulseos/types";
 import { CrmFieldsSection } from "@/components/settings/CrmFieldsSection";
+import { DepartmentsSection } from "@/components/settings/DepartmentsSection";
+import { LeadSourcesSection } from "@/components/settings/LeadSourcesSection";
 import { OutcomesSection } from "@/components/outcomes/OutcomesSection";
 import { AllocationSection } from "@/components/allocation/AllocationSection";
 import { useUrlFilters } from "@/lib/useUrlFilters";
 
-type Section = "services" | "fields" | "outcomes" | "allocation";
+type Section = "services" | "departments" | "fields" | "sources" | "outcomes" | "allocation";
 const SECTIONS: { key: Section; label: string; manageOnly: boolean }[] = [
   { key: "services", label: "Services", manageOnly: false },
+  { key: "departments", label: "Departments", manageOnly: true },
   { key: "fields", label: "CRM Fields", manageOnly: true },
+  { key: "sources", label: "Lead Sources", manageOnly: true },
   { key: "outcomes", label: "Workflow Outcomes", manageOnly: true },
   { key: "allocation", label: "Allocation Rules", manageOnly: true },
 ];
@@ -108,6 +112,16 @@ export default function SettingsPage() {
     <div className="mx-auto max-w-4xl space-y-5" data-testid="settings-page">
       {visible.length > 1 && <Tabs variant="underline" ariaLabel="Settings sections" value={section} onChange={(k) => urlFilters.set({ section: k === "services" ? undefined : k, service: undefined })} items={visible.map((s) => ({ key: s.key, label: s.label, testId: `settings-tab-${s.key}` }))} />}
 
+      {section === "departments" && canManage && (
+        <Panel title="Departments" subtitle="Install a ready-made department, then make it yours">
+          <DepartmentsSection />
+        </Panel>
+      )}
+      {section === "sources" && canManage && (
+        <Panel title="Lead Sources" subtitle="Where patients originally come from">
+          <LeadSourcesSection />
+        </Panel>
+      )}
       {section === "fields" && canManage && (
         <Panel title="CRM Fields" subtitle="What you capture about each enquiry, and where it appears">
           {specialties.isLoading && <Skeleton className="h-24" />}

@@ -345,3 +345,45 @@ Service Lines.
 web 63, api 565), build OK. Full Playwright run A on a fresh seed: 177/178 after the stale-spec fix (1 skipped
 by design); run B on the same seed with no reseed: 181 passed, 0 failed, 2 skipped (includes the new
 responsive matrix: 11 pages x 5 viewports, no page overflow, no runtime overlay, no console errors).
+
+---
+
+## Beta V1 foundation (M0 + M1 + M2) — 2026-10-01
+
+Baseline = the Beta V1 Ophthalmology gap report. Nothing rebuilt; existing systems extended and gated.
+
+**M0.** Unfinished Anthropic conversation-summary work KEPT and finished (env-gated; FIXTURE summarizer otherwise);
+`TimelineEventVm.summaryMode` joins the summary row. Commit 6820a66. Baseline green before M1.
+
+**M1 — edition / access / security (92a699e).** `tenants.edition` (BETA_V1_CORE | BETA_V2_GROWTH; existing tenants stay
+V2) is the single source, on the session. `requireCapability` gates Inbox, conversation intelligence, Campaigns,
+marketing Analytics and spend/ROAS routes server-side (V1 keeps lead-source analytics and the core CRM); nav, route
+guard and Command Centre mirror it (Inbox shown dimmed "Beta V2"). `MANAGE_INTEGRATIONS` split into
+`MANAGE_INTEGRATION_CONFIG` (Admin) and `MANAGE_INTEGRATION_SECRETS` (Super Admin only; an Admin request carrying
+secrets is a 403). New `VIEW_CALL_RECORDING` / `DOWNLOAD_CALL_RECORDING` / `VIEW_CALL_TRANSCRIPT`: the provider URL is
+no longer in patient payloads (`hasRecording`), only behind `GET /calls/:id/recording`. Role groups Super Admin /
+Admin / Staff; a seeded Super Admin per demo tenant; Developer Login adds an **Ophthalmology V1** environment (same
+clinic data, V1 edition).
+
+**M2 — department / source / intake (migration 0022).** Global department templates (code) install into
+tenant-owned rows (`departments`, services, TEMPLATE fields, treatment catalogue, lead sources) idempotently; edits and
+archives survive a re-install; archiving a department hides its services from new work. Field origin
+SYSTEM/TEMPLATE/CUSTOM (SYSTEM cannot be archived/retyped/made optional). Patient name may be NULL (display "Unknown
+patient"; the "Unknown caller"/"WhatsApp Contact"/"Unknown contact" placeholders are gone and backfilled to NULL),
+optional DOB / reported age, race-safe unique patient phone per tenant (partial unique indexes + ON CONFLICT; migration
+aborts with a clear message if duplicates exist — none in dev/test DBs). SOURCE (tenant `lead_sources` catalogue:
+Instagram, Facebook, YouTube, Google, Referral, Direct, Walk-in, Phone, WhatsApp, Other + archived legacy
+meta/website/organic) is separate from CHANNEL (fixed `interaction_channel` on timeline events: IVR call, phone call,
+WhatsApp, Instagram DM, Facebook DM, Walk-in). `journeys.source` stays as the coarse analytics bucket; `source_id` and
+`department_id` are new. Migration verified from the current schema with data, on a fresh DB, and the duplicate guard.
+
+**Evidence.** lint 2/2, typecheck 7/7, build OK. API 726 (twice, repeatable), web 88, ui 86, api-client 9, tokens 6.
+Playwright full run on the migrated+reseeded dev DB: 195 passed, 2 failed → both fixed (stale per-message timeline
+text from the earlier session change; Developer Login labels too long) and re-run green; new `foundation-m2.spec.ts`
+5/5.
+
+**Known / deferred.** Analytics "Leads by Source" still groups by the coarse bucket (V1 dashboard module should group by
+`lead_sources`); recording download is permission-gated but returns the provider URL (true byte streaming / signed
+URLs, transcript storage and per-tenant role policy belong to the calls module); age/DOB are fixed intake inputs, not
+yet hideable by an Admin; no Add Department for a hospital-made department (templates only); login still resolves a
+user by email across tenants.

@@ -199,6 +199,7 @@ export async function logInteraction(
 
     await tx.insert(timelineEvents).values({
       tenantId, patientId: journey.patientId, journeyId, actorType: "user", actorId: actor.id, eventType: "outcome_logged", occurredAt: now,
+      channel: input.channel ?? null,
       title: `Outcome: ${outcome.label}`,
       description,
     });

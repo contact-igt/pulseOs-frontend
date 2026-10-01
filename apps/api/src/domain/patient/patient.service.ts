@@ -1,4 +1,7 @@
 import { and, desc, eq, ilike, inArray, or } from "drizzle-orm";
+import { displayAge } from "../../lib/age.js";
+import { dayKeyIn } from "../../lib/hospital-time.js";
+import { patientNameSql } from "../../lib/patient-name.js";
 import type { Db } from "../../db/client.js";
 import {
   appointments,
@@ -63,7 +66,7 @@ export async function searchPatients(db: Db, tenantId: string, query: string, li
   if (trimmed.length < 2) return [];
 
   const rows = await db
-    .select({ id: patients.id, name: patients.name, phone: patients.phone })
+    .select({ id: patients.id, name: patientNameSql, phone: patients.phone })
     .from(patients)
     .where(and(eq(patients.tenantId, tenantId), or(ilike(patients.name, `%${trimmed}%`), ilike(patients.phone, `%${trimmed}%`))))
     .orderBy(patients.name)
@@ -103,7 +106,7 @@ export async function listPatients(db: Db, tenantId: string, filters: PatientLis
   const patientRows = await db
     .select({
       id: patients.id,
-      name: patients.name,
+      name: patientNameSql,
       phone: patients.phone,
       branchName: branches.name,
     })
@@ -209,7 +212,7 @@ export async function listPatients(db: Db, tenantId: string, filters: PatientLis
 
 export async function getPatient360(db: Db, tenantId: string, patientId: string, viewerRole: Role, timezone: string): Promise<Patient360 | null> {
   const [patient] = await db
-    .select({ id: patients.id, name: patients.name, phone: patients.phone, preferredLanguage: patients.preferredLanguage, branchName: branches.name })
+    .select({ id: patients.id, name: patientNameSql, dateOfBirth: patients.dateOfBirth, reportedAge: patients.reportedAge, phone: patients.phone, preferredLanguage: patients.preferredLanguage, branchName: branches.name })
     .from(patients)
     .leftJoin(branches, eq(patients.branchId, branches.id))
     .where(and(eq(patients.tenantId, tenantId), eq(patients.id, patientId)))
@@ -347,7 +350,7 @@ export async function getPatient360(db: Db, tenantId: string, patientId: string,
   const calls = await listCallsForPatient(db, tenantId, patient.id);
 
   return {
-    patient: { id: patient.id, name: patient.name, phone: patient.phone, preferredLanguage: patient.preferredLanguage, branchName: patient.branchName },
+    patient: { id: patient.id, name: patient.name, age: displayAge(patient.dateOfBirth, patient.reportedAge, dayKeyIn(new Date(), timezone)), dateOfBirth: patient.dateOfBirth, phone: patient.phone, preferredLanguage: patient.preferredLanguage, branchName: patient.branchName },
     journeys: journeyCards,
     calls,
     acquisition,

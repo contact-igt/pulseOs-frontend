@@ -324,7 +324,7 @@ export default function Patient360Page() {
               <span className="text-xs text-ink-2" data-testid="patient-journey-summary">{journeySummary(journeys)}</span>
             </div>
             <p className="mt-0.5 break-words text-sm text-ink-2">
-              {patient.phone} · {patient.preferredLanguage} · {patient.branchName ?? "No branch"}
+              {patient.age !== null ? `${patient.age} yrs · ` : ""}{patient.phone} · {patient.preferredLanguage} · {patient.branchName ?? "No branch"}
             </p>
           </div>
         </div>

@@ -1,4 +1,5 @@
 import { and, eq, gte, isNull, lt, or, sql } from "drizzle-orm";
+import { patientNameSql } from "../../lib/patient-name.js";
 import type { Db } from "../../db/client.js";
 import { hospitalTodayBounds } from "../../lib/hospital-time.js";
 import { journeys, patients, tasks, timelineEvents, users } from "../../db/schema.js";
@@ -43,7 +44,7 @@ export async function listTasks(db: Db, tenantId: string, filters: TaskFilters, 
 
   const rows = await db
     .select({
-      id: tasks.id, patientId: tasks.patientId, patientName: patients.name,
+      id: tasks.id, patientId: tasks.patientId, patientName: patientNameSql,
       journeyId: tasks.journeyId, journeyType: journeys.journeyType, source: journeys.source,
       assignedTo: tasks.assignedTo, assignedToName: users.name,
       type: tasks.type, priority: tasks.priority, status: tasks.status, reason: tasks.reason, notes: tasks.notes,
@@ -140,7 +141,7 @@ export async function createTask(db: Db, tenantId: string, createdBy: string, in
     title: `Task created: ${input.type.replace(/_/g, " ").toLowerCase()}`,
   });
 
-  const [patient] = await db.select({ name: patients.name }).from(patients).where(eq(patients.id, row.patientId)).limit(1);
+  const [patient] = await db.select({ name: patientNameSql }).from(patients).where(eq(patients.id, row.patientId)).limit(1);
   return toRow({ ...row, patientName: patient?.name ?? "", journeyType: null, assignedToName: null });
 }
 
@@ -177,7 +178,7 @@ export async function rescheduleTask(db: Db, tenantId: string, taskId: string, a
 export async function getTaskById(db: Db, tenantId: string, taskId: string): Promise<TaskRow | null> {
   const [row] = await db
     .select({
-      id: tasks.id, patientId: tasks.patientId, patientName: patients.name,
+      id: tasks.id, patientId: tasks.patientId, patientName: patientNameSql,
       journeyId: tasks.journeyId, journeyType: journeys.journeyType, source: journeys.source,
       assignedTo: tasks.assignedTo, assignedToName: users.name,
       type: tasks.type, priority: tasks.priority, status: tasks.status, reason: tasks.reason, notes: tasks.notes,

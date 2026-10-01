@@ -2,9 +2,8 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../../db/client.js";
 import { calls, conversations, journeys, marketingCampaigns, messages, tasks, timelineEvents } from "../../db/schema.js";
 import { recordTouchpoint } from "../../domain/acquisition/attribution.service.js";
-import { ensureSpecialties } from "../../domain/specialty/specialty.service.js";
-import { GYNECOLOGY_SPECIALTIES, GYNECOLOGY_TREATMENTS } from "../../domain/specialty/gynecology.templates.js";
-import { ensureTreatmentCatalog } from "../../domain/specialty/treatment-catalog.service.js";
+import { installDepartmentTemplate } from "../../domain/specialty/department.service.js";
+import { GYNECOLOGY_TREATMENTS } from "../../domain/specialty/gynecology.templates.js";
 import { assertJourneyConfigsConsistent } from "./consistency.js";
 import {
   createDemoBranches,
@@ -244,8 +243,8 @@ export const JOURNEY_CONFIGS: DemoJourneyConfig[] = [
 
 export async function seedGynecologyTenant(passwordHash: string) {
   const tenant = await createDemoTenant("PulseOS Gynecology Demo");
-  await ensureSpecialties(db, tenant.id, GYNECOLOGY_SPECIALTIES);
-  await ensureTreatmentCatalog(db, tenant.id, GYNECOLOGY_TREATMENTS);
+  // The same install a hospital admin runs from Settings: department, services, fields, catalogue, lead sources.
+  await installDepartmentTemplate(db, tenant.id, "gynecology");
 
   const branchByKey = await createDemoBranches(tenant.id, [
     { name: "Koramangala Centre", city: "Bengaluru" },
@@ -375,7 +374,7 @@ export async function seedGynecologyTenant(passwordHash: string) {
     .returning();
   timelineRows.push({
     tenantId: tenant.id, patientId: patientRows[2].id, journeyId: journeyIds[2],
-    actorType: "system", eventType: "call_logged", title: "Call completed · Rohan Das",
+    actorType: "system", eventType: "call_logged", channel: "IVR_CALL", title: "Call completed · Rohan Das",
     occurredAt: minutesAgo(180), relatedEntityType: "call", relatedEntityId: snehaCall.id,
   });
 
@@ -405,7 +404,7 @@ export async function seedGynecologyTenant(passwordHash: string) {
     .returning();
   timelineRows.push({
     tenantId: tenant.id, patientId: patientRows[6].id, journeyId: journeyIds[6],
-    actorType: "system", eventType: "call_logged", title: "Call missed",
+    actorType: "system", eventType: "call_logged", channel: "IVR_CALL", title: "Call missed",
     occurredAt: minutesAgo(305), relatedEntityType: "call", relatedEntityId: ishitaCall.id,
   });
   await db.insert(tasks).values({

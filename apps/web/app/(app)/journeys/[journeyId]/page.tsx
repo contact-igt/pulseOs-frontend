@@ -127,7 +127,7 @@ export default function JourneyDetailPage() {
       <PageHeader
         back={<BackLink fallback="/journeys" fallbackLabel="Back to Journeys" />}
         title={patient.name}
-        subtitle={`${patient.phone}${patient.branchName ? ` · ${patient.branchName}` : ""}`}
+        subtitle={`${patient.age !== null ? `${patient.age} yrs · ` : ""}${patient.phone}${patient.branchName ? ` · ${patient.branchName}` : ""}`}
         actions={
           <Link
             href={withFrom(`/patients/${patient.id}`, "journeys")}
@@ -162,7 +162,8 @@ export default function JourneyDetailPage() {
         )}
 
         <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-4">
-          <Fact label="Source">{SOURCE_LABEL[journey.source] ?? journey.source}</Fact>
+          <Fact label="Source">{journey.sourceLabel ?? SOURCE_LABEL[journey.source] ?? journey.source}</Fact>
+          {journey.departmentName && <Fact label="Department" testId="journey-department">{journey.departmentName}</Fact>}
           <Fact label="Campaign">{journey.campaign?.name ?? "Organic / no campaign"}</Fact>
           <Fact label="Owner" testId="journey-owner">
             <span className="flex items-center gap-1.5">

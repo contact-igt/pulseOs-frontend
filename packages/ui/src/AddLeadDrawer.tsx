@@ -1,30 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import type {
-  CreateLeadInput,
-  CreateLeadResult,
-  CustomFieldDefinitionVm,
-  LeadPhoneLookupResult,
-  Lookups,
-  SourceChannel,
-  SpecialtyTemplateVm,
-  TaskPriority,
-  TaskType,
+import {
+  INTERACTION_CHANNEL_LABEL,
+  MANUAL_INTERACTION_CHANNELS,
+  UNKNOWN_PATIENT_NAME,
+  type CreateLeadInput,
+  type InteractionChannel,
+  type LeadSourceVm,
+  type CreateLeadResult,
+  type CustomFieldDefinitionVm,
+  type LeadPhoneLookupResult,
+  type Lookups,
+  type SourceChannel,
+  type SpecialtyTemplateVm,
+  type TaskPriority,
+  type TaskType,
 } from "@pulseos/types";
 import { useDialogFocus } from "./useDialogFocus";
 import { CustomFieldInputs, defaultsFor, normalizeFieldValues } from "./CustomFieldInputs";
-
-const SOURCE_OPTIONS: { value: SourceChannel; label: string }[] = [
-  { value: "meta", label: "Meta Ads" },
-  { value: "google", label: "Google Ads" },
-  { value: "website", label: "Website" },
-  { value: "whatsapp", label: "WhatsApp" },
-  { value: "phone", label: "Phone" },
-  { value: "walk_in", label: "Walk-in" },
-  { value: "referral", label: "Referral" },
-  { value: "other", label: "Other" },
-];
 
 const FOLLOW_UP_TYPES: TaskType[] = ["CALLBACK", "FOLLOW_UP", "APPOINTMENT_CONFIRMATION", "OTHER"];
 
@@ -35,13 +29,16 @@ const labelClass = "mb-1 block text-xs font-medium text-neutral-600";
 interface FormState {
   patientId?: string;
   name: string;
+  age: string;
+  dateOfBirth: string;
   phone: string;
   email: string;
   preferredLanguage: string;
   specialtyKey: string;
   branchId: string;
   doctorId: string;
-  source: SourceChannel;
+  sourceKey: string;
+  channel: InteractionChannel | "";
   campaignId: string;
   journeyType: string;
   ownerId: string;
@@ -60,16 +57,19 @@ function defaultDueAt(): string {
   return d.toISOString().slice(0, 16);
 }
 
-function emptyForm(defaultSource?: SourceChannel): FormState {
+function emptyForm(sourceKey: string): FormState {
   return {
     name: "",
+    age: "",
+    dateOfBirth: "",
     phone: "",
     email: "",
     preferredLanguage: "English",
     specialtyKey: "",
     branchId: "",
     doctorId: "",
-    source: defaultSource ?? "website",
+    sourceKey,
+    channel: "",
     campaignId: "",
     journeyType: "",
     ownerId: "",
@@ -88,6 +88,7 @@ export function AddLeadDrawer({
   onClose,
   specialties,
   lookups,
+  leadSources,
   defaultSource,
   onPhoneLookup,
   onLoadCustomFields,
@@ -98,13 +99,16 @@ export function AddLeadDrawer({
   onClose: () => void;
   specialties: SpecialtyTemplateVm[];
   lookups: Lookups;
+  /** The sources the hospital offers for a new lead (non-archived). */
+  leadSources: LeadSourceVm[];
+  /** Preselects the first offered source whose coarse bucket matches (e.g. from a campaign page). */
   defaultSource?: SourceChannel;
   onPhoneLookup: (phone: string) => Promise<LeadPhoneLookupResult>;
   onLoadCustomFields: (specialtyKey: string) => Promise<CustomFieldDefinitionVm[]>;
   onSubmit: (input: CreateLeadInput) => Promise<CreateLeadResult>;
   onCreated?: (result: CreateLeadResult) => void;
 }) {
-  const [form, setForm] = useState<FormState>(() => emptyForm(defaultSource));
+  const [form, setForm] = useState<FormState>(() => emptyForm((defaultSource && leadSources.find((s) => s.bucket === defaultSource)?.key) || leadSources[0]?.key || ""));
   const [existingPatient, setExistingPatient] = useState<{ id: string; name: string; activeJourneyCount: number } | null>(null);
   const [phoneChecked, setPhoneChecked] = useState(false);
   const [fields, setFields] = useState<CustomFieldDefinitionVm[]>([]);
@@ -121,7 +125,9 @@ export function AddLeadDrawer({
     setPhoneChecked(true);
     if (result.patient) {
       setExistingPatient(result.patient);
-      setForm((f) => ({ ...f, patientId: result.patient!.id, name: result.patient!.name }));
+      // A patient whose name is not known yet has nothing to prefill — the name stays editable so it can be added.
+      const known = result.patient.name !== UNKNOWN_PATIENT_NAME;
+      setForm((f) => ({ ...f, patientId: result.patient!.id, name: known ? result.patient!.name : "" }));
     } else {
       setExistingPatient(null);
       setForm((f) => ({ ...f, patientId: undefined }));
@@ -141,7 +147,7 @@ export function AddLeadDrawer({
     setForm((f) => ({ ...f, customFieldValues: { ...f.customFieldValues, [key]: value } }));
   }
 
-  const canSubmit = form.name.trim() && form.phone.trim() && form.specialtyKey && form.branchId && form.journeyType.trim() && !submitting;
+  const canSubmit = form.phone.trim() && form.sourceKey && form.specialtyKey && form.branchId && form.journeyType.trim() && !submitting;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -151,14 +157,17 @@ export function AddLeadDrawer({
     try {
       const input: CreateLeadInput = {
         patientId: form.patientId,
-        name: form.name.trim(),
+        name: form.name.trim() || undefined,
+        age: form.age.trim() ? Number(form.age) : undefined,
+        dateOfBirth: form.dateOfBirth || undefined,
         phone: form.phone.trim(),
         email: form.email.trim() || undefined,
         preferredLanguage: form.preferredLanguage || undefined,
         specialtyKey: form.specialtyKey,
         branchId: form.branchId,
         doctorId: form.doctorId || undefined,
-        source: form.source,
+        sourceKey: form.sourceKey,
+        channel: form.channel || undefined,
         campaignId: form.campaignId || undefined,
         journeyType: form.journeyType.trim(),
         ownerId: form.ownerId || undefined,
@@ -181,7 +190,9 @@ export function AddLeadDrawer({
     }
   }
 
-  const campaignsForSource = lookups.campaigns.filter((c) => c.source === form.source);
+  const selectedBucket = leadSources.find((s) => s.key === form.sourceKey)?.bucket;
+  const campaignsForSource = lookups.campaigns.filter((c) => c.source === selectedBucket);
+  const selectedService = specialties.find((s) => s.key === form.specialtyKey);
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true" aria-label="Add Lead">
@@ -236,17 +247,32 @@ export function AddLeadDrawer({
               </div>
               <div>
                 <label className={labelClass} htmlFor="lead-name">
-                  Name <span className="text-danger-500">*</span>
+                  Name
                 </label>
                 <input
                   id="lead-name"
                   type="text"
-                  required
                   value={form.name}
                   onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                  disabled={!!existingPatient}
+                  disabled={!!existingPatient && form.name !== "" && existingPatient.name !== UNKNOWN_PATIENT_NAME}
+                  placeholder="Add when you have it"
                   className={`${inputClass} disabled:bg-neutral-50 disabled:text-neutral-500`}
+                  data-testid="lead-name-input"
                 />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelClass} htmlFor="lead-age">
+                    Age
+                  </label>
+                  <input id="lead-age" type="number" inputMode="numeric" min={0} max={120} step={1} value={form.age} onChange={(e) => setForm((f) => ({ ...f, age: e.target.value }))} className={inputClass} placeholder="Years" data-testid="lead-age-input" />
+                </div>
+                <div>
+                  <label className={labelClass} htmlFor="lead-dob">
+                    Date of birth
+                  </label>
+                  <input id="lead-dob" type="date" value={form.dateOfBirth} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setForm((f) => ({ ...f, dateOfBirth: e.target.value }))} className={inputClass} data-testid="lead-dob-input" />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -271,16 +297,21 @@ export function AddLeadDrawer({
             <div className="space-y-3">
               <div>
                 <label className={labelClass} htmlFor="lead-specialty">
-                  Specialty / Service <span className="text-danger-500">*</span>
+                  Service / enquiry <span className="text-danger-500">*</span>
                 </label>
                 <select id="lead-specialty" required value={form.specialtyKey} onChange={(e) => onSpecialtyChange(e.target.value)} className={inputClass} data-testid="lead-specialty-select">
-                  <option value="">Select specialty…</option>
+                  <option value="">Select service…</option>
                   {specialties.map((s) => (
                     <option key={s.key} value={s.key}>
                       {s.displayName}
                     </option>
                   ))}
                 </select>
+                {selectedService?.departmentName && (
+                  <p className="mt-1 text-[11px] text-neutral-500" data-testid="lead-department">
+                    Department: {selectedService.departmentName}
+                  </p>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -318,16 +349,18 @@ export function AddLeadDrawer({
                   <select
                     id="lead-source"
                     required
-                    value={form.source}
-                    onChange={(e) => setForm((f) => ({ ...f, source: e.target.value as SourceChannel, campaignId: "" }))}
+                    value={form.sourceKey}
+                    onChange={(e) => setForm((f) => ({ ...f, sourceKey: e.target.value, campaignId: "" }))}
                     className={inputClass}
+                    data-testid="lead-source-select"
                   >
-                    {SOURCE_OPTIONS.map((s) => (
-                      <option key={s.value} value={s.value}>
+                    {leadSources.map((s) => (
+                      <option key={s.key} value={s.key}>
                         {s.label}
                       </option>
                     ))}
                   </select>
+                  <p className="mt-1 text-[11px] text-neutral-500">Where the patient originally came from.</p>
                 </div>
                 <div>
                   <label className={labelClass} htmlFor="lead-campaign">
@@ -342,6 +375,19 @@ export function AddLeadDrawer({
                     ))}
                   </select>
                 </div>
+              </div>
+              <div>
+                <label className={labelClass} htmlFor="lead-channel">
+                  How did they get in touch?
+                </label>
+                <select id="lead-channel" value={form.channel} onChange={(e) => setForm((f) => ({ ...f, channel: e.target.value as InteractionChannel | "" }))} className={inputClass} data-testid="lead-channel-select">
+                  <option value="">Not specified</option>
+                  {MANUAL_INTERACTION_CHANNELS.map((c) => (
+                    <option key={c} value={c}>
+                      {INTERACTION_CHANNEL_LABEL[c]}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className={labelClass} htmlFor="lead-journey-type">

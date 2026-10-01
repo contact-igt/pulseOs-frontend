@@ -93,7 +93,7 @@ test.describe("Multi-specialty demo environments", () => {
     await page.keyboard.press("Tab");
     await page.keyboard.press("Enter");
     await expect(page.getByTestId("dev-login-env-ophthalmology")).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByTestId("dev-login-role-DOCTOR")).toHaveAccessibleName("Doctor, Ophthalmology Demo");
+    await expect(page.getByTestId("dev-login-role-DOCTOR")).toHaveAccessibleName("Doctor, Ophthalmology V2");
   });
 
   for (const environment of ["gynecology", "ophthalmology"] as const) {

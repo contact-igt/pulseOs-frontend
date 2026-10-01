@@ -42,7 +42,7 @@ test.describe("CRM critical business flows", () => {
     const firstBranchValue = await branchSelect.locator("option").nth(1).getAttribute("value");
     await branchSelect.selectOption(firstBranchValue!);
 
-    await page.locator("#lead-source").selectOption("meta");
+    await page.locator("#lead-source").selectOption("instagram");
 
     const ownerSelect = page.locator("#lead-owner");
     const firstOwnerValue = await ownerSelect.locator("option").nth(1).getAttribute("value");
@@ -81,7 +81,7 @@ test.describe("CRM critical business flows", () => {
     const branchSelect = page.locator("#lead-branch");
     const firstBranchValue = await branchSelect.locator("option").nth(1).getAttribute("value");
     await branchSelect.selectOption(firstBranchValue!);
-    await page.locator("#lead-source").selectOption("website");
+    await page.locator("#lead-source").selectOption("direct");
     await page.getByTestId("add-lead-submit").click();
     await expect(page.getByTestId("add-lead-drawer")).not.toBeVisible();
 
@@ -95,7 +95,7 @@ test.describe("CRM critical business flows", () => {
 
     await page.getByTestId("lead-specialty-select").selectOption("FERTILITY");
     await branchSelect.selectOption(firstBranchValue!);
-    await page.locator("#lead-source").selectOption("meta");
+    await page.locator("#lead-source").selectOption("instagram");
     await page.getByTestId("add-lead-submit").click();
     await expect(page.getByTestId("add-lead-drawer")).not.toBeVisible();
 
@@ -136,7 +136,7 @@ test.describe("CRM critical business flows", () => {
     await expect(page.getByTestId("add-lead-drawer")).toBeVisible();
     await page.getByTestId("lead-phone-input").fill(firstPhone);
     await page.locator("#lead-name").fill("E2E Race Stale Name");
-    await page.locator("#lead-source").selectOption("meta");
+    await page.locator("#lead-source").selectOption("instagram");
     await page.getByRole("button", { name: "Cancel" }).click();
     await expect(page.getByTestId("add-lead-drawer")).not.toBeVisible();
 
