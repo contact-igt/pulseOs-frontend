@@ -1,10 +1,14 @@
-import { and, desc, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
-import { calls, communicationEndpoints, connectors, journeys, tasks, timelineEvents } from "../../db/schema.js";
+import { calls, connectors, journeys, tasks, timelineEvents } from "../../db/schema.js";
 import { findMostRecentActiveJourney, findOrCreatePatientByPhone } from "../patient/identity.service.js";
 import { getSoleActiveEndpointForConnector } from "./communication-endpoint.service.js";
 import type { InboundCallEvent } from "./types.js";
-import type { CallVm } from "@pulseos/types";
+import { pickOwnerForNewJourney } from "../crm/crm-allocation.service.js";
+import { resolveLeadSource } from "../lead/lead-source.service.js";
+import { ensureCallIntelligence } from "../call/call-intelligence.service.js";
+
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
 // Disposition → Next Action mapping lives on the connector's own (non-secret)
 // configuration — "provider disposition mapping should be configurable at
@@ -29,7 +33,7 @@ export const DEFAULT_DISPOSITION_MAPPING: DispositionMapping = {
 // `if (!disposition) return` guard and created nothing at all, for every
 // missed call, silently. `missed_follow_up` already existed in
 // taskReasonEnum for exactly this case; it was just never used from here.
-async function createMissedCallTask(db: Db, tenantId: string, patientId: string, journeyId: string | null): Promise<void> {
+async function createMissedCallTask(db: Db | Tx, tenantId: string, patientId: string, journeyId: string | null): Promise<void> {
   const journey = journeyId ? await db.select().from(journeys).where(eq(journeys.id, journeyId)).limit(1).then((r) => r[0] ?? null) : null;
   const dueAt = new Date();
   dueAt.setHours(dueAt.getHours() + 2);
@@ -48,7 +52,7 @@ async function createMissedCallTask(db: Db, tenantId: string, patientId: string,
 }
 
 async function applyDispositionMapping(
-  db: Db,
+  db: Db | Tx,
   tenantId: string,
   patientId: string,
   journeyId: string | null,
@@ -83,116 +87,101 @@ async function applyDispositionMapping(
   }
 }
 
+/**
+ * One provider call event → Patient, Journey (an incoming call from someone with no open enquiry opens one, so the
+ * callback has somewhere to live), the Call, its Timeline line, the intelligence row, and the missed-call / disposition
+ * Task — in a single transaction. The provider's own call id is unique per connector, so a re-delivery of the same
+ * call is a no-op: no second Call, no second Task.
+ */
 export async function persistInboundCall(db: Db, tenantId: string, connectorId: string, event: InboundCallEvent, mapping: DispositionMapping = DEFAULT_DISPOSITION_MAPPING): Promise<void> {
   const customerName = (event.metadata.customerName as string | null | undefined) ?? null;
   const patient = await findOrCreatePatientByPhone(db, tenantId, event.phone, customerName);
-  const journey = await findMostRecentActiveJourney(db, tenantId, patient.id);
+  const existingJourney = await findMostRecentActiveJourney(db, tenantId, patient.id);
   // Runo's real API never reports which hospital line took the call
   // (confirmed against their live OpenAPI spec) — only resolvable when the
   // connector has exactly one active endpoint, a real default, never a guess
   // among several (see getSoleActiveEndpointForConnector).
   const endpoint = await getSoleActiveEndpointForConnector(db, tenantId, connectorId);
+  const [connector] = await db.select({ mode: connectors.mode }).from(connectors).where(eq(connectors.id, connectorId)).limit(1);
 
-  const [insertedCall] = await db
-    .insert(calls)
-    .values({
+  // Reads that may advance state outside the transaction: the owner for a brand-new enquiry (round-robin cursor).
+  const openNew = !existingJourney && event.direction === "inbound";
+  const phoneSource = openNew ? await resolveLeadSource(db, tenantId, "phone", { allowArchived: true }) : null;
+  const allocated = openNew ? await pickOwnerForNewJourney(db, tenantId, { source: "phone", journeyType: PHONE_ENQUIRY, branchId: endpoint?.branchId ?? null }) : null;
+
+  await db.transaction(async (tx) => {
+    const [insertedCall] = await tx
+      .insert(calls)
+      .values({
+        tenantId,
+        origin: "IVR",
+        connectorId,
+        patientId: patient.id,
+        journeyId: existingJourney?.id ?? null,
+        communicationEndpointId: endpoint?.id ?? null,
+        externalCallId: event.externalCallId,
+        direction: event.direction,
+        phone: event.phone,
+        status: event.status,
+        durationSeconds: event.durationSeconds,
+        recordingUrl: event.recordingUrl,
+        disposition: event.disposition,
+        agentName: event.agentName,
+        startedAt: event.startedAt,
+        endedAt: event.endedAt,
+        metadata: event.metadata,
+      })
+      .onConflictDoNothing({ target: [calls.connectorId, calls.externalCallId] })
+      .returning();
+    if (!insertedCall) return; // already stored: nothing else may run again
+
+    let journey = existingJourney;
+    if (openNew) {
+      const [created] = await tx
+        .insert(journeys)
+        .values({
+          tenantId, patientId: patient.id, journeyType: PHONE_ENQUIRY, source: "phone", sourceId: phoneSource?.id ?? null, stage: "enquiry",
+          ownerUserId: allocated?.userId ?? null, createdAt: event.startedAt ?? new Date(),
+        })
+        .returning();
+      journey = created!;
+      await tx.update(calls).set({ journeyId: journey.id }).where(eq(calls.id, insertedCall.id));
+      await tx.insert(timelineEvents).values({
+        tenantId, patientId: patient.id, journeyId: journey.id, actorType: "system", eventType: "journey_created", title: `${PHONE_ENQUIRY} journey opened`,
+        sourceChannel: "phone", channel: "IVR_CALL", occurredAt: event.startedAt ?? new Date(),
+      });
+      if (allocated) {
+        await tx.insert(timelineEvents).values({ tenantId, patientId: patient.id, journeyId: journey.id, actorType: "system", eventType: "journey_auto_assigned", title: `Auto-assigned to ${allocated.userName}`, description: `Allocation rule: ${allocated.ruleName}` });
+      }
+    }
+
+    await tx.insert(timelineEvents).values({
       tenantId,
-      connectorId,
       patientId: patient.id,
       journeyId: journey?.id ?? null,
-      communicationEndpointId: endpoint?.id ?? null,
-      externalCallId: event.externalCallId,
-      direction: event.direction,
-      phone: event.phone,
-      status: event.status,
-      durationSeconds: event.durationSeconds,
-      recordingUrl: event.recordingUrl,
-      disposition: event.disposition,
-      agentName: event.agentName,
-      startedAt: event.startedAt,
-      endedAt: event.endedAt,
-      metadata: event.metadata,
-    })
-    .returning();
+      actorType: "system",
+      eventType: "call_logged",
+      channel: "IVR_CALL",
+      title: `Call ${event.status.replace(/_/g, " ")}${event.agentName ? ` · ${event.agentName}` : ""}`,
+      description: event.disposition,
+      occurredAt: event.endedAt ?? event.startedAt ?? new Date(),
+      // Traceable back to its own `calls` row (relatedEntityType + relatedEntityId together).
+      relatedEntityType: "call",
+      relatedEntityId: insertedCall.id,
+    });
 
-  await db.insert(timelineEvents).values({
-    tenantId,
-    patientId: patient.id,
-    journeyId: journey?.id ?? null,
-    actorType: "system",
-    eventType: "call_logged",
-    channel: "IVR_CALL",
-    title: `Call ${event.status.replace(/_/g, " ")}${event.agentName ? ` · ${event.agentName}` : ""}`,
-    description: event.disposition,
-    occurredAt: event.endedAt ?? event.startedAt ?? new Date(),
-    // Previously set relatedEntityType with no relatedEntityId — the
-    // Timeline event existed but couldn't actually be traced back to its
-    // own `calls` row, unlike the equivalent treatment-status Timeline
-    // events (relatedEntityType + relatedEntityId together).
-    relatedEntityType: "call",
-    relatedEntityId: insertedCall.id,
+    await ensureCallIntelligence(tx, { id: insertedCall.id, tenantId, hasRecording: !!event.recordingUrl }, { connectorMode: connector?.mode ?? null, providerTranscript: event.transcript });
+
+    // Mutually exclusive, not "also": a missed call's disposition (if any
+    // provider ever sends one) doesn't reflect a real conversation, so it
+    // must never ALSO trigger a disposition-mapped task — that would double
+    // up the follow-up task for one missed call.
+    if (event.status === "missed") {
+      await createMissedCallTask(tx, tenantId, patient.id, journey?.id ?? null);
+    } else {
+      await applyDispositionMapping(tx, tenantId, patient.id, journey?.id ?? null, event.disposition, mapping);
+    }
   });
-
-  // Mutually exclusive, not "also": a missed call's disposition (if any
-  // provider ever sends one) doesn't reflect a real conversation, so it
-  // must never ALSO trigger a disposition-mapped task — that would double
-  // up the follow-up task for one missed call.
-  if (event.status === "missed") {
-    await createMissedCallTask(db, tenantId, patient.id, journey?.id ?? null);
-  } else {
-    await applyDispositionMapping(db, tenantId, patient.id, journey?.id ?? null, event.disposition, mapping);
-  }
 }
 
-// Calls have been written correctly since this table's introduction, but
-// nothing ever read them back — no API route existed at all. This is the
-// one read path: newest first, joined to the connector for a human-readable
-// provider label (never expose connector secrets — only `provider`/`mode`,
-// the same pair already treated as safe-to-return elsewhere).
-export async function listCallsForPatient(db: Db, tenantId: string, patientId: string): Promise<CallVm[]> {
-  const rows = await db
-    .select({
-      id: calls.id,
-      journeyId: calls.journeyId,
-      provider: connectors.provider,
-      connectorMode: connectors.mode,
-      direction: calls.direction,
-      phone: calls.phone,
-      status: calls.status,
-      durationSeconds: calls.durationSeconds,
-      recordingUrl: calls.recordingUrl,
-      disposition: calls.disposition,
-      agentName: calls.agentName,
-      startedAt: calls.startedAt,
-      endedAt: calls.endedAt,
-      endpointLabel: communicationEndpoints.displayLabel,
-    })
-    .from(calls)
-    .innerJoin(connectors, eq(calls.connectorId, connectors.id))
-    .leftJoin(communicationEndpoints, eq(calls.communicationEndpointId, communicationEndpoints.id))
-    .where(and(eq(calls.tenantId, tenantId), eq(calls.patientId, patientId)))
-    .orderBy(desc(calls.startedAt));
-
-  return rows.map((r) => ({
-    id: r.id,
-    journeyId: r.journeyId,
-    provider: r.provider,
-    connectorMode: r.connectorMode,
-    direction: r.direction,
-    phone: r.phone,
-    status: r.status,
-    durationSeconds: r.durationSeconds,
-    hasRecording: !!r.recordingUrl,
-    disposition: r.disposition,
-    agentName: r.agentName,
-    startedAt: r.startedAt ? r.startedAt.toISOString() : null,
-    endedAt: r.endedAt ? r.endedAt.toISOString() : null,
-    endpointLabel: r.endpointLabel ?? null,
-  }));
-}
-
-/** The provider's recording URL for one call in this tenant, or null when the call or its recording does not exist. */
-export async function getCallRecordingUrl(db: Db, tenantId: string, callId: string): Promise<string | null> {
-  const [row] = await db.select({ url: calls.recordingUrl }).from(calls).where(and(eq(calls.tenantId, tenantId), eq(calls.id, callId))).limit(1);
-  return row?.url ?? null;
-}
+const PHONE_ENQUIRY = "Phone enquiry";

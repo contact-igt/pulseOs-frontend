@@ -90,6 +90,7 @@ export type Permission =
   | "VIEW_CALL_RECORDING"
   | "DOWNLOAD_CALL_RECORDING"
   | "VIEW_CALL_TRANSCRIPT"
+  | "LOG_CALL"
   | "VIEW_COMMUNICATION_ENDPOINTS"
   | "MANAGE_LEADS"
   | "MANAGE_SPECIALTIES";
@@ -99,21 +100,21 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "VIEW_ADMIN_COMMAND_CENTRE", "VIEW_PATIENTS", "EDIT_PATIENTS", "VIEW_JOURNEYS", "MANAGE_JOURNEYS",
     "VIEW_APPOINTMENTS", "MANAGE_APPOINTMENTS", "RECORD_CONSULTATION_OUTCOME", "VIEW_TREATMENT", "MANAGE_TREATMENT",
     "VIEW_REVENUE", "VIEW_MARKETING", "VIEW_INBOX", "MANAGE_INBOX", "VIEW_TASKS", "MANAGE_TASKS",
-    "VIEW_INTEGRATIONS", "MANAGE_INTEGRATION_CONFIG", "MANAGE_INTEGRATION_SECRETS", "VIEW_CALL_RECORDING", "DOWNLOAD_CALL_RECORDING", "VIEW_CALL_TRANSCRIPT", "VIEW_COMMUNICATION_ENDPOINTS", "MANAGE_LEADS", "MANAGE_SPECIALTIES",
+    "VIEW_INTEGRATIONS", "MANAGE_INTEGRATION_CONFIG", "MANAGE_INTEGRATION_SECRETS", "VIEW_CALL_RECORDING", "DOWNLOAD_CALL_RECORDING", "VIEW_CALL_TRANSCRIPT", "LOG_CALL", "VIEW_COMMUNICATION_ENDPOINTS", "MANAGE_LEADS", "MANAGE_SPECIALTIES",
   ],
   HOSPITAL_ADMIN: [
     "VIEW_ADMIN_COMMAND_CENTRE", "VIEW_PATIENTS", "EDIT_PATIENTS", "VIEW_JOURNEYS", "MANAGE_JOURNEYS",
     "VIEW_APPOINTMENTS", "MANAGE_APPOINTMENTS", "VIEW_TREATMENT", "MANAGE_TREATMENT",
     "VIEW_REVENUE", "VIEW_MARKETING", "VIEW_INBOX", "MANAGE_INBOX", "VIEW_TASKS", "MANAGE_TASKS",
-    "VIEW_INTEGRATIONS", "MANAGE_INTEGRATION_CONFIG", "VIEW_CALL_RECORDING", "DOWNLOAD_CALL_RECORDING", "VIEW_CALL_TRANSCRIPT", "VIEW_COMMUNICATION_ENDPOINTS", "MANAGE_LEADS", "MANAGE_SPECIALTIES",
+    "VIEW_INTEGRATIONS", "MANAGE_INTEGRATION_CONFIG", "VIEW_CALL_RECORDING", "DOWNLOAD_CALL_RECORDING", "VIEW_CALL_TRANSCRIPT", "LOG_CALL", "VIEW_COMMUNICATION_ENDPOINTS", "MANAGE_LEADS", "MANAGE_SPECIALTIES",
   ],
   FRONT_DESK: [
     "VIEW_PATIENTS", "EDIT_PATIENTS", "VIEW_JOURNEYS", "VIEW_APPOINTMENTS", "MANAGE_APPOINTMENTS",
-    "VIEW_INBOX", "MANAGE_INBOX", "VIEW_TASKS", "MANAGE_TASKS", "VIEW_COMMUNICATION_ENDPOINTS", "MANAGE_LEADS",
+    "VIEW_INBOX", "MANAGE_INBOX", "VIEW_TASKS", "MANAGE_TASKS", "LOG_CALL", "VIEW_COMMUNICATION_ENDPOINTS", "MANAGE_LEADS",
   ],
   PATIENT_COORDINATOR: [
     "VIEW_PATIENTS", "EDIT_PATIENTS", "VIEW_JOURNEYS", "MANAGE_JOURNEYS", "VIEW_APPOINTMENTS", "MANAGE_APPOINTMENTS",
-    "VIEW_TREATMENT", "MANAGE_TREATMENT", "VIEW_REVENUE", "VIEW_INBOX", "MANAGE_INBOX", "VIEW_TASKS", "MANAGE_TASKS", "VIEW_COMMUNICATION_ENDPOINTS", "MANAGE_LEADS",
+    "VIEW_TREATMENT", "MANAGE_TREATMENT", "VIEW_REVENUE", "VIEW_INBOX", "MANAGE_INBOX", "VIEW_TASKS", "MANAGE_TASKS", "LOG_CALL", "VIEW_COMMUNICATION_ENDPOINTS", "MANAGE_LEADS",
   ],
   DOCTOR: [
     "VIEW_DOCTOR_COMMAND_CENTRE", "VIEW_PATIENTS", "VIEW_JOURNEYS", "VIEW_APPOINTMENTS",
@@ -441,19 +442,56 @@ export type CallStatus = "completed" | "missed" | "no_answer" | "busy" | "failed
 // no API route existed at all. Deliberately a flat read-model, not the
 // `calls` table's raw shape: no tenantId/connectorId (irrelevant once
 // scoped to a patient), no raw provider metadata (that stays server-side).
+export type CallOrigin = "IVR" | "MANUAL";
+export type CallIntelStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED" | "NOT_CONFIGURED";
+
+/**
+ * What PulseOS derived from a call's recording — kept apart from the call and from staff feedback. The summary is
+ * labelled by how it was made (mode); the transcript text itself is only served through a permission-checked endpoint.
+ */
+export interface CallIntelligenceVm {
+  transcriptStatus: CallIntelStatus;
+  /** The transcript exists and the viewer may fetch it (GET /calls/:id/transcript). */
+  hasTranscript: boolean;
+  transcriptMode: "PROVIDER" | "FIXTURE" | null;
+  summaryStatus: CallIntelStatus;
+  summary: {
+    text: string;
+    patientIntent: string | null;
+    serviceInterest: string | null;
+    questions: string[];
+    agreedAction: string | null;
+    nextAction: string | null;
+    mode: SummaryMode;
+    generatedAt: string;
+  } | null;
+  /** Only ever a short, non-technical reason ("failed after 3 tries"). Provider diagnostics stay server-side. */
+  failed: boolean;
+}
+
 export interface CallVm {
   id: string;
   journeyId: string | null;
+  origin: CallOrigin;
   provider: string;
-  connectorMode: ConnectorMode;
+  connectorMode: ConnectorMode | null;
   direction: CallDirection;
   phone: string;
   status: CallStatus;
+  /** Derived from status: the patient and the hospital actually spoke. */
+  connected: boolean;
   durationSeconds: number | null;
-  /** A recording exists. The provider URL itself is never sent to the browser — fetch it through GET /calls/:id/recording. */
+  /** A recording exists. The provider URL itself is never sent to the browser — GET /calls/:id/recording streams it for permitted roles. */
   hasRecording: boolean;
   disposition: string | null;
+  /** IVR: the provider's agent. Manual: the staff member who logged it. */
   agentName: string | null;
+  /** HUMAN-authored feedback — never AI text. */
+  staffFeedback: string | null;
+  staffFeedbackBy: string | null;
+  outcomeLabel: string | null;
+  callback: { taskId: string; dueAt: string; status: TaskStatus } | null;
+  intelligence: CallIntelligenceVm | null;
   startedAt: string | null;
   endedAt: string | null;
   // Best-effort only: Runo's real API never tells you which hospital line a
@@ -461,6 +499,52 @@ export interface CallVm {
   // only when the connector has exactly one configured CommunicationEndpoint
   // (an unambiguous default), never guessed among several. Null otherwise.
   endpointLabel: string | null;
+}
+
+/** Derived from the Journey's Call records — never stored as counters. */
+export interface CallStatsVm {
+  total: number;
+  incoming: number;
+  outgoing: number;
+  connected: number;
+  /** Missed (incoming) or no answer / busy / failed (outgoing). */
+  notConnected: number;
+  lastCallAt: string | null;
+}
+
+export interface LogCallInput {
+  direction: CallDirection;
+  connected: boolean;
+  /** ISO instant the call happened; defaults to now, never in the future. */
+  occurredAt?: string;
+  durationSeconds?: number;
+  staffFeedback?: string;
+  /** A configured CRM outcome key (Settings → Workflow Outcomes). */
+  outcomeKey?: string;
+  /** Ask for a callback: due ISO instant, optional note and owner (defaults to the Journey owner, else the person logging). */
+  callback?: { dueAt: string; note?: string; assignedTo?: string };
+  /** Client-generated id so a double-tapped Save returns the first call. */
+  idempotencyKey?: string;
+}
+
+export interface LogCallResult {
+  callId: string;
+  callbackTaskId: string | null;
+  /** True when the idempotency key had already been used and the original call is returned. */
+  duplicate: boolean;
+}
+
+/** Staff feedback / outcome / callback on a call that already exists (e.g. an IVR call). */
+export interface CallFeedbackInput {
+  staffFeedback?: string;
+  outcomeKey?: string;
+  callback?: { dueAt: string; note?: string; assignedTo?: string };
+}
+
+export interface CallTranscriptVm {
+  status: CallIntelStatus;
+  mode: "PROVIDER" | "FIXTURE" | null;
+  text: string | null;
 }
 
 // Previously defined three times (apps/api/src/domain/timeline/timeline.service.ts,
@@ -487,6 +571,8 @@ export interface TimelineEventVm {
   endpointLabel: string | null;
   /** How this interaction happened (call, WhatsApp, walk-in…). Independent of the patient's original source. */
   channel: InteractionChannel | null;
+  /** For a call event: the call itself (IVR and manual alike), trimmed to what the viewer may see. */
+  call: CallVm | null;
   /** How the summary on a whatsapp_conversation line was produced (FIXTURE/AI/…); null for every other event. */
   summaryMode: SummaryMode | null;
 }
@@ -603,6 +689,8 @@ export interface JourneyDetailVm {
     nextAction: { dueAt: string; label: string } | null;
     /** The latest configured outcome logged on this Journey (its sub-status), or null. */
     lastOutcome: { label: string; at: string } | null;
+    /** Counts derived from this Journey's Call records. */
+    callStats: CallStatsVm;
   };
   customFields: JourneyCustomFieldVm[];
   timeline: TimelineEventVm[];

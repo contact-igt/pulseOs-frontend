@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
-import type { Edition, Role } from "@pulseos/types";
+import type { ConnectorMode, Edition, Role } from "@pulseos/types";
 import type { Db } from "../../db/client.js";
-import { branches, calls, connectors, patients, tenants, users } from "../../db/schema.js";
+import { branches, calls, connectorSecrets, connectors, patients, tenants, users } from "../../db/schema.js";
+import { encryptSecret } from "../../domain/security/encryption.js";
 import { hashPassword } from "../../domain/auth/auth.service.js";
 import { purgePatientData } from "./purge.js";
 
@@ -13,6 +14,7 @@ export interface TestTenant {
   edition: Edition;
   /** session cookie by role */
   cookie: Partial<Record<Role, string>>;
+  userIds: Partial<Record<Role, string>>;
   connectorId: string;
   patientId: string;
   callId: string;
@@ -31,29 +33,33 @@ const ROLES: { role: Role; slug: string }[] = [
  * A throwaway tenant with one user per role, one telephony connector and one recorded call — isolated from the
  * seeded demo tenants so edition/permission tests can assert on exactly the data they created.
  */
-export async function createTestTenant(db: Db, app: FastifyInstance, edition: Edition, password: string): Promise<TestTenant> {
+export async function createTestTenant(db: Db, app: FastifyInstance, edition: Edition, password: string, opts: { connectorMode?: ConnectorMode; webhookSecret?: string } = {}): Promise<TestTenant> {
   const tag = randomUUID().slice(0, 8);
   const [tenant] = await db.insert(tenants).values({ name: `Edition Test ${edition} ${tag}`, edition }).returning();
   const [branch] = await db.insert(branches).values({ tenantId: tenant.id, name: "Test Branch", city: "Bengaluru" }).returning();
   const passwordHash = await hashPassword(password);
   const cookie: TestTenant["cookie"] = {};
+  const userIds: TestTenant["userIds"] = {};
   for (const { role, slug } of ROLES) {
     const email = `${slug}.${tag}@edition-test.local`;
-    await db.insert(users).values({ tenantId: tenant.id, branchId: branch.id, name: `${slug} ${tag}`, email, passwordHash, role });
+    const [u] = await db.insert(users).values({ tenantId: tenant.id, branchId: branch.id, name: `${slug} ${tag}`, email, passwordHash, role }).returning({ id: users.id });
+    userIds[role] = u!.id;
     const res = await app.inject({ method: "POST", url: "/auth/login", payload: { email, password } });
     cookie[role] = res.cookies.find((c) => c.name === "pulseos_session")!.value;
   }
   const [connector] = await db
     .insert(connectors)
-    .values({ tenantId: tenant.id, type: "TELEPHONY", provider: "runo", displayName: "Test telephony", capabilities: ["RECEIVE_CALL_EVENT", "RECEIVE_RECORDING"], configuration: { accountRef: "test" } })
+    .values({ tenantId: tenant.id, type: "TELEPHONY", provider: "runo", displayName: "Test telephony", capabilities: ["RECEIVE_CALL_EVENT", "RECEIVE_RECORDING"], configuration: { accountRef: "test" }, ...(opts.connectorMode ? { mode: opts.connectorMode } : {}) })
     .returning();
+  if (opts.webhookSecret) await db.insert(connectorSecrets).values({ connectorId: connector.id, encryptedPayload: encryptSecret({ webhookSharedSecret: opts.webhookSecret }) });
   const [patient] = await db.insert(patients).values({ tenantId: tenant.id, name: `Patient ${tag}`, phone: "+91 90000 00000", phoneE164: `+9190${Math.floor(10000000 + Math.random() * 89999999)}` }).returning();
-  const recordingUrl = `https://recordings.example.test/${tag}.mp3`;
+  // A fixture recording: playable (silent) and unique per tenant, so a leak of the stored reference is detectable.
+  const recordingUrl = `pulseos-fixture://silence.wav?${tag}`;
   const [call] = await db
     .insert(calls)
     .values({ tenantId: tenant.id, connectorId: connector.id, patientId: patient.id, externalCallId: `ext-${tag}`, direction: "inbound", phone: patient.phone, status: "completed", durationSeconds: 61, recordingUrl })
     .returning();
-  return { tenantId: tenant.id, branchId: branch.id, edition, cookie, connectorId: connector.id, patientId: patient.id, callId: call.id, recordingUrl };
+  return { tenantId: tenant.id, branchId: branch.id, edition, cookie, userIds, connectorId: connector.id, patientId: patient.id, callId: call.id, recordingUrl };
 }
 
 /** Removes everything a throwaway tenant owns, in foreign-key order — whatever the test added to it. */

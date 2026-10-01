@@ -116,12 +116,19 @@ export async function reorderOutcomes(db: Db, tenantId: string, orderedIds: stri
 // Logging an outcome on a Journey
 // ---------------------------------------------------------------------------
 
+/** An active (non-archived) outcome of this tenant by key, installing the default set first if the tenant has none. */
+export async function findActiveOutcome(db: Db, tenantId: string, key: string): Promise<CrmOutcomeVm | null> {
+  await ensureDefaultOutcomes(db, tenantId);
+  const [row] = await db.select().from(crmOutcomes).where(and(eq(crmOutcomes.tenantId, tenantId), eq(crmOutcomes.key, key), eq(crmOutcomes.archived, false))).limit(1);
+  return row ? toVm(row) : null;
+}
+
 export type LogResult =
   | { ok: true; result: LogInteractionResult }
   | { ok: false; reason: string; fields?: string[] };
 
 /** Where a Journey may go. Only enquiry → contacted and enquiry/contacted → lost; nothing ever moves backwards. */
-function nextStage(current: JourneyStage, target: OutcomeStage): JourneyStage {
+export function nextStage(current: JourneyStage, target: OutcomeStage): JourneyStage {
   if (target === "contacted") return current === "enquiry" ? "contacted" : current;
   return current === "enquiry" || current === "contacted" ? "lost" : current;
 }

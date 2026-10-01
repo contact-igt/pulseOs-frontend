@@ -37,6 +37,8 @@ function purgePatientsWhere(predicate: string) {
     DELETE FROM messages WHERE conversation_id IN (${cs});
     DELETE FROM conversation_automation_preferences WHERE conversation_id IN (${cs});
     DELETE FROM conversations WHERE patient_id IN (${ps});
+    DELETE FROM call_intelligence WHERE call_id IN (SELECT id FROM calls WHERE patient_id IN (${ps}));
+    UPDATE calls SET callback_task_id = NULL WHERE patient_id IN (${ps});
     DELETE FROM calls WHERE patient_id IN (${ps});
     DELETE FROM campaign_touchpoints WHERE patient_id IN (${ps});
     DELETE FROM custom_field_values WHERE journey_id IN (SELECT id FROM journeys WHERE patient_id IN (${ps}));

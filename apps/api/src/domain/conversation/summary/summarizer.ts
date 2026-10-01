@@ -24,7 +24,8 @@ export interface ConversationSummarizer {
   provider: string;
   /** AI only for a real language model. A deterministic stand-in is FIXTURE and is never shown as AI. */
   mode: SummaryMode;
-  summarize(messages: SummarizerMessage[]): Promise<SummaryDraft>;
+  /** `medium` tells a language model what it is reading (a WhatsApp thread by default, or a transcribed phone call). */
+  summarize(messages: SummarizerMessage[], opts?: { medium?: "whatsapp" | "call" }): Promise<SummaryDraft>;
 }
 
 /**

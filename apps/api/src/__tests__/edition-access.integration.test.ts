@@ -176,14 +176,15 @@ describe.skipIf(!DEMO_PASSWORD)("edition gating, integration secrets and recordi
       }
     });
 
-    it("Admin and Super Admin can play and download; the URL comes only from the recording endpoint", async () => {
+    it("Admin and Super Admin can play and download; the audio streams from PulseOS, never from the provider URL", async () => {
       for (const role of ["HOSPITAL_ADMIN", "SUPER_ADMIN"] as Role[]) {
         const play = await get(v1, role, `/calls/${v1.callId}/recording`);
         expect(play.statusCode).toBe(200);
-        expect(play.json()).toEqual({ url: v1.recordingUrl, download: false });
+        expect(play.headers["content-type"]).toBe("audio/wav");
+        expect(play.headers["content-disposition"]).toBeUndefined();
         const dl = await get(v1, role, `/calls/${v1.callId}/recording?download=1`);
         expect(dl.statusCode).toBe(200);
-        expect(dl.json().download).toBe(true);
+        expect(dl.headers["content-disposition"]).toContain("attachment");
       }
     });
 

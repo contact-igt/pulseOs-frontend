@@ -49,7 +49,7 @@ export async function patientRoutes(app: FastifyInstance) {
     const tenantId = request.sessionUser!.tenantId;
     const { id } = request.params as { id: string };
     const { journeyId } = request.query as { journeyId?: string };
-    return getPatientTimeline(app.db, tenantId, id, journeyId);
+    return getPatientTimeline(app.db, tenantId, id, request.sessionUser!.role, journeyId);
   });
 
   // Patient 360 "Upcoming" (read-only). Each item kind is trimmed by the SAME

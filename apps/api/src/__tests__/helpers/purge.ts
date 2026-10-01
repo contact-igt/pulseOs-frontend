@@ -18,6 +18,8 @@ export async function purgePatientData(db: Db, patientIds: string[]): Promise<vo
     sql`delete from messages where conversation_id in (select id from conversations where patient_id in (${ids}))`,
     sql`delete from conversation_automation_preferences where conversation_id in (select id from conversations where patient_id in (${ids}))`,
     sql`delete from conversations where patient_id in (${ids})`,
+    sql`delete from call_intelligence where call_id in (select id from calls where patient_id in (${ids}))`,
+    sql`update calls set callback_task_id = null where patient_id in (${ids})`,
     sql`delete from calls where patient_id in (${ids})`,
     sql`delete from campaign_touchpoints where patient_id in (${ids})`,
     sql`delete from custom_field_values where journey_id in (select id from journeys where patient_id in (${ids}))`,

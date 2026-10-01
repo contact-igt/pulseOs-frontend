@@ -18,6 +18,7 @@ import {
   treatmentOpportunities,
   users,
 } from "../../db/schema.js";
+import { getCallStats } from "../call/call.service.js";
 import { allocatedAcquisitionCost } from "../marketing/formulas.js";
 import { displayAge } from "../../lib/age.js";
 import { dayKeyIn } from "../../lib/hospital-time.js";
@@ -297,8 +298,8 @@ export async function getJourneyDetail(db: Db, tenantId: string, journeyId: stri
   // Archived fields keep their recorded values here; fields placed elsewhere or not visible to this role are left out.
   const customFields = await loadJourneyFieldValues(db, tenantId, journeyId, viewer.role, "journey_detail", viewer.timezone);
 
-  const [timeline, taskRows, appointmentRows, nextTask] = await Promise.all([
-    getPatientTimeline(db, tenantId, j.patientId, journeyId),
+  const [timeline, taskRows, appointmentRows, nextTask, callStats] = await Promise.all([
+    getPatientTimeline(db, tenantId, j.patientId, viewer.role, journeyId),
     canViewTasks
       ? // Same rule as GET /tasks: without MANAGE_TASKS the caller only ever
         // sees tasks assigned to themselves (task notes are PHI-adjacent).
@@ -306,6 +307,7 @@ export async function getJourneyDetail(db: Db, tenantId: string, journeyId: stri
       : Promise.resolve([]),
     listAppointments(db, tenantId, { journeyId }),
     getNextActionForJourney(db, journeyId),
+    getCallStats(db, tenantId, journeyId),
   ]);
   const journeyTasks = taskRows.filter((t) => t.journeyId === journeyId);
 
@@ -382,6 +384,7 @@ export async function getJourneyDetail(db: Db, tenantId: string, journeyId: stri
       lastInteractionAt,
       nextAction,
       lastOutcome: j.lastOutcomeLabel && j.lastOutcomeAt ? { label: j.lastOutcomeLabel, at: j.lastOutcomeAt.toISOString() } : null,
+      callStats,
     },
     customFields,
     timeline,

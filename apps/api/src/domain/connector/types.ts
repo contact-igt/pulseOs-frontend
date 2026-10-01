@@ -51,6 +51,8 @@ export interface InboundCallEvent {
   status: "completed" | "missed" | "no_answer" | "busy" | "failed";
   durationSeconds: number | null;
   recordingUrl: string | null;
+  /** A transcript the provider already produced (plain text). Stored as-is — never re-transcribed. */
+  transcript?: string | null;
   disposition: string | null;
   agentName: string | null;
   startedAt: Date | null;

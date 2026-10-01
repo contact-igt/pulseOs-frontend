@@ -35,6 +35,9 @@ interface RunoWebhookPayload {
   status?: string;
   duration_seconds?: number | null;
   recording_url?: string | null;
+  transcript?: string | null;
+  /** Demo/test only: the script a FIXTURE connector's stand-in transcriber returns. Ignored unless the connector is in FIXTURE mode. */
+  fixture_transcript?: string | null;
   disposition?: string | null;
   started_at?: string | null;
   ended_at?: string | null;
@@ -66,11 +69,12 @@ export const runoTelephonyAdapter: TelephonyProviderAdapter = {
         status,
         durationSeconds: data.duration_seconds ?? null,
         recordingUrl: data.recording_url ?? null,
+        transcript: typeof data.transcript === "string" ? data.transcript : null,
         disposition: data.disposition ?? null,
         agentName: data.agent_name ?? null,
         startedAt: data.started_at ? new Date(data.started_at) : null,
         endedAt: data.ended_at ? new Date(data.ended_at) : null,
-        metadata: { customerName: data.customer_name ?? null },
+        metadata: { customerName: data.customer_name ?? null, ...(typeof data.fixture_transcript === "string" ? { fixtureTranscript: data.fixture_transcript } : {}) },
       },
     ];
   },

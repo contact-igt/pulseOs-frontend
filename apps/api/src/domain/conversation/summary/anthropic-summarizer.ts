@@ -23,7 +23,7 @@ const schema = z.object({
 const clip = (s: string) => (s.length > MAX_FIELD ? `${s.slice(0, MAX_FIELD - 1).trimEnd()}…` : s);
 const clipOrNull = (s: string | null) => (s ? clip(s) : null);
 
-const SYSTEM = `You summarize one WhatsApp conversation session between a patient and a hospital's staff, for the hospital's front-office team.
+const SYSTEM = `You summarize one __MEDIUM__ between a patient and a hospital's staff, for the hospital's front-office team.
 ${SUMMARY_SAFETY_RULES}
 Reply with ONLY JSON, no prose, with exactly these keys:
 {"summary": string, "patientIntent": string|null, "serviceInterest": string|null, "questions": string[], "outcome": string|null, "promisedAction": string|null, "nextAction": string|null}
@@ -43,14 +43,14 @@ export class AnthropicSummarizer implements ConversationSummarizer {
     this.fetchImpl = opts.fetchImpl ?? fetch;
   }
 
-  async summarize(messages: SummarizerMessage[]): Promise<SummaryDraft> {
+  async summarize(messages: SummarizerMessage[], opts: { medium?: "whatsapp" | "call" } = {}): Promise<SummaryDraft> {
     if (messages.length === 0) throw new Error("No messages to summarize");
     const transcript = messages.map((m) => `${m.sender === "patient" ? "Patient" : "Hospital"}: ${m.body}`).join("\n");
 
     const res = await this.fetchImpl(API_URL, {
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": this.apiKey, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({ model: this.model, max_tokens: 700, temperature: 0, system: SYSTEM, messages: [{ role: "user", content: transcript }] }),
+      body: JSON.stringify({ model: this.model, max_tokens: 700, temperature: 0, system: SYSTEM.replace("__MEDIUM__", opts.medium === "call" ? "transcribed phone call" : "WhatsApp conversation session"), messages: [{ role: "user", content: transcript }] }),
     });
     if (!res.ok) throw new Error(`Summarizer request failed: ${res.status} ${(await res.text().catch(() => "")).slice(0, 120)}`);
 

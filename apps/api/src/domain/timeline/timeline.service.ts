@@ -1,7 +1,8 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { timelineEvents, calls, conversations, communicationEndpoints, conversationSummaries } from "../../db/schema.js";
-import type { SummaryMode, TimelineEventVm } from "@pulseos/types";
+import type { Role, SummaryMode, TimelineEventVm } from "@pulseos/types";
+import { loadCallVms } from "../call/call.service.js";
 
 const CATEGORY_BY_EVENT_TYPE: Record<string, "communication" | "appointments" | "clinical" | "tasks" | "other"> = {
   journey_created: "other",
@@ -33,7 +34,7 @@ const CATEGORY_BY_EVENT_TYPE: Record<string, "communication" | "appointments" | 
   conversation_returned_to_ai: "communication",
 };
 
-export async function getPatientTimeline(db: Db, tenantId: string, patientId: string, journeyId?: string): Promise<TimelineEventVm[]> {
+export async function getPatientTimeline(db: Db, tenantId: string, patientId: string, viewerRole: Role, journeyId?: string): Promise<TimelineEventVm[]> {
   const rows = await db
     .select()
     .from(timelineEvents)
@@ -48,6 +49,9 @@ export async function getPatientTimeline(db: Db, tenantId: string, patientId: st
 
   const endpointLabelByEventId = await resolveEndpointLabels(db, tenantId, rows);
   const summaryModeByEventId = await resolveSummaryModes(db, tenantId, rows);
+  // A call line carries the call itself (IVR and manual alike), trimmed to what this viewer may see.
+  const callIds = rows.filter((r) => r.eventType === "call_logged" && r.relatedEntityType === "call" && r.relatedEntityId).map((r) => r.relatedEntityId!);
+  const callById = new Map((callIds.length ? await loadCallVms(db, tenantId, inArray(calls.id, callIds), viewerRole) : []).map((c) => [c.id, c]));
 
   return rows.map((r) => ({
     id: r.id,
@@ -61,6 +65,7 @@ export async function getPatientTimeline(db: Db, tenantId: string, patientId: st
     relatedEntityId: r.relatedEntityId,
     endpointLabel: endpointLabelByEventId.get(r.id) ?? null,
     channel: r.channel,
+    call: (r.eventType === "call_logged" && r.relatedEntityId ? callById.get(r.relatedEntityId) : null) ?? null,
     summaryMode: summaryModeByEventId.get(r.id) ?? null,
   }));
 }

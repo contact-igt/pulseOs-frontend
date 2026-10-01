@@ -18,7 +18,7 @@ import {
 } from "../../db/schema.js";
 import { allocatedAcquisitionCost } from "../marketing/formulas.js";
 import { getAttributionSummary } from "../acquisition/attribution.service.js";
-import { listCallsForPatient } from "../connector/call-webhook.service.js";
+import { listCallsForPatient } from "../call/call.service.js";
 import { resolveOrCreatePatient } from "./identity.service.js";
 import type { CreatePatientInput, CreatePatientResult, JourneyCardVm, Patient360, PatientListRow, PatientSearchRow, Role } from "@pulseos/types";
 import { loadJourneyFieldValues } from "../crm/crm-field.service.js";
@@ -347,7 +347,7 @@ export async function getPatient360(db: Db, tenantId: string, patientId: string,
     };
   }
 
-  const calls = await listCallsForPatient(db, tenantId, patient.id);
+  const calls = await listCallsForPatient(db, tenantId, patient.id, viewerRole);
 
   return {
     patient: { id: patient.id, name: patient.name, age: displayAge(patient.dateOfBirth, patient.reportedAge, dayKeyIn(new Date(), timezone)), dateOfBirth: patient.dateOfBirth, phone: patient.phone, preferredLanguage: patient.preferredLanguage, branchName: patient.branchName },

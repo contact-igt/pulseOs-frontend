@@ -810,10 +810,16 @@ export const connectorConfigAuditEvents = pgTable("connector_config_audit_events
 export const callDirectionEnum = pgEnum("call_direction", ["inbound", "outbound"]);
 export const callStatusEnum = pgEnum("call_status", ["completed", "missed", "no_answer", "busy", "failed"]);
 
+// IVR: created by a provider webhook (connector + provider call id). MANUAL: logged by staff from a Journey
+// (no connector, no provider id). Both are the same Call, in the same Timeline.
+export const callOriginEnum = pgEnum("call_origin", ["IVR", "MANUAL"]);
+
 export const calls = pgTable("calls", {
   id: uuid("id").primaryKey().defaultRandom(),
   tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
-  connectorId: uuid("connector_id").notNull().references(() => connectors.id),
+  origin: callOriginEnum("origin").notNull().default("IVR"),
+  // Provider-only concepts: null for a manually logged call.
+  connectorId: uuid("connector_id").references(() => connectors.id),
   // Nullable: Runo never tells you which hospital line/SIM a call used
   // (confirmed against their real API) — most calls will have no resolvable
   // endpoint unless a tenant has configured a manual default for its Runo
@@ -821,7 +827,7 @@ export const calls = pgTable("calls", {
   communicationEndpointId: uuid("communication_endpoint_id").references(() => communicationEndpoints.id),
   patientId: uuid("patient_id").references(() => patients.id),
   journeyId: uuid("journey_id").references(() => journeys.id),
-  externalCallId: text("external_call_id").notNull(),
+  externalCallId: text("external_call_id"),
   direction: callDirectionEnum("direction").notNull(),
   phone: text("phone").notNull(),
   status: callStatusEnum("status").notNull(),
@@ -829,14 +835,57 @@ export const calls = pgTable("calls", {
   recordingUrl: text("recording_url"),
   disposition: text("disposition"),
   agentName: text("agent_name"),
+  // HUMAN-authored and authoritative. Nothing derived (transcript, AI summary) is ever written here.
+  staffFeedback: text("staff_feedback"),
+  feedbackByUserId: uuid("feedback_by_user_id").references(() => users.id),
+  feedbackAt: timestamp("feedback_at", { withTimezone: true }),
+  outcomeId: uuid("outcome_id").references(() => crmOutcomes.id),
+  loggedByUserId: uuid("logged_by_user_id").references(() => users.id),
+  // The callback this call asked for (the one Task engine — no separate follow-up table).
+  callbackTaskId: uuid("callback_task_id").references(() => tasks.id),
+  // A double-tapped Save returns the first call instead of creating a second.
+  idempotencyKey: text("idempotency_key"),
   startedAt: timestamp("started_at", { withTimezone: true }),
   endedAt: timestamp("ended_at", { withTimezone: true }),
   metadata: jsonb("metadata"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   tenantIdx: index("calls_tenant_idx").on(t.tenantId),
+  journeyIdx: index("calls_journey_idx").on(t.journeyId),
+  requestKeyUnique: uniqueIndex("calls_tenant_idempotency_unique").on(t.tenantId, t.idempotencyKey).where(sql`${t.idempotencyKey} is not null`),
   patientIdx: index("calls_patient_idx").on(t.patientId),
   idempotencyUnique: uniqueIndex("calls_connector_external_unique").on(t.connectorId, t.externalCallId),
+}));
+
+// Derived data about a call, kept apart from the call itself and from staff feedback. The recording is the
+// authoritative record; the transcript is derived from it and the summary from the transcript. Each has its own
+// status, so a failed summary never hides a good transcript and neither ever blocks the call.
+export const callIntelStatusEnum = pgEnum("call_intel_status", ["PENDING", "PROCESSING", "COMPLETED", "FAILED", "NOT_CONFIGURED"]);
+
+export const callIntelligence = pgTable("call_intelligence", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  callId: uuid("call_id").notNull().references(() => calls.id),
+  transcriptStatus: callIntelStatusEnum("transcript_status").notNull().default("PENDING"),
+  transcript: text("transcript"),
+  transcriptProvider: text("transcript_provider"),
+  // PROVIDER = the telephony provider sent it; FIXTURE = deterministic demo stand-in; AI = a real model.
+  transcriptMode: text("transcript_mode"),
+  summaryStatus: callIntelStatusEnum("summary_status").notNull().default("PENDING"),
+  summary: text("summary"),
+  summaryDetails: jsonb("summary_details"),
+  summaryProvider: text("summary_provider"),
+  summaryMode: text("summary_mode"),
+  error: text("error"),
+  attempts: integer("attempts").notNull().default(0),
+  // DB-held schedule + claim, like conversation summaries: restart-safe and idempotent.
+  nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
+  claimedAt: timestamp("claimed_at", { withTimezone: true }),
+  generatedAt: timestamp("generated_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  callUnique: uniqueIndex("call_intelligence_call_unique").on(t.callId),
+  dueIdx: index("call_intelligence_due_idx").on(t.transcriptStatus, t.summaryStatus, t.nextAttemptAt),
 }));
 
 // ---------------------------------------------------------------------------

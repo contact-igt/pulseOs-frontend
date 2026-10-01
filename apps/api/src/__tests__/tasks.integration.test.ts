@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { eq } from "drizzle-orm";
+import { dayKeyIn } from "../lib/hospital-time.js";
 import { buildApp } from "../app.js";
 import { db, queryClient } from "../db/client.js";
 import { patients, tasks, tenants, timelineEvents } from "../db/schema.js";
@@ -82,10 +83,9 @@ describe.skipIf(!DEMO_PASSWORD)("tasks / follow-ups / my work (integration)", ()
     const beforeCounts = before.json() as { mine: number; overdue: number; today: number; upcoming: number; completed: number };
 
     const overdueDue = new Date(Date.now() - 2 * 86400000).toISOString();
-    // Halfway between now and local midnight: always later today and still in
-    // the future (now + 1h crossed into tomorrow when the suite ran after 23:00).
-    const endOfToday = new Date();
-    endOfToday.setHours(24, 0, 0, 0);
+    // Halfway between now and the HOSPITAL's midnight (the tenant's timezone, not the test process's): always
+    // later today and still in the future, whatever the time of day or TZ the suite runs under.
+    const endOfToday = new Date(Date.parse(`${dayKeyIn(new Date(), "Asia/Kolkata")}T00:00:00+05:30`) + 86_400_000);
     const todayDue = new Date(Date.now() + (endOfToday.getTime() - Date.now()) / 2).toISOString();
     const upcomingDue = new Date(Date.now() + 5 * 86400000).toISOString();
 

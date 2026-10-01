@@ -11,7 +11,7 @@ export class FixtureSummarizer implements ConversationSummarizer {
   readonly provider = "fixture";
   readonly mode = "FIXTURE" as const;
 
-  async summarize(messages: SummarizerMessage[]): Promise<SummaryDraft> {
+  async summarize(messages: SummarizerMessage[], _opts?: { medium?: "whatsapp" | "call" }): Promise<SummaryDraft> {
     if (messages.length === 0) throw new Error("No messages to summarize");
     const patient = messages.filter((m) => m.sender === "patient");
     const staff = messages.filter((m) => m.sender === "staff" || m.sender === "ai");
