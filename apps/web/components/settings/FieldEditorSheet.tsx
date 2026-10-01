@@ -219,8 +219,9 @@ export function FieldEditorSheet({
 
         <FormField label="Where it appears">
           <div className="space-y-0.5" data-testid="field-placements">
-            {FIELD_PLACEMENTS.map((p) => (
-              <CheckRow key={p.key} label={p.label} checked={form.placements.includes(p.key)} onChange={(on) => togglePlacement(p.key, on)} testId={`field-placement-${p.key}`} />
+            {/* A placement no screen renders yet is offered only to switch it off (older fields may carry it). */}
+            {FIELD_PLACEMENTS.filter((p) => p.shown || form.placements.includes(p.key)).map((p) => (
+              <CheckRow key={p.key} label={p.label} hint={p.where} checked={form.placements.includes(p.key)} disabled={!p.shown && !form.placements.includes(p.key)} onChange={(on) => togglePlacement(p.key, on)} testId={`field-placement-${p.key}`} />
             ))}
           </div>
         </FormField>

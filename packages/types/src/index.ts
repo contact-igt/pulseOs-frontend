@@ -1425,13 +1425,17 @@ export const FIELD_GROUPS: { key: FieldGroupKey; label: string }[] = [
 ];
 
 export type FieldPlacement = "add_lead" | "journey_detail" | "patient_360" | "followup_outcome" | "appointment" | "treatment";
-export const FIELD_PLACEMENTS: { key: FieldPlacement; label: string }[] = [
-  { key: "add_lead", label: "Add Lead" },
-  { key: "journey_detail", label: "Journey Detail" },
-  { key: "patient_360", label: "Patient 360" },
-  { key: "followup_outcome", label: "Follow-up outcome" },
-  { key: "appointment", label: "Appointment" },
-  { key: "treatment", label: "Treatment" },
+/**
+ * `shown` = a screen actually renders fields placed there today. Appointment / Treatment placements are accepted and
+ * stored (the data model is ready) but no screen captures them yet, so the editor must not imply they appear anywhere.
+ */
+export const FIELD_PLACEMENTS: { key: FieldPlacement; label: string; where: string; shown: boolean }[] = [
+  { key: "add_lead", label: "Add Lead", where: "Asked when a new enquiry is added", shown: true },
+  { key: "journey_detail", label: "Journey Detail", where: "Shown and editable on the journey", shown: true },
+  { key: "patient_360", label: "Patient 360", where: "Shown on the patient's 360 view", shown: true },
+  { key: "followup_outcome", label: "Follow-up outcome", where: "Asked when staff log a call or follow-up outcome", shown: true },
+  { key: "appointment", label: "Appointment", where: "Not shown on any screen yet", shown: false },
+  { key: "treatment", label: "Treatment", where: "Not shown on any screen yet", shown: false },
 ];
 export const DEFAULT_FIELD_PLACEMENTS: FieldPlacement[] = ["add_lead", "journey_detail", "patient_360"];
 
