@@ -42,7 +42,9 @@ describe("appointment transition graph (unit)", () => {
 
   it("waiting time is derived from real timestamps, never stored", () => {
     const now = new Date("2026-10-01T05:30:00Z");
-    expect(waitMinutes({ status: "waiting", checkedInAt: "2026-10-01T05:10:00Z", waitingStartedAt: "2026-10-01T05:16:00Z" }, now)).toBe(14);
+    // Counted from arrival: the minutes between check-in and "waiting" are still waiting.
+    expect(waitMinutes({ status: "waiting", checkedInAt: "2026-10-01T05:16:00Z", waitingStartedAt: "2026-10-01T05:17:00Z" }, now)).toBe(14);
+    expect(waitMinutes({ status: "waiting", waitingStartedAt: "2026-10-01T05:17:00Z" }, now)).toBe(13); // legacy row with no check-in time
     expect(waitMinutes({ status: "checked_in", checkedInAt: "2026-10-01T05:25:00Z" }, now)).toBe(5);
     expect(waitMinutes({ status: "with_doctor", checkedInAt: "2026-10-01T05:25:00Z" }, now)).toBeNull();
     expect(waitMinutes({ status: "waiting" }, now)).toBeNull();

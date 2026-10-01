@@ -82,7 +82,7 @@ test.describe("Front Desk views", () => {
     await expect(page).toHaveURL(/view=flow/);
     await expect(page.getByTestId("front-desk-flow")).toBeVisible();
     expect((await idsOf(page, "front-desk-flow", "front-desk-flow-item-")).sort()).toEqual(queue);
-    await expect(page.getByTestId("front-desk-flow-group-expected").getByTestId(`front-desk-flow-item-${id}`)).toContainText("Confirmed");
+    await expect(page.getByTestId("front-desk-flow-group-expected").getByTestId(`front-desk-flow-item-${id}`)).toContainText("Booked");
   });
 
   test("view and search live in the URL: reload and back/forward restore them", async ({ page }) => {
@@ -131,14 +131,14 @@ test.describe("Front Desk views", () => {
     await page.getByTestId("view-switch-queue").click();
     await expect(page.getByTestId("front-desk-today").getByTestId(`appointment-row-${id}`)).toContainText("Checked in");
 
-    // Stale: the patient is moved on elsewhere, then our Move to waiting is rejected by the server.
+    // Stale: the patient is moved two steps on elsewhere, then our Move to waiting is rejected by the server.
     await page.getByTestId("view-switch-flow").click();
     await item.click();
     await expect(drawer.getByRole("button", { name: "Move to waiting", exact: true })).toBeVisible();
-    expect((await page.request.patch(`${API}/appointments/${id}/action`, { data: { action: "mark_waiting" } })).ok()).toBeTruthy();
+    for (const action of ["mark_waiting", "send_to_doctor"]) expect((await page.request.patch(`${API}/appointments/${id}/action`, { data: { action } })).ok()).toBeTruthy();
     await drawer.getByRole("button", { name: "Move to waiting", exact: true }).click();
     await expect(page.getByTestId("front-desk-action-error")).toContainText(/changed|not allowed/i);
-    await expect(item).toContainText("Waiting");
+    await expect(item).toContainText("With doctor");
     await expect(page.locator("[data-nextjs-dialog]")).toHaveCount(0);
     expect(errors).toEqual([]);
   });

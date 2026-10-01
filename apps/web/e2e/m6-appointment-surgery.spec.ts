@@ -362,6 +362,12 @@ test.describe("M6 — appointment lifecycle, completion, risk and surgery", () =
       await page.goto(`/front-desk?q=${encodeURIComponent(`E2E M6 V${w} ${run}`)}`);
       await expect(page.getByTestId("front-desk-page")).toBeVisible();
       expect(await overflow()).toBeLessThanOrEqual(0);
+      if (w === 390) {
+        // Every row action is a phone-sized target.
+        const buttons = page.locator('[data-testid^="appointment-action-"], [data-testid^="appointment-complete-"], [data-testid^="appointment-noshow-"]');
+        expect(await buttons.count()).toBeGreaterThan(0);
+        for (const b of await buttons.all()) expect((await b.boundingBox())!.height).toBeGreaterThanOrEqual(43);
+      }
 
       await page.goto(`/journeys/${lead.journeyId}`);
       await page.getByTestId("appointment-context-open").click();

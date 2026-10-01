@@ -1037,10 +1037,14 @@ export interface UpdateScheduleResourceInput {
   isActive?: boolean;
 }
 
-/** Minutes a patient has been waiting, derived from real timestamps (never stored); null if there is no arrival time. */
+/**
+ * Minutes a patient has been waiting, derived from real timestamps (never stored): since they arrived (checked in),
+ * which is what the patient experiences — the minute between check-in and "waiting" is still waiting. Null once they
+ * are with the doctor, or when no arrival time was recorded.
+ */
 export function waitMinutes(row: Pick<AppointmentRow, "status" | "checkedInAt" | "arrivedAt" | "waitingStartedAt">, now: Date = new Date()): number | null {
   if (row.status !== "checked_in" && row.status !== "waiting") return null;
-  const start = row.status === "waiting" ? (row.waitingStartedAt ?? row.checkedInAt ?? row.arrivedAt) : (row.checkedInAt ?? row.arrivedAt);
+  const start = row.checkedInAt ?? row.arrivedAt ?? row.waitingStartedAt;
   if (!start) return null;
   return Math.max(0, Math.floor((now.getTime() - new Date(start).getTime()) / 60_000));
 }

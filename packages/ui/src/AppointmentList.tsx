@@ -135,22 +135,22 @@ export function AppointmentList({
                       <Td align="right" nowrap={false} className="sm:whitespace-nowrap">
                         <span className="inline-flex flex-wrap items-center justify-end gap-1.5" onClick={stop}>
                           {onAction && next && (
-                            <Button size="sm" variant="secondary" onClick={() => onAction(row, next.action)} data-testid={`appointment-action-${row.id}`}>
+                            <Button size="sm" variant="secondary" className="max-sm:min-h-11" onClick={() => onAction(row, next.action)} data-testid={`appointment-action-${row.id}`}>
                               {next.label}
                             </Button>
                           )}
                           {onComplete && row.status === "with_doctor" && (
-                            <Button size="sm" variant="primary" onClick={() => onComplete(row)} data-testid={`appointment-complete-${row.id}`}>
+                            <Button size="sm" variant="primary" className="max-sm:min-h-11" onClick={() => onComplete(row)} data-testid={`appointment-complete-${row.id}`}>
                               Complete consultation
                             </Button>
                           )}
                           {onAction && onRowClick && row.status === "no_show" && (
-                            <Button size="sm" variant="secondary" onClick={() => onRowClick(row)} data-testid={`appointment-reschedule-${row.id}`}>
+                            <Button size="sm" variant="secondary" className="max-sm:min-h-11" onClick={() => onRowClick(row)} data-testid={`appointment-reschedule-${row.id}`}>
                               Reschedule
                             </Button>
                           )}
                           {onAction && canNoShow && (
-                            <Button size="sm" variant="danger" onClick={() => onAction(row, "mark_no_show")} data-testid={`appointment-noshow-${row.id}`}>
+                            <Button size="sm" variant="danger" className="max-sm:min-h-11" onClick={() => onAction(row, "mark_no_show")} data-testid={`appointment-noshow-${row.id}`}>
                               No-show
                             </Button>
                           )}

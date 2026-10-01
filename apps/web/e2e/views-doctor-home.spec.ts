@@ -97,7 +97,7 @@ test.describe("Doctor Home views", () => {
       const item = page.getByTestId(`doctor-schedule-item-${early}`);
       await expect(page.getByTestId("doctor-schedule-part-morning").getByTestId(`doctor-schedule-item-${early}`)).toBeVisible();
       await expect(item).toContainText("12:15 am");
-      await expect(item).toContainText("Confirmed");
+      await expect(item).toContainText("Booked");
       // Row -> Patient 360, same as the queue.
       await expect(item.getByRole("link")).toHaveAttribute("href", /\/patients\/[0-9a-f-]{36}/);
     });

@@ -189,13 +189,13 @@ test.describe("Appointments views", () => {
     await expect(event).toHaveAttribute("aria-label", /Checked in/);
     await expect(event).toContainText("Checked in");
 
-    // Stale drawer: someone else moves the patient on; our "Move to waiting" is now invalid server-side (409).
+    // Stale drawer: someone else moves the patient two steps on; our "Move to waiting" is now invalid server-side (409).
     await event.click();
     await expect(drawer.getByRole("button", { name: "Move to waiting", exact: true })).toBeVisible();
-    expect((await page.request.patch(`${API}/appointments/${appt.id}/action`, { data: { action: "mark_waiting" } })).ok()).toBeTruthy();
+    for (const action of ["mark_waiting", "send_to_doctor"]) expect((await page.request.patch(`${API}/appointments/${appt.id}/action`, { data: { action } })).ok()).toBeTruthy();
     await drawer.getByRole("button", { name: "Move to waiting", exact: true }).click();
     await expect(page.getByTestId("appointments-action-error")).toContainText(/changed|not allowed/i);
-    await expect(event).toHaveAttribute("aria-label", /Waiting/);
+    await expect(event).toHaveAttribute("aria-label", /With doctor/);
     await expectNoOverlay(page);
     expect(errors).toEqual([]);
 
