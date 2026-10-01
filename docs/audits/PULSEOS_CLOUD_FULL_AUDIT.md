@@ -112,7 +112,7 @@ regression tests.
 - **1 — font metrics:** `multi-specialty-demo › Developer Login 44px` expects desktop buttons under 44px; this
   container's fonts make one wrap to 46px. Environment-specific, P3, open.
 
-**Final gate after fixes:** see the overnight report §11. API 862/862, web 113/113, ui 102/102, api-client 9/9,
+**Final gate after fixes:** Playwright 237 passed / 1 failed (B-10, pre-existing) / 1 skipped of 239; API 862/862, web 113/113, ui 102/102, api-client 9/9,
 tokens 6/6. These ran at 01:16 IST, inside the window that used to fail.
 
 **Coverage quality.**

@@ -217,7 +217,7 @@ No integration work was done tonight. Nothing was sent to any provider.
 | ui | 98 | **102/102** |
 | api-client | 9 | 9/9 |
 | design-tokens | 6 | 6/6 |
-| Playwright | 225 passed / 7 failed / 1 skipped (233) | final full run in progress at commit time — result recorded in the next commit |
+| Playwright | 225 passed / 7 failed / 1 skipped (233) | **237 passed / 1 failed / 1 skipped (239, 17.6 min)** — the one failure is the pre-existing B-10 dev-login 46px font-metrics check (also failed at baseline); all 7 M5/M6/timezone-related baseline failures now pass |
 
 New tests:
 - **API:** `operations-report.integration.test.ts` (14), `hospital-wall-clock.test.ts` (5).
