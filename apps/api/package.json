@@ -21,6 +21,7 @@
     "@pulseos/validation": "workspace:*",
     "dotenv": "17.4.2",
     "drizzle-orm": "0.45.2",
+    "exceljs": "4.4.0",
     "fastify": "5.12.4",
     "libphonenumber-js": "^1.13.13",
     "postgres": "3.4.9",

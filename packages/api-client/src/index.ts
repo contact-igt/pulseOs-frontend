@@ -4,6 +4,10 @@ import type {
   AnalyticsFlow,
   AnalyticsFunnel,
   AnalyticsQuery,
+  OperationsReport,
+  ReportExportKind,
+  ReportFilterOptions,
+  ReportQuery,
   AnalyticsRevenue,
   AnalyticsServices,
   AnalyticsSummary,
@@ -147,6 +151,22 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export { request as apiRequest };
+
+/**
+ * Downloads a report workbook (.xlsx) with the session cookie. Returns the bytes and the server's filename so the caller
+ * can hand the file to the browser; a refusal or failure is an ApiError like any other call (never a broken file).
+ */
+async function downloadReport(kind: ReportExportKind, q: ReportQuery): Promise<{ blob: Blob; filename: string }> {
+  const params = new URLSearchParams({ kind });
+  for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== "") params.set(k, String(v));
+  const res = await fetch(`${API_BASE}/reports/export?${params.toString()}`, { credentials: "include" });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string; message?: string } | null;
+    throw new ApiError(res.status, body?.message ?? body?.error ?? res.statusText);
+  }
+  const filename = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") ?? "")?.[1] ?? `pulseos-${kind}.xlsx`;
+  return { blob: await res.blob(), filename };
+}
 
 export type { TimelineEventVm };
 
@@ -358,6 +378,9 @@ export const api = {
 
   // Analytics workspace — every call takes the same AnalyticsQuery so all panels agree.
   analyticsSummary: (q: AnalyticsQuery = {}) => request<AnalyticsSummary>(`/analytics/summary${toQuery({ ...q })}`),
+  operationsReport: (q: ReportQuery = {}) => request<OperationsReport>(`/reports/operations${toQuery({ ...q })}`),
+  reportFilterOptions: () => request<ReportFilterOptions>("/reports/filter-options"),
+  downloadReport,
   analyticsLeads: (q: AnalyticsQuery = {}) => request<LeadsBySourceResponse>(`/analytics/leads${toQuery({ ...q })}`),
   analyticsFunnel: (q: AnalyticsQuery = {}) => request<AnalyticsFunnel>(`/analytics/funnel${toQuery({ ...q })}`),
   analyticsSourceConversion: (q: AnalyticsQuery = {}) => request<SourceConversionResponse>(`/analytics/source-conversion${toQuery({ ...q })}`),

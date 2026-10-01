@@ -22,8 +22,11 @@ import {
   SpendAtRisk,
   TeamPanel,
   TodayPulse,
+  Tabs,
   Toolbar,
 } from "@pulseos/ui";
+import { OperationsReportView } from "@/components/report/OperationsReportView";
+import { useUrlFilters } from "@/lib/useUrlFilters";
 import { withFrom } from "@/components/shell/BackLink";
 import { useCapability } from "@/lib/useEdition";
 
@@ -38,6 +41,27 @@ import { useCapability } from "@/lib/useEdition";
  *  5. What needs a person: attention queue + team / doctor load.
  */
 export default function CommandCentrePage() {
+  const url = useUrlFilters();
+  const session = useQuery({ queryKey: ["session"], queryFn: api.session, retry: false });
+  const tab = url.get("cc") === "report" ? "report" : "overview";
+  return (
+    <div className="mx-auto max-w-7xl space-y-4">
+      <Tabs
+        variant="underline"
+        ariaLabel="Command Centre sections"
+        value={tab}
+        onChange={(k) => url.set({ cc: k === "report" ? "report" : undefined })}
+        items={[
+          { key: "overview", label: "Overview", testId: "cc-tab-overview" },
+          { key: "report", label: "Operations report", testId: "cc-tab-report" },
+        ]}
+      />
+      {tab === "report" ? session.data && <OperationsReportView role={session.data.user.role} /> : <CommandCentreOverview />}
+    </div>
+  );
+}
+
+function CommandCentreOverview() {
   const router = useRouter();
   const [branchId, setBranchId] = useState<string>("");
   const [journeyType, setJourneyType] = useState<string>("");

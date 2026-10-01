@@ -29,6 +29,7 @@ import { conversationSummaryRoutes } from "./domain/conversation/summary/convers
 import { campaignRoutes } from "./domain/campaign/campaign.routes.js";
 import { analyticsRoutes } from "./domain/analytics/analytics.routes.js";
 import { websiteFormRoutes } from "./domain/acquisition/website-form.routes.js";
+import { reportRoutes } from "./domain/report/report.routes.js";
 
 export async function buildApp() {
   const app = Fastify({ logger: true });
@@ -106,6 +107,7 @@ export async function buildApp() {
     await protectedApp.register(conversationSummaryRoutes);
     await protectedApp.register(campaignRoutes);
     await protectedApp.register(analyticsRoutes);
+    await protectedApp.register(reportRoutes);
   });
 
   app.get("/health", async () => ({ ok: true }));

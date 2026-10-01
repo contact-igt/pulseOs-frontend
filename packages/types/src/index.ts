@@ -93,20 +93,22 @@ export type Permission =
   | "LOG_CALL"
   | "VIEW_COMMUNICATION_ENDPOINTS"
   | "MANAGE_LEADS"
-  | "MANAGE_SPECIALTIES";
+  | "MANAGE_SPECIALTIES"
+  /** Download report / row-level Excel workbooks (patient names and phones leave the system). */
+  | "EXPORT_REPORTS";
 
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   SUPER_ADMIN: [
     "VIEW_ADMIN_COMMAND_CENTRE", "VIEW_PATIENTS", "EDIT_PATIENTS", "VIEW_JOURNEYS", "MANAGE_JOURNEYS",
     "VIEW_APPOINTMENTS", "MANAGE_APPOINTMENTS", "RECORD_CONSULTATION_OUTCOME", "VIEW_TREATMENT", "MANAGE_TREATMENT",
     "VIEW_REVENUE", "VIEW_MARKETING", "VIEW_INBOX", "MANAGE_INBOX", "VIEW_TASKS", "MANAGE_TASKS",
-    "VIEW_INTEGRATIONS", "MANAGE_INTEGRATION_CONFIG", "MANAGE_INTEGRATION_SECRETS", "VIEW_CALL_RECORDING", "DOWNLOAD_CALL_RECORDING", "VIEW_CALL_TRANSCRIPT", "LOG_CALL", "VIEW_COMMUNICATION_ENDPOINTS", "MANAGE_LEADS", "MANAGE_SPECIALTIES",
+    "VIEW_INTEGRATIONS", "MANAGE_INTEGRATION_CONFIG", "MANAGE_INTEGRATION_SECRETS", "VIEW_CALL_RECORDING", "DOWNLOAD_CALL_RECORDING", "VIEW_CALL_TRANSCRIPT", "LOG_CALL", "VIEW_COMMUNICATION_ENDPOINTS", "MANAGE_LEADS", "MANAGE_SPECIALTIES", "EXPORT_REPORTS",
   ],
   HOSPITAL_ADMIN: [
     "VIEW_ADMIN_COMMAND_CENTRE", "VIEW_PATIENTS", "EDIT_PATIENTS", "VIEW_JOURNEYS", "MANAGE_JOURNEYS",
     "VIEW_APPOINTMENTS", "MANAGE_APPOINTMENTS", "VIEW_TREATMENT", "MANAGE_TREATMENT",
     "VIEW_REVENUE", "VIEW_MARKETING", "VIEW_INBOX", "MANAGE_INBOX", "VIEW_TASKS", "MANAGE_TASKS",
-    "VIEW_INTEGRATIONS", "MANAGE_INTEGRATION_CONFIG", "VIEW_CALL_RECORDING", "DOWNLOAD_CALL_RECORDING", "VIEW_CALL_TRANSCRIPT", "LOG_CALL", "VIEW_COMMUNICATION_ENDPOINTS", "MANAGE_LEADS", "MANAGE_SPECIALTIES",
+    "VIEW_INTEGRATIONS", "MANAGE_INTEGRATION_CONFIG", "VIEW_CALL_RECORDING", "DOWNLOAD_CALL_RECORDING", "VIEW_CALL_TRANSCRIPT", "LOG_CALL", "VIEW_COMMUNICATION_ENDPOINTS", "MANAGE_LEADS", "MANAGE_SPECIALTIES", "EXPORT_REPORTS",
   ],
   FRONT_DESK: [
     "VIEW_PATIENTS", "EDIT_PATIENTS", "VIEW_JOURNEYS", "VIEW_APPOINTMENTS", "MANAGE_APPOINTMENTS",
@@ -2111,3 +2113,147 @@ export interface AnalyticsFilterOptions {
   sources: SourceChannel[];
   campaigns: { id: string; name: string; source: SourceChannel }[];
 }
+
+// ---------------------------------------------------------------------------
+// Operations report (Command Centre → Operations) — the hospital's daily loop
+// over a hospital-local period: enquiries, contact, follow-ups, appointments,
+// procedures, conversion. No spend/ROAS here, so every edition gets it.
+// ---------------------------------------------------------------------------
+
+export type ReportRange = "today" | "yesterday" | "7d" | "30d" | "this_month" | "last_month" | "custom";
+
+export const REPORT_RANGES: { key: ReportRange; label: string }[] = [
+  { key: "today", label: "Today" },
+  { key: "yesterday", label: "Yesterday" },
+  { key: "7d", label: "Last 7 days" },
+  { key: "30d", label: "Last 30 days" },
+  { key: "this_month", label: "This month" },
+  { key: "last_month", label: "Previous month" },
+  { key: "custom", label: "Custom range" },
+];
+
+export interface ReportQuery {
+  range?: ReportRange;
+  /** Inclusive hospital-local days (YYYY-MM-DD), used when range = "custom". */
+  from?: string;
+  to?: string;
+  /** Patient's branch for enquiries/follow-ups; the visit's branch for appointments; the procedure's branch for procedures. */
+  branchId?: string;
+  /** Service line = journey type, e.g. "Cataract". */
+  service?: string;
+  /** The hospital's own lead source (lead_sources.id) — where the patient came from. */
+  sourceId?: string;
+  /** Journey owner for enquiries; assignee for follow-ups. */
+  ownerId?: string;
+  /** Doctor / schedule resource — applies to appointments and procedures only. */
+  doctorId?: string;
+}
+
+export interface ReportPeriod {
+  range: ReportRange;
+  from: string;
+  to: string;
+  days: number;
+  timezone: string;
+  /** Hospital-local today at request time. */
+  today: string;
+}
+
+export interface OperationsKpis {
+  /** Journeys created in the period. */
+  newEnquiries: number;
+  /** …of which nobody has contacted yet (still at the Enquiry stage). */
+  uncontacted: number;
+  /** …of which the latest logged outcome is "No answer" and that never got further than Contacted. */
+  noResponse: number;
+  /** Open follow-ups due inside the period. */
+  followUpsDue: number;
+  /** Open follow-ups already past due right now (not limited to the period). */
+  followUpsOverdue: number;
+  /** Follow-ups completed inside the period. */
+  followUpsCompleted: number;
+  /** Appointments created (booked) inside the period, whenever the visit is. */
+  appointmentsBooked: number;
+  /** Visits scheduled inside the period. */
+  appointmentsScheduled: number;
+  /** …that the patient attended (checked in or later). */
+  appointmentsAttended: number;
+  appointmentsNoShow: number;
+  appointmentsCancelled: number;
+  /** Procedures with a planned date inside the period (scheduled or done). */
+  proceduresScheduled: number;
+  /** Procedures completed inside the period (dated by their first revenue event, else their planned date). */
+  proceduresCompleted: number;
+  /** Enquiries of the period whose procedure/treatment is completed. */
+  converted: number;
+  /** converted / newEnquiries, null without enquiries. */
+  conversionRate: number | null;
+}
+
+export interface OperationsDay {
+  day: string;
+  enquiries: number;
+  appointmentsScheduled: number;
+  attended: number;
+  noShow: number;
+  cancelled: number;
+  followUpsDue: number;
+  followUpsCompleted: number;
+}
+
+export interface OperationsFunnelStage {
+  key: "enquiry" | "contacted" | "booked" | "attended" | "procedure" | "converted";
+  label: string;
+  count: number;
+}
+
+export interface OperationsSourceRow {
+  sourceId: string | null;
+  label: string;
+  bucket: SourceChannel;
+  enquiries: number;
+  contacted: number;
+  booked: number;
+  attended: number;
+  converted: number;
+  conversionRate: number | null;
+}
+
+export interface OperationsOwnerRow {
+  userId: string | null;
+  name: string;
+  enquiries: number;
+  uncontacted: number;
+  followUpsDue: number;
+  followUpsOverdue: number;
+  followUpsCompleted: number;
+}
+
+export interface OperationsServiceRow {
+  service: string;
+  enquiries: number;
+  booked: number;
+  attended: number;
+  converted: number;
+}
+
+export interface OperationsReport {
+  period: ReportPeriod;
+  kpis: OperationsKpis;
+  daily: OperationsDay[];
+  funnel: OperationsFunnelStage[];
+  bySource: OperationsSourceRow[];
+  byOwner: OperationsOwnerRow[];
+  byService: OperationsServiceRow[];
+}
+
+export interface ReportFilterOptions {
+  branches: { id: string; name: string }[];
+  services: string[];
+  sources: { id: string; label: string; archived: boolean }[];
+  owners: { id: string; name: string }[];
+  doctors: { id: string; name: string }[];
+}
+
+/** Row-level exports offered next to the report. */
+export type ReportExportKind = "summary" | "enquiries" | "appointments" | "follow-ups";
