@@ -11,6 +11,7 @@ import {
   marketingCampaigns,
   patients,
   revenueEvents,
+  scheduleResources,
   tasks,
   timelineEvents,
   treatmentOpportunities,
@@ -239,9 +240,9 @@ export async function getPatient360(db: Db, tenantId: string, patientId: string,
       .limit(1);
 
     const [appt] = await db
-      .select({ scheduledAt: appointments.scheduledAt, status: appointments.status, doctorName: users.name })
+      .select({ scheduledAt: appointments.scheduledAt, status: appointments.status, doctorName: scheduleResources.name })
       .from(appointments)
-      .leftJoin(users, eq(appointments.doctorUserId, users.id))
+      .leftJoin(scheduleResources, eq(appointments.resourceId, scheduleResources.id))
       .where(eq(appointments.journeyId, j.id))
       .orderBy(desc(appointments.scheduledAt))
       .limit(1);

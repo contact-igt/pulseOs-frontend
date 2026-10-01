@@ -1,12 +1,36 @@
-import { and, asc, eq, inArray, max } from "drizzle-orm";
+import { and, asc, eq, or, sql } from "drizzle-orm";
 import { patientNameSql } from "../../lib/patient-name.js";
-import type { Db } from "../../db/client.js";
+import type { Db, Tx } from "../../db/client.js";
 import { inLocalRange, localToday, tenantTimezone } from "../../lib/hospital-time.js";
-import { appointments, branches, journeys, patients, timelineEvents, users } from "../../db/schema.js";
-import type { AppointmentAction, AppointmentRow, AppointmentStatus, CreateAppointmentInput, FrontDeskDashboard } from "@pulseos/types";
+import { appointments, branches, journeys, patients, scheduleResources, timelineEvents } from "../../db/schema.js";
+import {
+  APPOINTMENT_REASONS,
+  APPOINTMENT_TRANSITIONS,
+  type AppointmentAction,
+  type AppointmentActionInput,
+  type AppointmentActionResult,
+  type AppointmentReasonCode,
+  type AppointmentReasonKind,
+  type AppointmentRow,
+  type AppointmentStatus,
+  type CompleteAppointmentInput,
+  type CompleteAppointmentResult,
+  type CreateAppointmentInput,
+  type FrontDeskDashboard,
+  type RescheduleAppointmentInput,
+} from "@pulseos/types";
+import { findActiveResource } from "../resource/resource.service.js";
+import { createFollowUp, formatDueForTimeline } from "../task/task.service.js";
+import { scheduleSurgery } from "../treatment/treatment.service.js";
+import { raiseAppointmentRisk, resolveNoShowRisk, type AppointmentRiskSignal } from "./appointment-risk.service.js";
+import { emitAppointmentEvent } from "./appointment-events.js";
 
 /** Longest from/to span a list request may ask for: a month grid (42 days) plus slack. */
 export const MAX_APPOINTMENT_RANGE_DAYS = 62;
+const MAX_NOTE = 500;
+const PAST_SLACK_MS = 60_000;
+
+type Result<T = object> = ({ ok: true } & T) | { ok: false; reason: string };
 
 /** The hospital's IANA zone and its current local day - what "today" means for every appointment view. */
 export async function getCalendarContext(db: Db, tenantId: string, now: Date = new Date()): Promise<{ timezone: string; today: string }> {
@@ -16,6 +40,7 @@ export async function getCalendarContext(db: Db, tenantId: string, now: Date = n
 
 export interface AppointmentFilters {
   branchId?: string;
+  /** A schedule resource id (the doctor/profile the visit is with). A login's user id is still accepted for old links. */
   doctorId?: string;
   journeyId?: string;
   status?: AppointmentStatus;
@@ -27,44 +52,68 @@ export interface AppointmentFilters {
   search?: string;
 }
 
-function toRow(r: {
+const REASON_LABEL = new Map(APPOINTMENT_REASONS.map((r) => [r.code, r.label]));
+const REASON_BY_CODE = new Map(APPOINTMENT_REASONS.map((r) => [r.code, r]));
+
+const rowColumns = {
+  id: appointments.id,
+  patientId: appointments.patientId,
+  patientName: patientNameSql,
+  journeyId: appointments.journeyId,
+  branchName: branches.name,
+  doctorId: appointments.resourceId,
+  doctorName: scheduleResources.name,
+  status: appointments.status,
+  scheduledAt: appointments.scheduledAt,
+  reason: appointments.reason,
+  checkedInAt: appointments.checkedInAt,
+  waitingStartedAt: appointments.waitingStartedAt,
+  consultationStartedAt: appointments.consultationStartedAt,
+  completedAt: appointments.completedAt,
+  statusReasonCode: appointments.statusReasonCode,
+  statusReasonNote: appointments.statusReasonNote,
+  atRisk: sql<boolean>`exists (select 1 from tasks rt where rt.appointment_id = ${appointments.id} and rt.status in ('pending', 'in_progress'))`,
+};
+
+type SelectedRow = {
   id: string; patientId: string; patientName: string; journeyId: string; branchName: string | null;
-  doctorId: string; doctorName: string | null; status: AppointmentStatus; scheduledAt: Date; reason: string | null;
-}): AppointmentRow {
+  doctorId: string | null; doctorName: string | null; status: AppointmentStatus; scheduledAt: Date; reason: string | null;
+  checkedInAt: Date | null; waitingStartedAt: Date | null; consultationStartedAt: Date | null; completedAt: Date | null;
+  statusReasonCode: string | null; statusReasonNote: string | null; atRisk: boolean;
+};
+
+function toRow(r: SelectedRow): AppointmentRow {
+  const code = r.statusReasonCode as AppointmentReasonCode | null;
   return {
     id: r.id, patientId: r.patientId, patientName: r.patientName, journeyId: r.journeyId, branchName: r.branchName,
-    doctorId: r.doctorId, doctorName: r.doctorName, status: r.status, scheduledAt: r.scheduledAt.toISOString(), reason: r.reason,
+    doctorId: r.doctorId ?? "", doctorName: r.doctorName, status: r.status, scheduledAt: r.scheduledAt.toISOString(), reason: r.reason,
+    arrivedAt: r.checkedInAt?.toISOString() ?? null,
+    checkedInAt: r.checkedInAt?.toISOString() ?? null,
+    waitingStartedAt: r.waitingStartedAt?.toISOString() ?? null,
+    consultationStartedAt: r.consultationStartedAt?.toISOString() ?? null,
+    completedAt: r.completedAt?.toISOString() ?? null,
+    statusReason: code ? { code, label: REASON_LABEL.get(code) ?? code, note: r.statusReasonNote } : null,
+    atRisk: !!r.atRisk,
   };
 }
 
-async function selectAppointments(db: Db, tenantId: string, filters: AppointmentFilters) {
+async function selectAppointments(db: Db | Tx, tenantId: string, filters: AppointmentFilters) {
   // Day boundaries are the hospital's local midnight (tenants.timezone), never
   // UTC and never the API server's own clock zone.
   const days = filters.from && filters.to ? { from: filters.from, to: filters.to } : filters.date ? { from: filters.date, to: filters.date } : undefined;
-  const dayClause = days ? inLocalRange(appointments.scheduledAt, await tenantTimezone(db, tenantId), days.from, days.to) : undefined;
+  const dayClause = days ? inLocalRange(appointments.scheduledAt, await tenantTimezone(db as Db, tenantId), days.from, days.to) : undefined;
 
   const rows = await db
-    .select({
-      id: appointments.id,
-      patientId: appointments.patientId,
-      patientName: patientNameSql,
-      journeyId: appointments.journeyId,
-      branchName: branches.name,
-      doctorId: appointments.doctorUserId,
-      doctorName: users.name,
-      status: appointments.status,
-      scheduledAt: appointments.scheduledAt,
-      reason: appointments.reason,
-    })
+    .select(rowColumns)
     .from(appointments)
     .innerJoin(patients, eq(appointments.patientId, patients.id))
     .innerJoin(branches, eq(appointments.branchId, branches.id))
-    .innerJoin(users, eq(appointments.doctorUserId, users.id))
+    .innerJoin(scheduleResources, eq(appointments.resourceId, scheduleResources.id))
     .where(
       and(
         eq(appointments.tenantId, tenantId),
         filters.branchId ? eq(appointments.branchId, filters.branchId) : undefined,
-        filters.doctorId ? eq(appointments.doctorUserId, filters.doctorId) : undefined,
+        filters.doctorId ? or(eq(appointments.resourceId, filters.doctorId), eq(appointments.doctorUserId, filters.doctorId)) : undefined,
         filters.journeyId ? eq(appointments.journeyId, filters.journeyId) : undefined,
         filters.status ? eq(appointments.status, filters.status) : undefined,
         dayClause,
@@ -81,9 +130,27 @@ export async function listAppointments(db: Db, tenantId: string, filters: Appoin
   return rows.map(toRow);
 }
 
+export async function getAppointmentRow(db: Db | Tx, tenantId: string, id: string): Promise<AppointmentRow | null> {
+  const [row] = await db
+    .select(rowColumns)
+    .from(appointments)
+    .innerJoin(patients, eq(appointments.patientId, patients.id))
+    .innerJoin(branches, eq(appointments.branchId, branches.id))
+    .innerJoin(scheduleResources, eq(appointments.resourceId, scheduleResources.id))
+    .where(and(eq(appointments.tenantId, tenantId), eq(appointments.id, id)))
+    .limit(1);
+  return row ? toRow(row) : null;
+}
+
+/** "10:16 am" on the hospital's clock. */
+function clock(at: Date, timezone: string): string {
+  return at.toLocaleTimeString("en-IN", { timeZone: timezone, hour: "numeric", minute: "2-digit", hour12: true });
+}
+
 /**
  * Books a visit. Everything it points at must belong to THIS hospital: the patient, the journey (and that journey to
- * that patient), the branch, and a Doctor. A bad reference is refused — it never lands as a cross-hospital row.
+ * that patient), the branch, and an active doctor/resource. A bad reference is refused — it never lands as a
+ * cross-hospital row.
  */
 export async function createAppointment(db: Db, tenantId: string, actorId: string, input: CreateAppointmentInput, timezone = "Asia/Kolkata"): Promise<{ ok: true; appointment: AppointmentRow } | { ok: false; reason: string }> {
   const scheduledAt = new Date(input.scheduledAt);
@@ -92,103 +159,52 @@ export async function createAppointment(db: Db, tenantId: string, actorId: strin
   if (!journey) return { ok: false, reason: "journey_not_found" };
   const [branch] = await db.select({ id: branches.id }).from(branches).where(and(eq(branches.tenantId, tenantId), eq(branches.id, input.branchId))).limit(1);
   if (!branch) return { ok: false, reason: "branch_not_found" };
-  const [doctor] = await db.select({ id: users.id }).from(users).where(and(eq(users.tenantId, tenantId), eq(users.id, input.doctorId), eq(users.role, "DOCTOR"))).limit(1);
-  if (!doctor) return { ok: false, reason: "doctor_not_found" };
+  const resource = await findActiveResource(db, tenantId, input.doctorId);
+  if (!resource) return { ok: false, reason: "doctor_not_found" };
 
-  const [row] = await db
-    .insert(appointments)
-    .values({
+  const row = await db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(appointments)
+      .values({ tenantId, patientId: input.patientId, journeyId: input.journeyId, branchId: input.branchId, resourceId: resource.id, scheduledAt, reason: input.reason ?? null, status: "scheduled" })
+      .returning();
+    await tx.insert(timelineEvents).values({
       tenantId,
       patientId: input.patientId,
       journeyId: input.journeyId,
-      branchId: input.branchId,
-      doctorUserId: input.doctorId,
-      scheduledAt,
-      reason: input.reason ?? null,
-      status: "scheduled",
-    })
-    .returning();
-
-  await db.insert(timelineEvents).values({
-    tenantId,
-    patientId: input.patientId,
-    journeyId: input.journeyId,
-    actorType: "user",
-    actorId,
-    eventType: "appointment_created",
-    // Hospital clock, not the server's, and absolute so it never goes stale.
-    title: `Appointment booked · ${scheduledAt.toLocaleString("en-IN", { timeZone: timezone, weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true })}`,
-    relatedEntityType: "appointment",
-    relatedEntityId: row!.id,
+      actorType: "user",
+      actorId,
+      eventType: "appointment_created",
+      // Hospital clock, not the server's, and absolute so it never goes stale.
+      title: `Appointment booked · ${formatDueForTimeline(scheduledAt, timezone)}`,
+      relatedEntityType: "appointment",
+      relatedEntityId: created!.id,
+    });
+    return created!;
   });
-
-  const [full] = await db
-    .select({
-      id: appointments.id,
-      patientId: appointments.patientId,
-      patientName: patientNameSql,
-      journeyId: appointments.journeyId,
-      branchName: branches.name,
-      doctorId: appointments.doctorUserId,
-      doctorName: users.name,
-      status: appointments.status,
-      scheduledAt: appointments.scheduledAt,
-      reason: appointments.reason,
-    })
-    .from(appointments)
-    .innerJoin(patients, eq(appointments.patientId, patients.id))
-    .innerJoin(branches, eq(appointments.branchId, branches.id))
-    .innerJoin(users, eq(appointments.doctorUserId, users.id))
-    .where(eq(appointments.id, row.id))
-    .limit(1);
-
-  return { ok: true, appointment: toRow(full) };
-}
-
-// Wait duration needs a real arrival time. Appointments have no checked-in
-// timestamp of their own, but every check-in already writes an
-// `appointment_checked_in` Timeline event — take the latest one today per
-// (patient, journey). No event (e.g. seeded status) leaves arrivedAt null so
-// the UI can say so honestly instead of inventing a wait.
-async function withArrivalTimes(db: Db, tenantId: string, rows: AppointmentRow[], timezone: string, today: string): Promise<AppointmentRow[]> {
-  if (rows.length === 0) return rows;
-  const events = await db
-    .select({ patientId: timelineEvents.patientId, journeyId: timelineEvents.journeyId, at: max(timelineEvents.occurredAt) })
-    .from(timelineEvents)
-    .where(
-      and(
-        eq(timelineEvents.tenantId, tenantId),
-        eq(timelineEvents.eventType, "appointment_checked_in"),
-        inLocalRange(timelineEvents.occurredAt, timezone, today, today),
-        inArray(timelineEvents.patientId, rows.map((r) => r.patientId)),
-      ),
-    )
-    .groupBy(timelineEvents.patientId, timelineEvents.journeyId);
-  const arrivals = new Map(events.map((e) => [`${e.patientId}:${e.journeyId}`, e.at]));
-  return rows.map((r) => {
-    const at = arrivals.get(`${r.patientId}:${r.journeyId}`);
-    return { ...r, arrivedAt: at ? at.toISOString() : null };
-  });
+  emitAppointmentEvent({ type: "appointment.booked", tenantId, appointmentId: row.id, scheduledAt });
+  return { ok: true, appointment: (await getAppointmentRow(db, tenantId, row.id))! };
 }
 
 export async function getFrontDeskDashboard(db: Db, tenantId: string, branchId?: string, now: Date = new Date()): Promise<FrontDeskDashboard> {
-  const { timezone, today: todayKey } = await getCalendarContext(db, tenantId, now);
-  const todayRows = await selectAppointments(db, tenantId, { branchId, from: todayKey, to: todayKey });
+  const { today: todayKey } = await getCalendarContext(db, tenantId, now);
+  const todayRows = (await selectAppointments(db, tenantId, { branchId, from: todayKey, to: todayKey })).map(toRow);
 
-  const today = todayRows.map(toRow);
-  const arrivals = todayRows.filter((r) => r.status === "checked_in" || r.status === "waiting" || r.status === "with_doctor" || r.status === "completed").map(toRow);
-  const waitingQueue = await withArrivalTimes(
-    db,
-    tenantId,
-    todayRows.filter((r) => r.status === "checked_in" || r.status === "waiting").map(toRow),
-    timezone,
-    todayKey,
-  );
-  const noShows = todayRows.filter((r) => r.status === "no_show").map(toRow);
-  const pendingConfirmations = todayRows.filter((r) => r.status === "requested" || r.status === "scheduled").map(toRow);
+  const arrivals = todayRows.filter((r) => r.status === "checked_in" || r.status === "waiting" || r.status === "with_doctor" || r.status === "completed");
+  // Longest-waiting first: arrival time (real timestamp), falling back to the booked time.
+  const waitingQueue = todayRows
+    .filter((r) => r.status === "checked_in" || r.status === "waiting")
+    .sort((a, b) => (a.checkedInAt ?? a.scheduledAt).localeCompare(b.checkedInAt ?? b.scheduledAt));
+  const noShows = todayRows.filter((r) => r.status === "no_show");
+  const pendingConfirmations = todayRows.filter((r) => r.status === "requested" || r.status === "scheduled");
+  const atRisk = todayRows.filter((r) => r.atRisk);
 
-  return { today, arrivals, waitingQueue, noShows, pendingConfirmations };
+  return { today: todayRows, arrivals, waitingQueue, noShows, pendingConfirmations, atRisk };
 }
+
+// ---------------------------------------------------------------------------
+// Transitions. The graph itself is shared with the UI (@pulseos/types APPOINTMENT_TRANSITIONS); what lives here is
+// what a step WRITES.
+// ---------------------------------------------------------------------------
 
 const ACTION_STATUS: Record<AppointmentAction, AppointmentStatus> = {
   confirm: "confirmed",
@@ -197,22 +213,6 @@ const ACTION_STATUS: Record<AppointmentAction, AppointmentStatus> = {
   send_to_doctor: "with_doctor",
   mark_no_show: "no_show",
   cancel: "cancelled",
-};
-
-// The canonical transition graph — not invented here, but read off the
-// frontend's own already-shipped encoding of it: AppointmentList.tsx's
-// NEXT_ACTION map (one valid next action per status) plus
-// AppointmentDrawer.tsx's CAN_NO_SHOW/CAN_CANCEL sets. Previously only
-// enforced client-side; a direct API call could skip steps (e.g. confirmed
-// straight to with_doctor) or move backward (waiting back to confirmed) with
-// nothing stopping it server-side.
-const VALID_FROM_STATUSES: Record<AppointmentAction, AppointmentStatus[]> = {
-  confirm: ["requested", "scheduled"],
-  check_in: ["confirmed"],
-  mark_waiting: ["checked_in"],
-  send_to_doctor: ["waiting"],
-  mark_no_show: ["requested", "scheduled", "confirmed"],
-  cancel: ["requested", "scheduled", "confirmed", "checked_in", "waiting"],
 };
 
 const ACTION_EVENT: Record<AppointmentAction, string> = {
@@ -224,59 +224,245 @@ const ACTION_EVENT: Record<AppointmentAction, string> = {
   cancel: "appointment_cancelled",
 };
 
-const ACTION_LABEL: Record<AppointmentAction, string> = {
-  confirm: "Appointment confirmed",
-  check_in: "Patient checked in",
-  mark_waiting: "Patient moved to waiting",
-  send_to_doctor: "Sent in to doctor",
-  mark_no_show: "Marked as no-show",
-  cancel: "Appointment cancelled",
-};
+/** One meaningful Timeline line per step, in the hospital's clock. */
+function actionLine(action: AppointmentAction, at: Date, timezone: string, reasonLabel: string | null, note: string | null): { title: string; description: string | null } {
+  const t = clock(at, timezone);
+  const why = reasonLabel ? `Reason: ${reasonLabel}${note ? ` · ${note}` : ""}` : null;
+  switch (action) {
+    case "confirm": return { title: "Appointment confirmed", description: null };
+    case "check_in": return { title: `Checked in · ${t}`, description: null };
+    case "mark_waiting": return { title: `Waiting · ${t}`, description: null };
+    case "send_to_doctor": return { title: `Consultation started · ${t}`, description: null };
+    case "mark_no_show": return { title: "No-show", description: why };
+    case "cancel": return { title: "Appointment cancelled", description: why };
+  }
+}
 
+function validReason(kind: AppointmentReasonKind, code: unknown, note: unknown): Result<{ code: AppointmentReasonCode; note: string | null; hospitalAction: boolean }> {
+  if (typeof code !== "string") return { ok: false, reason: "reason_required" };
+  const def = REASON_BY_CODE.get(code as AppointmentReasonCode);
+  if (!def || !def.appliesTo.includes(kind)) return { ok: false, reason: "reason_invalid" };
+  if (note !== undefined && note !== null && typeof note !== "string") return { ok: false, reason: "invalid_request" };
+  const n = typeof note === "string" ? note.trim() : "";
+  if (n.length > MAX_NOTE) return { ok: false, reason: "invalid_request" };
+  return { ok: true, code: def.code, note: n || null, hospitalAction: def.hospitalAction };
+}
+
+/**
+ * Check in / waiting / with doctor / confirm / no-show / cancel. Enforces APPOINTMENT_TRANSITIONS server-side, writes
+ * the event timestamp, the one Timeline line and (for no-show / hospital-caused cancellation) the Appointment Risk
+ * task in a single transaction. The status write is guarded on the status that was read, so two people pressing the
+ * same button produce one transition: the loser sees the appointment already in the requested state and nothing is
+ * written twice.
+ */
 export async function applyAppointmentAction(
   db: Db,
   tenantId: string,
   appointmentId: string,
   actorId: string,
-  action: AppointmentAction,
-): Promise<{ ok: true; status: AppointmentStatus } | { ok: false; reason: string }> {
+  input: AppointmentActionInput,
+  timezone = "Asia/Kolkata",
+  now: Date = new Date(),
+): Promise<Result<Omit<AppointmentActionResult, "ok">>> {
+  const action = input?.action;
+  if (!action || !(action in ACTION_STATUS)) return { ok: false, reason: "invalid_request" };
   const [existing] = await db.select().from(appointments).where(and(eq(appointments.tenantId, tenantId), eq(appointments.id, appointmentId))).limit(1);
   if (!existing) return { ok: false, reason: "appointment_not_found" };
-  if (existing.status === "completed" || existing.status === "cancelled") return { ok: false, reason: "appointment_closed" };
-  if (!VALID_FROM_STATUSES[action].includes(existing.status)) return { ok: false, reason: "invalid_transition" };
+  const target = ACTION_STATUS[action];
+  if (existing.status === target) return { ok: true, status: target, alreadyApplied: true };
+  if (existing.status === "completed" || (existing.status === "cancelled" && action !== "cancel")) return { ok: false, reason: "appointment_closed" };
+  if (!APPOINTMENT_TRANSITIONS[existing.status].includes(action)) return { ok: false, reason: "invalid_transition" };
 
-  const nextStatus = ACTION_STATUS[action];
-  await db.update(appointments).set({ status: nextStatus }).where(eq(appointments.id, appointmentId));
-  await db.insert(timelineEvents).values({
-    tenantId, patientId: existing.patientId, journeyId: existing.journeyId,
-    actorType: "user", actorId, eventType: ACTION_EVENT[action], title: ACTION_LABEL[action],
+  let reason: { code: AppointmentReasonCode; note: string | null; hospitalAction: boolean } | null = null;
+  if (action === "cancel") {
+    const r = validReason("cancel", input.reasonCode, input.note);
+    if (!r.ok) return r;
+    reason = r;
+  } else if (action === "mark_no_show") {
+    const r = validReason("no_show", input.reasonCode ?? "patient_no_show", input.note);
+    if (!r.ok) return r;
+    reason = r;
+  }
+
+  const stamp: Partial<typeof appointments.$inferInsert> = {};
+  if (action === "check_in") stamp.checkedInAt = now;
+  if (action === "mark_waiting") stamp.waitingStartedAt = now;
+  if (action === "send_to_doctor") stamp.consultationStartedAt = now;
+  if (action === "mark_no_show") stamp.noShowAt = now;
+  if (action === "cancel") stamp.cancelledAt = now;
+  if (reason) {
+    stamp.statusReasonCode = reason.code;
+    stamp.statusReasonNote = reason.note;
+  }
+
+  const moved = await db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(appointments)
+      .set({ status: target, ...stamp })
+      .where(and(eq(appointments.id, appointmentId), eq(appointments.tenantId, tenantId), eq(appointments.status, existing.status)))
+      .returning({ id: appointments.id });
+    if (!updated) return false;
+
+    const line = actionLine(action, now, timezone, reason ? (REASON_LABEL.get(reason.code) ?? reason.code) : null, reason?.note ?? null);
+    await tx.insert(timelineEvents).values({
+      tenantId, patientId: existing.patientId, journeyId: existing.journeyId, actorType: "user", actorId,
+      eventType: ACTION_EVENT[action], relatedEntityType: "appointment", relatedEntityId: appointmentId, ...line,
+    });
+
+    // The risk: a missed visit always needs recovering; a cancellation only when the hospital caused it.
+    const signal: AppointmentRiskSignal | null = action === "mark_no_show" ? "no_show" : action === "cancel" && reason?.hospitalAction ? "hospital_cancel" : null;
+    if (signal) {
+      const detail = signal === "no_show"
+        ? `Did not arrive for the ${clock(existing.scheduledAt, timezone)} appointment. Reason: ${REASON_LABEL.get(reason!.code)}${reason!.note ? ` · ${reason!.note}` : ""}`
+        : `Appointment for ${formatDueForTimeline(existing.scheduledAt, timezone)} was cancelled by the hospital (${REASON_LABEL.get(reason!.code)}). Contact the patient.`;
+      await raiseAppointmentRisk(tx, tenantId, existing, signal, actorId, detail, timezone, now);
+    }
+    return true;
   });
 
-  return { ok: true, status: nextStatus };
+  if (!moved) {
+    // Lost the race. If the winner put it where we wanted, this is a repeat click; otherwise it genuinely moved on.
+    const [now2] = await db.select({ status: appointments.status }).from(appointments).where(and(eq(appointments.id, appointmentId), eq(appointments.tenantId, tenantId))).limit(1);
+    if (now2?.status === target) return { ok: true, status: target, alreadyApplied: true };
+    return { ok: false, reason: "invalid_transition" };
+  }
+
+  if (action === "cancel") emitAppointmentEvent({ type: "appointment.cancelled", tenantId, appointmentId, reasonCode: reason!.code, hospitalAction: reason!.hospitalAction });
+  if (action === "mark_no_show") emitAppointmentEvent({ type: "appointment.no_show", tenantId, appointmentId });
+  return { ok: true, status: target };
 }
 
-export async function completeAppointment(db: Db, tenantId: string, appointmentId: string, actorId: string): Promise<{ ok: true } | { ok: false; reason: string }> {
+class Abort extends Error {
+  constructor(readonly reason: string) {
+    super(reason);
+  }
+}
+
+/**
+ * Finishes the consultation and, in the SAME transaction, does what the Staff chose next: nothing, a follow-up Task
+ * (the M5 follow-up engine) or a scheduled surgery (the treatment lifecycle). If the follow-up or surgery is refused
+ * the appointment is not completed — the caller never sees a "completed" visit whose requested next step vanished.
+ * Completing twice completes once and creates nothing a second time.
+ */
+export async function completeAppointment(
+  db: Db,
+  tenantId: string,
+  appointmentId: string,
+  actor: { id: string; canManageTreatment: boolean },
+  input: CompleteAppointmentInput = {},
+  timezone = "Asia/Kolkata",
+  now: Date = new Date(),
+): Promise<Result<Omit<CompleteAppointmentResult, "ok">>> {
   const [existing] = await db.select().from(appointments).where(and(eq(appointments.tenantId, tenantId), eq(appointments.id, appointmentId))).limit(1);
   if (!existing) return { ok: false, reason: "appointment_not_found" };
+  if (existing.status === "completed") return { ok: true, alreadyApplied: true };
   if (existing.status !== "with_doctor") return { ok: false, reason: "not_with_doctor" };
 
-  await db.update(appointments).set({ status: "completed" }).where(eq(appointments.id, appointmentId));
-  await db.insert(timelineEvents).values({
-    tenantId, patientId: existing.patientId, journeyId: existing.journeyId,
-    actorType: "user", actorId, eventType: "appointment_completed", title: "Appointment completed",
-  });
-  return { ok: true };
+  const next = input?.next ?? { kind: "none" as const };
+  if (next.kind !== "none" && next.kind !== "follow_up" && next.kind !== "surgery") return { ok: false, reason: "invalid_request" };
+  if (next.kind === "surgery" && !actor.canManageTreatment) return { ok: false, reason: "forbidden" };
+  const note = typeof input.note === "string" ? input.note.trim() : "";
+  if (note.length > MAX_NOTE) return { ok: false, reason: "invalid_request" };
+
+  let followUpTaskId: string | null = null;
+  let treatmentId: string | null = null;
+  let plannedDate: Date | null = null;
+  try {
+    await db.transaction(async (tx) => {
+      const [updated] = await tx
+        .update(appointments)
+        .set({ status: "completed", completedAt: now })
+        .where(and(eq(appointments.id, appointmentId), eq(appointments.tenantId, tenantId), eq(appointments.status, "with_doctor")))
+        .returning({ id: appointments.id });
+      if (!updated) throw new Abort("conflict");
+
+      await tx.insert(timelineEvents).values({
+        tenantId, patientId: existing.patientId, journeyId: existing.journeyId, actorType: "user", actorId: actor.id,
+        eventType: "appointment_completed", relatedEntityType: "appointment", relatedEntityId: appointmentId,
+        title: `Consultation completed · ${clock(now, timezone)}`, description: note || null,
+      });
+
+      if (next.kind === "follow_up") {
+        const r = await createFollowUp(tx, tenantId, { id: actor.id }, existing.journeyId, next.followUp, timezone, now);
+        if (!r.ok) throw new Abort(r.reason);
+        followUpTaskId = r.task.id;
+      } else if (next.kind === "surgery") {
+        const r = await scheduleSurgery(tx, tenantId, actor.id, existing.journeyId, next.surgery, timezone, now);
+        if (!r.ok) throw new Abort(r.reason);
+        treatmentId = r.treatmentId;
+        plannedDate = r.plannedDate;
+      }
+    });
+  } catch (err) {
+    if (!(err instanceof Abort)) throw err;
+    if (err.reason === "conflict") {
+      const [again] = await db.select({ status: appointments.status }).from(appointments).where(and(eq(appointments.id, appointmentId), eq(appointments.tenantId, tenantId))).limit(1);
+      return again?.status === "completed" ? { ok: true, alreadyApplied: true } : { ok: false, reason: "not_with_doctor" };
+    }
+    return { ok: false, reason: err.reason };
+  }
+
+  emitAppointmentEvent({ type: "appointment.completed", tenantId, appointmentId });
+  if (treatmentId) emitAppointmentEvent({ type: "surgery.scheduled", tenantId, treatmentId, plannedDate });
+  return { ok: true, followUpTaskId, treatmentId };
 }
 
-export async function rescheduleAppointment(db: Db, tenantId: string, appointmentId: string, actorId: string, newScheduledAt: string): Promise<{ ok: true } | { ok: false; reason: string }> {
+/**
+ * Moves a visit that has not happened yet (booked / confirmed / requested, or a missed or cancelled one being rebooked).
+ * The new time must be in the future on the hospital's clock; the reason is a stable code. A hospital-caused change
+ * raises an Appointment Risk task (the patient has to be told); rebooking a no-show resolves its recovery task.
+ */
+export async function rescheduleAppointment(
+  db: Db,
+  tenantId: string,
+  appointmentId: string,
+  actorId: string,
+  input: RescheduleAppointmentInput,
+  timezone = "Asia/Kolkata",
+  now: Date = new Date(),
+): Promise<Result<{ alreadyApplied?: boolean }>> {
+  const newAt = new Date(input?.scheduledAt);
+  if (Number.isNaN(newAt.getTime())) return { ok: false, reason: "invalid_request" };
   const [existing] = await db.select().from(appointments).where(and(eq(appointments.tenantId, tenantId), eq(appointments.id, appointmentId))).limit(1);
   if (!existing) return { ok: false, reason: "appointment_not_found" };
+  if (existing.status === "completed") return { ok: false, reason: "appointment_closed" };
+  if (existing.status === "scheduled" && existing.scheduledAt.getTime() === newAt.getTime()) return { ok: true, alreadyApplied: true };
+  if (!APPOINTMENT_TRANSITIONS[existing.status].includes("reschedule")) return { ok: false, reason: "invalid_transition" };
+  if (newAt.getTime() < now.getTime() - PAST_SLACK_MS) return { ok: false, reason: "scheduled_in_past" };
+  const reason = validReason("reschedule", input.reasonCode, input.note);
+  if (!reason.ok) return reason;
 
-  await db.update(appointments).set({ scheduledAt: new Date(newScheduledAt), status: "scheduled" }).where(eq(appointments.id, appointmentId));
-  await db.insert(timelineEvents).values({
-    tenantId, patientId: existing.patientId, journeyId: existing.journeyId,
-    actorType: "user", actorId, eventType: "appointment_rescheduled",
-    title: `Appointment rescheduled to ${new Date(newScheduledAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`,
+  const moved = await db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(appointments)
+      .set({ scheduledAt: newAt, status: "scheduled", noShowAt: null, cancelledAt: null, statusReasonCode: reason.code, statusReasonNote: reason.note })
+      .where(and(eq(appointments.id, appointmentId), eq(appointments.tenantId, tenantId), eq(appointments.status, existing.status), eq(appointments.scheduledAt, existing.scheduledAt)))
+      .returning({ id: appointments.id });
+    if (!updated) return false;
+
+    await tx.insert(timelineEvents).values({
+      tenantId, patientId: existing.patientId, journeyId: existing.journeyId, actorType: "user", actorId,
+      eventType: "appointment_rescheduled", relatedEntityType: "appointment", relatedEntityId: appointmentId,
+      title: `Appointment rescheduled · ${formatDueForTimeline(newAt, timezone)}`,
+      description: `Reason: ${REASON_LABEL.get(reason.code)}${reason.note ? ` · ${reason.note}` : ""}`,
+    });
+
+    if (existing.status === "no_show") await resolveNoShowRisk(tx, tenantId, appointmentId, actorId, now);
+    if (reason.hospitalAction) {
+      await raiseAppointmentRisk(
+        tx, tenantId, existing, "hospital_reschedule", actorId,
+        `Appointment moved from ${formatDueForTimeline(existing.scheduledAt, timezone)} to ${formatDueForTimeline(newAt, timezone)} (${REASON_LABEL.get(reason.code)}). Tell the patient and confirm the new time.`,
+        timezone, now,
+      );
+    }
+    return true;
   });
+  if (!moved) {
+    const [again] = await db.select({ at: appointments.scheduledAt, status: appointments.status }).from(appointments).where(and(eq(appointments.id, appointmentId), eq(appointments.tenantId, tenantId))).limit(1);
+    if (again && again.status === "scheduled" && again.at.getTime() === newAt.getTime()) return { ok: true, alreadyApplied: true };
+    return { ok: false, reason: "invalid_transition" };
+  }
+
+  emitAppointmentEvent({ type: "appointment.rescheduled", tenantId, appointmentId, previousScheduledAt: existing.scheduledAt, scheduledAt: newAt, reasonCode: reason.code, hospitalAction: reason.hospitalAction });
   return { ok: true };
 }

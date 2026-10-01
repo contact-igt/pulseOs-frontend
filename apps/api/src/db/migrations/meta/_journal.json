@@ -176,6 +176,13 @@
       "when": 1790872524235,
       "tag": "0024_m5_followup_types",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1790874946526,
+      "tag": "0025_m6_appointment_lifecycle_resources",
+      "breakpoints": true
     }
   ]
 }

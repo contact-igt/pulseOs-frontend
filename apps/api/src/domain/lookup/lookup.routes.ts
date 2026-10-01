@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { and, eq, or } from "drizzle-orm";
-import { branches, marketingCampaigns, users } from "../../db/schema.js";
+import { branches, marketingCampaigns, scheduleResources, users } from "../../db/schema.js";
 
 export async function lookupRoutes(app: FastifyInstance) {
   app.get("/lookups", async (request) => {
@@ -8,7 +8,8 @@ export async function lookupRoutes(app: FastifyInstance) {
 
     const [branchRows, doctorRows, ownerRows, campaignRows] = await Promise.all([
       app.db.select({ id: branches.id, name: branches.name }).from(branches).where(eq(branches.tenantId, tenantId)),
-      app.db.select({ id: users.id, name: users.name }).from(users).where(and(eq(users.tenantId, tenantId), eq(users.role, "DOCTOR"))),
+      // "Doctors" are the hospital's active scheduling profiles — a doctor does not need a login to appear here.
+      app.db.select({ id: scheduleResources.id, name: scheduleResources.name }).from(scheduleResources).where(and(eq(scheduleResources.tenantId, tenantId), eq(scheduleResources.isActive, true))).orderBy(scheduleResources.name),
       app.db
         .select({ id: users.id, name: users.name })
         .from(users)

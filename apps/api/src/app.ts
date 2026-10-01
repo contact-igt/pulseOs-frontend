@@ -11,6 +11,7 @@ import { outcomeRoutes } from "./domain/consultation/outcome.routes.js";
 import { lookupRoutes } from "./domain/lookup/lookup.routes.js";
 import { taskRoutes } from "./domain/task/task.routes.js";
 import { followUpTypeRoutes } from "./domain/task/followup-type.routes.js";
+import { resourceRoutes } from "./domain/resource/resource.routes.js";
 import { appointmentRoutes } from "./domain/appointment/appointment.routes.js";
 import { treatmentRoutes } from "./domain/treatment/treatment.routes.js";
 import { conversationRoutes } from "./domain/conversation/conversation.routes.js";
@@ -88,6 +89,7 @@ export async function buildApp() {
     await protectedApp.register(lookupRoutes);
     await protectedApp.register(taskRoutes);
     await protectedApp.register(followUpTypeRoutes);
+    await protectedApp.register(resourceRoutes);
     await protectedApp.register(appointmentRoutes);
     await protectedApp.register(treatmentRoutes);
     await protectedApp.register(conversationRoutes);

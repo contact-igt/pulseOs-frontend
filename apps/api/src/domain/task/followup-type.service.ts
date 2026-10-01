@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, isNull, or } from "drizzle-orm";
-import type { Db } from "../../db/client.js";
+import type { Db, DbOrTx } from "../../db/client.js";
 import { departments, followUpTypes } from "../../db/schema.js";
 import { FOLLOW_UP_BEHAVIOURS, FOLLOW_UP_KEYS, type CreateFollowUpTypeInput, type FollowUpTypeVm, type TaskType, type UpdateFollowUpTypeInput } from "@pulseos/types";
 
@@ -26,7 +26,7 @@ const toVm = (r: Row, departmentName: string | null): FollowUpTypeVm => ({
 });
 
 /** Installs the defaults the first time a tenant needs them; a hospital's later edits are never overwritten. */
-export async function ensureFollowUpTypes(db: Db, tenantId: string): Promise<void> {
+export async function ensureFollowUpTypes(db: DbOrTx, tenantId: string): Promise<void> {
   const [existing] = await db.select({ id: followUpTypes.id }).from(followUpTypes).where(eq(followUpTypes.tenantId, tenantId)).limit(1);
   if (existing) return;
   await db

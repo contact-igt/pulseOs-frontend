@@ -1,6 +1,6 @@
 import { and, eq, gte, inArray, or, sql } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
-import { appointments, journeys, patients, tasks, treatmentOpportunities, users } from "../../db/schema.js";
+import { appointments, journeys, patients, scheduleResources, tasks, treatmentOpportunities, users } from "../../db/schema.js";
 import { tenantTimezone, tzLiteral } from "../../lib/hospital-time.js";
 import type { PatientUpcoming, PatientUpcomingItem } from "@pulseos/types";
 
@@ -37,10 +37,10 @@ export async function getPatientUpcoming(db: Db, tenantId: string, patientId: st
 
   if (scope.appointments) {
     const rows = await db
-      .select({ id: appointments.id, at: appointments.scheduledAt, reason: appointments.reason, status: appointments.status, journeyId: appointments.journeyId, journeyType: journeys.journeyType, doctorName: users.name })
+      .select({ id: appointments.id, at: appointments.scheduledAt, reason: appointments.reason, status: appointments.status, journeyId: appointments.journeyId, journeyType: journeys.journeyType, doctorName: scheduleResources.name })
       .from(appointments)
       .innerJoin(journeys, eq(appointments.journeyId, journeys.id))
-      .leftJoin(users, eq(appointments.doctorUserId, users.id))
+      .leftJoin(scheduleResources, eq(appointments.resourceId, scheduleResources.id))
       .where(and(eq(appointments.tenantId, tenantId), eq(appointments.patientId, patientId), inArray(appointments.status, [...OPEN_APPOINTMENT]), gte(appointments.scheduledAt, todayStart)));
     for (const r of rows) {
       items.push({ kind: "appointment", id: r.id, at: r.at.toISOString(), label: r.reason, status: r.status, overdue: false, journeyId: r.journeyId, journeyType: r.journeyType, personName: r.doctorName });
@@ -68,10 +68,11 @@ export async function getPatientUpcoming(db: Db, tenantId: string, patientId: st
 
   if (scope.treatments) {
     const rows = await db
-      .select({ id: treatmentOpportunities.id, at: treatmentOpportunities.plannedDate, label: treatmentOpportunities.treatmentLabel, status: treatmentOpportunities.status, journeyId: treatmentOpportunities.journeyId, journeyType: journeys.journeyType, owner: users.name })
+      .select({ id: treatmentOpportunities.id, at: treatmentOpportunities.plannedDate, label: treatmentOpportunities.treatmentLabel, status: treatmentOpportunities.status, journeyId: treatmentOpportunities.journeyId, journeyType: journeys.journeyType, owner: sql<string | null>`coalesce(${scheduleResources.name}, ${users.name})` })
       .from(treatmentOpportunities)
       .innerJoin(journeys, eq(treatmentOpportunities.journeyId, journeys.id))
       .leftJoin(users, eq(treatmentOpportunities.ownerUserId, users.id))
+      .leftJoin(scheduleResources, eq(treatmentOpportunities.scheduledResourceId, scheduleResources.id))
       .where(and(eq(treatmentOpportunities.tenantId, tenantId), eq(treatmentOpportunities.patientId, patientId), eq(treatmentOpportunities.status, "SCHEDULED"), gte(treatmentOpportunities.plannedDate, todayStart)));
     for (const r of rows) {
       if (!r.at) continue;

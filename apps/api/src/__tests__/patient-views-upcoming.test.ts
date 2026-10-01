@@ -67,7 +67,7 @@ describe.skipIf(!DEMO_PASSWORD)("GET /patients/:id/upcoming (integration)", () =
     ids.futureAppt = await appt(journeyA, now + 3 * DAY);
     ids.pastAppt = await appt(journeyA, now - 3 * DAY);
     ids.cancelledAppt = await appt(journeyB, now + 4 * DAY);
-    await app.inject({ method: "PATCH", url: `/appointments/${ids.cancelledAppt}/action`, cookies, payload: { action: "cancel" } });
+    await app.inject({ method: "PATCH", url: `/appointments/${ids.cancelledAppt}/action`, cookies, payload: { action: "cancel", reasonCode: "patient_requested" } });
 
     ids.taskB = await task(journeyB, now + 1 * DAY, adminId);
     ids.overdueTask = await task(journeyA, now - 2 * DAY, adminId);

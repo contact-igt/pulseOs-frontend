@@ -187,7 +187,7 @@ describe.skipIf(!DEMO_PASSWORD)("appointments / front desk (integration)", () =>
 
     const newTime = new Date(Date.now() + 7 * 86400000).toISOString();
     const reschedule = await app.inject({
-      method: "PATCH", url: `/appointments/${target.id}/reschedule`, cookies: { pulseos_session: frontDeskCookie }, payload: { scheduledAt: newTime },
+      method: "PATCH", url: `/appointments/${target.id}/reschedule`, cookies: { pulseos_session: frontDeskCookie }, payload: { scheduledAt: newTime, reasonCode: "patient_requested" },
     });
     expect(reschedule.statusCode).toBe(200);
 

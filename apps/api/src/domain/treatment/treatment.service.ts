@@ -1,9 +1,12 @@
-import { and, eq, or } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { patientNameSql } from "../../lib/patient-name.js";
-import type { Db } from "../../db/client.js";
-import { appointments, journeys, patients, revenueEvents, tasks, timelineEvents, treatmentOpportunities, users } from "../../db/schema.js";
+import type { Db, DbOrTx } from "../../db/client.js";
+import { appointments, branches, journeys, patients, revenueEvents, scheduleResources, tasks, timelineEvents, treatmentOpportunities, users } from "../../db/schema.js";
 import { recordConversionFeedbackEvent } from "../acquisition/conversion-feedback.service.js";
-import type { TreatmentFilters, TreatmentRow, TreatmentStatus } from "@pulseos/types";
+import { findActiveResource } from "../resource/resource.service.js";
+import { findActiveTreatmentDefinition } from "../specialty/treatment-catalog.service.js";
+import { emitAppointmentEvent } from "../appointment/appointment-events.js";
+import type { ScheduleSurgeryInput, TreatmentFilters, TreatmentRow, TreatmentStatus } from "@pulseos/types";
 
 // Postgres unique_violation SQLSTATE. Used to recognize a lost race against
 // the revenue_events_treatment_opportunity_unique index as "already recorded"
@@ -28,11 +31,18 @@ export async function listTreatments(db: Db, tenantId: string, filters: Treatmen
       status: treatmentOpportunities.status,
       ownerName: users.name,
       plannedDate: treatmentOpportunities.plannedDate,
+      resourceId: treatmentOpportunities.scheduledResourceId,
+      resourceName: scheduleResources.name,
+      branchId: treatmentOpportunities.scheduledBranchId,
+      branchName: branches.name,
+      scheduleNote: treatmentOpportunities.scheduleNote,
     })
     .from(treatmentOpportunities)
     .innerJoin(patients, eq(treatmentOpportunities.patientId, patients.id))
     .innerJoin(journeys, eq(treatmentOpportunities.journeyId, journeys.id))
     .leftJoin(users, eq(treatmentOpportunities.ownerUserId, users.id))
+    .leftJoin(scheduleResources, eq(treatmentOpportunities.scheduledResourceId, scheduleResources.id))
+    .leftJoin(branches, eq(treatmentOpportunities.scheduledBranchId, branches.id))
     .where(
       and(
         eq(treatmentOpportunities.tenantId, tenantId),
@@ -48,19 +58,19 @@ export async function listTreatments(db: Db, tenantId: string, filters: Treatmen
   if (journeyIds.length === 0) return [];
 
   const doctorRows = await db
-    .select({ journeyId: appointments.journeyId, doctorId: appointments.doctorUserId, doctorName: users.name, scheduledAt: appointments.scheduledAt })
+    .select({ journeyId: appointments.journeyId, doctorId: appointments.resourceId, doctorUserId: appointments.doctorUserId, doctorName: scheduleResources.name, scheduledAt: appointments.scheduledAt })
     .from(appointments)
-    .leftJoin(users, eq(appointments.doctorUserId, users.id))
+    .leftJoin(scheduleResources, eq(appointments.resourceId, scheduleResources.id))
     .where(eq(appointments.tenantId, tenantId));
   const latestApptByJourney = new Map<string, Date>();
   const doctorByJourney = new Map<string, string | null>();
-  const doctorIdByJourney = new Map<string, string | null>();
+  const doctorIdByJourney = new Map<string, { resourceId: string | null; userId: string | null }>();
   for (const d of doctorRows) {
     const existing = latestApptByJourney.get(d.journeyId);
     if (!existing || d.scheduledAt > existing) {
       latestApptByJourney.set(d.journeyId, d.scheduledAt);
       doctorByJourney.set(d.journeyId, d.doctorName);
-      doctorIdByJourney.set(d.journeyId, d.doctorId);
+      doctorIdByJourney.set(d.journeyId, { resourceId: d.doctorId, userId: d.doctorUserId });
     }
   }
 
@@ -87,14 +97,21 @@ export async function listTreatments(db: Db, tenantId: string, filters: Treatmen
   }
 
   // "Doctor" is the one who last saw the journey (latest appointment) — the same rule the row's doctorName uses.
-  const visibleRows = filters.doctorId ? rows.filter((r) => doctorIdByJourney.get(r.journeyId) === filters.doctorId) : rows;
+  // A scheduled procedure with its own doctor/resource is filed under that one. A login's user id still matches (old links).
+  const visibleRows = filters.doctorId
+    ? rows.filter((r) => {
+        if (r.resourceId) return r.resourceId === filters.doctorId;
+        const d = doctorIdByJourney.get(r.journeyId);
+        return d?.resourceId === filters.doctorId || d?.userId === filters.doctorId;
+      })
+    : rows;
 
   return visibleRows.map((r) => ({
     id: r.id,
     patientId: r.patientId,
     patientName: r.patientName,
     journeyId: r.journeyId,
-    doctorName: doctorByJourney.get(r.journeyId) ?? null,
+    doctorName: r.resourceName ?? doctorByJourney.get(r.journeyId) ?? null,
     service: r.service,
     treatmentDefinitionId: r.treatmentDefinitionId,
     treatmentLabel: r.treatmentLabel,
@@ -104,6 +121,11 @@ export async function listTreatments(db: Db, tenantId: string, filters: Treatmen
     nextActionDueAt: nextActionByJourney.get(r.journeyId)?.toISOString() ?? null,
     lastContactAt: lastContactByJourney.get(r.journeyId)?.toISOString() ?? null,
     plannedDate: r.plannedDate?.toISOString() ?? null,
+    resourceId: r.resourceId,
+    resourceName: r.resourceName,
+    branchId: r.branchId,
+    branchName: r.branchName,
+    scheduleNote: r.scheduleNote,
   }));
 }
 
@@ -159,7 +181,9 @@ export async function updateTreatmentStatus(
     await tx.insert(timelineEvents).values({
       tenantId, patientId: existing.patientId, journeyId: existing.journeyId,
       actorType: "user", actorId, eventType: "treatment_status_changed",
-      title: `Treatment "${existing.treatmentLabel}" — ${nextStatus.replace(/_/g, " ").toLowerCase()}`,
+      title: existing.status === "SCHEDULED" && nextStatus === "CANCELLED"
+        ? `Surgery cancelled · ${existing.treatmentLabel}`
+        : `Treatment "${existing.treatmentLabel}" — ${nextStatus.replace(/_/g, " ").toLowerCase()}`,
       relatedEntityType: "treatment_opportunity", relatedEntityId: existing.id,
     });
 
@@ -236,6 +260,7 @@ export async function updateTreatmentStatus(
   });
 
   if (!transitioned) return { ok: false, reason: "conflict" };
+  if (existing.status === "SCHEDULED" && nextStatus === "CANCELLED") emitAppointmentEvent({ type: "surgery.cancelled", tenantId, treatmentId, plannedDate: existing.plannedDate });
 
   if (nextStatus === "COMPLETED") {
     // A completed treatment is the checkpoint-specified trigger point for
@@ -253,5 +278,186 @@ export async function updateTreatmentStatus(
     }
   }
 
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Scheduling a surgery (operational only: procedure, when, with whom, where — no clinical fields)
+// ---------------------------------------------------------------------------
+
+type Result<T = object> = ({ ok: true } & T) | { ok: false; reason: string };
+const PAST_SLACK_MS = 60_000;
+const MAX_NOTE = 500;
+/** Statuses in which a procedure for this Journey is still open: re-used rather than duplicated. */
+const OPEN_BEFORE_SCHEDULE: TreatmentStatus[] = ["ADVISED", "DECISION_PENDING", "ACCEPTED"];
+
+/** The shortest legal path from one status to another through VALID_TRANSITIONS (BFS), excluding the start. */
+function pathThrough(from: TreatmentStatus, to: TreatmentStatus): TreatmentStatus[] | null {
+  const queue: TreatmentStatus[][] = [[from]];
+  const seen = new Set<TreatmentStatus>([from]);
+  while (queue.length) {
+    const path = queue.shift()!;
+    const last = path[path.length - 1]!;
+    if (last === to) return path.slice(1);
+    for (const n of VALID_TRANSITIONS[last]) {
+      if (!seen.has(n)) {
+        seen.add(n);
+        queue.push([...path, n]);
+      }
+    }
+  }
+  return null;
+}
+
+function validScheduleTime(raw: unknown, now: Date): Result<{ at: Date }> {
+  if (typeof raw !== "string") return { ok: false, reason: "invalid_request" };
+  const at = new Date(raw);
+  if (Number.isNaN(at.getTime())) return { ok: false, reason: "invalid_request" };
+  if (at.getTime() < now.getTime() - PAST_SLACK_MS) return { ok: false, reason: "scheduled_in_past" };
+  return { ok: true, at };
+}
+
+function validNote(raw: unknown): Result<{ note: string | null }> {
+  if (raw !== undefined && raw !== null && typeof raw !== "string") return { ok: false, reason: "invalid_request" };
+  const n = typeof raw === "string" ? raw.trim() : "";
+  return n.length > MAX_NOTE ? { ok: false, reason: "invalid_request" } : { ok: true, note: n || null };
+}
+
+/** "Mon 12 Oct, 9:30 am" on the hospital's clock. */
+function when(at: Date, timezone: string): string {
+  return at.toLocaleString("en-IN", { timeZone: timezone, weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true });
+}
+
+/**
+ * Schedules a catalog procedure for a Journey. Everything referenced must belong to THIS hospital (journey, procedure,
+ * doctor/resource, branch). The Journey's open treatment for that procedure is reused — else one is created — and moved
+ * to SCHEDULED hop by hop through the SAME transition graph the pipeline uses; nothing assigns the status directly.
+ * Scheduling a procedure that is already SCHEDULED for the Journey is refused, and concurrent attempts serialize on
+ * an advisory lock, so a double click can never produce two records. Runs on the pool or inside the caller's transaction.
+ */
+export async function scheduleSurgery(
+  dbOrTx: DbOrTx,
+  tenantId: string,
+  actorId: string,
+  journeyId: string,
+  input: ScheduleSurgeryInput,
+  timezone: string,
+  now: Date = new Date(),
+): Promise<Result<{ treatmentId: string; plannedDate: Date }>> {
+  if (!input || typeof input.treatmentDefinitionId !== "string" || typeof input.resourceId !== "string" || typeof input.branchId !== "string") return { ok: false, reason: "invalid_request" };
+  const time = validScheduleTime(input.scheduledAt, now);
+  if (!time.ok) return time;
+  const note = validNote(input.note);
+  if (!note.ok) return note;
+
+  const db = dbOrTx as Db;
+  const [journey] = await db.select().from(journeys).where(and(eq(journeys.tenantId, tenantId), eq(journeys.id, journeyId))).limit(1);
+  if (!journey) return { ok: false, reason: "journey_not_found" };
+  const definition = await findActiveTreatmentDefinition(db, tenantId, input.treatmentDefinitionId);
+  if (!definition) return { ok: false, reason: "treatment_invalid" };
+  const resource = await findActiveResource(db, tenantId, input.resourceId);
+  if (!resource) return { ok: false, reason: "resource_invalid" };
+  const [branch] = await db.select({ id: branches.id, name: branches.name }).from(branches).where(and(eq(branches.tenantId, tenantId), eq(branches.id, input.branchId))).limit(1);
+  if (!branch) return { ok: false, reason: "branch_invalid" };
+
+  return db.transaction(async (tx): Promise<Result<{ treatmentId: string; plannedDate: Date }>> => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`surgery:${journeyId}:${definition.id}`}))`);
+
+    const current = await tx
+      .select()
+      .from(treatmentOpportunities)
+      .where(and(eq(treatmentOpportunities.tenantId, tenantId), eq(treatmentOpportunities.journeyId, journeyId), eq(treatmentOpportunities.treatmentDefinitionId, definition.id), inArray(treatmentOpportunities.status, [...OPEN_BEFORE_SCHEDULE, "SCHEDULED"])))
+      .orderBy(desc(treatmentOpportunities.createdAt));
+    if (current.some((t) => t.status === "SCHEDULED")) return { ok: false, reason: "surgery_already_scheduled" };
+
+    let opportunity = current[0];
+    if (!opportunity) {
+      [opportunity] = await tx
+        .insert(treatmentOpportunities)
+        .values({ tenantId, patientId: journey.patientId, journeyId, treatmentLabel: definition.label, treatmentDefinitionId: definition.id, status: "ADVISED", estimatedValue: definition.defaultEstimatedValue ?? 0, ownerUserId: journey.ownerUserId })
+        .returning();
+    }
+    const hops = pathThrough(opportunity!.status, "SCHEDULED");
+    if (!hops) return { ok: false, reason: "invalid_transition" };
+
+    let status = opportunity!.status;
+    for (const next of hops) {
+      const [moved] = await tx
+        .update(treatmentOpportunities)
+        .set({ status: next, updatedAt: now, ...(next === "ACCEPTED" ? { decisionDate: now } : {}) })
+        .where(and(eq(treatmentOpportunities.id, opportunity!.id), eq(treatmentOpportunities.tenantId, tenantId), eq(treatmentOpportunities.status, status)))
+        .returning({ id: treatmentOpportunities.id });
+      if (!moved) return { ok: false, reason: "conflict" };
+      status = next;
+    }
+    await tx
+      .update(treatmentOpportunities)
+      .set({ plannedDate: time.at, scheduledResourceId: resource.id, scheduledBranchId: branch.id, scheduleNote: note.note, updatedAt: now })
+      .where(eq(treatmentOpportunities.id, opportunity!.id));
+
+    await tx.insert(timelineEvents).values({
+      tenantId, patientId: journey.patientId, journeyId, actorType: "user", actorId, eventType: "surgery_scheduled",
+      title: `Surgery scheduled · ${definition.label}`,
+      description: `${when(time.at, timezone)} · ${resource.name} · ${branch.name}${note.note ? ` · ${note.note}` : ""}`,
+      relatedEntityType: "treatment_opportunity", relatedEntityId: opportunity!.id,
+    });
+    // The Journey has reached its procedure date; never moves a Journey backwards from completed / lost.
+    await tx.update(journeys).set({ stage: "scheduled" }).where(and(eq(journeys.id, journeyId), inArray(journeys.stage, ["enquiry", "contacted", "booked", "attended", "consulted", "treatment_advised"])));
+    return { ok: true, treatmentId: opportunity!.id, plannedDate: time.at };
+  });
+}
+
+/** Moves a SCHEDULED procedure to another time / doctor / branch. Nothing else about the treatment changes. */
+export async function rescheduleSurgery(
+  db: Db,
+  tenantId: string,
+  actorId: string,
+  treatmentId: string,
+  input: Partial<ScheduleSurgeryInput> & { scheduledAt: string },
+  timezone: string,
+  now: Date = new Date(),
+): Promise<Result<{ alreadyApplied?: boolean }>> {
+  const time = validScheduleTime(input?.scheduledAt, now);
+  if (!time.ok) return time;
+  const note = validNote(input.note);
+  if (!note.ok) return note;
+  const [existing] = await db.select().from(treatmentOpportunities).where(and(eq(treatmentOpportunities.tenantId, tenantId), eq(treatmentOpportunities.id, treatmentId))).limit(1);
+  if (!existing) return { ok: false, reason: "treatment_not_found" };
+  if (existing.status !== "SCHEDULED") return { ok: false, reason: "invalid_transition" };
+
+  let resourceId = existing.scheduledResourceId;
+  if (input.resourceId !== undefined) {
+    const r = await findActiveResource(db, tenantId, input.resourceId);
+    if (!r) return { ok: false, reason: "resource_invalid" };
+    resourceId = r.id;
+  }
+  let branchId = existing.scheduledBranchId;
+  if (input.branchId !== undefined) {
+    const [b] = await db.select({ id: branches.id }).from(branches).where(and(eq(branches.tenantId, tenantId), eq(branches.id, input.branchId))).limit(1);
+    if (!b) return { ok: false, reason: "branch_invalid" };
+    branchId = b.id;
+  }
+  const nextNote = input.note === undefined ? existing.scheduleNote : note.note;
+  if (existing.plannedDate?.getTime() === time.at.getTime() && resourceId === existing.scheduledResourceId && branchId === existing.scheduledBranchId && nextNote === existing.scheduleNote) return { ok: true, alreadyApplied: true };
+
+  const moved = await db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(treatmentOpportunities)
+      .set({ plannedDate: time.at, scheduledResourceId: resourceId, scheduledBranchId: branchId, scheduleNote: nextNote, updatedAt: now })
+      .where(and(eq(treatmentOpportunities.id, treatmentId), eq(treatmentOpportunities.tenantId, tenantId), eq(treatmentOpportunities.status, "SCHEDULED")))
+      .returning({ id: treatmentOpportunities.id });
+    if (!updated) return false;
+    const [resource] = resourceId ? await tx.select({ name: scheduleResources.name }).from(scheduleResources).where(eq(scheduleResources.id, resourceId)).limit(1) : [];
+    const [branch] = branchId ? await tx.select({ name: branches.name }).from(branches).where(eq(branches.id, branchId)).limit(1) : [];
+    await tx.insert(timelineEvents).values({
+      tenantId, patientId: existing.patientId, journeyId: existing.journeyId, actorType: "user", actorId, eventType: "surgery_rescheduled",
+      title: `Surgery rescheduled · ${existing.treatmentLabel}`,
+      description: [when(time.at, timezone), resource?.name, branch?.name].filter(Boolean).join(" · "),
+      relatedEntityType: "treatment_opportunity", relatedEntityId: existing.id,
+    });
+    return true;
+  });
+  if (!moved) return { ok: false, reason: "conflict" };
+  emitAppointmentEvent({ type: "surgery.rescheduled", tenantId, treatmentId, plannedDate: time.at });
   return { ok: true };
 }

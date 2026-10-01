@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import type { AppointmentAction } from "@pulseos/types";
+import { hasPermission } from "@pulseos/types";
 import { requirePermission } from "../auth/permission.middleware.js";
 import { diffDays, isRealDate } from "../../lib/hospital-time.js";
 import {
@@ -41,12 +41,50 @@ const listAppointmentsQuery = z
   .refine((q) => !q.from === !q.to, "from and to go together")
   .refine((q) => !q.from || !q.to || (diffDays(q.from, q.to) >= 0 && diffDays(q.from, q.to) < MAX_APPOINTMENT_RANGE_DAYS), "invalid range");
 
+const reasonCode = z.enum(["patient_requested", "doctor_unavailable", "hospital_reschedule", "hospital_cancelled", "timing_conflict", "unable_to_reach", "patient_no_show", "other"]);
+const actionBody = z.object({
+  action: z.enum(["confirm", "check_in", "mark_waiting", "send_to_doctor", "mark_no_show", "cancel"]),
+  reasonCode: reasonCode.optional(),
+  note: z.string().max(500).optional(),
+});
+const rescheduleBody = z.object({ scheduledAt: z.string(), reasonCode, note: z.string().max(500).optional() });
+const completeBody = z
+  .object({
+    next: z
+      .discriminatedUnion("kind", [
+        z.object({ kind: z.literal("none") }),
+        z.object({ kind: z.literal("follow_up"), followUp: z.object({ followUpTypeId: z.string().uuid(), dueAt: z.string(), assignedTo: z.string().uuid().nullable().optional(), priority: z.enum(["normal", "high"]).optional(), note: z.string().max(500).optional() }) }),
+        z.object({ kind: z.literal("surgery"), surgery: z.object({ treatmentDefinitionId: z.string().uuid(), scheduledAt: z.string(), resourceId: z.string().uuid(), branchId: z.string().uuid(), note: z.string().max(500).optional() }) }),
+      ])
+      .optional(),
+    note: z.string().max(500).optional(),
+  })
+  .optional();
+
 const REASON_STATUS: Record<string, number> = {
   appointment_not_found: 404,
   appointment_closed: 409,
   not_with_doctor: 409,
   invalid_transition: 409,
+  conflict: 409,
+  reason_required: 422,
+  reason_invalid: 422,
+  scheduled_in_past: 422,
+  // completion's embedded follow-up / surgery
+  type_invalid: 422,
+  due_in_past: 422,
+  note_required: 422,
+  assignee_invalid: 422,
+  invalid_due_at: 422,
+  journey_not_found: 422,
+  treatment_invalid: 422,
+  resource_invalid: 422,
+  branch_invalid: 422,
+  surgery_already_scheduled: 409,
+  forbidden: 403,
 };
+
+const uuid = z.string().uuid();
 
 export async function appointmentRoutes(app: FastifyInstance) {
   app.addHook("preHandler", requirePermission("VIEW_APPOINTMENTS"));
@@ -88,8 +126,10 @@ export async function appointmentRoutes(app: FastifyInstance) {
       const tenantId = request.sessionUser!.tenantId;
       const actorId = request.sessionUser!.id;
       const { id } = request.params as { id: string };
-      const { action } = request.body as { action: AppointmentAction };
-      const result = await applyAppointmentAction(app.db, tenantId, id, actorId, action);
+      if (!uuid.safeParse(id).success) return reply.status(404).send({ error: "appointment_not_found" });
+      const parsed = actionBody.safeParse(request.body);
+      if (!parsed.success) return reply.status(400).send({ error: "invalid_request" });
+      const result = await applyAppointmentAction(app.db, tenantId, id, actorId, parsed.data, request.sessionUser!.timezone);
       if (!result.ok) return reply.status(REASON_STATUS[result.reason] ?? 400).send({ error: result.reason });
       return result;
     });
@@ -98,7 +138,10 @@ export async function appointmentRoutes(app: FastifyInstance) {
       const tenantId = request.sessionUser!.tenantId;
       const actorId = request.sessionUser!.id;
       const { id } = request.params as { id: string };
-      const result = await completeAppointment(app.db, tenantId, id, actorId);
+      if (!uuid.safeParse(id).success) return reply.status(404).send({ error: "appointment_not_found" });
+      const parsed = completeBody.safeParse(request.body ?? undefined);
+      if (!parsed.success) return reply.status(400).send({ error: "invalid_request" });
+      const result = await completeAppointment(app.db, tenantId, id, { id: actorId, canManageTreatment: hasPermission(request.sessionUser!.role, "MANAGE_TREATMENT") }, parsed.data ?? {}, request.sessionUser!.timezone);
       if (!result.ok) return reply.status(REASON_STATUS[result.reason] ?? 400).send({ error: result.reason });
       return result;
     });
@@ -107,8 +150,10 @@ export async function appointmentRoutes(app: FastifyInstance) {
       const tenantId = request.sessionUser!.tenantId;
       const actorId = request.sessionUser!.id;
       const { id } = request.params as { id: string };
-      const { scheduledAt } = request.body as { scheduledAt: string };
-      const result = await rescheduleAppointment(app.db, tenantId, id, actorId, scheduledAt);
+      if (!uuid.safeParse(id).success) return reply.status(404).send({ error: "appointment_not_found" });
+      const parsed = rescheduleBody.safeParse(request.body);
+      if (!parsed.success) return reply.status(400).send({ error: "invalid_request" });
+      const result = await rescheduleAppointment(app.db, tenantId, id, actorId, parsed.data, request.sessionUser!.timezone);
       if (!result.ok) return reply.status(REASON_STATUS[result.reason] ?? 400).send({ error: result.reason });
       return result;
     });

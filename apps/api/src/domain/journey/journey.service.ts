@@ -13,6 +13,7 @@ import {
   marketingCampaigns,
   patients,
   revenueEvents,
+  scheduleResources,
   tasks,
   timelineEvents,
   treatmentOpportunities,
@@ -112,19 +113,19 @@ export async function listJourneys(db: Db, tenantId: string, filters: JourneyFil
   }
 
   const doctorRows = await db
-    .select({ journeyId: appointments.journeyId, doctorId: appointments.doctorUserId, doctorName: users.name, scheduledAt: appointments.scheduledAt })
+    .select({ journeyId: appointments.journeyId, doctorId: appointments.resourceId, doctorUserId: appointments.doctorUserId, doctorName: scheduleResources.name, scheduledAt: appointments.scheduledAt })
     .from(appointments)
-    .leftJoin(users, eq(appointments.doctorUserId, users.id))
+    .leftJoin(scheduleResources, eq(appointments.resourceId, scheduleResources.id))
     .where(eq(appointments.tenantId, tenantId));
   const doctorByJourney = new Map<string, string | null>();
-  const doctorIdByJourney = new Map<string, string>();
+  const doctorIdByJourney = new Map<string, { resourceId: string | null; userId: string | null }>();
   const latestApptByJourney = new Map<string, Date>();
   for (const d of doctorRows) {
     const existing = latestApptByJourney.get(d.journeyId);
     if (!existing || d.scheduledAt > existing) {
       latestApptByJourney.set(d.journeyId, d.scheduledAt);
       doctorByJourney.set(d.journeyId, d.doctorName);
-      doctorIdByJourney.set(d.journeyId, d.doctorId);
+      doctorIdByJourney.set(d.journeyId, { resourceId: d.doctorId, userId: d.doctorUserId });
     }
   }
 
@@ -194,12 +195,12 @@ export async function listJourneys(db: Db, tenantId: string, filters: JourneyFil
       acquisitionCost,
       treatmentValue: treatmentValueByJourney.get(r.id) ?? 0,
     };
-    return { row, campaignId, journeyId: r.id, doctorId: doctorIdByJourney.get(r.id) ?? null };
+    return { row, campaignId, journeyId: r.id, doctorRef: doctorIdByJourney.get(r.id) ?? null };
   });
 
   return withCampaign
     .filter((x) => !filters.campaignId || x.campaignId === filters.campaignId)
-    .filter((x) => !filters.doctorId || x.doctorId === filters.doctorId)
+    .filter((x) => !filters.doctorId || x.doctorRef?.resourceId === filters.doctorId || x.doctorRef?.userId === filters.doctorId)
     .filter((x) => !atRiskJourneyIds || atRiskJourneyIds.has(x.journeyId))
     .map((x) => x.row);
 }
@@ -328,9 +329,16 @@ export async function getJourneyDetail(db: Db, tenantId: string, journeyId: stri
         status: treatmentOpportunities.status,
         ownerName: users.name,
         plannedDate: treatmentOpportunities.plannedDate,
+        resourceId: treatmentOpportunities.scheduledResourceId,
+        resourceName: scheduleResources.name,
+        branchId: treatmentOpportunities.scheduledBranchId,
+        branchName: branches.name,
+        scheduleNote: treatmentOpportunities.scheduleNote,
       })
       .from(treatmentOpportunities)
       .leftJoin(users, eq(treatmentOpportunities.ownerUserId, users.id))
+      .leftJoin(scheduleResources, eq(treatmentOpportunities.scheduledResourceId, scheduleResources.id))
+      .leftJoin(branches, eq(treatmentOpportunities.scheduledBranchId, branches.id))
       .where(and(eq(treatmentOpportunities.tenantId, tenantId), eq(treatmentOpportunities.journeyId, journeyId)))
       .orderBy(desc(treatmentOpportunities.createdAt));
     treatments = rows.map((r) => ({
@@ -338,7 +346,7 @@ export async function getJourneyDetail(db: Db, tenantId: string, journeyId: stri
       patientId: j.patientId,
       patientName: j.patientName,
       journeyId,
-      doctorName,
+      doctorName: r.resourceName ?? doctorName,
       treatmentLabel: r.treatmentLabel,
       service: j.journeyType,
       estimatedValue: r.estimatedValue,
@@ -347,6 +355,11 @@ export async function getJourneyDetail(db: Db, tenantId: string, journeyId: stri
       nextActionDueAt: nextAction?.dueAt ?? null,
       lastContactAt: lastInteractionAt,
       plannedDate: r.plannedDate?.toISOString() ?? null,
+      resourceId: r.resourceId,
+      resourceName: r.resourceName,
+      branchId: r.branchId,
+      branchName: r.branchName,
+      scheduleNote: r.scheduleNote,
     }));
   }
 

@@ -1,7 +1,7 @@
 import { and, eq, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { patientNameSql } from "../../lib/patient-name.js";
-import type { Db } from "../../db/client.js";
+import type { Db, DbOrTx } from "../../db/client.js";
 import { hospitalTodayBounds } from "../../lib/hospital-time.js";
 import { followUpTypes, journeys, patients, tasks, timelineEvents, users } from "../../db/schema.js";
 import { FOLLOW_UP_KEYS, TASK_TYPE_LABEL, type CreateFollowUpInput, type CreateTaskInput, type TaskCounts, type TaskReason, type TaskRow, type TaskView } from "@pulseos/types";
@@ -271,7 +271,9 @@ export async function createTask(db: Db, tenantId: string, createdBy: string, in
  * (active, this hospital, offered for this journey's department), the due time (must be in the future), the
  * required note, and the owner (default per the type; an explicit owner must be a valid person in this hospital).
  */
-export async function createFollowUp(db: Db, tenantId: string, actor: { id: string }, journeyId: string, input: CreateFollowUpInput, timezone: string, now: Date = new Date()): Promise<Result<{ task: TaskRow }>> {
+export async function createFollowUp(dbOrTx: DbOrTx, tenantId: string, actor: { id: string }, journeyId: string, input: CreateFollowUpInput, timezone: string, now: Date = new Date()): Promise<Result<{ task: TaskRow }>> {
+  // On the pool or inside a caller's transaction (then `db.transaction` below is a savepoint): the same queries either way.
+  const db = dbOrTx as Db;
   if (!input || typeof input.followUpTypeId !== "string" || typeof input.dueAt !== "string") return { ok: false, reason: "invalid_request" };
   const [journey] = await db.select().from(journeys).where(and(eq(journeys.tenantId, tenantId), eq(journeys.id, journeyId))).limit(1);
   if (!journey) return { ok: false, reason: "journey_not_found" };
@@ -348,7 +350,7 @@ export async function rescheduleTask(db: Db, tenantId: string, taskId: string, a
   return { ok: true };
 }
 
-export async function getTaskById(db: Db, tenantId: string, taskId: string): Promise<TaskRow | null> {
+export async function getTaskById(db: DbOrTx, tenantId: string, taskId: string): Promise<TaskRow | null> {
   const [row] = await db
     .select({
       id: tasks.id, patientId: tasks.patientId, patientName: patientNameSql,

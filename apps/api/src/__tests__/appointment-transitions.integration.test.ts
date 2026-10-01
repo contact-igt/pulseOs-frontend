@@ -67,7 +67,7 @@ describe.skipIf(!DEMO_PASSWORD)("appointment state machine — server-side trans
   }
 
   async function act(id: string, action: string) {
-    return app.inject({ method: "PATCH", url: `/appointments/${id}/action`, cookies: { pulseos_session: frontDeskCookie }, payload: { action } });
+    return app.inject({ method: "PATCH", url: `/appointments/${id}/action`, cookies: { pulseos_session: frontDeskCookie }, payload: { action, ...(action === "cancel" ? { reasonCode: "patient_requested" } : {}) } });
   }
 
   async function dbStatus(id: string): Promise<string> {

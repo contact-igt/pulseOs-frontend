@@ -11,3 +11,6 @@ if (!connectionString) {
 export const queryClient = postgres(connectionString);
 export const db = drizzle(queryClient, { schema });
 export type Db = typeof db;
+export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+/** A service may run on the pool or inside a caller's transaction. */
+export type DbOrTx = Db | Tx;

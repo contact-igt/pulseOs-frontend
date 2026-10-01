@@ -4,7 +4,7 @@ import type { FastifyInstance } from "fastify";
 import type { AppointmentRow, FollowUpTypeVm, JourneyDetailVm, Role, TaskCounts, TaskRow, TimelineEventVm } from "@pulseos/types";
 import { buildApp } from "../app.js";
 import { db, queryClient } from "../db/client.js";
-import { followUpTypes, journeys, tasks, timelineEvents } from "../db/schema.js";
+import { followUpTypes, journeys, scheduleResources, tasks, timelineEvents } from "../db/schema.js";
 import { deriveNextAction } from "../domain/task/task.service.js";
 import { createTestTenant, destroyTestTenant, type TestTenant } from "./helpers/edition-tenant.js";
 
@@ -418,7 +418,9 @@ describe.skipIf(!DEMO_PASSWORD)("follow-up types, Add Follow-up, Next Action, bo
       const res = await call(t, "FRONT_DESK", "POST", "/appointments", { patientId, journeyId, branchId: t.branchId, doctorId: t.userIds.DOCTOR, scheduledAt, reason: "Cataract consultation" });
       expect(res.statusCode).toBe(201);
       const appt = res.json() as AppointmentRow;
-      expect(appt).toMatchObject({ patientId, journeyId, doctorId: t.userIds.DOCTOR, status: "scheduled", reason: "Cataract consultation" });
+      // The doctor is a scheduling resource; the Doctor user's own profile is linked to their login.
+      const [resource] = await db.select({ id: scheduleResources.id }).from(scheduleResources).where(eq(scheduleResources.linkedUserId, t.userIds.DOCTOR!));
+      expect(appt).toMatchObject({ patientId, journeyId, doctorId: resource!.id, status: "scheduled", reason: "Cataract consultation" });
       const lines = (await timelineOf(t, patientId)).filter((e) => e.eventType === "appointment_created");
       expect(lines).toHaveLength(1);
       expect(lines[0]!.title).toContain("Appointment booked");

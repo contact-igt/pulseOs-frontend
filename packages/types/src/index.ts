@@ -889,11 +889,154 @@ export interface AppointmentRow {
   status: AppointmentStatus;
   scheduledAt: string;
   reason: string | null;
-  /** Real check-in time (from the Timeline) — only populated for Front Desk waiting-queue rows. */
+  /** Real check-in time (the appointment's own checkedInAt). Kept under this name for the Front Desk waiting rows. */
   arrivedAt?: string | null;
+  checkedInAt?: string | null;
+  waitingStartedAt?: string | null;
+  consultationStartedAt?: string | null;
+  completedAt?: string | null;
+  /** Why the latest reschedule / cancellation / no-show happened; null if none has. */
+  statusReason?: { code: AppointmentReasonCode; label: string; note: string | null } | null;
+  /** An unresolved Appointment Risk task exists for this appointment. */
+  atRisk?: boolean;
 }
 
 export type AppointmentAction = "confirm" | "check_in" | "mark_waiting" | "send_to_doctor" | "mark_no_show" | "cancel";
+
+/** Everything a person can do to an appointment: the status-moving actions plus Complete and Reschedule. */
+export type AppointmentOp = AppointmentAction | "complete" | "reschedule";
+
+/**
+ * THE appointment transition graph: what may be done from each status. The API enforces exactly this table and the
+ * UI offers exactly these operations, so a button is only ever shown for a step the server will accept.
+ */
+export const APPOINTMENT_TRANSITIONS: Record<AppointmentStatus, AppointmentOp[]> = {
+  requested: ["confirm", "mark_no_show", "cancel", "reschedule"],
+  scheduled: ["check_in", "confirm", "mark_no_show", "cancel", "reschedule"],
+  confirmed: ["check_in", "mark_no_show", "cancel", "reschedule"],
+  checked_in: ["mark_waiting", "cancel"],
+  waiting: ["send_to_doctor", "cancel"],
+  with_doctor: ["complete"],
+  completed: [],
+  no_show: ["reschedule"],
+  cancelled: ["reschedule"],
+};
+
+export function allowedAppointmentOps(status: AppointmentStatus): AppointmentOp[] {
+  return APPOINTMENT_TRANSITIONS[status];
+}
+
+/** The one obvious next step for Staff at each status, in plain words. */
+export const APPOINTMENT_PRIMARY_OP: Partial<Record<AppointmentStatus, { op: AppointmentOp; label: string }>> = {
+  requested: { op: "confirm", label: "Confirm appointment" },
+  scheduled: { op: "check_in", label: "Check in patient" },
+  confirmed: { op: "check_in", label: "Check in patient" },
+  checked_in: { op: "mark_waiting", label: "Move to waiting" },
+  waiting: { op: "send_to_doctor", label: "Send to doctor" },
+  with_doctor: { op: "complete", label: "Complete consultation" },
+};
+
+/** Why an appointment was rescheduled, cancelled or missed. A stable code (tenant customisation comes later) + optional note. */
+export type AppointmentReasonCode =
+  | "patient_requested" | "doctor_unavailable" | "hospital_reschedule" | "hospital_cancelled" | "timing_conflict" | "unable_to_reach" | "patient_no_show" | "other";
+export type AppointmentReasonKind = "reschedule" | "cancel" | "no_show";
+export interface AppointmentReasonDef {
+  code: AppointmentReasonCode;
+  label: string;
+  /** The hospital caused it, so the patient has to be contacted: raises an Appointment Risk task. */
+  hospitalAction: boolean;
+  appliesTo: AppointmentReasonKind[];
+}
+export const APPOINTMENT_REASONS: AppointmentReasonDef[] = [
+  { code: "patient_requested", label: "Patient requested", hospitalAction: false, appliesTo: ["reschedule", "cancel"] },
+  { code: "doctor_unavailable", label: "Doctor unavailable", hospitalAction: true, appliesTo: ["reschedule", "cancel"] },
+  { code: "hospital_reschedule", label: "Hospital reschedule", hospitalAction: true, appliesTo: ["reschedule"] },
+  { code: "hospital_cancelled", label: "Hospital cancelled", hospitalAction: true, appliesTo: ["cancel"] },
+  { code: "timing_conflict", label: "Timing conflict", hospitalAction: false, appliesTo: ["reschedule", "cancel"] },
+  { code: "unable_to_reach", label: "Unable to reach patient", hospitalAction: false, appliesTo: ["cancel", "no_show"] },
+  { code: "patient_no_show", label: "Patient did not arrive", hospitalAction: false, appliesTo: ["no_show"] },
+  { code: "other", label: "Other", hospitalAction: false, appliesTo: ["reschedule", "cancel", "no_show"] },
+];
+export function appointmentReasonsFor(kind: AppointmentReasonKind): AppointmentReasonDef[] {
+  return APPOINTMENT_REASONS.filter((r) => r.appliesTo.includes(kind));
+}
+
+/** PATCH /appointments/:id/action body. Cancel needs a reason; a no-show defaults to "Patient did not arrive". */
+export interface AppointmentActionInput {
+  action: AppointmentAction;
+  reasonCode?: AppointmentReasonCode;
+  note?: string;
+}
+
+/** PATCH /appointments/:id/reschedule body. */
+export interface RescheduleAppointmentInput {
+  scheduledAt: string;
+  reasonCode: AppointmentReasonCode;
+  note?: string;
+}
+
+/** Schedule a procedure for a Journey (operational scheduling only — no clinical fields). */
+export interface ScheduleSurgeryInput {
+  treatmentDefinitionId: string;
+  scheduledAt: string;
+  resourceId: string;
+  branchId: string;
+  note?: string;
+}
+
+/** What happens after a consultation. Exactly one; "none" leaves the Journey as it is. */
+export type CompletionNext =
+  | { kind: "none" }
+  | { kind: "follow_up"; followUp: CreateFollowUpInput }
+  | { kind: "surgery"; surgery: ScheduleSurgeryInput };
+
+/** PATCH /appointments/:id/complete body — everything optional, so a bare call still just completes the visit. */
+export interface CompleteAppointmentInput {
+  next?: CompletionNext;
+  note?: string;
+}
+
+export interface AppointmentActionResult {
+  ok: true;
+  status: AppointmentStatus;
+  /** True when the appointment was already in the requested state (a repeated click): nothing was written again. */
+  alreadyApplied?: boolean;
+}
+
+export interface CompleteAppointmentResult {
+  ok: true;
+  alreadyApplied?: boolean;
+  followUpTaskId?: string | null;
+  treatmentId?: string | null;
+}
+
+/** A scheduling profile (doctor / theatre team): selectable on appointments and surgeries; a login is optional. */
+export interface ScheduleResourceVm {
+  id: string;
+  name: string;
+  departmentId: string | null;
+  departmentName: string | null;
+  /** True when a PulseOS user is linked, i.e. this doctor can sign in. */
+  hasLogin: boolean;
+  isActive: boolean;
+}
+export interface CreateScheduleResourceInput {
+  name: string;
+  departmentId?: string | null;
+}
+export interface UpdateScheduleResourceInput {
+  name?: string;
+  departmentId?: string | null;
+  isActive?: boolean;
+}
+
+/** Minutes a patient has been waiting, derived from real timestamps (never stored); null if there is no arrival time. */
+export function waitMinutes(row: Pick<AppointmentRow, "status" | "checkedInAt" | "arrivedAt" | "waitingStartedAt">, now: Date = new Date()): number | null {
+  if (row.status !== "checked_in" && row.status !== "waiting") return null;
+  const start = row.status === "waiting" ? (row.waitingStartedAt ?? row.checkedInAt ?? row.arrivedAt) : (row.checkedInAt ?? row.arrivedAt);
+  if (!start) return null;
+  return Math.max(0, Math.floor((now.getTime() - new Date(start).getTime()) / 60_000));
+}
 
 export interface CreatePatientInput {
   name?: string;
@@ -918,6 +1061,8 @@ export interface CreateAppointmentInput {
 }
 
 export interface FrontDeskDashboard {
+  /** Today's appointments with an unresolved Appointment Risk task. */
+  atRisk?: AppointmentRow[];
   today: AppointmentRow[];
   arrivals: AppointmentRow[];
   waitingQueue: AppointmentRow[];
@@ -966,6 +1111,12 @@ export interface TreatmentRow {
   nextActionDueAt: string | null;
   lastContactAt: string | null;
   plannedDate: string | null;
+  /** Scheduled procedure: who it is with, where, and the operational note (set once it is SCHEDULED). */
+  resourceId?: string | null;
+  resourceName?: string | null;
+  branchId?: string | null;
+  branchName?: string | null;
+  scheduleNote?: string | null;
 }
 
 /** GET /treatments query. service = journey type; doctorId = doctor of the journey's latest appointment. */

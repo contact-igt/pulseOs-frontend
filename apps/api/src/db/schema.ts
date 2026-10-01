@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, pgEnum, index, uniqueIndex, date } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, pgEnum, index, uniqueIndex, date, type AnyPgColumn } from "drizzle-orm/pg-core";
 
 export const roleEnum = pgEnum("role", ["SUPER_ADMIN", "HOSPITAL_ADMIN", "FRONT_DESK", "PATIENT_COORDINATOR", "DOCTOR"]);
 
@@ -256,11 +256,16 @@ export const tasks = pgTable("tasks", {
   createdBy: uuid("created_by").references(() => users.id),
   completedBy: uuid("completed_by").references(() => users.id),
   completedAt: timestamp("completed_at", { withTimezone: true }),
+  // Set only on a system-raised Appointment Risk task: which appointment, and which operational signal raised it.
+  // At most one OPEN task per (appointment, riskReason) — see the partial unique index below.
+  appointmentId: uuid("appointment_id").references((): AnyPgColumn => appointments.id, { onDelete: "set null" }),
+  riskReason: text("risk_reason"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   tenantIdx: index("tasks_tenant_idx").on(t.tenantId),
   assignedIdx: index("tasks_assigned_idx").on(t.assignedTo),
   journeyIdx: index("tasks_journey_idx").on(t.journeyId),
+  openRiskUnique: uniqueIndex("tasks_open_appointment_risk_unique").on(t.appointmentId, t.riskReason).where(sql`${t.appointmentId} is not null and ${t.riskReason} is not null and ${t.status} in ('pending', 'in_progress')`),
 }));
 
 // "scheduled" is the DB-level synonym for the operational state BOOKED
@@ -270,20 +275,50 @@ export const appointmentStatusEnum = pgEnum("appointment_status", [
   "requested", "scheduled", "confirmed", "checked_in", "waiting", "with_doctor", "completed", "no_show", "cancelled",
 ]);
 
+// Who an appointment or surgery is scheduled WITH. A resource is a scheduling profile, not a login: a doctor may have
+// no PulseOS account at all. `linkedUserId` ties the profile to a person who can sign in (their own dashboard and
+// consultation outcomes follow that link). Every DOCTOR user gets a linked resource automatically (DB trigger).
+export const scheduleResources = pgTable("schedule_resources", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  departmentId: uuid("department_id").references(() => departments.id, { onDelete: "set null" }),
+  linkedUserId: uuid("linked_user_id").references(() => users.id, { onDelete: "set null" }),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  tenantIdx: index("schedule_resources_tenant_idx").on(t.tenantId),
+  linkedUserUnique: uniqueIndex("schedule_resources_tenant_user_unique").on(t.tenantId, t.linkedUserId).where(sql`${t.linkedUserId} is not null`),
+}));
+
 export const appointments = pgTable("appointments", {
   id: uuid("id").primaryKey().defaultRandom(),
   tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
   patientId: uuid("patient_id").notNull().references(() => patients.id),
   journeyId: uuid("journey_id").notNull().references(() => journeys.id),
   branchId: uuid("branch_id").notNull().references(() => branches.id),
-  doctorUserId: uuid("doctor_user_id").notNull().references(() => users.id),
+  // Who the visit is with. The DB guarantees it is set (a trigger resolves it from doctorUserId for older writers).
+  resourceId: uuid("resource_id").references(() => scheduleResources.id),
+  // The resource's login, when it has one — kept in step by the DB so the Doctor's own views keep working.
+  doctorUserId: uuid("doctor_user_id").references(() => users.id),
   status: appointmentStatusEnum("status").notNull().default("scheduled"),
   scheduledAt: timestamp("scheduled_at", { withTimezone: true }).notNull(),
   reason: text("reason"),
+  // Event timestamps — only the ones the front-desk workflow reads (waiting time, "completed 11:42 AM").
+  checkedInAt: timestamp("checked_in_at", { withTimezone: true }),
+  waitingStartedAt: timestamp("waiting_started_at", { withTimezone: true }),
+  consultationStartedAt: timestamp("consultation_started_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+  noShowAt: timestamp("no_show_at", { withTimezone: true }),
+  // Why the latest reschedule / cancellation / no-show happened (a stable code + optional note); the Timeline keeps the history.
+  statusReasonCode: text("status_reason_code"),
+  statusReasonNote: text("status_reason_note"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   tenantIdx: index("appointments_tenant_idx").on(t.tenantId),
   doctorIdx: index("appointments_doctor_idx").on(t.doctorUserId),
+  resourceIdx: index("appointments_resource_idx").on(t.resourceId),
 }));
 
 // ---------------------------------------------------------------------------
@@ -442,6 +477,10 @@ export const treatmentOpportunities = pgTable("treatment_opportunities", {
   ownerUserId: uuid("owner_user_id").references(() => users.id),
   decisionDate: timestamp("decision_date", { withTimezone: true }),
   plannedDate: timestamp("planned_date", { withTimezone: true }),
+  // Where and with whom a SCHEDULED procedure takes place (operational scheduling only — no clinical fields).
+  scheduledResourceId: uuid("scheduled_resource_id").references(() => scheduleResources.id, { onDelete: "set null" }),
+  scheduledBranchId: uuid("scheduled_branch_id").references(() => branches.id, { onDelete: "set null" }),
+  scheduleNote: text("schedule_note"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
