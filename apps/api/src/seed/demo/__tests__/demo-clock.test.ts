@@ -1,14 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { demoNow, todaySlot } from "../demo-clock.js";
+import { DEMO_TIMEZONE, demoNow, todaySlot } from "../demo-clock.js";
+import { dayKeyIn, minutesOfDayIn, zonedWallTime } from "../../../lib/hospital-time.js";
 
-const at = (h: number, m = 0) => new Date(2026, 8, 29, h, m);
-const mins = (d: Date) => d.getHours() * 60 + d.getMinutes();
+// Hospital wall time (IST), whatever zone the test process runs in (UTC, see vitest.config.ts).
+const at = (h: number, m = 0) => zonedWallTime("2026-09-29", h, m, DEMO_TIMEZONE);
+const mins = (d: Date) => minutesOfDayIn(d, DEMO_TIMEZONE);
 
 describe("demoNow", () => {
   it("clamps early-morning and late-evening seeding into clinic hours, on the same day", () => {
     expect(mins(demoNow(at(6, 5)))).toBe(11 * 60);
     expect(mins(demoNow(at(23, 40)))).toBe(17 * 60 + 30);
-    expect(demoNow(at(23, 40)).getDate()).toBe(29);
+    expect(dayKeyIn(demoNow(at(23, 40)), DEMO_TIMEZONE)).toBe("2026-09-29");
     expect(mins(demoNow(at(14, 22)))).toBe(14 * 60 + 15);
   });
 });
