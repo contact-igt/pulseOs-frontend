@@ -4,7 +4,7 @@ import { Badge, Card, EmptyState, Panel, SectionHeading } from "./primitives";
 import { SegmentedRadial } from "./SegmentedRadial";
 import { MetricStrip } from "./MetricStrip";
 import { APPOINTMENT_STATUS_LABEL as STATUS_LABEL, APPOINTMENT_STATUS_TONE as STATUS_TONE } from "./status";
-import { fmtDate, fmtTime } from "./format";
+import { fmtDate, fmtTime, hospitalDaysAgo } from "./format";
 
 export function DoctorKpiStrip({ dashboard }: { dashboard: DoctorDashboard }) {
   return (
@@ -72,7 +72,7 @@ export function DoctorQuickStats({ dashboard }: { dashboard: DoctorDashboard }) 
   );
 }
 
-const isToday = (iso: string) => new Date(iso).toDateString() === new Date().toDateString();
+const isToday = (iso: string) => hospitalDaysAgo(iso) === 0;
 
 type PatientLinkRenderer = (item: { patientId?: string; patientName: string }, children: ReactNode) => ReactNode;
 

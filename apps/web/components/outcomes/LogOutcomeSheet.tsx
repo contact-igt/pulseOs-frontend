@@ -7,6 +7,7 @@ import { Badge, Button, CustomFieldInputs, ErrorState, SideSheet, Skeleton, defa
 import type { CrmOutcomeVm, LogInteractionResult } from "@pulseos/types";
 import { useQuickCreate } from "@/components/shell/QuickCreateProvider";
 import { CheckRow, CONTROL, FormError, FormField, TextInput } from "@/components/settings/FormBits";
+import { useHospitalTimeZone } from "@/lib/useHospitalTimeZone";
 import { buildLogInput, defaultFollowUpLocal, outcomeHint, type LogState } from "./outcomeForm";
 
 const SERVER_ERRORS: Record<string, string> = {
@@ -38,6 +39,7 @@ export function LogOutcomeSheet({
 }) {
   const queryClient = useQueryClient();
   const quickCreate = useQuickCreate();
+  const timeZone = useHospitalTimeZone();
   const outcomes = useQuery({ queryKey: ["crm-outcomes", "active"], queryFn: () => api.crmOutcomes() });
   const fields = useQuery({ queryKey: ["crm-fields-for-journey", "followup_outcome", journeyId], queryFn: () => api.crmFieldsForJourney("followup_outcome", journeyId) });
 
@@ -61,11 +63,11 @@ export function LogOutcomeSheet({
   const choose = (o: CrmOutcomeVm) => {
     setSelectedKey(o.key);
     setError(null);
-    if ((o.requiresFollowUp || state.scheduleFollowUp) && !state.followUpLocal) set("followUpLocal", defaultFollowUpLocal(new Date()));
+    if ((o.requiresFollowUp || state.scheduleFollowUp) && !state.followUpLocal) set("followUpLocal", defaultFollowUpLocal(new Date(), timeZone));
   };
 
   async function save() {
-    const built = buildLogInput(selected, state, fieldList, new Date(), taskId);
+    const built = buildLogInput(selected, state, fieldList, new Date(), taskId, timeZone);
     if ("error" in built) return setError(built.error);
     setSaving(true);
     setError(null);
@@ -162,7 +164,7 @@ export function LogOutcomeSheet({
 
             {selected.asksReason && <TextInput label="Why? (optional)" value={state.reason} onChange={(e) => set("reason", e.target.value)} placeholder="e.g. Chose another hospital" data-testid="log-outcome-reason" />}
 
-            {!selected.requiresFollowUp && <CheckRow label="Schedule a follow-up" checked={state.scheduleFollowUp} onChange={(v) => { set("scheduleFollowUp", v); if (v && !state.followUpLocal) set("followUpLocal", defaultFollowUpLocal(new Date())); }} testId="log-outcome-schedule" />}
+            {!selected.requiresFollowUp && <CheckRow label="Schedule a follow-up" checked={state.scheduleFollowUp} onChange={(v) => { set("scheduleFollowUp", v); if (v && !state.followUpLocal) set("followUpLocal", defaultFollowUpLocal(new Date(), timeZone)); }} testId="log-outcome-schedule" />}
             {wantsFollowUp && <TextInput label="Follow up on" type="datetime-local" value={state.followUpLocal} onChange={(e) => set("followUpLocal", e.target.value)} data-testid="log-outcome-follow-up" hint="A task is created and assigned to the journey's owner." />}
 
             {fieldList.length > 0 && <CustomFieldInputs fields={fieldList} values={state.fieldValues} onChange={(key, value) => setState((s) => ({ ...s, fieldValues: { ...s.fieldValues, [key]: value } }))} idPrefix="outcome-field" testId="log-outcome-fields" />}

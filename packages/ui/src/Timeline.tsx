@@ -3,30 +3,23 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { CalendarCheck, IndianRupee, ListChecks, MessageCircle, Phone, Stethoscope, UserCog, Circle, type LucideIcon } from "lucide-react";
 import { Badge, Card, EmptyState, Tabs, type TabItem } from "./primitives";
-import { fmtDate, fmtTime } from "./format";
+import { fmtDate, fmtTime, hospitalDaysAgo, isSameHospitalDay } from "./format";
 import { INTERACTION_CHANNEL_LABEL, type TimelineEventVm } from "@pulseos/types";
 
 export type { TimelineEventVm };
 
 type Category = TimelineEventVm["category"];
 
-/** "Today" / "Yesterday" / "16 Sept" — the day-group header text. */
+/** "Today" / "Yesterday" / "16 Sept" — the day-group header text, in hospital days. */
 function dayHeaderLabel(iso: string): string {
-  const d = new Date(iso);
-  const now = new Date();
-  const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-  const diffDays = Math.round((startOfDay(now) - startOfDay(d)) / 86_400_000);
+  const diffDays = hospitalDaysAgo(iso);
   if (diffDays === 0) return "Today";
   if (diffDays === 1) return "Yesterday";
   return fmtDate(iso);
 }
 
-/** Same calendar day, in local time — not a raw ISO-string prefix compare. */
-function isSameDay(a: string, b: string): boolean {
-  const da = new Date(a);
-  const db = new Date(b);
-  return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate();
-}
+/** Same hospital calendar day — not a raw ISO-string prefix compare and not the browser's day. */
+const isSameDay = isSameHospitalDay;
 
 const CATEGORY_LABEL: Record<Category, string> = {
   communication: "Communication",

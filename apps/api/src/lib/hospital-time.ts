@@ -76,3 +76,29 @@ export function hospitalTodayBounds(timezone: string): { start: SQL; end: SQL } 
 export function dayKeyIn(instant: Date, timezone: string): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(instant);
 }
+
+// --- Hospital wall clock in JS (seed data, due-time offsets) ---
+
+function zoneOffsetMs(utcMs: number, timezone: string): number {
+  const f = new Intl.DateTimeFormat("en-US", { timeZone: timezone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const p = Object.fromEntries(f.formatToParts(new Date(utcMs)).map((x) => [x.type, x.value]));
+  const asUtc = Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day), Number(p.hour), Number(p.minute), Number(p.second));
+  return asUtc - Math.floor(utcMs / 1000) * 1000;
+}
+
+/** The instant a hospital wall time ("2026-10-02" 11:00 in `timezone`) happens at (DST-safe). */
+export function zonedWallTime(ymd: string, hour: number, minute: number, timezone: string): Date {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const guess = Date.UTC(y!, m! - 1, d!, hour, minute);
+  let result = guess - zoneOffsetMs(guess, timezone);
+  result = guess - zoneOffsetMs(result, timezone);
+  return new Date(result);
+}
+
+/** Minutes since local midnight of an instant in `timezone`. */
+export function minutesOfDayIn(instant: Date, timezone: string): number {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", { timeZone: timezone, hourCycle: "h23", hour: "2-digit", minute: "2-digit" }).formatToParts(instant).map((x) => [x.type, x.value]),
+  );
+  return Number(p.hour) * 60 + Number(p.minute);
+}

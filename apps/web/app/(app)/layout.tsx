@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api } from "@pulseos/api-client";
-import { PulseMark } from "@pulseos/ui";
+import { PulseMark, getDisplayTimeZone, setDisplayTimeZone } from "@pulseos/ui";
 import { Sidebar } from "../../components/shell/Sidebar";
 import { TopBar } from "../../components/shell/TopBar";
 import { QuickCreateProvider } from "../../components/shell/QuickCreateProvider";
@@ -27,7 +27,8 @@ const PAGE_META: Record<string, { title: string; subtitle: string }> = {
 };
 
 function greeting() {
-  const hour = new Date().getHours();
+  // The hospital's hour, not the browser's.
+  const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: getDisplayTimeZone(), hour: "2-digit", hourCycle: "h23" }).format(new Date()));
   if (hour < 12) return "Good morning";
   if (hour < 17) return "Good afternoon";
   return "Good evening";
@@ -79,6 +80,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   if (!data) return null;
+
+  // Every date/time in the app is shown in the hospital's zone (tenants.timezone). Set before any page renders;
+  // idempotent, so doing it during render is safe.
+  setDisplayTimeZone(data.user.timezone);
 
   // Redirecting away (effect above) — render nothing rather than the
   // requested page, so its data hooks never fire the doomed requests.

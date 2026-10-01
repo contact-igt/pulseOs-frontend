@@ -30,7 +30,8 @@ import {
 import { createLead } from "../../domain/lead/lead.service.js";
 import { ensureLeadSources } from "../../domain/lead/lead-source.service.js";
 import { encryptSecret } from "../../domain/security/encryption.js";
-import { todaySlot } from "./demo-clock.js";
+import { DEMO_TIMEZONE, todaySlot } from "./demo-clock.js";
+import { addDays, dayKeyIn, zonedWallTime } from "../../lib/hospital-time.js";
 import { normalizePhone } from "../../domain/patient/phone.js";
 import { demoEmail } from "../../domain/auth/demo-environments.js";
 import type { DemoEnvironmentKey } from "../../domain/auth/demo-environments.js";
@@ -42,11 +43,9 @@ import type { DemoEnvironmentKey } from "../../domain/auth/demo-environments.js"
 // never drift apart in how a Journey/Appointment/Treatment is written.
 // ---------------------------------------------------------------------------
 
-export function daysFromNow(days: number, hour = 10, minute = 0) {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  d.setHours(hour, minute, 0, 0);
-  return d;
+/** `hour:minute` hospital time, `days` hospital days from today (never the server's clock zone). */
+export function daysFromNow(days: number, hour = 10, minute = 0, now: Date = new Date()) {
+  return zonedWallTime(addDays(dayKeyIn(now, DEMO_TIMEZONE), days), hour, minute, DEMO_TIMEZONE);
 }
 
 export function minutesAgo(mins: number) {

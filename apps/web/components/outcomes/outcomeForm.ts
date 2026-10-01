@@ -1,6 +1,10 @@
+import { instantToWallTime, wallTimeToInstant } from "../../lib/hospitalTime";
 import { normalizeFieldValues } from "@pulseos/ui";
 import type { CreateCrmOutcomeInput, CrmOutcomeVm, CustomFieldDefinitionVm, LogInteractionInput, OutcomeStage, TaskType, UpdateCrmOutcomeInput } from "@pulseos/types";
 import { slugifyKey } from "@/components/settings/crmFieldForm";
+
+/** tenants.timezone default — callers pass the session's zone. */
+const DEFAULT_TZ = "Asia/Kolkata";
 
 // Pure helpers behind the outcome editor (Settings → Workflow Outcomes) and the "Log outcome" form.
 
@@ -71,14 +75,17 @@ export function buildLogInput(
   fields: CustomFieldDefinitionVm[],
   now: Date,
   taskId?: string,
+  timeZone: string = DEFAULT_TZ,
 ): { input: LogInteractionInput } | { error: string } {
   if (!outcome) return { error: "Choose what happened." };
   const wantsFollowUp = outcome.requiresFollowUp || state.scheduleFollowUp;
   let followUpAt: string | undefined;
   if (wantsFollowUp) {
     if (!state.followUpLocal) return { error: "Choose when to follow up." };
-    const at = new Date(state.followUpLocal);
-    if (Number.isNaN(at.getTime())) return { error: "Choose when to follow up." };
+    // The picker shows hospital wall time ("2026-10-02T17:00" = 17:00 in the hospital), whatever the browser's zone.
+    const [date, time] = state.followUpLocal.split("T");
+    const at = date && time ? wallTimeToInstant(date, time.slice(0, 5), timeZone) : null;
+    if (!at) return { error: "Choose when to follow up." };
     if (at.getTime() <= now.getTime()) return { error: "Pick a follow-up time in the future." };
     followUpAt = at.toISOString();
   }
@@ -100,9 +107,9 @@ export function buildLogInput(
   };
 }
 
-/** A sensible suggestion for the follow-up picker: tomorrow at 10:00 (datetime-local value). */
-export function defaultFollowUpLocal(now: Date): string {
-  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 10, 0, 0);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+/** A sensible suggestion for the follow-up picker: tomorrow (in the hospital) at 10:00, as a datetime-local value. */
+export function defaultFollowUpLocal(now: Date, timeZone: string = DEFAULT_TZ): string {
+  const today = instantToWallTime(now, timeZone).date;
+  const tomorrow = new Date(Date.parse(`${today}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+  return `${tomorrow}T10:00`;
 }

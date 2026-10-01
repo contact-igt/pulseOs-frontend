@@ -117,7 +117,8 @@ import type {
   UpdateSpecialtyInput,
 } from "@pulseos/types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+// Defaults to the API's own default port (apps/api PORT=4310); override with NEXT_PUBLIC_API_URL (apps/web/.env.local).
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4310";
 
 class ApiError extends Error {
   status: number;

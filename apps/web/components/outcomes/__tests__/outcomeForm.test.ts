@@ -42,14 +42,15 @@ describe("buildLogInput", () => {
   });
   it("an outcome that requires a follow-up needs a time in the future", () => {
     expect(buildLogInput(callback, base, [], NOW)).toEqual({ error: "Choose when to follow up." });
-    expect(buildLogInput(callback, { ...base, followUpLocal: "2026-10-01T09:00" }, [], new Date("2026-10-01T10:00:00"))).toEqual({ error: "Pick a follow-up time in the future." });
-    const ok = buildLogInput(callback, { ...base, followUpLocal: "2026-10-02T17:00" }, [], new Date("2026-10-01T10:00:00"));
-    expect(ok).toEqual({ input: { outcomeKey: "needs_callback", note: "Spoke to the daughter", followUpAt: new Date("2026-10-02T17:00").toISOString() } });
+    // 10:00 IST on 1 Oct = 04:30Z
+    expect(buildLogInput(callback, { ...base, followUpLocal: "2026-10-01T09:00" }, [], new Date("2026-10-01T04:30:00Z"))).toEqual({ error: "Pick a follow-up time in the future." });
+    const ok = buildLogInput(callback, { ...base, followUpLocal: "2026-10-02T17:00" }, [], new Date("2026-10-01T04:30:00Z"));
+    expect(ok).toEqual({ input: { outcomeKey: "needs_callback", note: "Spoke to the daughter", followUpAt: "2026-10-02T11:30:00.000Z" } });
   });
   it("an optional follow-up is only sent when scheduled; the reason only when the outcome asks for it", () => {
     expect(buildLogInput(interested, { ...base, followUpLocal: "2026-10-02T17:00" }, [], NOW)).toEqual({ input: { outcomeKey: "interested", note: "Spoke to the daughter" } });
-    const sched = buildLogInput(interested, { ...base, scheduleFollowUp: true, followUpLocal: "2026-10-02T17:00" }, [], new Date("2026-10-01T10:00:00"));
-    expect("input" in sched && sched.input.followUpAt).toBe(new Date("2026-10-02T17:00").toISOString());
+    const sched = buildLogInput(interested, { ...base, scheduleFollowUp: true, followUpLocal: "2026-10-02T17:00" }, [], new Date("2026-10-01T04:30:00Z"));
+    expect("input" in sched && sched.input.followUpAt).toBe("2026-10-02T11:30:00.000Z");
     expect(buildLogInput(notInterested, { ...base, reason: " Chose another hospital " }, [], NOW)).toEqual({ input: { outcomeKey: "not_interested", note: "Spoke to the daughter", reason: "Chose another hospital" } });
     expect(buildLogInput(interested, { ...base, reason: "ignored" }, [], NOW)).toEqual({ input: { outcomeKey: "interested", note: "Spoke to the daughter" } });
   });
@@ -64,8 +65,24 @@ describe("buildLogInput", () => {
 });
 
 describe("defaultFollowUpLocal", () => {
-  it("suggests tomorrow at 10:00 in the local clock", () => {
-    expect(defaultFollowUpLocal(new Date("2026-10-01T15:45:00"))).toBe("2026-10-02T10:00");
-    expect(defaultFollowUpLocal(new Date("2026-12-31T08:00:00"))).toBe("2027-01-01T10:00");
+  it("suggests tomorrow at 10:00 in the hospital's clock", () => {
+    expect(defaultFollowUpLocal(new Date("2026-10-01T10:15:00Z"))).toBe("2026-10-02T10:00");
+    expect(defaultFollowUpLocal(new Date("2026-12-31T08:00:00Z"))).toBe("2027-01-01T10:00");
+  });
+  it("after hospital midnight 'tomorrow' is the next hospital day, even while UTC is still on the previous one", () => {
+    // 19:00Z on 1 Oct = 00:30 IST on 2 Oct
+    expect(defaultFollowUpLocal(new Date("2026-10-01T19:00:00Z"))).toBe("2026-10-03T10:00");
+    expect(defaultFollowUpLocal(new Date("2026-10-01T19:00:00Z"), "UTC")).toBe("2026-10-02T10:00");
+  });
+});
+
+describe("buildLogInput — hospital wall time", () => {
+  it("reads the picked time as hospital time whatever the browser's zone, and honours another hospital zone", () => {
+    const callbackOutcome = { key: "needs_callback", requiresFollowUp: true, asksReason: false } as unknown as Parameters<typeof buildLogInput>[0];
+    const state = { note: "", reason: "", scheduleFollowUp: false, followUpLocal: "2026-10-02T11:00", fieldValues: {} };
+    const ist = buildLogInput(callbackOutcome, state, [], new Date("2026-10-01T00:00:00Z"));
+    expect("input" in ist && ist.input.followUpAt).toBe("2026-10-02T05:30:00.000Z");
+    const dubai = buildLogInput(callbackOutcome, state, [], new Date("2026-10-01T00:00:00Z"), undefined, "Asia/Dubai");
+    expect("input" in dubai && dubai.input.followUpAt).toBe("2026-10-02T07:00:00.000Z");
   });
 });

@@ -1,8 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { and, count, eq, gte, lt, sum } from "drizzle-orm";
+import { and, count, eq, sql, sum } from "drizzle-orm";
 import { buildApp } from "../app.js";
 import { db, queryClient } from "../db/client.js";
 import { appointments, journeys, revenueEvents, treatmentOpportunities } from "../db/schema.js";
+import { hospitalTodayBounds, tenantTimezone } from "../lib/hospital-time.js";
 import type { FastifyInstance } from "fastify";
 
 // The dashboard's numbers must reconcile with the raw rows behind them — for
@@ -77,14 +78,13 @@ describe.skipIf(!DEMO_PASSWORD)("dashboard numbers reconcile with source rows (i
     });
 
     it("today's Patient Flow buckets add up to today's appointments", async () => {
-      const start = new Date();
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(start);
-      end.setDate(end.getDate() + 1);
+      // "Today" is the hospital's day (tenants.timezone), never the test process's (UTC) — between 18:30 and 24:00
+      // UTC the two are different calendar days.
+      const { start, end } = hospitalTodayBounds(await tenantTimezone(db, sessions[key].tenantId));
       const [{ c }] = await db
         .select({ c: count() })
         .from(appointments)
-        .where(and(eq(appointments.tenantId, sessions[key].tenantId), gte(appointments.scheduledAt, start), lt(appointments.scheduledAt, end)));
+        .where(and(eq(appointments.tenantId, sessions[key].tenantId), sql`${appointments.scheduledAt} >= ${start}`, sql`${appointments.scheduledAt} < ${end}`));
       const flow = await get<{ bucket: string; count: number }[]>(key, "/dashboard/patient-flow");
       const today = await get<{ appointmentsToday: number }>(key, "/dashboard/today");
       expect(today.appointmentsToday).toBe(c);

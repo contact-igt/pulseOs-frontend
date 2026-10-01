@@ -29,23 +29,65 @@ export function formatRoas(roas: number | null): string {
 // timeline that was previously calling toLocaleDateString/toLocaleTimeString
 // with its own slightly-different options object. India-first (en-IN),
 // short month names, never a numeric month.
+//
+// Every date and time is shown in the HOSPITAL's timezone (tenants.timezone),
+// never the browser's: a coordinator on a laptop set to UTC — or travelling —
+// still reads "11:00 am" for an 11:00 IST follow-up. The (app) layout sets the
+// zone once from the session; until then the India default applies.
+
+const DEFAULT_DISPLAY_TIME_ZONE = "Asia/Kolkata";
+let displayTimeZone = DEFAULT_DISPLAY_TIME_ZONE;
+
+function isValidTimeZone(tz: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-IN", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Sets the zone every formatter below uses. An unknown zone is ignored (the previous one stays). */
+export function setDisplayTimeZone(tz: string | null | undefined): void {
+  if (tz && isValidTimeZone(tz)) displayTimeZone = tz;
+}
+
+export function getDisplayTimeZone(): string {
+  return displayTimeZone;
+}
+
+/** YYYY-MM-DD of an instant in the hospital's zone. */
+export function hospitalDayKey(iso: string | Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: displayTimeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
+}
+
+/** Same hospital calendar day — not a raw ISO-prefix compare and not the browser's day. */
+export function isSameHospitalDay(a: string | Date, b: string | Date): boolean {
+  return hospitalDayKey(a) === hospitalDayKey(b);
+}
+
+/** Whole hospital days from `iso` to now: 0 = today, 1 = yesterday, negative = future. */
+export function hospitalDaysAgo(iso: string | Date, now: Date = new Date()): number {
+  const day = (x: string | Date) => new Date(`${hospitalDayKey(x)}T00:00:00Z`).getTime();
+  return Math.round((day(now) - day(iso)) / 86_400_000);
+}
 
 /** "16 Sept" — table cells, due dates, compact contexts. No year (implicitly current/near-term). */
 export function fmtDate(iso: string | null | undefined): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: displayTimeZone });
 }
 
 /** "16 Sept 2026" — contexts spanning more than the current year (campaign date ranges, etc). */
 export function fmtDateWithYear(iso: string | null | undefined): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: displayTimeZone });
 }
 
 /** "2:30 PM" — time-only contexts (queues, timelines). */
 export function fmtTime(iso: string | null | undefined): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: displayTimeZone });
 }
 
 /** "4m 21s" / "38s" — call duration, null for a call that never connected (missed/failed/no_answer). */
@@ -59,21 +101,19 @@ export function fmtCallDuration(seconds: number | null): string {
 /** "16 Sept, 2:30 PM" — the common combined case. */
 export function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: displayTimeZone });
 }
 
 /**
  * "Today, 2:30 PM" / "Yesterday, 4:10 PM" / "16 Sept, 2:30 PM" — the
  * context-aware form for activity feeds where "today"/"yesterday" reads
  * faster than a repeated date. Falls back to fmtDateTime beyond that.
+ * Today / yesterday are hospital days.
  */
 export function fmtSmartDateTime(iso: string | null | undefined): string {
   if (!iso) return "—";
-  const d = new Date(iso);
-  const now = new Date();
-  const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-  const diffDays = Math.round((startOfDay(now) - startOfDay(d)) / 86_400_000);
-  const time = d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+  const diffDays = hospitalDaysAgo(iso);
+  const time = fmtTime(iso);
   if (diffDays === 0) return `Today, ${time}`;
   if (diffDays === 1) return `Yesterday, ${time}`;
   return `${fmtDate(iso)}, ${time}`;

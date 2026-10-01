@@ -7,6 +7,8 @@ import { useRouter } from "next/navigation";
 import { Badge, Button, Card, ConfirmDialog, EmptyState, ErrorState, FilterBar, FilterSelect, OverflowMenu, SectionHeading, Skeleton, useDialogFocus, relativeTime, fmtDate, fmtDateTime, fmtSmartDateTime, JOURNEY_STAGE_LABEL } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import { withFrom } from "@/components/shell/BackLink";
+import { instantToWallTime, wallTimeToInstant } from "@/lib/hospitalTime";
+import { useHospitalTimeZone } from "@/lib/useHospitalTimeZone";
 import type { ConversationAutomationMode, ConversationAutomationPreference, ConversationChannel, ConversationDetail, OwnershipState } from "@pulseos/types";
 import { ArrowLeft, CalendarPlus, ListPlus, Mail, MessageCircle, MessageSquareText, PanelRight, Phone, Search, User, Users as UsersIcon, X } from "lucide-react";
 
@@ -479,12 +481,15 @@ export default function InboxPage() {
   );
 }
 
-// datetime-local inputs want "YYYY-MM-DDTHH:mm" in the browser's local time —
-// neither an ISO string (UTC "Z") nor Date's own toString() match that shape.
-function isoToLocalInputValue(iso: string): string {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+// datetime-local inputs hold "YYYY-MM-DDTHH:mm" — here always the HOSPITAL's wall time, never the browser's.
+function isoToLocalInputValue(iso: string, timeZone: string): string {
+  const { date, time } = instantToWallTime(new Date(iso), timeZone);
+  return `${date}T${time}`;
+}
+
+function localInputValueToIso(value: string, timeZone: string): string | undefined {
+  const [date, time] = value.split("T");
+  return (date && time ? wallTimeToInstant(date, time.slice(0, 5), timeZone) : null)?.toISOString();
 }
 
 function AiSchedulePanel({
@@ -498,10 +503,11 @@ function AiSchedulePanel({
   onSaved: () => void;
   onCancel: () => void;
 }) {
+  const timeZone = useHospitalTimeZone();
   const [mode, setMode] = useState<ConversationAutomationMode>(current?.mode ?? "manual");
-  const [start, setStart] = useState(current?.scheduledStart ? isoToLocalInputValue(current.scheduledStart) : "");
-  const [end, setEnd] = useState(current?.scheduledEnd ? isoToLocalInputValue(current.scheduledEnd) : "");
-  const [timezone, setTimezone] = useState(current?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "Asia/Kolkata");
+  const [start, setStart] = useState(current?.scheduledStart ? isoToLocalInputValue(current.scheduledStart, timeZone) : "");
+  const [end, setEnd] = useState(current?.scheduledEnd ? isoToLocalInputValue(current.scheduledEnd, timeZone) : "");
+  const [timezone, setTimezone] = useState(current?.timezone ?? timeZone);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -515,8 +521,8 @@ function AiSchedulePanel({
     try {
       await api.setConversationAutomation(conversationId, {
         mode,
-        scheduledStart: mode === "ai_scheduled" ? new Date(start).toISOString() : undefined,
-        scheduledEnd: mode === "ai_scheduled" ? new Date(end).toISOString() : undefined,
+        scheduledStart: mode === "ai_scheduled" ? localInputValueToIso(start, timeZone) : undefined,
+        scheduledEnd: mode === "ai_scheduled" ? localInputValueToIso(end, timeZone) : undefined,
         timezone: mode === "ai_scheduled" ? timezone : undefined,
       });
       onSaved();

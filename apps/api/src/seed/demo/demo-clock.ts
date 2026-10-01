@@ -8,18 +8,20 @@
 // never a "waiting" patient scheduled hours in the future or an "upcoming"
 // one already in the past.
 
+import { dayKeyIn, minutesOfDayIn, zonedWallTime } from "../../lib/hospital-time.js";
+
+/** Every demo tenant runs on India time; the seed reasons in hospital days, never the server's clock zone. */
+export const DEMO_TIMEZONE = "Asia/Kolkata";
+
 export const DEMO_NOW_EARLIEST_MINUTES = 11 * 60;
 export const DEMO_NOW_LATEST_MINUTES = 17 * 60 + 30;
 const CLINIC_OPENS_MINUTES = 8 * 60;
 
-/** `now` with its time of day clamped into clinic hours (same calendar day). */
+/** `now` with its hospital time of day clamped into clinic hours (same hospital calendar day). */
 export function demoNow(now: Date = new Date()): Date {
-  const minutes = now.getHours() * 60 + now.getMinutes();
-  const clamped = Math.min(Math.max(minutes, DEMO_NOW_EARLIEST_MINUTES), DEMO_NOW_LATEST_MINUTES);
-  const d = new Date(now);
-  d.setHours(0, 0, 0, 0);
-  d.setMinutes(Math.floor(clamped / 15) * 15);
-  return d;
+  const minutes = minutesOfDayIn(now, DEMO_TIMEZONE);
+  const clamped = Math.floor(Math.min(Math.max(minutes, DEMO_NOW_EARLIEST_MINUTES), DEMO_NOW_LATEST_MINUTES) / 15) * 15;
+  return zonedWallTime(dayKeyIn(now, DEMO_TIMEZONE), Math.floor(clamped / 60), clamped % 60, DEMO_TIMEZONE);
 }
 
 type TodayStatus = "scheduled" | "confirmed" | "checked_in" | "waiting" | "with_doctor" | "completed" | "no_show" | "cancelled";
@@ -44,10 +46,8 @@ const MINUTES_BY_STATUS: Record<TodayStatus, { base: number; step: number }> = {
 export function todaySlot(status: TodayStatus, ordinal: number, now: Date = new Date()): Date {
   const { base, step } = MINUTES_BY_STATUS[status];
   const slot = demoNow(now);
-  const candidate = slot.getHours() * 60 + slot.getMinutes() + base + step * ordinal;
+  const candidate = minutesOfDayIn(slot, DEMO_TIMEZONE) + base + step * ordinal;
   // Past slots may not precede opening; upcoming slots may not run past 19:00.
-  const bounded = Math.min(Math.max(candidate, CLINIC_OPENS_MINUTES), 19 * 60);
-  slot.setHours(0, 0, 0, 0);
-  slot.setMinutes(Math.round(bounded / 15) * 15);
-  return slot;
+  const bounded = Math.round(Math.min(Math.max(candidate, CLINIC_OPENS_MINUTES), 19 * 60) / 15) * 15;
+  return zonedWallTime(dayKeyIn(slot, DEMO_TIMEZONE), Math.floor(bounded / 60), bounded % 60, DEMO_TIMEZONE);
 }

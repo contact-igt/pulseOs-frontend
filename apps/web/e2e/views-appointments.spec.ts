@@ -224,8 +224,10 @@ test.describe("Appointments views", () => {
       await expect(page.getByTestId(`calendar-event-${appt.id}`)).toHaveCount(0);
 
       await page.goto(`/appointments?view=week&date=${day}`);
-      const dayLabel = new Intl.DateTimeFormat("en-IN", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(new Date(`${day}T12:00:00Z`));
-      await expect(page.getByRole("group", { name: new RegExp(`^${dayLabel}`) }).getByTestId(`calendar-event-${appt.id}`)).toBeVisible();
+      // ICU versions differ on punctuation ("Thursday, 15 October 2026" vs "Thursday 15 October, 2026") — match the words.
+      const parts = (opts: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat("en-IN", { timeZone: "UTC", ...opts }).format(new Date(`${day}T12:00:00Z`));
+      const dayLabel = new RegExp(`^${parts({ weekday: "long" })},? ${parts({ day: "numeric" })} ${parts({ month: "long" })},? ${parts({ year: "numeric" })}`);
+      await expect(page.getByRole("group", { name: dayLabel }).getByTestId(`calendar-event-${appt.id}`)).toBeVisible();
 
       // Other runs may fill that month cell past its 3 visible events; the (URL) search filter applies to every view.
       await page.goto(`/appointments?view=month&date=${day}&q=${encodeURIComponent(`P1 View Midnight ${RUN}`)}`);

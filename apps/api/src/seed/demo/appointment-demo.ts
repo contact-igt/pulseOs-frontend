@@ -5,14 +5,10 @@ import { applyAppointmentAction, createAppointment, rescheduleAppointment } from
 import { createResource } from "../../domain/resource/resource.service.js";
 import { scheduleSurgery } from "../../domain/treatment/treatment.service.js";
 import { todaySlot } from "./demo-clock.js";
+import { daysFromNow } from "./shared.js";
 
 const TZ = "Asia/Kolkata";
-const days = (d: number, h: number) => {
-  const x = new Date();
-  x.setDate(x.getDate() + d);
-  x.setHours(h, 0, 0, 0);
-  return x;
-};
+const days = (d: number, h: number) => daysFromNow(d, h, 0);
 
 interface Actors {
   admin: { id: string };
