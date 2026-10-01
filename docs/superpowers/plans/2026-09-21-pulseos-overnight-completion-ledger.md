@@ -468,3 +468,49 @@ appointment context. My Work: Appointment Risk bucket + type and priority filter
 run 217 passed / 1 skipped / 1 failed → the failure was a stale text expectation ("Task created: callback") — fixed; the
 10 affected specs re-run with no reseed: 57/57. New `followups-m5.spec.ts` 11/11 (flows A–D, reschedule/reassign,
 Settings, Doctor, 3 viewports incl. 390).
+
+---
+
+## M6 — Appointment lifecycle, consultation completion, surgery scheduling — 2026-10-01
+
+Closes the operational loop: Lead → Call/Follow-up → Appointment → Check-in → Waiting → With doctor → Completed →
+(no follow-up | follow-up | surgery). No EMR fields, no messaging (M7 subscribes to the domain events added here).
+
+**State machine.** One graph, shared (`APPOINTMENT_TRANSITIONS` in `@pulseos/types`): the API enforces it and the UI
+offers exactly its operations. Stable enum values are unchanged; labels are plain words ("scheduled" reads *Booked*).
+
+| State | Valid next | Who (MANAGE_APPOINTMENTS) | Side effects |
+|---|---|---|---|
+| requested | confirm · no-show · cancel · reschedule | Front Desk, Coordinator, Admin | confirm: none · no-show: noShowAt + reason + 1 risk task · cancel: cancelledAt + reason (+ risk if hospital-caused) |
+| scheduled (Booked) | **check in** · confirm · no-show · cancel · reschedule | same | check-in: checkedInAt, "Checked in · 10:16 am" |
+| confirmed | check in · no-show · cancel · reschedule | same | as above |
+| checked_in | move to waiting · cancel | same | waitingStartedAt |
+| waiting | send to doctor · cancel | same | consultationStartedAt, "Consultation started" |
+| with_doctor | complete | same | completedAt, "Consultation completed", + chosen next step in the SAME transaction |
+| completed | — | — | final |
+| no_show / cancelled | reschedule | same | status → scheduled, reason stored; no-show recovery task resolved |
+
+Every transition is a compare-and-set on the status that was read: two people pressing the same button give one state,
+one Timeline line, one task; the loser gets the current state back (`alreadyApplied`). Anything the graph does not allow
+is a 409.
+
+**Doctor/resource.** `schedule_resources` (name, department, optional linked login, active). A DB trigger gives every
+DOCTOR user a linked resource and resolves legacy writers that only know `doctor_user_id`; a resource of another hospital
+is refused by the DB itself. Appointments and surgeries reference the resource; the Doctor's own views still follow the
+link. Settings → Doctors (Admin) adds doctors who never sign in.
+
+**Appointment Risk.** `tasks.appointment_id` + `risk_reason`, with a partial unique index (one OPEN task per appointment
+and signal): no-show → `no_show`; hospital-caused reschedule / cancellation (Doctor unavailable, Hospital reschedule,
+Hospital cancelled) → `hospital_reschedule` / `hospital_cancel`. Raised through the follow-up engine under the
+"Appointment Risk" type (by stable key, so it works even if the hospital archived the label). Rebooking a no-show
+resolves its task.
+
+**Surgery.** `scheduleSurgery` reuses the Journey's open treatment for the procedure (else creates one) and walks it to
+SCHEDULED hop by hop through the treatment transition graph; planned date, doctor, branch and a note are stored on the
+treatment record, so Treatments (table / pipeline / calendar), Journey and Patient 360 read one record. An advisory lock
+makes concurrent attempts create one record; a second schedule of the same procedure is a 409. Reschedule keeps the
+record; cancel is the normal CANCELLED transition.
+
+**Decisions to confirm.** (1) Scheduling a surgery needs MANAGE_TREATMENT (Admin, Coordinator) — Front Desk completes
+visits but is not offered "Schedule surgery". (2) One-click "No-show" in lists uses the default reason ("Patient did not
+arrive"); the drawer asks for a reason. (3) Reasons are a stable V1 set; per-hospital customisation is a later Settings item.
