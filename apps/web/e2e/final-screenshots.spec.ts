@@ -88,7 +88,8 @@ test.describe("Final review screenshots", () => {
     await expect(page.getByTestId("command-centre")).toBeVisible();
     // Both analytics cards must be visible in the same viewport without vertical stacking.
     await expect(page.getByText("Patient Journey Performance")).toBeVisible();
-    await expect(page.getByText("Journey Health")).toBeVisible();
+    // (2026-09-29 recomposition replaced the Journey Health radial with the Service Lines panel.)
+    await expect(page.getByText("Service Lines")).toBeVisible();
     const overflowX1280 = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflowX1280).toBeLessThanOrEqual(0);
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "14-admin-command-centre-1280.png"), fullPage: true });

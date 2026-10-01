@@ -50,12 +50,12 @@ test.describe("Master visual reconstruction loop — required screenshot set", (
     await expect(page.getByTestId("command-centre")).toBeVisible();
     await shot(page, "06-admin-mobile.png");
 
-    // 24 / 25 — Journey Health radial + Journey Performance chart crops (admin, desktop)
+    // 24 / 25 — Service Lines panel (replaced the Journey Health radial in the 2026-09-29 recomposition) + Journey Performance chart crops (admin, desktop)
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/command-centre");
     await expect(page.getByTestId("command-centre")).toBeVisible();
     await page.getByTestId("journey-funnel").screenshot({ path: path.join(ARTIFACTS_DIR, "25-journey-performance.png") });
-    await page.getByTestId("journey-health-radial").screenshot({ path: path.join(ARTIFACTS_DIR, "24-journey-health.png") });
+    await page.getByText("Service Lines").locator("xpath=ancestor::section[1] | ancestor::div[contains(@class,'rounded')][1]").first().screenshot({ path: path.join(ARTIFACTS_DIR, "24-service-lines.png") });
 
     // 07 — Doctor Home
     await login(page, "gyn.doctor@pulseos.local");

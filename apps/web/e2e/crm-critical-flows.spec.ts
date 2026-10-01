@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { purgePatients } from "./support/fixtures";
 
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD ?? "";
 
@@ -15,6 +16,8 @@ function uniquePhone(): string {
 }
 
 test.describe("CRM critical business flows", () => {
+  // Fictional "E2E Flow …" patients created by this spec are removed afterwards (repeatable without a reseed).
+  test.afterAll(() => purgePatients("E2E Flow "));
   test.skip(!DEMO_PASSWORD, "DEMO_PASSWORD must be set to run this suite");
 
   test("FLOW 1: Admin creates a new lead end to end — appears in Leads, opens its Journey page, and shows on the Timeline", async ({ page }) => {

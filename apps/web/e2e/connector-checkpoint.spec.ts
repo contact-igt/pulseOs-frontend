@@ -1,5 +1,6 @@
 import { createHmac } from "node:crypto";
 import { test, expect } from "@playwright/test";
+import { purgePatients } from "./support/fixtures";
 import path from "path";
 
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD ?? "";
@@ -20,6 +21,8 @@ async function login(page: import("@playwright/test").Page, email: string) {
 }
 
 test.describe("Communication connectors checkpoint (Group Y)", () => {
+  // Fictional "E2E Fixture Patient…" patients created by this spec are removed afterwards (repeatable without a reseed).
+  test.afterAll(() => purgePatients("E2E Fixture Patient"));
   test.skip(!DEMO_PASSWORD, "DEMO_PASSWORD must be set to run this suite");
 
   test("FLOW 1/2/3 end-to-end against fixture providers + all 8 required screenshots", async ({ page, request }) => {

@@ -313,3 +313,35 @@ launched in parallel with strict file ownership; agents do not write to git; con
 If context compacts: check `git log` (latest controller commits above), then collect P1/P2/P3 reports,
 integration-gate them, then reviewers R1–R7, full gate (lint/typecheck/test/build, full Playwright twice
 without reseed, final clean reseed), Opus review, final report.
+
+### 2026-09-30 / 10-01 — page views, reviewers, final gate (supersedes the resume point above)
+
+**Page views (f04f2f5 + 370dbb2 + f1e956c + f41c74e).** P1/P2/P3 delivered Appointments (List/Day/Week/
+Month/Doctors), Doctor Home (Overview/Schedule), Front Desk (Queue/Today flow), Leads (Table / READ-ONLY
+board — no stage-mutation endpoint exists), My Work (List/Board/Calendar; moves map only to real
+reschedule/complete), Patient 360 (Timeline/Upcoming), Treatments (Table / Pipeline via the server's
+transition endpoint / Procedure Calendar) and Campaigns (Table/Calendar/Timeline; null end date = Ongoing).
+Controller integration: hospital timezone on the session (`SessionUser.timezone`) replaces hard-coded
+Asia/Kolkata; shared `apps/api/src/lib/hospital-time.ts`; `useViewState` owns Agenda (`cal=agenda`).
+
+**Reviewers R1–R7 (read-only) and Opus final review.** Verified Critical/Important findings fixed:
+malformed session cookie 500s every request; Command Centre/Leads/My Work "today" used the API server's
+clock zone; sliced analytics dropped spend of campaigns with no enquiries in range; previous-period
+comparison counted a half-finished today against full days (now `previousUntil`; future custom ranges 400);
+"open day" lost the clicked date; clipped calendar titles; kanban focus/announce; dialog focus trap;
+Patient 360 Upcoming never refreshed; failed appointment action discarded typed input; URL writers
+overwrote each other and lagged a server round trip (now one `replaceUrlParams` on history.replaceState).
+Deferred as Minor (listed in the final report): Drizzle error params in 5xx logs; non-uuid `:id` → 500 on
+three routes; chart/Gantt contrast + hard-coded chart hexes; Overdue red-vs-amber; tablet touch targets;
+recharts focus stop; cost-per-enquiry denominator; organic folded into "Other"; revenue partial week;
+62-day cap on multi-day calendar events; Doctor deep links from Upcoming.
+
+**Test isolation.** API vitest pins TZ=UTC (suite passes under UTC and IST). e2e fixtures are purged by
+`e2e/support/fixtures.ts` (views, My Work, Patient 360, Wave 3, CRM flows, connector checkpoint). Two older
+screenshot specs asserted the Journey Health radial removed in the 2026-09-29 recomposition; updated to
+Service Lines.
+
+**Final gate (fresh evidence).** lint 2/2, typecheck 7/7, tests 717 (api-client 9, design-tokens 6, ui 74,
+web 63, api 565), build OK. Full Playwright run A on a fresh seed: 177/178 after the stale-spec fix (1 skipped
+by design); run B on the same seed with no reseed: 181 passed, 0 failed, 2 skipped (includes the new
+responsive matrix: 11 pages x 5 viewports, no page overflow, no runtime overlay, no console errors).
