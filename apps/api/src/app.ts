@@ -19,6 +19,7 @@ import { leadRoutes } from "./domain/lead/lead.routes.js";
 import { specialtyRoutes } from "./domain/specialty/specialty.routes.js";
 import { crmFieldRoutes } from "./domain/crm/crm-field.routes.js";
 import { crmOutcomeRoutes } from "./domain/crm/crm-outcome.routes.js";
+import { crmAllocationRoutes } from "./domain/crm/crm-allocation.routes.js";
 import { campaignRoutes } from "./domain/campaign/campaign.routes.js";
 import { analyticsRoutes } from "./domain/analytics/analytics.routes.js";
 import { websiteFormRoutes } from "./domain/acquisition/website-form.routes.js";
@@ -55,7 +56,7 @@ export async function buildApp() {
     reply.header("Access-Control-Allow-Origin", process.env.WEB_ORIGIN ?? "http://localhost:3000");
     reply.header("Access-Control-Allow-Credentials", "true");
     reply.header("Access-Control-Allow-Headers", "content-type");
-    reply.header("Access-Control-Allow-Methods", "GET,POST,PATCH,OPTIONS");
+    reply.header("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS");
     if (request.method === "OPTIONS") {
       reply.status(204).send();
     }
@@ -90,6 +91,7 @@ export async function buildApp() {
     await protectedApp.register(specialtyRoutes);
     await protectedApp.register(crmFieldRoutes);
     await protectedApp.register(crmOutcomeRoutes);
+    await protectedApp.register(crmAllocationRoutes);
     await protectedApp.register(campaignRoutes);
     await protectedApp.register(analyticsRoutes);
   });

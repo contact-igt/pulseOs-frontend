@@ -7,13 +7,15 @@ import { Badge, ErrorState, Panel, Skeleton, Tabs } from "@pulseos/ui";
 import { hasPermission } from "@pulseos/types";
 import { CrmFieldsSection } from "@/components/settings/CrmFieldsSection";
 import { OutcomesSection } from "@/components/outcomes/OutcomesSection";
+import { AllocationSection } from "@/components/allocation/AllocationSection";
 import { useUrlFilters } from "@/lib/useUrlFilters";
 
-type Section = "services" | "fields" | "outcomes";
+type Section = "services" | "fields" | "outcomes" | "allocation";
 const SECTIONS: { key: Section; label: string; manageOnly: boolean }[] = [
   { key: "services", label: "Services", manageOnly: false },
   { key: "fields", label: "CRM Fields", manageOnly: true },
   { key: "outcomes", label: "Workflow Outcomes", manageOnly: true },
+  { key: "allocation", label: "Allocation Rules", manageOnly: true },
 ];
 
 /** A service's name and default Journey type. Its CRM fields live in the CRM Fields section. */
@@ -117,6 +119,12 @@ export default function SettingsPage() {
       {section === "outcomes" && canManage && (
         <Panel title="Workflow Outcomes" subtitle="What staff can record after a call or follow-up">
           <OutcomesSection />
+        </Panel>
+      )}
+
+      {section === "allocation" && canManage && (
+        <Panel title="Allocation Rules" subtitle="Who owns a new enquiry">
+          {specialties.data ? <AllocationSection services={specialties.data} /> : <Skeleton className="h-24" />}
         </Panel>
       )}
 

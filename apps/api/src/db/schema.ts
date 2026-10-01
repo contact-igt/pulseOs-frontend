@@ -102,6 +102,25 @@ export const crmOutcomes = pgTable("crm_outcomes", {
   tenantKeyUnique: uniqueIndex("crm_outcomes_tenant_key_unique").on(t.tenantId, t.key),
 }));
 
+// Ordered first-match rules that choose the owner of a new Journey. A pool of users is shared round-robin
+// through rr_cursor (incremented atomically). Manual assignment always wins.
+export const allocationRules = pgTable("allocation_rules", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  name: text("name").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  enabled: boolean("enabled").notNull().default(true),
+  matchSource: text("match_source"),
+  matchSpecialtyKey: text("match_specialty_key"),
+  matchJourneyType: text("match_journey_type"),
+  matchBranchId: uuid("match_branch_id").references(() => branches.id),
+  pool: jsonb("pool").notNull().default([]),
+  rrCursor: integer("rr_cursor").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  tenantIdx: index("allocation_rules_tenant_idx").on(t.tenantId),
+}));
+
 export const journeys = pgTable("journeys", {
   id: uuid("id").primaryKey().defaultRandom(),
   tenantId: uuid("tenant_id").notNull().references(() => tenants.id),

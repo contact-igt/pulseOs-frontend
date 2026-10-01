@@ -24,6 +24,8 @@ const CATEGORY_BY_EVENT_TYPE: Record<string, "communication" | "appointments" | 
   task_created: "tasks",
   task_completed: "tasks",
   journey_owner_changed: "tasks",
+  journey_auto_assigned: "tasks",
+  outcome_logged: "communication",
   conversation_claimed: "communication",
   conversation_assigned: "communication",
   conversation_closed: "communication",

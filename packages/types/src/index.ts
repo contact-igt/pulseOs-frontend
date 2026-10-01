@@ -1114,6 +1114,36 @@ export interface LogInteractionResult {
   completedTaskId: string | null;
 }
 
+// ---------------------------------------------------------------------------
+// Allocation rules: ordered, first-match assignment of a NEW Journey's owner. Manual assignment always
+// wins; a rule only applies when nobody was chosen. A team is a small pool shared round-robin.
+// ---------------------------------------------------------------------------
+
+export interface AllocationRuleVm {
+  id: string;
+  name: string;
+  sortOrder: number;
+  enabled: boolean;
+  /** Each condition is optional; every one given must match. At least one is required. */
+  source: SourceChannel | null;
+  specialtyKey: string | null;
+  journeyType: string | null;
+  branchId: string | null;
+  pool: { userId: string; name: string }[];
+}
+
+export interface CreateAllocationRuleInput {
+  name: string;
+  source?: SourceChannel | null;
+  specialtyKey?: string | null;
+  journeyType?: string | null;
+  branchId?: string | null;
+  userIds: string[];
+  enabled?: boolean;
+}
+
+export type UpdateAllocationRuleInput = Partial<CreateAllocationRuleInput>;
+
 /** A configurable CRM field definition (what Settings → CRM Fields edits). */
 export interface CrmFieldVm extends CustomFieldDefinitionVm {
   groupKey: FieldGroupKey;

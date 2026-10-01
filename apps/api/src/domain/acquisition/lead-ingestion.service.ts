@@ -2,6 +2,7 @@ import type { Db } from "../../db/client.js";
 import { journeys, tasks, timelineEvents } from "../../db/schema.js";
 import { findMostRecentActiveJourney, resolveOrCreatePatient } from "../patient/identity.service.js";
 import { recordTouchpoint } from "./attribution.service.js";
+import { pickOwnerForNewJourney } from "../crm/crm-allocation.service.js";
 import type { NormalizedLead } from "./types.js";
 
 export interface IngestLeadOptions {
@@ -48,6 +49,8 @@ export async function ingestNormalizedLead(
   const existingJourney = await findMostRecentActiveJourney(db, tenantId, patient.id);
   const journeyReused = existingJourney !== null;
 
+  // A brand-new Journey is offered to the allocation rules; a reused one keeps its owner.
+  const allocated = existingJourney ? null : await pickOwnerForNewJourney(db, tenantId, { source: lead.source, journeyType: opts.journeyTypeFallback, branchId: opts.branchId });
   const journey = existingJourney ?? (await db
     .insert(journeys)
     .values({
@@ -56,8 +59,16 @@ export async function ingestNormalizedLead(
       journeyType: opts.journeyTypeFallback,
       source: lead.source,
       stage: "enquiry",
+      ownerUserId: allocated?.userId ?? null,
     })
     .returning())[0];
+
+  if (allocated) {
+    await db.insert(timelineEvents).values({
+      tenantId, patientId: patient.id, journeyId: journey.id, actorType: "system", eventType: "journey_auto_assigned",
+      title: `Auto-assigned to ${allocated.userName}`, description: `Allocation rule: ${allocated.ruleName}`,
+    });
+  }
 
   if (!journeyReused) {
     await db.insert(timelineEvents).values({

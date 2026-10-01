@@ -20,6 +20,7 @@ import { resolveOrCreatePatient } from "../patient/identity.service.js";
 import { recordTouchpoint } from "../acquisition/attribution.service.js";
 import { createTask } from "../task/task.service.js";
 import { listFieldsForEntry, resolveSubmittedValues } from "../crm/crm-field.service.js";
+import { pickOwnerForNewJourney } from "../crm/crm-allocation.service.js";
 import type { OwnerFilter } from "../journey/journey.service.js";
 import type { CreateLeadInput, CreateLeadResult, LeadPhoneLookupResult, LeadRow, LeadStatus, LeadsSummary, Role } from "@pulseos/types";
 
@@ -79,6 +80,8 @@ export async function createLead(db: Db, tenantId: string, actorId: string, inpu
     });
   }
 
+  // Nobody chosen: the first matching allocation rule (Settings → Allocation Rules) picks the owner.
+  const allocated = input.ownerId ? null : await pickOwnerForNewJourney(db, tenantId, { source: input.source, specialtyKey: input.specialtyKey, journeyType: input.journeyType, branchId: input.branchId });
   const [journey] = await db
     .insert(journeys)
     .values({
@@ -87,11 +90,18 @@ export async function createLead(db: Db, tenantId: string, actorId: string, inpu
       journeyType: input.journeyType,
       specialtyKey: input.specialtyKey,
       source: input.source,
-      ownerUserId: input.ownerId ?? null,
+      ownerUserId: input.ownerId ?? allocated?.userId ?? null,
       priority: input.priority ?? "normal",
       notes: input.notes ?? null,
     })
     .returning();
+
+  if (allocated) {
+    await db.insert(timelineEvents).values({
+      tenantId, patientId, journeyId: journey.id, actorType: "system", eventType: "journey_auto_assigned",
+      title: `Auto-assigned to ${allocated.userName}`, description: `Allocation rule: ${allocated.ruleName}`,
+    });
+  }
 
   if (input.campaignId) {
     // Journey-scoped attribution (first touch immutable, later touches
