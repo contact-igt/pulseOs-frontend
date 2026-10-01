@@ -2,6 +2,9 @@ import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, pgEnum, index,
 
 export const roleEnum = pgEnum("role", ["SUPER_ADMIN", "HOSPITAL_ADMIN", "FRONT_DESK", "PATIENT_COORDINATOR", "DOCTOR"]);
 
+// One codebase, one schema: the edition is a tenant property read by the API (see domain/auth/edition.ts) and mirrored in the UI.
+export const tenantEditionEnum = pgEnum("tenant_edition", ["BETA_V1_CORE", "BETA_V2_GROWTH"]);
+
 export const tenants = pgTable("tenants", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
@@ -12,6 +15,8 @@ export const tenants = pgTable("tenants", {
   // did this enquiry arrive on?") is grouped in this zone, not UTC or the
   // server clock, so a 23:30 IST enquiry lands on its own calendar day.
   timezone: text("timezone").notNull().default("Asia/Kolkata"),
+  // Existing tenants predate editions and keep every capability they already had.
+  edition: tenantEditionEnum("edition").notNull().default("BETA_V2_GROWTH"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

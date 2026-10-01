@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import { requirePermission } from "../auth/permission.middleware.js";
+import { requireCapability, requirePermission } from "../auth/permission.middleware.js";
+import { hasPermission } from "@pulseos/types";
 import { getConnectorDetail, listConnectors, upsertConnectorConfig } from "./connector.service.js";
 import { syncConnectorCampaigns } from "../acquisition/campaign-sync.service.js";
 import { syncConnectorPerformance } from "../acquisition/gbp-performance.service.js";
@@ -35,16 +36,21 @@ export async function connectorRoutes(app: FastifyInstance) {
     return detail;
   });
 
-  app.patch("/connectors/:id", { preHandler: requirePermission("MANAGE_INTEGRATIONS") }, async (request, reply) => {
+  app.patch("/connectors/:id", { preHandler: requirePermission("MANAGE_INTEGRATION_CONFIG") }, async (request, reply) => {
     const tenantId = request.sessionUser!.tenantId;
     const { id } = request.params as { id: string };
     const body = request.body as { displayName?: string; configuration?: Record<string, unknown>; secrets?: Record<string, unknown> };
+    // Raw provider credentials are Super Admin only: an Admin may change operational configuration but is
+    // refused outright (not silently stripped) if the request carries secrets.
+    if (body?.secrets !== undefined && !hasPermission(request.sessionUser!.role, "MANAGE_INTEGRATION_SECRETS")) {
+      return reply.status(403).send({ error: "forbidden", requiredPermission: "MANAGE_INTEGRATION_SECRETS" });
+    }
     const result = await upsertConnectorConfig(app.db, tenantId, id, body);
     if (!result.ok) return reply.status(REASON_STATUS[result.reason] ?? 400).send({ error: result.reason });
     return result;
   });
 
-  app.post("/connectors/:id/sync-campaigns", { preHandler: requirePermission("MANAGE_INTEGRATIONS") }, async (request, reply) => {
+  app.post("/connectors/:id/sync-campaigns", { preHandler: [requireCapability("CAMPAIGNS"), requirePermission("MANAGE_INTEGRATION_CONFIG")] }, async (request, reply) => {
     const tenantId = request.sessionUser!.tenantId;
     const { id } = request.params as { id: string };
     const result = await syncConnectorCampaigns(app.db, tenantId, id);
@@ -52,7 +58,7 @@ export async function connectorRoutes(app: FastifyInstance) {
     return result;
   });
 
-  app.post("/connectors/:id/sync-performance", { preHandler: requirePermission("MANAGE_INTEGRATIONS") }, async (request, reply) => {
+  app.post("/connectors/:id/sync-performance", { preHandler: [requireCapability("CAMPAIGNS"), requirePermission("MANAGE_INTEGRATION_CONFIG")] }, async (request, reply) => {
     const tenantId = request.sessionUser!.tenantId;
     const { id } = request.params as { id: string };
     const result = await syncConnectorPerformance(app.db, tenantId, id);
@@ -70,7 +76,7 @@ export async function connectorRoutes(app: FastifyInstance) {
     return endpoint;
   });
 
-  app.post("/connectors/:id/endpoints", { preHandler: requirePermission("MANAGE_INTEGRATIONS") }, async (request, reply) => {
+  app.post("/connectors/:id/endpoints", { preHandler: requirePermission("MANAGE_INTEGRATION_CONFIG") }, async (request, reply) => {
     const tenantId = request.sessionUser!.tenantId;
     const { id } = request.params as { id: string };
     const body = request.body as CreateCommunicationEndpointInput;
@@ -79,7 +85,7 @@ export async function connectorRoutes(app: FastifyInstance) {
     return reply.status(201).send(result.endpoint);
   });
 
-  app.patch("/connectors/:id/endpoints/:endpointId", { preHandler: requirePermission("MANAGE_INTEGRATIONS") }, async (request, reply) => {
+  app.patch("/connectors/:id/endpoints/:endpointId", { preHandler: requirePermission("MANAGE_INTEGRATION_CONFIG") }, async (request, reply) => {
     const tenantId = request.sessionUser!.tenantId;
     const { id, endpointId } = request.params as { id: string; endpointId: string };
     const body = request.body as UpdateCommunicationEndpointInput;

@@ -5,18 +5,10 @@ import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, ChevronDown, LogOut, Menu, Search } from "lucide-react";
 import { QuickCreateMenu, JOURNEY_STAGE_LABEL, type QuickCreateItem } from "@pulseos/ui";
-import type { SessionUser } from "@pulseos/types";
+import { roleGroupLabel, type SessionUser } from "@pulseos/types";
 import { api, ApiError } from "@pulseos/api-client";
 import { useQuickCreate } from "./QuickCreateProvider";
 import { initials } from "./nav";
-
-const ROLE_LABEL: Record<string, string> = {
-  SUPER_ADMIN: "Super Admin",
-  HOSPITAL_ADMIN: "Hospital Admin",
-  FRONT_DESK: "Front Desk",
-  PATIENT_COORDINATOR: "Patient Coordinator",
-  DOCTOR: "Doctor",
-};
 
 export function TopBar({
   user,
@@ -120,7 +112,7 @@ export function TopBar({
           {profileOpen && (
             <div className="glass-strong absolute right-0 top-full z-10 mt-1.5 w-52 rounded-card py-1">
               <div className="border-b border-neutral-100 px-3 py-2">
-                <p className="text-xs font-medium text-slate-900">{ROLE_LABEL[user.role]}</p>
+                <p className="text-xs font-medium text-slate-900">{roleGroupLabel(user.role)}</p>
                 {user.branchName && <p className="text-xs text-neutral-500">{user.branchName}</p>}
               </div>
               <button

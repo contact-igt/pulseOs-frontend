@@ -7,18 +7,20 @@ import type { Role } from "@pulseos/types";
 // password login.
 
 export const DEMO_LOGIN_ROLES: { role: Role; label: string; emailSlug: string }[] = [
-  { role: "HOSPITAL_ADMIN", label: "Hospital Admin", emailSlug: "admin" },
+  { role: "SUPER_ADMIN", label: "Super Admin", emailSlug: "superadmin" },
+  { role: "HOSPITAL_ADMIN", label: "Admin", emailSlug: "admin" },
   { role: "DOCTOR", label: "Doctor", emailSlug: "doctor" },
-  { role: "FRONT_DESK", label: "Front Desk", emailSlug: "frontdesk" },
-  { role: "PATIENT_COORDINATOR", label: "Patient Coordinator", emailSlug: "coordinator" },
+  { role: "FRONT_DESK", label: "Staff · Front Desk", emailSlug: "frontdesk" },
+  { role: "PATIENT_COORDINATOR", label: "Staff · Patient Coordinator", emailSlug: "coordinator" },
 ];
 
 /** Every seeded staff account per environment: the four Dev Login roles plus a second doctor. */
-export const DEMO_STAFF_SLUGS = ["admin", "doctor", "doctor2", "frontdesk", "coordinator"] as const;
+export const DEMO_STAFF_SLUGS = ["superadmin", "admin", "doctor", "doctor2", "frontdesk", "coordinator"] as const;
 
 export const DEMO_ENVIRONMENTS = [
-  { key: "gynecology", label: "Gynecology Demo", tenantName: "PulseOS Gynecology Demo", emailPrefix: "gyn" },
-  { key: "ophthalmology", label: "Ophthalmology Demo", tenantName: "PulseOS Ophthalmology Demo", emailPrefix: "eye" },
+  { key: "gynecology", label: "Gynecology Demo (V2)", tenantName: "PulseOS Gynecology Demo", emailPrefix: "gyn", edition: "BETA_V2_GROWTH" },
+  { key: "ophthalmology", label: "Ophthalmology V2 (Growth)", tenantName: "PulseOS Ophthalmology Demo", emailPrefix: "eye", edition: "BETA_V2_GROWTH" },
+  { key: "ophthalmology-v1", label: "Ophthalmology V1 (Core CRM)", tenantName: "PulseOS Ophthalmology V1 Demo", emailPrefix: "eyev1", edition: "BETA_V1_CORE" },
 ] as const;
 
 export type DemoEnvironmentKey = (typeof DEMO_ENVIRONMENTS)[number]["key"];

@@ -25,6 +25,7 @@ import {
   Toolbar,
 } from "@pulseos/ui";
 import { withFrom } from "@/components/shell/BackLink";
+import { useCapability } from "@/lib/useEdition";
 
 /**
  * Command Centre composition (top to bottom):
@@ -41,18 +42,22 @@ export default function CommandCentrePage() {
   const [branchId, setBranchId] = useState<string>("");
   const [journeyType, setJourneyType] = useState<string>("");
 
+  // Spend, ROAS and source-performance panels exist only in the growth edition; a Beta V1 tenant neither shows nor requests them.
+  const growth = useCapability("SPEND_ATTRIBUTION");
+  const analyticsLink = useCapability("MARKETING_ANALYTICS");
+
   const filters = { branchId: branchId || undefined, journeyType: journeyType || undefined };
 
   const branches = useQuery({ queryKey: ["branches"], queryFn: api.branches });
   const journeyTypes = useQuery({ queryKey: ["journey-types"], queryFn: api.journeyTypes });
 
-  const executive = useQuery({ queryKey: ["dashboard", "executive"], queryFn: () => api.executive() });
+  const executive = useQuery({ queryKey: ["dashboard", "executive"], queryFn: () => api.executive(), enabled: growth });
   const today = useQuery({ queryKey: ["dashboard", "today", filters], queryFn: () => api.today(filters) });
   const journeyHealth = useQuery({ queryKey: ["dashboard", "journey-health", filters], queryFn: () => api.journeyHealth(filters) });
   const patientFlow = useQuery({ queryKey: ["dashboard", "patient-flow", filters], queryFn: () => api.patientFlow(filters) });
   const attention = useQuery({ queryKey: ["dashboard", "attention", filters], queryFn: () => api.attention(filters) });
-  const spendAtRisk = useQuery({ queryKey: ["dashboard", "spend-at-risk-by-reason"], queryFn: () => api.spendAtRiskByReason() });
-  const sourcePerformance = useQuery({ queryKey: ["dashboard", "source-performance"], queryFn: () => api.sourcePerformance() });
+  const spendAtRisk = useQuery({ queryKey: ["dashboard", "spend-at-risk-by-reason"], queryFn: () => api.spendAtRiskByReason(), enabled: growth });
+  const sourcePerformance = useQuery({ queryKey: ["dashboard", "source-performance"], queryFn: () => api.sourcePerformance(), enabled: growth });
   const serviceMix = useQuery({ queryKey: ["dashboard", "service-mix", { branchId: filters.branchId }], queryFn: () => api.serviceMix({ branchId: filters.branchId }) });
   const team = useQuery({ queryKey: ["dashboard", "team", filters], queryFn: () => api.team(filters) });
   const branchDoctor = useQuery({ queryKey: ["dashboard", "branch-doctor", filters], queryFn: () => api.branchDoctor(filters) });
@@ -95,9 +100,9 @@ export default function CommandCentrePage() {
       </Toolbar>
 
       <section aria-label="Hospital performance" className="space-y-2.5">
-        {executive.isLoading && <Skeleton className="h-[76px]" />}
-        {executive.isError && <ErrorState message="Could not load hospital performance." />}
-        {executive.data && (
+        {growth && executive.isLoading && <Skeleton className="h-[76px]" />}
+        {growth && executive.isError && <ErrorState message="Could not load hospital performance." />}
+        {growth && executive.data && (
           <ExecutiveStripSection
             data={executive.data}
             onSpendAtRiskClick={() => document.getElementById("spend-at-risk-panel")?.scrollIntoView({ behavior: "smooth", block: "center" })}
@@ -125,7 +130,7 @@ export default function CommandCentrePage() {
           )
         )}
         <div className="flex min-w-0 flex-col gap-4 xl:gap-5">
-          {spendAtRisk.isLoading ? (
+          {!growth ? null : spendAtRisk.isLoading ? (
             <Skeleton className="h-64" />
           ) : spendAtRisk.isError ? (
             <ErrorState message="Could not load spend at risk." />
@@ -153,9 +158,11 @@ export default function CommandCentrePage() {
         question="Last 14 days — which sources brought patients in each day?"
         testId="cc-daily-source"
         actions={
-          <Link href="/analytics" className="text-xs font-medium text-primary-700 hover:underline" data-testid="view-analytics-link">
-            View Analytics →
-          </Link>
+          analyticsLink ? (
+            <Link href="/analytics" className="text-xs font-medium text-primary-700 hover:underline" data-testid="view-analytics-link">
+              View Analytics →
+            </Link>
+          ) : null
         }
       >
         {dailyLeads.isLoading ? (
@@ -175,7 +182,7 @@ export default function CommandCentrePage() {
         ) : (
           serviceMix.data && <ServiceLinePanel rows={serviceMix.data} selected={journeyType} onSelect={setJourneyType} />
         )}
-        {sourcePerformance.isLoading ? (
+        {!growth ? null : sourcePerformance.isLoading ? (
           <Skeleton className="h-72" />
         ) : sourcePerformance.isError ? (
           <ErrorState message="Could not load source performance." />

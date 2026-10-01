@@ -277,6 +277,7 @@ export async function seedGynecologyTenant(passwordHash: string) {
   const whatsappEndpoint = endpoints.whatsapp;
 
   const staff = await createDemoUsers("gynecology", tenant.id, passwordHash, branchByKey, [
+    { slug: "superadmin", name: "Anand Iyer", role: "SUPER_ADMIN", branch: "a" },
     { slug: "admin", name: "Ananya Rao", role: "HOSPITAL_ADMIN", branch: "a" },
     { slug: "doctor", name: "Dr. Meera Iyer", role: "DOCTOR", branch: "a" },
     { slug: "doctor2", name: "Dr. Arjun Nair", role: "DOCTOR", branch: "b" },

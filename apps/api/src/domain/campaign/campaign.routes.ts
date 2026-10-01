@@ -1,9 +1,10 @@
 import type { FastifyInstance } from "fastify";
-import { requirePermission } from "../auth/permission.middleware.js";
+import { requireCapability, requirePermission } from "../auth/permission.middleware.js";
 import { getCampaignPerformance, getCampaignSpendAtRisk, getMarketingEfficiency } from "./campaign.service.js";
 import type { SourceChannel } from "@pulseos/types";
 
 export async function campaignRoutes(app: FastifyInstance) {
+  app.addHook("preHandler", requireCapability("CAMPAIGNS"));
   app.addHook("preHandler", requirePermission("VIEW_MARKETING"));
 
   app.get("/campaigns/performance", async (request) => {

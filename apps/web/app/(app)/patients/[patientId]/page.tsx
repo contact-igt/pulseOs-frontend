@@ -191,7 +191,26 @@ const CALL_DIRECTION_ICON = { inbound: PhoneIncoming, outbound: PhoneOutgoing } 
 // story" design. Recording is a plain link-out, not an inline player — an
 // embedded player/transcript view is real future scope (see the omnichannel
 // audit), not built this pass.
-function CallHistoryList({ calls }: { calls: CallVm[] }) {
+function RecordingButton({ callId }: { callId: string }) {
+  const [state, setState] = useState<"idle" | "loading" | "error">("idle");
+  async function play() {
+    setState("loading");
+    try {
+      const { url } = await api.callRecording(callId);
+      window.open(url, "_blank", "noopener,noreferrer");
+      setState("idle");
+    } catch {
+      setState("error");
+    }
+  }
+  return (
+    <button type="button" onClick={play} disabled={state === "loading"} className="mt-1 inline-block text-xs font-medium text-primary-700 hover:underline disabled:opacity-60" data-testid={`call-recording-${callId}`}>
+      {state === "loading" ? "Opening…" : state === "error" ? "Recording unavailable — retry" : "Recording"}
+    </button>
+  );
+}
+
+function CallHistoryList({ calls, canPlayRecording }: { calls: CallVm[]; canPlayRecording: boolean }) {
   if (calls.length === 0) return null;
   return (
     <Panel title={`Calls (${calls.length})`} subtitle="Duration, recording and disposition" padded={false}>
@@ -212,11 +231,7 @@ function CallHistoryList({ calls }: { calls: CallVm[] }) {
                   {call.disposition ? ` · ${call.disposition}` : ""}
                   {call.endpointLabel ? ` · ${call.endpointLabel}` : ""}
                 </p>
-                {call.recordingUrl && (
-                  <a href={call.recordingUrl} target="_blank" rel="noreferrer" className="mt-1 inline-block text-xs font-medium text-primary-700 hover:underline">
-                    Recording
-                  </a>
-                )}
+                {call.hasRecording && canPlayRecording && <RecordingButton callId={call.id} />}
               </div>
             </li>
           );
@@ -377,7 +392,7 @@ export default function Patient360Page() {
           {journeys.map((j) => (
             <JourneyCard key={j.id} journey={j} active={journeys.length > 1 && j.id === selectedJourney?.id} canOpen={canOpenJourney} onSelect={() => journeys.length > 1 && setSelection(j.id)} />
           ))}
-          <CallHistoryList calls={calls} />
+          <CallHistoryList calls={calls} canPlayRecording={!!session.data && hasPermission(session.data.user.role, "VIEW_CALL_RECORDING")} />
         </div>
       </div>
 

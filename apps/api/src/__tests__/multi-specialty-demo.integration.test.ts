@@ -400,14 +400,15 @@ describe.skipIf(!DEMO_PASSWORD)("Dev Login demo environments (integration)", () 
     await queryClient.end();
   });
 
-  it("lists the two demo environments", async () => {
+  it("lists the demo environments", async () => {
     const built = await devApp();
     apps.push(built);
     const res = await built.inject({ method: "GET", url: "/auth/dev-login/environments" });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual([
-      { key: "gynecology", label: "Gynecology Demo" },
-      { key: "ophthalmology", label: "Ophthalmology Demo" },
+      { key: "gynecology", label: "Gynecology Demo (V2)" },
+      { key: "ophthalmology", label: "Ophthalmology V2 (Growth)" },
+      { key: "ophthalmology-v1", label: "Ophthalmology V1 (Core CRM)" },
     ]);
   });
 

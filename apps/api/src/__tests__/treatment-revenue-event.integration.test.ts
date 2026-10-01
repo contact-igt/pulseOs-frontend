@@ -25,7 +25,7 @@ describe.skipIf(!DATABASE_URL)("Treatment Completed -> revenue event write path 
   let journeyId: string;
 
   beforeAll(async () => {
-    const [tenant] = await db.select({ id: tenants.id }).from(tenants).limit(1);
+    const [tenant] = await db.select({ id: tenants.id }).from(tenants).where(eq(tenants.name, "PulseOS Gynecology Demo")).limit(1);
     tenantId = tenant.id;
     const [user] = await db.select({ id: users.id }).from(users).where(eq(users.tenantId, tenantId)).limit(1);
     actorId = user.id;

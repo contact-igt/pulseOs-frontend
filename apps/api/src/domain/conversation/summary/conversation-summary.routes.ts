@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { requirePermission } from "../../auth/permission.middleware.js";
+import { requireCapability, requirePermission } from "../../auth/permission.middleware.js";
 import { getConversationSettings, listConversationSummaries, listPatientSummaries, refreshConversationSummary, updateConversationSettings } from "./conversation-session.service.js";
 import { getSummarizer } from "./index.js";
 
@@ -8,6 +8,8 @@ const uuid = z.string().uuid();
 const settingsBody = z.object({ idleMinutes: z.number() }).strict();
 
 export async function conversationSummaryRoutes(app: FastifyInstance) {
+  app.addHook("preHandler", requireCapability("CONVERSATION_INTELLIGENCE"));
+
   // Hospital-wide: how long a conversation must be idle before it is summarized (5-10 minutes, default 7).
   app.get("/settings/conversation", async (request) => getConversationSettings(app.db, request.sessionUser!.tenantId));
 

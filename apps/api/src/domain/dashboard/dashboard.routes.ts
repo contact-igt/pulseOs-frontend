@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import { requirePermission } from "../auth/permission.middleware.js";
+import { editionHasCapability } from "@pulseos/types";
+import { requireCapability, requirePermission } from "../auth/permission.middleware.js";
 import {
   getAttentionQueue,
   getBranchDoctorPerformance,
@@ -44,14 +45,16 @@ export async function dashboardRoutes(app: FastifyInstance) {
     return getTodayStrip(app.db, tenantId, dashboardFilters(request), request.sessionUser!.timezone);
   });
 
-  app.get("/dashboard/executive", async (request) => {
+  app.get("/dashboard/executive", { preHandler: requireCapability("SPEND_ATTRIBUTION") }, async (request) => {
     const tenantId = request.sessionUser!.tenantId;
     return getExecutiveStrip(app.db, tenantId);
   });
 
   app.get("/dashboard/conversion", async (request) => {
     const tenantId = request.sessionUser!.tenantId;
-    return getConversionFunnel(app.db, tenantId, dashboardFilters(request));
+    const stages = await getConversionFunnel(app.db, tenantId, dashboardFilters(request));
+    // Cost per outcome is derived from marketing spend, which a Beta V1 tenant does not see.
+    return editionHasCapability(request.sessionUser!.edition, "SPEND_ATTRIBUTION") ? stages : stages.map((s) => ({ ...s, costPerOutcome: null }));
   });
 
   app.get("/dashboard/journey-health", async (request) => {
@@ -69,22 +72,22 @@ export async function dashboardRoutes(app: FastifyInstance) {
     return getAttentionQueue(app.db, tenantId, dashboardFilters(request));
   });
 
-  app.get("/dashboard/spend-at-risk", async (request) => {
+  app.get("/dashboard/spend-at-risk", { preHandler: requireCapability("SPEND_ATTRIBUTION") }, async (request) => {
     const tenantId = request.sessionUser!.tenantId;
     return getSpendAtRisk(app.db, tenantId);
   });
 
-  app.get("/dashboard/spend-at-risk-by-reason", async (request) => {
+  app.get("/dashboard/spend-at-risk-by-reason", { preHandler: requireCapability("SPEND_ATTRIBUTION") }, async (request) => {
     const tenantId = request.sessionUser!.tenantId;
     return getSpendAtRiskByReason(app.db, tenantId);
   });
 
-  app.get("/dashboard/source-performance", async (request) => {
+  app.get("/dashboard/source-performance", { preHandler: requireCapability("SPEND_ATTRIBUTION") }, async (request) => {
     const tenantId = request.sessionUser!.tenantId;
     return getSourcePerformance(app.db, tenantId);
   });
 
-  app.get("/dashboard/marketing", async (request) => {
+  app.get("/dashboard/marketing", { preHandler: requireCapability("SPEND_ATTRIBUTION") }, async (request) => {
     const tenantId = request.sessionUser!.tenantId;
     return getMarketingSources(app.db, tenantId);
   });

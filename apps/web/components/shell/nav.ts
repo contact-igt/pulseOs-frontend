@@ -1,4 +1,4 @@
-import { hasPermission, type Permission, type Role } from "@pulseos/types";
+import { DEFAULT_EDITION, editionHasCapability, hasPermission, type Edition, type EditionCapability, type Permission, type Role } from "@pulseos/types";
 
 export interface NavItem {
   label: string;
@@ -12,6 +12,10 @@ export interface NavItem {
    * ROLE_PERMISSIONS map the API enforces server-side, so a role's sidebar
    * can never link to a page its session is actually forbidden to load. */
   permission?: Permission;
+  /** Growth capability this page needs. A tenant without it never reaches the page (nav, route guard) and the API refuses its data. */
+  capability?: EditionCapability;
+  /** Show the item dimmed with a "Beta V2" label instead of hiding it when the tenant lacks the capability. */
+  previewWhenLocked?: boolean;
 }
 
 export interface NavGroup {
@@ -44,14 +48,14 @@ const FULL_NAV: NavGroup[] = [
       { label: "Front Desk", href: "/front-desk", icon: "CalendarCheck", implemented: true, permission: "VIEW_APPOINTMENTS" },
       { label: "Appointments", href: "/appointments", icon: "CalendarCheck", implemented: true, permission: "VIEW_APPOINTMENTS" },
       { label: "Treatments", href: "/treatments", icon: "Stethoscope", implemented: true, permission: "VIEW_TREATMENT" },
-      { label: "Inbox", href: "/inbox", icon: "Inbox", implemented: true, permission: "VIEW_INBOX" },
+      { label: "Inbox", href: "/inbox", icon: "Inbox", implemented: true, permission: "VIEW_INBOX", capability: "FULL_INBOX", previewWhenLocked: true },
     ],
   },
   {
     label: "Growth",
     items: [
-      { label: "Campaigns / Sources", href: "/campaigns", icon: "Megaphone", implemented: true, permission: "VIEW_MARKETING" },
-      { label: "Analytics", href: "/analytics", icon: "BarChart3", implemented: true, permission: "VIEW_MARKETING" },
+      { label: "Campaigns / Sources", href: "/campaigns", icon: "Megaphone", implemented: true, permission: "VIEW_MARKETING", capability: "CAMPAIGNS" },
+      { label: "Analytics", href: "/analytics", icon: "BarChart3", implemented: true, permission: "VIEW_MARKETING", capability: "MARKETING_ANALYTICS" },
     ],
   },
   {
@@ -82,7 +86,7 @@ const DOCTOR_NAV: NavGroup[] = [
   },
 ];
 
-export function navForRole(role: Role): NavGroup[] {
+export function navForRole(role: Role, edition: Edition = DEFAULT_EDITION): NavGroup[] {
   // Doctor's nav is a deliberately different information architecture (its
   // own "Command Centre" pointing at /doctor-home, no Treatments/Campaigns/
   // Integrations even though a Doctor's VIEW_TREATMENT permission would
@@ -100,8 +104,14 @@ export function navForRole(role: Role): NavGroup[] {
   // separate per-role guard list to maintain.
   return FULL_NAV.map((group) => ({
     ...group,
-    items: group.items.filter((item) => !item.permission || hasPermission(role, item.permission)),
+    items: group.items.filter((item) => (!item.permission || hasPermission(role, item.permission)) && (!item.capability || editionHasCapability(edition, item.capability))),
   })).filter((group) => group.items.length > 0);
+}
+
+/** Items this role could use but the tenant's edition does not include — shown dimmed as "Beta V2", never as links. */
+export function lockedNavItems(role: Role, edition: Edition): NavItem[] {
+  if (role === "DOCTOR") return [];
+  return FULL_NAV.flatMap((g) => g.items).filter((item) => item.previewWhenLocked && item.capability && !editionHasCapability(edition, item.capability) && (!item.permission || hasPermission(role, item.permission)));
 }
 
 // The one shared map from role to landing page — login redirects here after
@@ -131,9 +141,9 @@ const ROLE_NEUTRAL_REDIRECT_PATHS = ["/treatment"];
 // detail sub-route of something that is (e.g. /patients/abc123 under a nav
 // entry for /patients). Driven entirely by the existing nav data — no
 // separate permission list to keep in sync with it.
-export function pathAllowedForRole(role: Role, pathname: string): boolean {
+export function pathAllowedForRole(role: Role, pathname: string, edition: Edition = DEFAULT_EDITION): boolean {
   if (ROLE_NEUTRAL_REDIRECT_PATHS.includes(pathname)) return true;
-  const items = navForRole(role).flatMap((group) => group.items);
+  const items = navForRole(role, edition).flatMap((group) => group.items);
   return items.some((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
 }
 

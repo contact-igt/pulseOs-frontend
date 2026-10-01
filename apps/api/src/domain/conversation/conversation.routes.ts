@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { ConversationChannel, OwnershipState } from "@pulseos/types";
-import { requirePermission } from "../auth/permission.middleware.js";
+import { requireCapability, requirePermission } from "../auth/permission.middleware.js";
 import {
   assignConversation,
   claimConversation,
@@ -21,6 +21,7 @@ const REASON_STATUS: Record<string, number> = {
 };
 
 export async function conversationRoutes(app: FastifyInstance) {
+  app.addHook("preHandler", requireCapability("FULL_INBOX"));
   app.addHook("preHandler", requirePermission("VIEW_INBOX"));
 
   app.get("/conversations", async (request) => {

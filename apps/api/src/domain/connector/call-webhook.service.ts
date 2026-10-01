@@ -181,11 +181,17 @@ export async function listCallsForPatient(db: Db, tenantId: string, patientId: s
     phone: r.phone,
     status: r.status,
     durationSeconds: r.durationSeconds,
-    recordingUrl: r.recordingUrl,
+    hasRecording: !!r.recordingUrl,
     disposition: r.disposition,
     agentName: r.agentName,
     startedAt: r.startedAt ? r.startedAt.toISOString() : null,
     endedAt: r.endedAt ? r.endedAt.toISOString() : null,
     endpointLabel: r.endpointLabel ?? null,
   }));
+}
+
+/** The provider's recording URL for one call in this tenant, or null when the call or its recording does not exist. */
+export async function getCallRecordingUrl(db: Db, tenantId: string, callId: string): Promise<string | null> {
+  const [row] = await db.select({ url: calls.recordingUrl }).from(calls).where(and(eq(calls.tenantId, tenantId), eq(calls.id, callId))).limit(1);
+  return row?.url ?? null;
 }

@@ -46,7 +46,7 @@ describe.skipIf(!DATABASE_URL)("conversion feedback foundation — integration",
   let noTouchpointJourneyId: string;
 
   beforeAll(async () => {
-    const [tenant] = await db.select({ id: tenants.id }).from(tenants).limit(1);
+    const [tenant] = await db.select({ id: tenants.id }).from(tenants).where(eq(tenants.name, "PulseOS Gynecology Demo")).limit(1);
     tenantId = tenant.id;
 
     const [consentedPatient] = await db.insert(patients).values({ tenantId, name: "Consented CFB Patient", phone: "+919876500033", marketingConsent: true }).returning();

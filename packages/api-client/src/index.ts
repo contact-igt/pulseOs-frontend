@@ -246,6 +246,8 @@ export const api = {
   conversationAutomation: (id: string) => request<ConversationAutomationPreference>(`/conversations/${id}/automation`),
   setConversationAutomation: (id: string, input: { mode: ConversationAutomationMode; scheduledStart?: string; scheduledEnd?: string; timezone?: string }) =>
     request<ConversationAutomationPreference>(`/conversations/${id}/automation`, { method: "PATCH", body: JSON.stringify(input) }),
+  /** The provider's recording URL, only for a role allowed to play it (`download` additionally needs the download permission). */
+  callRecording: (id: string, opts: { download?: boolean } = {}) => request<{ url: string; download: boolean }>(`/calls/${id}/recording${opts.download ? "?download=1" : ""}`),
   connectors: () => request<ConnectorRow[]>("/connectors"),
   connector: (id: string) => request<ConnectorDetail>(`/connectors/${id}`),
   updateConnector: (id: string, input: { displayName?: string; configuration?: Record<string, unknown>; secrets?: Record<string, unknown> }) =>

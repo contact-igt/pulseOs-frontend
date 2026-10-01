@@ -7,7 +7,7 @@ import {
   Badge, Button, EmptyState, ErrorState, SectionHeading, Skeleton, Table, TableBody, TableHead, Td, Th, Tr,
   relativeTime, CONNECTOR_STATUS_LABEL, CONNECTOR_STATUS_TONE, CONNECTOR_EVENT_STATUS_LABEL, CONNECTOR_EVENT_STATUS_TONE,
 } from "@pulseos/ui";
-import { hasPermission } from "@pulseos/types";
+import { editionHasCapability, hasPermission } from "@pulseos/types";
 import type { CommunicationEndpointType, CommunicationEndpointVm, ConnectorMode, ConnectorType } from "@pulseos/types";
 import { Mail, MessageCircle, Phone, Radio, ShieldCheck, Target, Zap } from "lucide-react";
 
@@ -277,10 +277,12 @@ export default function IntegrationsPage() {
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   const session = useQuery({ queryKey: ["session"], queryFn: api.session });
-  // MANAGE_INTEGRATIONS gates sync/config mutations server-side — mirrored
+  // MANAGE_INTEGRATION_CONFIG gates operational config mutations server-side (raw secrets need MANAGE_INTEGRATION_SECRETS and have no UI here) — mirrored
   // here only to avoid showing dead controls, never as the actual
   // authorization boundary.
-  const canManage = !!session.data && hasPermission(session.data.user.role, "MANAGE_INTEGRATIONS");
+  const canManage = !!session.data && hasPermission(session.data.user.role, "MANAGE_INTEGRATION_CONFIG");
+  // Campaign / spend sync belongs to the growth edition; a Beta V1 tenant neither sees nor can call it.
+  const canSync = canManage && editionHasCapability(session.data!.user.edition, "CAMPAIGNS");
 
   const connectors = useQuery({ queryKey: ["connectors"], queryFn: api.connectors });
   const effectiveSelectedId = selectedId ?? connectors.data?.[0]?.id ?? null;
@@ -476,12 +478,12 @@ export default function IntegrationsPage() {
               >
                 Reload Status
               </Button>
-              {canManage && detail.data.connector.capabilities.includes("SYNC_CAMPAIGNS") && (
+              {canSync && detail.data.connector.capabilities.includes("SYNC_CAMPAIGNS") && (
                 <Button size="sm" variant="primary" onClick={() => runSync("campaigns")} disabled={syncing !== null} data-testid="sync-campaigns-button">
                   {syncing === "campaigns" ? "Syncing…" : "Sync Campaigns"}
                 </Button>
               )}
-              {canManage && detail.data.connector.capabilities.includes("SYNC_PERFORMANCE") && (
+              {canSync && detail.data.connector.capabilities.includes("SYNC_PERFORMANCE") && (
                 <Button size="sm" variant="primary" onClick={() => runSync("performance")} disabled={syncing !== null} data-testid="sync-performance-button">
                   {syncing === "performance" ? "Syncing…" : "Sync Performance"}
                 </Button>

@@ -18,7 +18,8 @@ import {
 } from "lucide-react";
 import { PulseLockup } from "@pulseos/ui";
 import type { SessionUser } from "@pulseos/types";
-import { initials, navForRole } from "./nav";
+import { initials, lockedNavItems, navForRole } from "./nav";
+import { roleGroupLabel } from "@pulseos/types";
 
 const ICONS: Record<string, LucideIcon> = {
   LayoutDashboard,
@@ -34,21 +35,15 @@ const ICONS: Record<string, LucideIcon> = {
   UserPlus,
 };
 
-const ROLE_LABEL: Record<string, string> = {
-  SUPER_ADMIN: "Super Admin",
-  HOSPITAL_ADMIN: "Hospital Admin",
-  FRONT_DESK: "Front Desk",
-  PATIENT_COORDINATOR: "Patient Coordinator",
-  DOCTOR: "Doctor",
-};
-
 
 export function Sidebar({ user, open = false, onClose }: { user: SessionUser; open?: boolean; onClose?: () => void }) {
   const pathname = usePathname();
   // Unbuilt destinations are hidden, not shown greyed out: no dead navigation.
-  const groups = navForRole(user.role)
+  const groups = navForRole(user.role, user.edition)
     .map((group) => ({ ...group, items: group.items.filter((item) => item.implemented) }))
     .filter((group) => group.items.length > 0);
+
+  const locked = lockedNavItems(user.role, user.edition);
 
   return (
     <>
@@ -96,6 +91,25 @@ export function Sidebar({ user, open = false, onClose }: { user: SessionUser; op
               </ul>
             </div>
           ))}
+          {locked.length > 0 && (
+            <div data-testid="nav-locked">
+              <p className="nav-group-label px-2.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em]">Not in your edition</p>
+              <ul className="space-y-0.5">
+                {locked.map((item) => {
+                  const Icon = ICONS[item.icon] ?? LayoutDashboard;
+                  return (
+                    <li key={item.href}>
+                      <span aria-disabled="true" title="Included in Beta V2" className="nav-secondary flex cursor-not-allowed items-center gap-2.5 rounded-control px-2.5 py-3 text-[13px] font-medium opacity-60 lg:py-1.5" data-testid={`nav-locked-${item.href}`}>
+                        <Icon size={17} strokeWidth={2} className="shrink-0" />
+                        <span className="flex-1">{item.label}</span>
+                        <span className="rounded-chip border border-line px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide">Beta V2</span>
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
         </div>
 
         <div className="nav-divider flex shrink-0 items-center gap-2.5 border-t px-3 py-3">
@@ -103,7 +117,7 @@ export function Sidebar({ user, open = false, onClose }: { user: SessionUser; op
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[13px] font-medium">{user.name}</span>
             <span className="nav-secondary block truncate text-xs">
-              {ROLE_LABEL[user.role]}
+              {roleGroupLabel(user.role)}
               {user.branchName ? ` · ${user.branchName}` : ""}
             </span>
           </span>

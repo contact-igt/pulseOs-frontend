@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { AnalyticsQuery } from "@pulseos/types";
-import { requirePermission } from "../auth/permission.middleware.js";
+import { requireCapability, requirePermission } from "../auth/permission.middleware.js";
 import {
   AnalyticsInputError,
   getAnalyticsCampaigns,
@@ -47,8 +47,13 @@ export async function analyticsRoutes(app: FastifyInstance) {
   app.addHook("preHandler", requirePermission("VIEW_MARKETING"));
   app.addHook("preHandler", requirePermission("VIEW_REVENUE"));
 
+  // Beta V1 keeps lead-source volume/trend and source conversion (no spend); everything else here is
+  // marketing analytics (spend, ROAS, revenue attribution, campaigns) and needs the growth capability.
+  const V1_OPEN = new Set(["leads", "source-conversion", "filter-options"]);
+
   function route<T>(path: string, handler: Handler<T>) {
-    app.get(`/analytics/${path}`, async (request, reply) => {
+    const gate = V1_OPEN.has(path) ? [] : [requireCapability("MARKETING_ANALYTICS")];
+    app.get(`/analytics/${path}`, { preHandler: gate }, async (request, reply) => {
       const query = parse(request, reply);
       if (!query) return reply;
       try {

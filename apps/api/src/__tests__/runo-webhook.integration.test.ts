@@ -93,9 +93,11 @@ describe.skipIf(!DEMO_PASSWORD)("Runo webhook (integration, fixture mode)", () =
       direction: "inbound",
       status: "completed",
       durationSeconds: 120,
-      recordingUrl: "https://fixture.example/recording.mp3",
+      hasRecording: true,
       agentName: "Test Agent",
     });
+    // The provider URL never rides along in a patient payload; it is fetched through the permission-gated endpoint.
+    expect(patient360.body).not.toContain("fixture.example/recording.mp3");
 
     // The Timeline event must be traceable back to its own `calls` row, not
     // just tagged with a type and no id.

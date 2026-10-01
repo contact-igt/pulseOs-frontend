@@ -2,7 +2,7 @@ import { hash, verify } from "@node-rs/argon2";
 import { and, eq } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { users, sessions, tenants, branches } from "../../db/schema.js";
-import type { Role } from "@pulseos/types";
+import { DEFAULT_EDITION, type Role } from "@pulseos/types";
 import { DEFAULT_DEMO_ENVIRONMENT, DEMO_ENVIRONMENTS, demoEmailForRole, type DemoEnvironmentKey } from "./demo-environments.js";
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 12;
@@ -41,6 +41,7 @@ async function createSessionFor(db: Db, user: typeof users.$inferSelect) {
       tenantId: user.tenantId,
       tenantName: tenant?.name ?? "",
       timezone: tenant?.timezone ?? "Asia/Kolkata",
+      edition: tenant?.edition ?? DEFAULT_EDITION,
       branchId: user.branchId,
       branchName: branch?.name ?? null,
       name: user.name,
@@ -85,7 +86,7 @@ export async function loginByRole(db: Db, role: Role, environment: DemoEnvironme
 export async function resolveSession(db: Db, sessionId: string) {
   if (!SESSION_ID.test(sessionId)) return null;
   const [row] = await db
-    .select({ session: sessions, user: users, branch: branches, timezone: tenants.timezone })
+    .select({ session: sessions, user: users, branch: branches, timezone: tenants.timezone, edition: tenants.edition })
     .from(sessions)
     .innerJoin(users, eq(sessions.userId, users.id))
     .innerJoin(tenants, eq(users.tenantId, tenants.id))
@@ -105,6 +106,7 @@ export async function resolveSession(db: Db, sessionId: string) {
     email: row.user.email,
     role: row.user.role,
     timezone: row.timezone,
+    edition: row.edition,
   };
 }
 

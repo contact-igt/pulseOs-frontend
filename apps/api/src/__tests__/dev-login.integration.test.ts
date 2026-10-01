@@ -71,10 +71,11 @@ describe.skipIf(!DEMO_PASSWORD)("Dev Login (integration)", () => {
     const res = await app.inject({ method: "GET", url: "/auth/dev-login/roles" });
     expect(res.statusCode).toBe(200);
     const roles = res.json() as { role: string; label: string }[];
-    expect(roles.map((r) => r.role).sort()).toEqual(["DOCTOR", "FRONT_DESK", "HOSPITAL_ADMIN", "PATIENT_COORDINATOR"]);
+    expect(roles.map((r) => r.role).sort()).toEqual(["DOCTOR", "FRONT_DESK", "HOSPITAL_ADMIN", "PATIENT_COORDINATOR", "SUPER_ADMIN"]);
   });
 
   it.each([
+    ["SUPER_ADMIN", "gyn.superadmin@pulseos.local"],
     ["HOSPITAL_ADMIN", "gyn.admin@pulseos.local"],
     ["DOCTOR", "gyn.doctor@pulseos.local"],
     ["FRONT_DESK", "gyn.frontdesk@pulseos.local"],
@@ -98,11 +99,22 @@ describe.skipIf(!DEMO_PASSWORD)("Dev Login (integration)", () => {
     expect(session.json().user.role).toBe(role);
   });
 
-  it("rejects a role with no seeded demo account (SUPER_ADMIN) rather than crashing", async () => {
+  it("rejects an environment with no such role seeded rather than crashing", async () => {
     const app = await buildWithEnv({ NODE_ENV: "test", ENABLE_DEV_LOGIN: "true" });
     apps.push(app);
-    const res = await app.inject({ method: "POST", url: "/auth/dev-login", payload: { role: "SUPER_ADMIN" } });
-    expect(res.statusCode).toBe(404);
+    const res = await app.inject({ method: "POST", url: "/auth/dev-login", payload: { role: "DOCTOR", environment: "not-an-environment" } });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("the Ophthalmology V1 environment signs in to a Beta V1 tenant; the V2 environment to a growth tenant", async () => {
+    const app = await buildWithEnv({ NODE_ENV: "test", ENABLE_DEV_LOGIN: "true" });
+    apps.push(app);
+    const v1 = await app.inject({ method: "POST", url: "/auth/dev-login", payload: { role: "HOSPITAL_ADMIN", environment: "ophthalmology-v1" } });
+    expect(v1.statusCode).toBe(200);
+    expect(v1.json().user.edition).toBe("BETA_V1_CORE");
+    expect(v1.json().user.email).toBe("eyev1.admin@pulseos.local");
+    const v2 = await app.inject({ method: "POST", url: "/auth/dev-login", payload: { role: "HOSPITAL_ADMIN", environment: "ophthalmology" } });
+    expect(v2.json().user.edition).toBe("BETA_V2_GROWTH");
   });
 
   it("rejects an unknown role string", async () => {

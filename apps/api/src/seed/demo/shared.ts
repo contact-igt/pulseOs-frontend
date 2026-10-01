@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import type { Edition } from "@pulseos/types";
 import { db } from "../../db/client.js";
 import {
   appointments,
@@ -164,8 +165,8 @@ export interface DemoContext {
   endpoints: Record<string, EndpointRow>;
 }
 
-export async function createDemoTenant(name: string) {
-  const [tenant] = await db.insert(tenants).values({ name, timezone: "Asia/Kolkata" }).returning();
+export async function createDemoTenant(name: string, edition: Edition = "BETA_V2_GROWTH") {
+  const [tenant] = await db.insert(tenants).values({ name, timezone: "Asia/Kolkata", edition }).returning();
   return tenant;
 }
 

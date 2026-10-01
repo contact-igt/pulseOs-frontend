@@ -1,5 +1,45 @@
 export type Role = "SUPER_ADMIN" | "HOSPITAL_ADMIN" | "FRONT_DESK" | "PATIENT_COORDINATOR" | "DOCTOR";
 
+// ---------------------------------------------------------------------------
+// Editions — one codebase, one schema. A tenant's edition (tenants.edition) is the single source of truth
+// for which growth capabilities it has; the API enforces it per route and the UI mirrors it for navigation.
+// ---------------------------------------------------------------------------
+
+export type Edition = "BETA_V1_CORE" | "BETA_V2_GROWTH";
+export const EDITIONS: { key: Edition; label: string }[] = [
+  { key: "BETA_V1_CORE", label: "Beta V1 · Core Hospital CRM" },
+  { key: "BETA_V2_GROWTH", label: "Beta V2 · Growth / Engagement" },
+];
+export const DEFAULT_EDITION: Edition = "BETA_V2_GROWTH";
+
+/** Capabilities that exist only beyond the V1 core. Everything not listed here is part of every edition. */
+export type EditionCapability = "FULL_INBOX" | "CONVERSATION_INTELLIGENCE" | "CAMPAIGNS" | "MARKETING_ANALYTICS" | "SPEND_ATTRIBUTION";
+
+export const EDITION_CAPABILITIES: Record<Edition, EditionCapability[]> = {
+  BETA_V1_CORE: [],
+  BETA_V2_GROWTH: ["FULL_INBOX", "CONVERSATION_INTELLIGENCE", "CAMPAIGNS", "MARKETING_ANALYTICS", "SPEND_ATTRIBUTION"],
+};
+
+export function isEdition(value: unknown): value is Edition {
+  return value === "BETA_V1_CORE" || value === "BETA_V2_GROWTH";
+}
+
+export function editionHasCapability(edition: Edition, capability: EditionCapability): boolean {
+  return EDITION_CAPABILITIES[edition].includes(capability);
+}
+
+/** The Beta V1 UX names for the five stored roles. Doctor stays a role (and a resource) but has no V1 label. */
+export type RoleGroup = "SUPER_ADMIN" | "ADMIN" | "STAFF" | "DOCTOR";
+export const ROLE_GROUP: Record<Role, RoleGroup> = {
+  SUPER_ADMIN: "SUPER_ADMIN",
+  HOSPITAL_ADMIN: "ADMIN",
+  FRONT_DESK: "STAFF",
+  PATIENT_COORDINATOR: "STAFF",
+  DOCTOR: "DOCTOR",
+};
+export const ROLE_GROUP_LABEL: Record<RoleGroup, string> = { SUPER_ADMIN: "Super Admin", ADMIN: "Admin", STAFF: "Staff", DOCTOR: "Doctor" };
+export const roleGroupLabel = (role: Role): string => ROLE_GROUP_LABEL[ROLE_GROUP[role]];
+
 export interface SessionUser {
   id: string;
   tenantId: string;
@@ -10,6 +50,8 @@ export interface SessionUser {
   branchName: string | null;
   /** Hospital IANA timezone (tenants.timezone) — every "today" and day boundary uses it. */
   timezone: string;
+  /** The tenant's edition (tenants.edition) — gates growth capabilities server-side. */
+  edition: Edition;
 }
 
 export interface Branch {
@@ -43,7 +85,11 @@ export type Permission =
   | "VIEW_TASKS"
   | "MANAGE_TASKS"
   | "VIEW_INTEGRATIONS"
-  | "MANAGE_INTEGRATIONS"
+  | "MANAGE_INTEGRATION_CONFIG"
+  | "MANAGE_INTEGRATION_SECRETS"
+  | "VIEW_CALL_RECORDING"
+  | "DOWNLOAD_CALL_RECORDING"
+  | "VIEW_CALL_TRANSCRIPT"
   | "VIEW_COMMUNICATION_ENDPOINTS"
   | "MANAGE_LEADS"
   | "MANAGE_SPECIALTIES";
@@ -53,13 +99,13 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "VIEW_ADMIN_COMMAND_CENTRE", "VIEW_PATIENTS", "EDIT_PATIENTS", "VIEW_JOURNEYS", "MANAGE_JOURNEYS",
     "VIEW_APPOINTMENTS", "MANAGE_APPOINTMENTS", "RECORD_CONSULTATION_OUTCOME", "VIEW_TREATMENT", "MANAGE_TREATMENT",
     "VIEW_REVENUE", "VIEW_MARKETING", "VIEW_INBOX", "MANAGE_INBOX", "VIEW_TASKS", "MANAGE_TASKS",
-    "VIEW_INTEGRATIONS", "MANAGE_INTEGRATIONS", "VIEW_COMMUNICATION_ENDPOINTS", "MANAGE_LEADS", "MANAGE_SPECIALTIES",
+    "VIEW_INTEGRATIONS", "MANAGE_INTEGRATION_CONFIG", "MANAGE_INTEGRATION_SECRETS", "VIEW_CALL_RECORDING", "DOWNLOAD_CALL_RECORDING", "VIEW_CALL_TRANSCRIPT", "VIEW_COMMUNICATION_ENDPOINTS", "MANAGE_LEADS", "MANAGE_SPECIALTIES",
   ],
   HOSPITAL_ADMIN: [
     "VIEW_ADMIN_COMMAND_CENTRE", "VIEW_PATIENTS", "EDIT_PATIENTS", "VIEW_JOURNEYS", "MANAGE_JOURNEYS",
     "VIEW_APPOINTMENTS", "MANAGE_APPOINTMENTS", "VIEW_TREATMENT", "MANAGE_TREATMENT",
     "VIEW_REVENUE", "VIEW_MARKETING", "VIEW_INBOX", "MANAGE_INBOX", "VIEW_TASKS", "MANAGE_TASKS",
-    "VIEW_INTEGRATIONS", "MANAGE_INTEGRATIONS", "VIEW_COMMUNICATION_ENDPOINTS", "MANAGE_LEADS", "MANAGE_SPECIALTIES",
+    "VIEW_INTEGRATIONS", "MANAGE_INTEGRATION_CONFIG", "VIEW_CALL_RECORDING", "DOWNLOAD_CALL_RECORDING", "VIEW_CALL_TRANSCRIPT", "VIEW_COMMUNICATION_ENDPOINTS", "MANAGE_LEADS", "MANAGE_SPECIALTIES",
   ],
   FRONT_DESK: [
     "VIEW_PATIENTS", "EDIT_PATIENTS", "VIEW_JOURNEYS", "VIEW_APPOINTMENTS", "MANAGE_APPOINTMENTS",
@@ -404,7 +450,8 @@ export interface CallVm {
   phone: string;
   status: CallStatus;
   durationSeconds: number | null;
-  recordingUrl: string | null;
+  /** A recording exists. The provider URL itself is never sent to the browser — fetch it through GET /calls/:id/recording. */
+  hasRecording: boolean;
   disposition: string | null;
   agentName: string | null;
   startedAt: string | null;

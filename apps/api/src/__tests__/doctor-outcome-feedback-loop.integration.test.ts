@@ -31,7 +31,7 @@ describe.skipIf(!DEMO_PASSWORD)("doctor outcome -> journey -> dashboard feedback
 
     // Set up a fresh completed-but-no-outcome-yet appointment on a real seeded journey,
     // so this test doesn't depend on which exact seeded rows already have outcomes.
-    const [tenant] = await db.select().from(tenants).limit(1);
+    const [tenant] = await db.select().from(tenants).where(eq(tenants.name, "PulseOS Gynecology Demo")).limit(1);
     const [doctor] = await db.select().from(users).where(eq(users.email, "gyn.doctor@pulseos.local")).limit(1);
     const [branch] = await db.select().from(branches).where(eq(branches.tenantId, tenant.id)).limit(1);
     const [someJourney] = await db.select().from(journeys).where(eq(journeys.tenantId, tenant.id)).limit(1);

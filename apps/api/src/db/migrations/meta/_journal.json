@@ -148,6 +148,13 @@
       "when": 1790850260289,
       "tag": "0020_wonderful_amphibian",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790853130072,
+      "tag": "0021_beta_v1_tenant_edition",
+      "breakpoints": true
     }
   ]
 }

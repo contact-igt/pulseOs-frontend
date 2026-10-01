@@ -1,4 +1,5 @@
 import { db } from "../../db/client.js";
+import type { Edition } from "@pulseos/types";
 import { journeys, marketingCampaigns, tasks, timelineEvents } from "../../db/schema.js";
 import { ensureSpecialties } from "../../domain/specialty/specialty.service.js";
 import { OPHTHALMOLOGY_SPECIALTIES, OPHTHALMOLOGY_TREATMENTS } from "../../domain/specialty/ophthalmology.templates.js";
@@ -591,9 +592,23 @@ const CONVERSATION_CONFIGS: ConversationConfig[] = [
   },
 ];
 
-export async function seedOphthalmologyTenant(passwordHash: string) {
+/** The two Ophthalmology demo tenants share every row of data; only edition, identity and fixture tags differ. */
+export interface OphthalmologyVariant {
+  environment: "ophthalmology" | "ophthalmology-v1";
+  tenantName: string;
+  edition: Edition;
+  /** Upper-case tag that keeps each tenant's fixture secrets, page ids and provider refs unique. */
+  tag: string;
+  /** Website form id the demo tenant's form connector accepts. */
+  formId: string;
+}
+
+export const OPHTHALMOLOGY_V2: OphthalmologyVariant = { environment: "ophthalmology", tenantName: "PulseOS Ophthalmology Demo", edition: "BETA_V2_GROWTH", tag: "EYE", formId: "eye-care-enquiry-v1" };
+export const OPHTHALMOLOGY_V1: OphthalmologyVariant = { environment: "ophthalmology-v1", tenantName: "PulseOS Ophthalmology V1 Demo", edition: "BETA_V1_CORE", tag: "EYEV1", formId: "eye-care-enquiry-v1core" };
+
+export async function seedOphthalmologyTenant(passwordHash: string, variant: OphthalmologyVariant = OPHTHALMOLOGY_V2) {
   assertJourneyConfigsConsistent("ophthalmology", JOURNEY_CONFIGS, OPHTHALMOLOGY_PATIENT_NAMES, new Set(OPHTHALMOLOGY_TREATMENTS.map((t) => t.key)));
-  const tenant = await createDemoTenant("PulseOS Ophthalmology Demo");
+  const tenant = await createDemoTenant(variant.tenantName, variant.edition);
   await ensureSpecialties(db, tenant.id, OPHTHALMOLOGY_SPECIALTIES);
   await ensureTreatmentCatalog(db, tenant.id, OPHTHALMOLOGY_TREATMENTS);
 
@@ -608,20 +623,21 @@ export async function seedOphthalmologyTenant(passwordHash: string) {
   // the line they arrived on. (Runo itself never reports the line; a live
   // inbound webhook only auto-stamps an endpoint when exactly one is active.)
   const { whatsappConnector, runoConnector, endpoints } = await createDemoConnectors(tenant.id, branchByKey, {
-    identifiers: fixtureIdentifiers("EYE"),
-    phoneNumberId: "FIXTURE_EYE_PHONE_NUMBER_ID",
+    identifiers: fixtureIdentifiers(variant.tag),
+    phoneNumberId: `FIXTURE_${variant.tag}_PHONE_NUMBER_ID`,
     whatsappNumber: "+91 97400 55100",
     whatsappLabel: "WhatsApp Line",
-    formIds: ["eye-care-enquiry-v1"],
-    metaPageId: "FIXTURE_EYE_PAGE_ID",
+    formIds: [variant.formId],
+    metaPageId: `FIXTURE_${variant.tag}_PAGE_ID`,
     phoneLines: [
-      { key: "main", number: "+91 80 4155 0100", providerRef: "EYE-MAIN-RECEPTION", label: "Main Reception", isActive: true, branch: "a" },
-      { key: "cataract", number: "+91 80 4155 0101", providerRef: "EYE-CATARACT-LINE", label: "Cataract Enquiry Line", isActive: true, branch: null },
-      { key: "surgery", number: "+91 80 4155 0102", providerRef: "EYE-SURGERY-LINE", label: "Surgery / Procedure Line", isActive: true, branch: null },
+      { key: "main", number: "+91 80 4155 0100", providerRef: `${variant.tag}-MAIN-RECEPTION`, label: "Main Reception", isActive: true, branch: "a" },
+      { key: "cataract", number: "+91 80 4155 0101", providerRef: `${variant.tag}-CATARACT-LINE`, label: "Cataract Enquiry Line", isActive: true, branch: null },
+      { key: "surgery", number: "+91 80 4155 0102", providerRef: `${variant.tag}-SURGERY-LINE`, label: "Surgery / Procedure Line", isActive: true, branch: null },
     ],
   });
 
-  const staff = await createDemoUsers("ophthalmology", tenant.id, passwordHash, branchByKey, [
+  const staff = await createDemoUsers(variant.environment, tenant.id, passwordHash, branchByKey, [
+    { slug: "superadmin", name: "Vikram Rao", role: "SUPER_ADMIN", branch: "a" },
     { slug: "admin", name: "Meghna Kapoor", role: "HOSPITAL_ADMIN", branch: "a" },
     { slug: "doctor", name: "Dr. Rajiv Menon", role: "DOCTOR", branch: "a" },
     { slug: "doctor2", name: "Dr. Shalini Bhat", role: "DOCTOR", branch: "b" },

@@ -38,7 +38,7 @@ import { assertSafeToWipe } from "./safety.js";
 import { hashPassword } from "../domain/auth/auth.service.js";
 import { DEMO_ENVIRONMENTS, DEMO_STAFF_SLUGS } from "../domain/auth/demo-environments.js";
 import { seedGynecologyTenant } from "./demo/gynecology.js";
-import { seedOphthalmologyTenant } from "./demo/ophthalmology.js";
+import { OPHTHALMOLOGY_V1, seedOphthalmologyTenant } from "./demo/ophthalmology.js";
 import { seedConversationSessions } from "./demo/conversation-sessions.js";
 
 function requireDemoPassword(): string {
@@ -95,6 +95,8 @@ async function main() {
   const passwordHash = await hashPassword(demoPassword);
   await seedGynecologyTenant(passwordHash);
   await seedOphthalmologyTenant(passwordHash);
+  // Same clinic data on the Beta V1 (core CRM) edition, so the edition gates can be seen against the very same journeys.
+  await seedOphthalmologyTenant(passwordHash, OPHTHALMOLOGY_V1);
   // Each WhatsApp thread gets its session line on the Timeline and a (FIXTURE-labelled) summary, exactly as
   // live traffic does once a conversation has been idle.
   await seedConversationSessions();
