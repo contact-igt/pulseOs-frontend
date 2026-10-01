@@ -9,11 +9,12 @@ import { SOURCE_LABEL, campaignCalendarEvents, isOngoing, runLabel, runStatusLab
 import { useHospitalTimeZone } from "@/lib/useHospitalTimeZone";
 
 /** Inclusive hospital-day period the calendar is showing (the month itself, not its grey spill-over days). */
-function periodOf(mode: CalendarMode, date: DayKey): { from: DayKey; to: DayKey; label: string } {
+export function periodOf(mode: CalendarMode, date: DayKey): { from: DayKey; to: DayKey; label: string } {
   if (mode === "day") return { from: date, to: date, label: formatKey(date, { day: "numeric", month: "short", year: "numeric" }) };
   if (mode === "week") {
     const r = visibleRange("week", date);
-    return { ...r, label: "this week" };
+    const short = (key: DayKey) => formatKey(key, { day: "numeric", month: "short" });
+    return { ...r, label: `${short(r.from)} – ${short(r.to)}` };
   }
   const from = `${date.slice(0, 7)}-01`;
   return { from, to: addDays(shiftDate(from, "month", 1), -1), label: formatKey(from, { month: "long", year: "numeric" }) };

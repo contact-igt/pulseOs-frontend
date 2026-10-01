@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { replaceUrlParams } from "@/lib/urlParams";
 import { FilterBar, FilterSelect, Tabs } from "@pulseos/ui";
 import type { LookupOption } from "@pulseos/types";
 
@@ -11,20 +12,9 @@ import type { LookupOption } from "@pulseos/types";
  * "" = everyone, "mine" | "unassigned" | <userId>.
  */
 export function useOwnerScope(): [string, (next: string) => void] {
-  const router = useRouter();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
   const owner = searchParams.get("owner") ?? "";
-  const setOwner = useCallback(
-    (next: string) => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (next) params.set("owner", next);
-      else params.delete("owner");
-      const qs = params.toString();
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-    },
-    [router, pathname, searchParams],
-  );
+  const setOwner = useCallback((next: string) => void replaceUrlParams({ owner: next || undefined }), []);
   return [owner, setOwner];
 }
 

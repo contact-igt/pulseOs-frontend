@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@pulseos/api-client";
 import {
   Badge, Button, Card, EmptyState, ErrorState, MetricStrip, Skeleton, Table, TableBody, TableHead, Tabs, Td, Th, Toolbar, Tr, ViewSwitcher,
@@ -17,6 +17,7 @@ import { AssignOwnerDialog } from "@/components/journey/AssignOwnerDialog";
 import { OwnerScopeControl, useOwnerScope } from "@/components/journey/OwnerScopeControl";
 import { invalidateJourneyQueries } from "@/components/journey/invalidate";
 import { useViewState } from "@/lib/useViewState";
+import { replaceUrlParams } from "@/lib/urlParams";
 import { LeadsStageBoard } from "@/components/leads/LeadsStageBoard";
 import { useHospitalTimeZone } from "@/lib/useHospitalTimeZone";
 
@@ -67,21 +68,11 @@ export default function LeadsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const quickCreate = useQuickCreate();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
   // Status lives in the URL (?status=) like owner and view, so reload, back/forward and shared links keep it.
   const rawStatus = searchParams.get("status");
   const statusFilter: LeadStatus | "all" = STATUS_TABS.find((t) => t.key === rawStatus)?.key ?? "all";
-  const setStatusFilter = useCallback(
-    (next: LeadStatus | "all") => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (next === "all") params.delete("status");
-      else params.set("status", next);
-      const qs = params.toString();
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-    },
-    [router, pathname, searchParams],
-  );
+  const setStatusFilter = useCallback((next: LeadStatus | "all") => void replaceUrlParams({ status: next === "all" ? undefined : next }), []);
   const { view, setView } = useViewState<LeadsView>({ views: VIEWS, defaultView: "table", timeZone });
   const [owner, setOwner] = useOwnerScope();
   const [selected, setSelected] = useState<Set<string>>(new Set());

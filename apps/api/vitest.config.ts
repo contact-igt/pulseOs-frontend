@@ -1,5 +1,10 @@
 import { defineConfig } from "vitest/config";
 
+// Pin the process clock zone to UTC. Hospital "today" / day buckets must come from the
+// tenant timezone (Asia/Kolkata), never from the server clock — on an IST dev machine a
+// server-local-midnight bug would otherwise hide, because the two zones agree.
+process.env.TZ = "UTC";
+
 export default defineConfig({
   test: {
     environment: "node",

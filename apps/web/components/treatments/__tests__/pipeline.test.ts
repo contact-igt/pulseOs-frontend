@@ -9,7 +9,6 @@ import {
   readTreatmentFilters,
   scheduledProcedures,
 } from "../pipeline";
-import { patchSearch } from "../urlState";
 
 function row(id: string, status: TreatmentStatus, plannedDate: string | null = null): TreatmentRow {
   return {
@@ -104,10 +103,5 @@ describe("treatment URL state", () => {
       procedureId: "p1",
     });
     expect(readTreatmentFilters(new URLSearchParams("state=BOGUS")).status).toBe("");
-  });
-
-  it("patches only the given params and keeps view/date/range", () => {
-    const qs = patchSearch(new URLSearchParams("view=calendar&date=2026-10-05&state=SCHEDULED"), { state: undefined, service: "Cataract" });
-    expect(new URLSearchParams(qs)).toEqual(new URLSearchParams("view=calendar&date=2026-10-05&service=Cataract"));
   });
 });

@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { CalendarDays, CircleAlert, Columns3, Table2, X } from "lucide-react";
 import { api } from "@pulseos/api-client";
 import {
@@ -14,11 +14,11 @@ import {
 } from "@pulseos/ui";
 import { withFrom } from "@/components/shell/BackLink";
 import { useViewState } from "@/lib/useViewState";
+import { replaceUrlParams } from "@/lib/urlParams";
 import { ProcedureCalendar } from "@/components/treatments/ProcedureCalendar";
 import { TreatmentPipelineBoard } from "@/components/treatments/TreatmentPipelineBoard";
 import { ALL_STATUSES, TREATMENT_VIEWS, moveErrorMessage, readTreatmentFilters, treatmentFilterPatch } from "@/components/treatments/pipeline";
 import type { TreatmentUrlFilters, TreatmentView } from "@/components/treatments/pipeline";
-import { patchSearch } from "@/components/treatments/urlState";
 import { hasPermission } from "@pulseos/types";
 import type { TreatmentFilters, TreatmentRow, TreatmentStatus } from "@pulseos/types";
 import { useHospitalTimeZone } from "@/lib/useHospitalTimeZone";
@@ -59,7 +59,6 @@ const VIEW_OPTIONS: { key: TreatmentView; label: string; icon: ReactNode }[] = [
 export default function TreatmentPage() {
   const timeZone = useHospitalTimeZone();
   const router = useRouter();
-  const pathname = usePathname();
   const params = useSearchParams();
   const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState<{ row: TreatmentRow; status: TreatmentStatus; label: string } | null>(null);
@@ -70,13 +69,7 @@ export default function TreatmentPage() {
   const viewState = useViewState<TreatmentView>({ views: TREATMENT_VIEWS, defaultView: "table", defaultRange: "month", timeZone });
   const { view, date, setView, setDate, calendarMode, setCalendarMode } = viewState;
   const { status, service, doctorId, ownerId, procedureId } = useMemo(() => readTreatmentFilters(new URLSearchParams(params.toString())), [params]);
-  const setFilters = useCallback(
-    (patch: Partial<TreatmentUrlFilters>) => {
-      const qs = patchSearch(new URLSearchParams(params.toString()), treatmentFilterPatch(patch));
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-    },
-    [params, pathname, router],
-  );
+  const setFilters = useCallback((patch: Partial<TreatmentUrlFilters>) => void replaceUrlParams(treatmentFilterPatch(patch)), []);
 
   // service / doctor / owner / procedure are applied by the API; the state
   // filter is applied to the same result client-side so the pipeline counts

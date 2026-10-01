@@ -147,8 +147,9 @@ export function AppointmentDrawer({
                   type="button"
                   disabled={!newDateTime}
                   onClick={() => {
+                    // The form stays open until the drawer closes (success or a server-side state change), so a
+                    // failed save keeps the typed time next to the error instead of discarding it.
                     onReschedule(row, new Date(newDateTime).toISOString());
-                    setRescheduling(false);
                   }}
                   className="flex-1 rounded-control bg-primary-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-primary-700 disabled:opacity-40"
                 >

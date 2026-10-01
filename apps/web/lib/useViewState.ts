@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { isDayKey, localDayKey, type CalendarMode } from "@pulseos/ui";
+import { replaceUrlParams } from "./urlParams";
 
 export type ViewRange = "day" | "week" | "month";
 const RANGES: readonly ViewRange[] = ["day", "week", "month"];
@@ -29,28 +30,19 @@ export interface UseViewStateOptions<V extends string> {
  * URL-backed view state: ONLY `view`, `date`, `range` and `cal` (Agenda). Refresh, back/forward
  * and shared links restore the same view. Every other query param (filters, page,
  * search) is left exactly as it was - this hook is not a filter store.
- * `router.replace` with `scroll: false`, so switching views never adds history
- * entries or jumps the page.
+ * Writes go through `replaceUrlParams` (history.replaceState on the live URL), so
+ * switching views is instant, never adds history entries or jumps the page, and
+ * several updates in one handler (open a day = date + Day mode) all land.
  *
  * Call sites need a Suspense boundary above them only if the page is statically
  * rendered; pages under the authenticated `(app)` layout are dynamic.
  */
 export function useViewState<V extends string>({ views, defaultView, defaultRange = "week", timeZone }: UseViewStateOptions<V>) {
-  const router = useRouter();
-  const pathname = usePathname();
   const params = useSearchParams();
 
   const rawView = params.get("view");
   const rawDate = params.get("date");
   const rawRange = params.get("range");
-  // The URL this hook last wrote but the router has not surfaced yet: a second
-  // update in the same handler (e.g. open a day = date + Day mode) builds on it
-  // instead of on the stale `params`, so neither update is lost.
-  const pending = useRef<string | null>(null);
-  const current = params.toString();
-  useEffect(() => {
-    pending.current = null;
-  }, [current]);
   const agenda = params.get("cal") === "agenda";
 
   const state = useMemo<ViewState<V>>(() => {
@@ -70,20 +62,14 @@ export function useViewState<V extends string>({ views, defaultView, defaultRang
   /** Patch any of view/date/range in one navigation. A value equal to its default (view, range) is dropped from the URL. */
   const setState = useCallback(
     (patch: Partial<Omit<ViewState<V>, "calendarMode">> & { agenda?: boolean }) => {
-      const next = new URLSearchParams(pending.current ?? params.toString());
-      const put = (key: string, value: string | undefined, isDefault: boolean) => {
-        if (value === undefined || isDefault) next.delete(key);
-        else next.set(key, value);
-      };
-      if ("view" in patch) put("view", patch.view, patch.view === defaultView);
-      if ("date" in patch) put("date", patch.date, false);
-      if ("range" in patch) put("range", patch.range, patch.range === defaultRange);
-      if ("agenda" in patch) put("cal", "agenda", !patch.agenda);
-      const qs = next.toString();
-      pending.current = qs;
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+      const write: Record<string, string | undefined> = {};
+      if ("view" in patch) write.view = patch.view === defaultView ? undefined : patch.view;
+      if ("date" in patch) write.date = patch.date;
+      if ("range" in patch) write.range = patch.range === defaultRange ? undefined : patch.range;
+      if ("agenda" in patch) write.cal = patch.agenda ? "agenda" : undefined;
+      replaceUrlParams(write);
     },
-    [params, pathname, router, defaultView, defaultRange],
+    [defaultView, defaultRange],
   );
 
   return {

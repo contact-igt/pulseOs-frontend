@@ -75,7 +75,7 @@ export default function FrontDeskPage() {
   }, [queryClient]);
   const closeDrawer = useCallback(() => setSelected(null), [setSelected]);
   // Same actions as before; a server rejection (stale status) is an inline message, never an unhandled error.
-  const { handleAction, handleComplete, handleReschedule, error: actionError, clearError } = useAppointmentActions({ refresh: invalidate, onDone: closeDrawer });
+  const { handleAction, handleComplete, handleReschedule, error: actionError, clearError, drawerErrorFor, clearDrawerError } = useAppointmentActions({ refresh: invalidate, onDone: closeDrawer });
 
   const today = useMemo(() => dashboard.data?.today ?? [], [dashboard.data]);
   const filteredToday = useMemo(() => {
@@ -229,11 +229,14 @@ export default function FrontDeskPage() {
       <AppointmentDrawer
         appointment={selected}
         recentEvents={timeline.data}
-        onClose={closeDrawer}
+        onClose={() => {
+          clearDrawerError();
+          closeDrawer();
+        }}
         onAction={handleAction}
         onComplete={handleComplete}
         onReschedule={handleReschedule}
-        error={actionError}
+        error={drawerErrorFor(selected?.id)}
       />
     </div>
   );

@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 import { test, expect } from "@playwright/test";
 import path from "path";
+import { purgePatients, sql } from "./support/fixtures";
 
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD ?? "";
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4310";
@@ -29,6 +30,15 @@ async function login(page: import("@playwright/test").Page, email: string) {
 test.describe("Wave 3 — multi-endpoint attribution + telecaller reason filters (Group Omnichannel)", () => {
   test.skip(!DEMO_PASSWORD, "DEMO_PASSWORD must be set to run this suite");
 
+  // Fictional fixtures this spec creates in the live demo DB — patients (with their
+  // conversations, calls, tasks) and the extra WhatsApp line — are removed afterwards,
+  // so the suite is repeatable without a reseed.
+  const LINE_LABEL = `E2E Fertility Line ${Date.now()}`;
+  test.afterAll(() => {
+    purgePatients("Wave3 E2E ");
+    sql(`DELETE FROM communication_endpoints WHERE display_label LIKE 'E2E Fertility Line%'`);
+  });
+
   test("a second configured WhatsApp line is attributed correctly across Integrations, Inbox, and Patient 360", async ({ page, request }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await login(page, "gyn.admin@pulseos.local");
@@ -41,7 +51,7 @@ test.describe("Wave 3 — multi-endpoint attribution + telecaller reason filters
 
     // ---- Configure a second hospital line via the real Integrations UI, not the API directly ----
     const providerRef = `E2E_PNI_${Date.now()}`;
-    const label = "E2E Fertility Line";
+    const label = LINE_LABEL;
     await page.goto("/integrations");
     await expect(page.getByTestId("integrations-page")).toBeVisible();
     await page.getByTestId(`connector-row-${whatsapp.provider}`).click();

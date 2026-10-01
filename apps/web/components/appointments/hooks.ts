@@ -28,21 +28,28 @@ const ACTION_ERROR: Record<string, string> = {
  * the data is refetched so the view shows the server's truth.
  */
 export function useAppointmentActions({ refresh, onDone }: { refresh: () => void; onDone: () => void }) {
+  // The appointment changed on the server: the drawer closes and this notice explains why.
   const [error, setError] = useState<string | null>(null);
+  // A recoverable failure (network, 5xx): the drawer stays open with what was typed in it, and the
+  // message belongs to THAT appointment only — it never shows on another one's drawer.
+  const [drawerError, setDrawerError] = useState<{ id: string; message: string } | null>(null);
 
   const run = useCallback(
-    async (fn: () => Promise<unknown>) => {
+    async (rowId: string, fn: () => Promise<unknown>) => {
       setError(null);
+      setDrawerError(null);
       try {
         await fn();
         onDone();
       } catch (err) {
         const code = err instanceof ApiError ? err.message : "";
         const changed = ACTION_ERROR[code];
-        setError(changed ?? "Could not update the appointment. Please try again.");
-        // The appointment changed on the server: close so the refreshed row is what the user sees.
-        // Anything else (network, 5xx) is recoverable: keep the drawer and what was typed in it.
-        if (changed) onDone();
+        if (changed) {
+          setError(changed);
+          onDone();
+        } else {
+          setDrawerError({ id: rowId, message: "Could not update the appointment. Please try again." });
+        }
       } finally {
         refresh();
       }
@@ -53,8 +60,10 @@ export function useAppointmentActions({ refresh, onDone }: { refresh: () => void
   return {
     error,
     clearError: useCallback(() => setError(null), []),
-    handleAction: useCallback((row: AppointmentRow, action: AppointmentAction) => run(() => api.appointmentAction(row.id, action)), [run]),
-    handleComplete: useCallback((row: AppointmentRow) => run(() => api.completeAppointment(row.id)), [run]),
-    handleReschedule: useCallback((row: AppointmentRow, iso: string) => run(() => api.rescheduleAppointment(row.id, iso)), [run]),
+    drawerErrorFor: useCallback((id: string | undefined) => (id && drawerError?.id === id ? drawerError.message : null), [drawerError]),
+    clearDrawerError: useCallback(() => setDrawerError(null), []),
+    handleAction: useCallback((row: AppointmentRow, action: AppointmentAction) => run(row.id, () => api.appointmentAction(row.id, action)), [run]),
+    handleComplete: useCallback((row: AppointmentRow) => run(row.id, () => api.completeAppointment(row.id)), [run]),
+    handleReschedule: useCallback((row: AppointmentRow, iso: string) => run(row.id, () => api.rescheduleAppointment(row.id, iso)), [run]),
   };
 }

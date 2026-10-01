@@ -98,7 +98,7 @@ export function readTreatmentFilters(params: URLSearchParams): TreatmentUrlFilte
   };
 }
 
-/** Filter patch -> URL param patch (for patchSearch). */
+/** Filter patch -> URL param patch (for replaceUrlParams). */
 export function treatmentFilterPatch(patch: Partial<TreatmentUrlFilters>): Record<string, string | undefined> {
   const out: Record<string, string | undefined> = {};
   for (const [key, value] of Object.entries(patch) as [keyof TreatmentUrlFilters, string | undefined][]) out[TREATMENT_FILTER_PARAM[key]] = value || undefined;

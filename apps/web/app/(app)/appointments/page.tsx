@@ -195,12 +195,15 @@ export default function AppointmentsPage() {
       <AppointmentDrawer
         appointment={selected}
         recentEvents={timeline.data}
-        onClose={closeDrawer}
+        onClose={() => {
+          actions.clearDrawerError();
+          closeDrawer();
+        }}
         onAction={actions.handleAction}
         onComplete={actions.handleComplete}
         onReschedule={actions.handleReschedule}
         readOnly={!canManage}
-        error={actions.error}
+        error={actions.drawerErrorFor(selected?.id)}
       />
     </div>
   );

@@ -1,4 +1,5 @@
 import type { AnalyticsQuery, AnalyticsRangePreset, SourceChannel } from "@pulseos/types";
+import { addDays } from "@pulseos/ui";
 
 export type AnalyticsTab = "overview" | "acquisition" | "journey" | "revenue" | "team";
 
@@ -102,4 +103,17 @@ export function activeFilters(f: AnalyticsFilters): { key: FilterKey }[] {
   if (f.source) out.push({ key: "source" });
   if (f.campaignId) out.push({ key: "campaign" });
   return out;
+}
+
+/** The API accepts custom ranges of at most this many inclusive days. */
+const MAX_RANGE_DAYS = 366;
+
+/** Default custom range: the last 30 hospital days ending on the hospital's `today` (YYYY-MM-DD). */
+export function customRangeDefaults(today: string): { from: string; to: string } {
+  return { from: addDays(today, -29), to: today };
+}
+
+/** Earliest `from` the API accepts for a range ending on `to`. */
+export function earliestFrom(to: string): string {
+  return addDays(to, -(MAX_RANGE_DAYS - 1));
 }

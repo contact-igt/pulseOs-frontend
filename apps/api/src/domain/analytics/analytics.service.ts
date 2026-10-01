@@ -207,7 +207,10 @@ async function fetchCampaignSpend(db: Db, tenantId: string, period: AnalyticsPer
     const wholeCount = countBy(await fetchJourneys(db, tenantId, period.timezone, period.from, period.to, wholeFilter));
     const sliceCount = countBy(journeyFacts);
     shareByCampaign = new Map([...wholeCount].map(([id, total]) => [id, (sliceCount.get(id) ?? 0) / total]));
-    const idle = rows.filter((r) => !wholeCount.has(r.id)).map((r) => r.id);
+    // Only campaigns that actually carry spend in this period need a share: a long-ended one prorates to 0.
+    const idle = rows
+      .filter((r) => !wholeCount.has(r.id) && proratedSpend(r.spendAmount, r.startDay, r.endDay ?? period.today, period.from, period.to) > 0)
+      .map((r) => r.id);
     if (idle.length) {
       const lifetime = (filter: ScopeFilters) => fetchJourneys(db, tenantId, period.timezone, LIFETIME_FROM, period.to, filter);
       const lifeWhole = countBy(await lifetime(wholeFilter));

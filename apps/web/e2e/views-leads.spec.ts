@@ -57,9 +57,16 @@ test.describe("Leads views", () => {
 
       await page.getByTestId("view-switch-board").click();
       await expect(page).toHaveURL(/view=board/);
+      if (api.length === 0) {
+        // Nothing matches (e.g. no unassigned leads in this seed): both views show the same empty state.
+        await expect(page.getByText("No leads match these filters.")).toBeVisible();
+        await page.getByTestId("view-switch-table").click();
+        await expect(page.getByText("No leads match these filters.")).toBeVisible();
+        continue;
+      }
       await expect(page.getByTestId("leads-board")).toBeVisible();
       const board = await boardStageCounts(page);
-      expect(board, `stage counts for filter "${qs || "all"}"`).toEqual(api.length ? table : {});
+      expect(board, `stage counts for filter "${qs || "all"}"`).toEqual(table);
       const apiCounts = api.reduce<Record<string, number>>((acc, r) => ((acc[r.stage] = (acc[r.stage] ?? 0) + 1), acc), {});
       expect(board).toEqual(apiCounts);
 

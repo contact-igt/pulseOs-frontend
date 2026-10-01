@@ -5,18 +5,9 @@ import { SlidersHorizontal, X } from "lucide-react";
 import type { AnalyticsFilterOptions, Branch } from "@pulseos/types";
 import { Button, FilterSelect, SOURCE_LABELS, Tabs, localDayKey, useDialogFocus } from "@pulseos/ui";
 import { useHospitalTimeZone } from "@/lib/useHospitalTimeZone";
-import { RANGE_OPTIONS, activeFilters, type AnalyticsFilters } from "./filters";
+import { RANGE_OPTIONS, activeFilters, customRangeDefaults, earliestFrom, type AnalyticsFilters } from "./filters";
 
 const DATE_INPUT = "glass-control h-8 min-w-0 flex-1 rounded-control px-2 text-xs text-ink outline-none focus-visible:border-primary-500 sm:flex-none";
-
-const localYmd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-
-function defaultCustomRange() {
-  const to = new Date();
-  const from = new Date();
-  from.setDate(from.getDate() - 29);
-  return { from: localYmd(from), to: localYmd(to) };
-}
 
 interface BarProps {
   filters: AnalyticsFilters;
@@ -27,13 +18,14 @@ interface BarProps {
 }
 
 function RangeTabs({ filters, onChange }: Pick<BarProps, "filters" | "onChange">) {
+  const today = localDayKey(new Date(), useHospitalTimeZone());
   return (
     <Tabs
       ariaLabel="Date range"
       value={filters.range}
       items={[...RANGE_OPTIONS.map((r) => ({ key: r.key, label: r.label, testId: `range-${r.key}` })), { key: "custom", label: "Custom", testId: "range-custom" }]}
       onChange={(key) => {
-        if (key === "custom") onChange({ range: "custom", ...(filters.from && filters.to ? {} : defaultCustomRange()) });
+        if (key === "custom") onChange({ range: "custom", ...(filters.from && filters.to ? {} : customRangeDefaults(today)) });
         else onChange({ range: key as AnalyticsFilters["range"], from: undefined, to: undefined });
       }}
     />
@@ -47,7 +39,7 @@ function CustomDates({ filters, onChange }: Pick<BarProps, "filters" | "onChange
   if (filters.range !== "custom") return null;
   return (
     <div className="flex items-center gap-1.5" data-testid="custom-dates">
-      <input type="date" aria-label="From date" className={DATE_INPUT} value={filters.from ?? ""} max={filters.to ?? today} onChange={(e) => e.target.value && onChange({ from: e.target.value })} />
+      <input type="date" aria-label="From date" className={DATE_INPUT} value={filters.from ?? ""} min={earliestFrom(filters.to ?? today)} max={filters.to ?? today} onChange={(e) => e.target.value && onChange({ from: e.target.value })} />
       <span className="text-xs text-ink-2" aria-hidden="true">
         –
       </span>

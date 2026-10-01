@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_FILTERS, activeFilters, parseFilters, toApiQuery, toSearch } from "../filters";
+import { DEFAULT_FILTERS, activeFilters, parseFilters, toApiQuery, toSearch, customRangeDefaults, earliestFrom } from "../filters";
 
 describe("analytics filter state (URL is the single source of truth)", () => {
   it("defaults to 30 days, Overview, nothing filtered", () => {
@@ -42,5 +42,12 @@ describe("analytics filter state (URL is the single source of truth)", () => {
   it("switching tab keeps filters; the tab itself is not a filter", () => {
     const f = parseFilters(new URLSearchParams("source=meta&tab=team"));
     expect(activeFilters(f).map((a) => a.key)).toEqual(["source"]);
+  });
+
+  it("custom range defaults to the last 30 hospital days and cannot reach back past the API's 366-day limit", () => {
+    expect(customRangeDefaults("2026-10-01")).toEqual({ from: "2026-09-02", to: "2026-10-01" });
+    expect(customRangeDefaults("2026-03-01")).toEqual({ from: "2026-01-31", to: "2026-03-01" });
+    expect(earliestFrom("2026-10-01")).toBe("2025-10-01"); // 366 days inclusive
+    expect(earliestFrom("2024-03-01")).toBe("2023-03-02"); // a leap day sits inside the window
   });
 });

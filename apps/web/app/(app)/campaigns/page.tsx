@@ -3,7 +3,7 @@
 import { useCallback, useMemo } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarDays, GanttChart, Table2 } from "lucide-react";
 import { api } from "@pulseos/api-client";
@@ -11,11 +11,11 @@ import { Card, ConnectorModeBadge, EmptyState, ErrorState, FilterBar, FilterSele
 import type { CampaignFilters, CampaignViewRow, SourceChannel } from "@pulseos/types";
 import { withFrom } from "@/components/shell/BackLink";
 import { useViewState } from "@/lib/useViewState";
+import { replaceUrlParams } from "@/lib/urlParams";
 import { CampaignCalendar } from "@/components/campaigns/CampaignCalendar";
 import { CampaignTimeline } from "@/components/campaigns/CampaignTimeline";
 import { CAMPAIGN_VIEWS, SOURCE_LABEL, SOURCE_OPTIONS, campaignFilterPatch, readCampaignFilters } from "@/components/campaigns/runs";
 import type { CampaignView } from "@/components/campaigns/runs";
-import { patchSearch } from "@/components/treatments/urlState";
 import { useHospitalTimeZone } from "@/lib/useHospitalTimeZone";
 
 const DATE_INPUT = "glass-control h-8 min-w-0 flex-1 rounded-control px-2 text-xs text-ink outline-none focus-visible:border-primary-500 sm:flex-none";
@@ -32,19 +32,17 @@ const PANEL_TITLE: Record<CampaignView, string> = { table: "Campaign / Source Pe
 export default function CampaignsPage() {
   const timeZone = useHospitalTimeZone();
   const router = useRouter();
-  const pathname = usePathname();
   const params = useSearchParams();
   // View, date and every filter live in the URL (refresh / back / shared link restore them).
   const { view, date, setView, setDate, calendarMode, setCalendarMode } = useViewState<CampaignView>({ views: CAMPAIGN_VIEWS, defaultView: "table", defaultRange: "month", timeZone });
   const filters = useMemo(() => readCampaignFilters(new URLSearchParams(params.toString())), [params]);
-  const go = useCallback((qs: string) => router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false }), [pathname, router]);
   const setFilters = useCallback(
     (update: (f: CampaignFilters) => CampaignFilters) => {
       const next = update(filters);
       const cleared: Partial<CampaignFilters> = { branchId: undefined, specialtyKey: undefined, source: undefined, dateFrom: undefined, dateTo: undefined };
-      go(patchSearch(new URLSearchParams(params.toString()), campaignFilterPatch({ ...cleared, ...next })));
+      replaceUrlParams(campaignFilterPatch({ ...cleared, ...next }));
     },
-    [filters, go, params],
+    [filters],
   );
   const openCampaign = useCallback((row: CampaignViewRow) => router.push(withFrom(`/campaigns/${row.campaignId}`, "campaigns")), [router]);
 

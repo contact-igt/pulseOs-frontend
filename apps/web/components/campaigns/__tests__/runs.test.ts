@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CampaignViewRow } from "@pulseos/types";
+import { periodOf } from "../CampaignCalendar";
 import { campaignCalendarEvents, campaignGanttItems, readCampaignFilters, runLabel, runningDuring, timelineWindow } from "../runs";
 
 const TZ = "Asia/Kolkata";
@@ -81,5 +82,11 @@ describe("campaign run window", () => {
       dateTo: "2026-09-30",
     });
     expect(readCampaignFilters(new URLSearchParams("source=bogus&from=nope"))).toEqual({});
+  });
+
+  it("labels a week by its real dates, never 'this week' (the user may be looking at any week)", () => {
+    const p = periodOf("week", "2026-01-14");
+    expect(p).toMatchObject({ from: "2026-01-12", to: "2026-01-18" });
+    expect(p.label).toBe("12 Jan – 18 Jan");
   });
 });
