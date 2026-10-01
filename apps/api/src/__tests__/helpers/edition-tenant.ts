@@ -78,6 +78,8 @@ export async function destroyTestTenant(db: Db, t: TestTenant): Promise<void> {
     sql`delete from custom_field_definitions where tenant_id = ${tenant}`,
     sql`delete from treatment_definitions where tenant_id = ${tenant}`,
     sql`delete from specialty_templates where tenant_id = ${tenant}`,
+    sql`delete from tasks where tenant_id = ${tenant}`,
+    sql`delete from followup_types where tenant_id = ${tenant}`,
     sql`delete from departments where tenant_id = ${tenant}`,
     sql`delete from lead_sources where tenant_id = ${tenant}`,
     sql`delete from tenant_settings where tenant_id = ${tenant}`,

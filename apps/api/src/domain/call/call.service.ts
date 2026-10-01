@@ -4,6 +4,7 @@ import type { Db } from "../../db/client.js";
 import { callIntelligence, calls, communicationEndpoints, connectors, crmOutcomes, journeys, patients, tasks, timelineEvents, users } from "../../db/schema.js";
 import { hasPermission, type CallDirection, type CallFeedbackInput, type CallIntelligenceVm, type CallStatsVm, type CallStatus, type CallVm, type LogCallInput, type LogCallResult, type Role, type SummaryMode } from "@pulseos/types";
 import { findActiveOutcome, nextStage } from "../crm/crm-outcome.service.js";
+import { scheduledEvent } from "../task/task.service.js";
 
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 type Result<T = object> = ({ ok: true } & T) | { ok: false; reason: string };
@@ -171,7 +172,7 @@ async function assigneeOk(db: Db | Tx, tenantId: string, userId: string): Promis
 /** The callback is the ordinary Task engine — one CALLBACK (or the outcome's follow-up type) Task, no separate table. */
 async function createCallbackTask(
   tx: Tx,
-  ctx: { tenantId: string; patientId: string; journeyId: string; ownerUserId: string | null; actorId: string; type: "CALLBACK" | string; label: string },
+  ctx: { tenantId: string; patientId: string; journeyId: string; ownerUserId: string | null; actorId: string; type: "CALLBACK" | string; label: string; timezone: string },
   callback: { dueAt: Date; note: string | null; assignedTo?: string },
   now: Date,
 ): Promise<string> {
@@ -190,10 +191,10 @@ async function createCallbackTask(
       createdBy: ctx.actorId,
       notes: callback.note ?? "Callback requested on a call",
     })
-    .returning({ id: tasks.id });
+    .returning();
   await tx.insert(timelineEvents).values({
     tenantId: ctx.tenantId, patientId: ctx.patientId, journeyId: ctx.journeyId, actorType: "user", actorId: ctx.actorId, eventType: "task_created", occurredAt: now,
-    title: `Task created: ${ctx.type.replace(/_/g, " ").toLowerCase()}`, description: ctx.label,
+    relatedEntityType: "task", relatedEntityId: task!.id, ...(await scheduledEvent(tx, ctx.tenantId, task!, ctx.timezone)),
   });
   return task!.id;
 }
@@ -204,7 +205,7 @@ async function createCallbackTask(
  * so a requested callback can never silently vanish. Patient, phone, department, source and service all come from
  * the Journey; the call count is derived, not typed.
  */
-export async function logManualCall(db: Db, tenantId: string, actor: Actor, journeyId: string, input: LogCallInput, now: Date = new Date()): Promise<Result<LogCallResult>> {
+export async function logManualCall(db: Db, tenantId: string, actor: Actor, journeyId: string, input: LogCallInput, now: Date = new Date(), timezone = "Asia/Kolkata"): Promise<Result<LogCallResult>> {
   if (input.direction !== "inbound" && input.direction !== "outbound") return { ok: false, reason: "invalid_request" };
   if (typeof input.connected !== "boolean") return { ok: false, reason: "invalid_request" };
   const feedback = input.staffFeedback?.trim() || null;
@@ -270,7 +271,7 @@ export async function logManualCall(db: Db, tenantId: string, actor: Actor, jour
 
     let callbackTaskId: string | null = null;
     if (callback && !("error" in callback)) {
-      callbackTaskId = await createCallbackTask(tx, { tenantId, patientId: journey.patientId, journeyId, ownerUserId: journey.ownerUserId, actorId: actor.id, type: outcome?.followUpType ?? "CALLBACK", label: outcome?.label ?? "Callback" }, { ...callback, assignedTo: input.callback?.assignedTo }, now);
+      callbackTaskId = await createCallbackTask(tx, { tenantId, patientId: journey.patientId, journeyId, ownerUserId: journey.ownerUserId, actorId: actor.id, type: outcome?.followUpType ?? "CALLBACK", label: outcome?.label ?? "Callback", timezone }, { ...callback, assignedTo: input.callback?.assignedTo }, now);
       await tx.update(calls).set({ callbackTaskId }).where(eq(calls.id, call.id));
     }
     return { callId: call.id, callbackTaskId, duplicate: false };
@@ -282,7 +283,7 @@ export async function logManualCall(db: Db, tenantId: string, actor: Actor, jour
  * Add the human side to a call that already exists — typically an IVR call. Writes ONLY the human columns
  * (feedback, outcome, callback); the transcript and AI summary live in their own table and are never touched here.
  */
-export async function addCallFeedback(db: Db, tenantId: string, actor: Actor, callId: string, input: CallFeedbackInput, now: Date = new Date()): Promise<Result<{ callbackTaskId: string | null }>> {
+export async function addCallFeedback(db: Db, tenantId: string, actor: Actor, callId: string, input: CallFeedbackInput, now: Date = new Date(), timezone = "Asia/Kolkata"): Promise<Result<{ callbackTaskId: string | null }>> {
   const [call] = await db.select().from(calls).where(and(eq(calls.tenantId, tenantId), eq(calls.id, callId))).limit(1);
   if (!call) return { ok: false, reason: "call_not_found" };
   if (!call.patientId || !call.journeyId) return { ok: false, reason: "call_not_linked" };
@@ -313,7 +314,7 @@ export async function addCallFeedback(db: Db, tenantId: string, actor: Actor, ca
       await tx.update(journeys).set({ stage, lastOutcomeId: outcome.id, lastOutcomeAt: now, ...(journey.contactedAt === null && stage !== "enquiry" ? { contactedAt: now } : {}) }).where(eq(journeys.id, journey.id));
     }
     if (callback && !("error" in callback)) {
-      const id = await createCallbackTask(tx, { tenantId, patientId: journey.patientId, journeyId: journey.id, ownerUserId: journey.ownerUserId, actorId: actor.id, type: outcome?.followUpType ?? "CALLBACK", label: outcome?.label ?? "Callback" }, { ...callback, assignedTo: input.callback?.assignedTo }, now);
+      const id = await createCallbackTask(tx, { tenantId, patientId: journey.patientId, journeyId: journey.id, ownerUserId: journey.ownerUserId, actorId: actor.id, type: outcome?.followUpType ?? "CALLBACK", label: outcome?.label ?? "Callback", timezone }, { ...callback, assignedTo: input.callback?.assignedTo }, now);
       await tx.update(calls).set({ callbackTaskId: id }).where(eq(calls.id, callId));
       return id;
     }

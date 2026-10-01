@@ -2,7 +2,7 @@ import { and, asc, eq, inArray, max } from "drizzle-orm";
 import { patientNameSql } from "../../lib/patient-name.js";
 import type { Db } from "../../db/client.js";
 import { inLocalRange, localToday, tenantTimezone } from "../../lib/hospital-time.js";
-import { appointments, branches, patients, timelineEvents, users } from "../../db/schema.js";
+import { appointments, branches, journeys, patients, timelineEvents, users } from "../../db/schema.js";
 import type { AppointmentAction, AppointmentRow, AppointmentStatus, CreateAppointmentInput, FrontDeskDashboard } from "@pulseos/types";
 
 /** Longest from/to span a list request may ask for: a month grid (42 days) plus slack. */
@@ -81,7 +81,20 @@ export async function listAppointments(db: Db, tenantId: string, filters: Appoin
   return rows.map(toRow);
 }
 
-export async function createAppointment(db: Db, tenantId: string, actorId: string, input: CreateAppointmentInput): Promise<AppointmentRow> {
+/**
+ * Books a visit. Everything it points at must belong to THIS hospital: the patient, the journey (and that journey to
+ * that patient), the branch, and a Doctor. A bad reference is refused — it never lands as a cross-hospital row.
+ */
+export async function createAppointment(db: Db, tenantId: string, actorId: string, input: CreateAppointmentInput, timezone = "Asia/Kolkata"): Promise<{ ok: true; appointment: AppointmentRow } | { ok: false; reason: string }> {
+  const scheduledAt = new Date(input.scheduledAt);
+  if (Number.isNaN(scheduledAt.getTime())) return { ok: false, reason: "invalid_request" };
+  const [journey] = await db.select({ id: journeys.id }).from(journeys).where(and(eq(journeys.tenantId, tenantId), eq(journeys.id, input.journeyId), eq(journeys.patientId, input.patientId))).limit(1);
+  if (!journey) return { ok: false, reason: "journey_not_found" };
+  const [branch] = await db.select({ id: branches.id }).from(branches).where(and(eq(branches.tenantId, tenantId), eq(branches.id, input.branchId))).limit(1);
+  if (!branch) return { ok: false, reason: "branch_not_found" };
+  const [doctor] = await db.select({ id: users.id }).from(users).where(and(eq(users.tenantId, tenantId), eq(users.id, input.doctorId), eq(users.role, "DOCTOR"))).limit(1);
+  if (!doctor) return { ok: false, reason: "doctor_not_found" };
+
   const [row] = await db
     .insert(appointments)
     .values({
@@ -90,7 +103,7 @@ export async function createAppointment(db: Db, tenantId: string, actorId: strin
       journeyId: input.journeyId,
       branchId: input.branchId,
       doctorUserId: input.doctorId,
-      scheduledAt: new Date(input.scheduledAt),
+      scheduledAt,
       reason: input.reason ?? null,
       status: "scheduled",
     })
@@ -103,7 +116,10 @@ export async function createAppointment(db: Db, tenantId: string, actorId: strin
     actorType: "user",
     actorId,
     eventType: "appointment_created",
-    title: `Appointment booked for ${new Date(input.scheduledAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`,
+    // Hospital clock, not the server's, and absolute so it never goes stale.
+    title: `Appointment booked · ${scheduledAt.toLocaleString("en-IN", { timeZone: timezone, weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", hour12: true })}`,
+    relatedEntityType: "appointment",
+    relatedEntityId: row!.id,
   });
 
   const [full] = await db
@@ -126,7 +142,7 @@ export async function createAppointment(db: Db, tenantId: string, actorId: strin
     .where(eq(appointments.id, row.id))
     .limit(1);
 
-  return toRow(full);
+  return { ok: true, appointment: toRow(full) };
 }
 
 // Wait duration needs a real arrival time. Appointments have no checked-in

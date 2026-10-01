@@ -33,6 +33,7 @@ import {
   connectors,
   customFieldDefinitions,
   departments,
+  followUpTypes,
   leadSources,
   specialtyTemplates,
   tenants,
@@ -93,6 +94,7 @@ async function main() {
   await db.delete(connectors);
   await db.delete(customFieldDefinitions);
   await db.delete(specialtyTemplates);
+  await db.delete(followUpTypes);
   await db.delete(departments);
   await db.delete(leadSources);
   await db.delete(tenantSettings);

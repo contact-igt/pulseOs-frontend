@@ -43,7 +43,7 @@ export async function callRoutes(app: FastifyInstance) {
     const parsed = logBody.safeParse(request.body);
     if (!parsed.success) return reply.status(400).send({ error: "invalid_request" });
     const user = request.sessionUser!;
-    const result = await logManualCall(app.db, user.tenantId, { id: user.id, name: user.name, role: user.role }, id.data, parsed.data);
+    const result = await logManualCall(app.db, user.tenantId, { id: user.id, name: user.name, role: user.role }, id.data, parsed.data, new Date(), user.timezone);
     if (!result.ok) return reply.status(REASON_STATUS[result.reason] ?? 400).send({ error: result.reason });
     return reply.status(result.duplicate ? 200 : 201).send({ callId: result.callId, callbackTaskId: result.callbackTaskId, duplicate: result.duplicate });
   });
@@ -55,7 +55,7 @@ export async function callRoutes(app: FastifyInstance) {
     const parsed = feedbackBody.safeParse(request.body);
     if (!parsed.success) return reply.status(400).send({ error: "invalid_request" });
     const user = request.sessionUser!;
-    const result = await addCallFeedback(app.db, user.tenantId, { id: user.id, name: user.name, role: user.role }, id.data, parsed.data);
+    const result = await addCallFeedback(app.db, user.tenantId, { id: user.id, name: user.name, role: user.role }, id.data, parsed.data, new Date(), user.timezone);
     if (!result.ok) return reply.status(REASON_STATUS[result.reason] ?? 400).send({ error: result.reason });
     return { ok: true, callbackTaskId: result.callbackTaskId };
   });

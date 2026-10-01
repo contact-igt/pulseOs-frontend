@@ -215,6 +215,30 @@ export const taskTypeEnum = pgEnum("task_type", [
   "CALLBACK", "FOLLOW_UP", "APPOINTMENT_CONFIRMATION", "NO_SHOW_RECOVERY", "TREATMENT_DECISION", "POST_CARE", "RECALL", "OTHER",
 ]);
 
+// Tenant-owned follow-up types: the product labels staff see ("Callback", "Appointment Risk"…). Each maps onto a
+// canonical Task type, so the Task engine and everything keyed on it stay stable. `key` never changes once created;
+// a type is archived (isActive=false) rather than deleted, so historical tasks keep their label.
+export const followUpDefaultOwnerEnum = pgEnum("followup_default_owner", ["JOURNEY_OWNER", "ACTOR", "UNASSIGNED"]);
+
+export const followUpTypes = pgTable("followup_types", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  // Null = offered for every department; otherwise only for journeys of that department.
+  departmentId: uuid("department_id").references(() => departments.id),
+  key: text("key").notNull(),
+  label: text("label").notNull(),
+  canonicalTaskType: taskTypeEnum("canonical_task_type").notNull().default("FOLLOW_UP"),
+  defaultPriority: taskPriorityEnum("default_priority").notNull().default("normal"),
+  defaultOwner: followUpDefaultOwnerEnum("default_owner").notNull().default("JOURNEY_OWNER"),
+  requiresNote: boolean("requires_note").notNull().default(false),
+  isActive: boolean("is_active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  tenantKeyUnique: uniqueIndex("followup_types_tenant_key_unique").on(t.tenantId, t.key),
+}));
+
 export const tasks = pgTable("tasks", {
   id: uuid("id").primaryKey().defaultRandom(),
   tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
@@ -223,6 +247,8 @@ export const tasks = pgTable("tasks", {
   assignedTo: uuid("assigned_to").references(() => users.id),
   reason: taskReasonEnum("reason").notNull().default("manual_task"),
   type: taskTypeEnum("type").notNull().default("OTHER"),
+  // The tenant's product label for this task (null on tasks made before follow-up types, or by the system).
+  followUpTypeId: uuid("followup_type_id").references(() => followUpTypes.id),
   priority: taskPriorityEnum("priority").notNull().default("normal"),
   status: taskStatusEnum("status").notNull().default("pending"),
   notes: text("notes"),
@@ -234,6 +260,7 @@ export const tasks = pgTable("tasks", {
 }, (t) => ({
   tenantIdx: index("tasks_tenant_idx").on(t.tenantId),
   assignedIdx: index("tasks_assigned_idx").on(t.assignedTo),
+  journeyIdx: index("tasks_journey_idx").on(t.journeyId),
 }));
 
 // "scheduled" is the DB-level synonym for the operational state BOOKED

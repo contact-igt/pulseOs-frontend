@@ -79,8 +79,9 @@ export async function appointmentRoutes(app: FastifyInstance) {
       const parsed = createAppointmentBody.safeParse(request.body);
       if (!parsed.success) return reply.status(400).send({ error: "invalid_request" });
 
-      const row = await createAppointment(app.db, tenantId, actorId, parsed.data);
-      return reply.status(201).send(row);
+      const result = await createAppointment(app.db, tenantId, actorId, parsed.data, request.sessionUser!.timezone);
+      if (!result.ok) return reply.status(result.reason === "invalid_request" ? 400 : 404).send({ error: result.reason });
+      return reply.status(201).send(result.appointment);
     });
 
     manageApp.patch("/appointments/:id/action", async (request, reply) => {

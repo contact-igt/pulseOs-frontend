@@ -2,6 +2,7 @@ import { db } from "../../db/client.js";
 import type { Edition } from "@pulseos/types";
 import { journeys, marketingCampaigns, tasks, timelineEvents } from "../../db/schema.js";
 import { seedCallDemo } from "./call-demo.js";
+import { seedFollowUpDemo } from "./followup-demo.js";
 import { installDepartmentTemplate } from "../../domain/specialty/department.service.js";
 import { OPHTHALMOLOGY_TREATMENTS } from "../../domain/specialty/ophthalmology.templates.js";
 import { eq } from "drizzle-orm";
@@ -731,6 +732,8 @@ export async function seedOphthalmologyTenant(passwordHash: string, variant: Oph
   await db.update(journeys).set({ contactedAt: daysFromNow(-1, 9) }).where(eq(journeys.id, leadResults[3].journeyId));
 
   await seedCallDemo(tenant.id, { runoConnectorId: runoConnector.id, coordinator: { id: coordinator.id, name: coordinator.name, role: "PATIENT_COORDINATOR" }, frontDesk: { id: frontDesk.id, name: frontDesk.name, role: "FRONT_DESK" }, tag: variant.tag.toLowerCase() });
+
+  await seedFollowUpDemo(tenant.id, { admin, coordinator, frontDesk, doctorId: staff.doctor.id, branchId: branchA.id });
 
   console.log(`Ophthalmology tenant: ${tenant.name} (${tenant.id}) — ${JOURNEY_CONFIGS.length} journeys, ${patientRows.length} patients`);
   return { tenantId: tenant.id };

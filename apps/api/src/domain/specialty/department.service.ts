@@ -2,6 +2,7 @@ import { and, asc, eq } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { departments, specialtyTemplates } from "../../db/schema.js";
 import { ensureLeadSources } from "../lead/lead-source.service.js";
+import { ensureFollowUpTypes } from "../task/followup-type.service.js";
 import { DEPARTMENT_TEMPLATES, departmentKeyForTemplate, findDepartmentTemplate } from "./department-templates.js";
 import { ensureSpecialties } from "./specialty.service.js";
 import { ensureTreatmentCatalog } from "./treatment-catalog.service.js";
@@ -52,6 +53,7 @@ export async function installDepartmentTemplate(db: Db, tenantId: string, templa
   await ensureSpecialties(db, tenantId, template.specialties, { departmentId: department.id });
   await ensureTreatmentCatalog(db, tenantId, template.treatments);
   await ensureLeadSources(db, tenantId);
+  await ensureFollowUpTypes(db, tenantId);
   return { ok: true, departmentId: department.id, created: inserted.length > 0 };
 }
 

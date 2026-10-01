@@ -687,6 +687,10 @@ export interface JourneyDetailVm {
     lastInteractionAt: string;
     /** Nearest-due open task on this journey (any assignee); type label + due date only, never notes. */
     nextAction: { dueAt: string; label: string } | null;
+    /** The task that IS the Next Action (derived from open tasks — never stored): overdue first, then today, then the earliest upcoming. Null when the viewer may not see tasks or none is open. */
+    nextTask: TaskRow | null;
+    /** Where nextTask falls today, in the hospital's clock. */
+    nextTaskBucket: "overdue" | "today" | "upcoming" | null;
     /** The latest configured outcome logged on this Journey (its sub-status), or null. */
     lastOutcome: { label: string; at: string } | null;
     /** Counts derived from this Journey's Call records. */
@@ -742,11 +746,83 @@ export type TaskStatus = "pending" | "in_progress" | "completed" | "cancelled";
 // assignedTo to themselves regardless of view, which combined with this
 // view's "assignedTo IS NULL" condition always yields an empty result for
 // them, never a tenant-wide unassigned queue).
-export type TaskView = "today" | "overdue" | "upcoming" | "completed" | "unassigned";
+export type TaskView = "today" | "overdue" | "upcoming" | "completed" | "unassigned" | "appointment_risk";
 // Why a task exists — distinct from `type` (what action it is). Written by
 // the specific service that creates each kind of task; "manual_task" is the
 // DB default for anything created without an explicit reason.
 export type TaskReason = "overdue_callback" | "missed_follow_up" | "no_show" | "high_intent_uncontacted" | "treatment_decision_pending" | "manual_task" | "new_lead";
+
+/** Stable keys of the default follow-up types. A tenant may rename or archive them but the key never changes. */
+export const FOLLOW_UP_KEYS = { callback: "callback", appointmentFollowUp: "appointment_followup", appointmentRisk: "appointment_risk", general: "general_followup", surgery: "surgery_followup" } as const;
+
+export const TASK_TYPE_LABEL: Record<TaskType, string> = {
+  CALLBACK: "Callback",
+  FOLLOW_UP: "Follow-up",
+  APPOINTMENT_CONFIRMATION: "Appointment confirmation",
+  NO_SHOW_RECOVERY: "No-show recovery",
+  TREATMENT_DECISION: "Treatment decision",
+  POST_CARE: "Post-care",
+  RECALL: "Recall",
+  OTHER: "Other",
+};
+
+export type FollowUpDefaultOwner = "JOURNEY_OWNER" | "ACTOR" | "UNASSIGNED";
+export const FOLLOW_UP_OWNER_LABEL: Record<FollowUpDefaultOwner, string> = { JOURNEY_OWNER: "Journey owner", ACTOR: "The person adding it", UNASSIGNED: "Unassigned" };
+
+/** What a follow-up type behaves like to the system. Shown to Admins in plain words, never as an internal name. */
+export const FOLLOW_UP_BEHAVIOURS: { key: TaskType; label: string; hint: string }[] = [
+  { key: "CALLBACK", label: "A call to make", hint: "Shown as a callback in My Work" },
+  { key: "FOLLOW_UP", label: "A general follow-up", hint: "Most follow-ups" },
+  { key: "APPOINTMENT_CONFIRMATION", label: "Confirming an appointment", hint: "Counts with appointment confirmations" },
+  { key: "POST_CARE", label: "Care after treatment", hint: "Post-care check-ins" },
+];
+
+export interface FollowUpTypeVm {
+  id: string;
+  key: string;
+  label: string;
+  /** The stable internal Task type this label maps to. */
+  canonicalTaskType: TaskType;
+  defaultPriority: TaskPriority;
+  defaultOwner: FollowUpDefaultOwner;
+  requiresNote: boolean;
+  isActive: boolean;
+  sortOrder: number;
+  /** Null = offered for every department. */
+  departmentId: string | null;
+  departmentName: string | null;
+}
+
+export interface CreateFollowUpTypeInput {
+  label: string;
+  canonicalTaskType?: TaskType;
+  defaultPriority?: TaskPriority;
+  defaultOwner?: FollowUpDefaultOwner;
+  requiresNote?: boolean;
+  departmentId?: string | null;
+}
+
+export interface UpdateFollowUpTypeInput {
+  label?: string;
+  canonicalTaskType?: TaskType;
+  defaultPriority?: TaskPriority;
+  defaultOwner?: FollowUpDefaultOwner;
+  requiresNote?: boolean;
+  departmentId?: string | null;
+  isActive?: boolean;
+}
+
+/** Add Follow-up on a Journey: the Task engine, with the tenant's follow-up type. */
+export interface CreateFollowUpInput {
+  followUpTypeId: string;
+  /** ISO instant, in the future. */
+  dueAt: string;
+  /** Omit for the type's default owner; null = unassigned. */
+  assignedTo?: string | null;
+  /** Omit for the type's default priority. */
+  priority?: TaskPriority;
+  note?: string;
+}
 
 export interface TaskRow {
   id: string;
@@ -759,6 +835,11 @@ export interface TaskRow {
   assignedTo: string | null;
   assignedToName: string | null;
   type: TaskType;
+  /** The tenant's follow-up type, when the task has one. */
+  followUpTypeId: string | null;
+  followUpTypeKey: string | null;
+  /** What to show: the follow-up type's label (even if archived), else the stable type's label. */
+  typeLabel: string;
   priority: TaskPriority;
   status: TaskStatus;
   reason: TaskReason;
@@ -774,6 +855,8 @@ export interface TaskCounts {
   today: number;
   upcoming: number;
   completed: number;
+  /** Open Appointment Risk tasks assigned to the caller. */
+  appointmentRisk: number;
   // Tenant-wide unassigned actionable tasks — only computed for callers with
   // MANAGE_TASKS (see task.routes.ts); omitted (undefined) for everyone else.
   unassigned?: number;
@@ -784,6 +867,8 @@ export interface CreateTaskInput {
   journeyId?: string;
   assignedTo?: string;
   type: TaskType;
+  /** Optional: the hospital's follow-up type (label) for this task. */
+  followUpTypeId?: string;
   priority?: TaskPriority;
   notes?: string;
   dueAt: string;

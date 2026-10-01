@@ -2,6 +2,7 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { crmOutcomes, customFieldValues, journeys, tasks, timelineEvents } from "../../db/schema.js";
 import type { CreateCrmOutcomeInput, CrmOutcomeVm, JourneyStage, LogInteractionInput, LogInteractionResult, OutcomeStage, Role, TaskType, UpdateCrmOutcomeInput } from "@pulseos/types";
+import { scheduledEvent } from "../task/task.service.js";
 import { listFieldsForEntry, resolveSubmittedValues, type Result } from "./crm-field.service.js";
 
 // Configurable outcomes. Canonical stages are fixed (enquiry → contacted → booked → ...); an outcome only
@@ -140,6 +141,7 @@ export async function logInteraction(
   journeyId: string,
   input: LogInteractionInput,
   now: Date = new Date(),
+  timezone = "Asia/Kolkata",
 ): Promise<LogResult> {
   await ensureDefaultOutcomes(db, tenantId);
   const [journey] = await db.select().from(journeys).where(and(eq(journeys.tenantId, tenantId), eq(journeys.id, journeyId))).limit(1);
@@ -220,11 +222,11 @@ export async function logInteraction(
           reason: "overdue_callback", type: outcome.followUpType, priority: "normal", status: "pending", dueAt: followUpAt, createdBy: actor.id,
           notes: [outcome.label, description].filter(Boolean).join(" — "),
         })
-        .returning({ id: tasks.id });
+        .returning();
       followUpTaskId = task!.id;
       await tx.insert(timelineEvents).values({
         tenantId, patientId: journey.patientId, journeyId, actorType: "user", actorId: actor.id, eventType: "task_created", occurredAt: now,
-        title: `Task created: ${outcome.followUpType.replace(/_/g, " ").toLowerCase()}`,
+        relatedEntityType: "task", relatedEntityId: task!.id, ...(await scheduledEvent(tx, tenantId, task!, timezone)),
       });
     }
 

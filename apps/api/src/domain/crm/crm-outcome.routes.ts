@@ -93,7 +93,7 @@ export async function crmOutcomeRoutes(app: FastifyInstance) {
     const parsed = interactionBody.safeParse(request.body);
     if (!parsed.success) return reply.status(400).send({ error: "invalid_request" });
     const user = request.sessionUser!;
-    const result = await logInteraction(app.db, user.tenantId, { id: user.id, role: user.role }, id.data, parsed.data);
+    const result = await logInteraction(app.db, user.tenantId, { id: user.id, role: user.role }, id.data, parsed.data, new Date(), user.timezone);
     if (!result.ok) {
       // An unknown / archived outcome is a bad request body (400); 404 is reserved for the Journey or Task in the path / body that does not exist.
       const status = result.reason === "outcome_not_found" ? 400 : (REASON_STATUS[result.reason] ?? 400);

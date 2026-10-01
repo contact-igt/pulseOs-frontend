@@ -34,7 +34,7 @@ import type {
 } from "@pulseos/types";
 import { getSpendAtRisk, SPEND_AT_RISK_CATEGORIES } from "../dashboard/dashboard.service.js";
 import { listAppointments } from "../appointment/appointment.service.js";
-import { listTasks, getNextActionForJourney } from "../task/task.service.js";
+import { deriveNextAction, getNextActionForJourney, listTasks } from "../task/task.service.js";
 import { getPatientTimeline } from "../timeline/timeline.service.js";
 import { loadJourneyFieldValues } from "../crm/crm-field.service.js";
 
@@ -236,11 +236,6 @@ export interface JourneyViewer {
   timezone: string;
 }
 
-function nextActionLabel(type: string): string {
-  const words = type.replace(/_/g, " ").toLowerCase();
-  return words.charAt(0).toUpperCase() + words.slice(1);
-}
-
 export async function getJourneyDetail(db: Db, tenantId: string, journeyId: string, viewer: JourneyViewer): Promise<JourneyDetailVm | null> {
   // Tenant-scoped in the WHERE clause itself: another tenant's id returns no
   // row, exactly like a nonexistent id.
@@ -306,7 +301,7 @@ export async function getJourneyDetail(db: Db, tenantId: string, journeyId: stri
         listTasks(db, tenantId, { patientId: j.patientId, assignedTo: canManageTasks ? undefined : viewer.id }, viewer.timezone)
       : Promise.resolve([]),
     listAppointments(db, tenantId, { journeyId }),
-    getNextActionForJourney(db, journeyId),
+    getNextActionForJourney(db, tenantId, journeyId, viewer.timezone),
     getCallStats(db, tenantId, journeyId),
   ]);
   const journeyTasks = taskRows.filter((t) => t.journeyId === journeyId);
@@ -314,7 +309,14 @@ export async function getJourneyDetail(db: Db, tenantId: string, journeyId: stri
   const latestAppointment = appointmentRows.length > 0 ? appointmentRows[appointmentRows.length - 1] : null; // ordered by scheduledAt asc
   const doctorName = latestAppointment?.doctorName ?? null;
   const lastInteractionAt = timeline.length > 0 ? timeline[timeline.length - 1].occurredAt : j.createdAt.toISOString();
-  const nextAction = nextTask ? { dueAt: nextTask.dueAt.toISOString(), label: nextActionLabel(nextTask.type) } : null;
+  const nextAction = nextTask ? { dueAt: nextTask.dueAt.toISOString(), label: nextTask.label } : null;
+  // The Next Action as a full task (note, owner, priority) — only from tasks this viewer may see, derived the same way.
+  const visibleNext = deriveNextAction(
+    journeyTasks.filter((t) => t.status === "pending" || t.status === "in_progress").map((t) => ({ id: t.id, dueAt: new Date(t.dueAt), priority: t.priority })),
+    new Date(),
+    viewer.timezone,
+  );
+  const nextTaskRow = visibleNext ? journeyTasks.find((t) => t.id === visibleNext.task.id) ?? null : null;
 
   let treatments: TreatmentRow[] | null = null;
   if (canViewTreatment) {
@@ -385,6 +387,8 @@ export async function getJourneyDetail(db: Db, tenantId: string, journeyId: stri
       nextAction,
       lastOutcome: j.lastOutcomeLabel && j.lastOutcomeAt ? { label: j.lastOutcomeLabel, at: j.lastOutcomeAt.toISOString() } : null,
       callStats,
+      nextTask: nextTaskRow,
+      nextTaskBucket: visibleNext?.bucket ?? null,
     },
     customFields,
     timeline,

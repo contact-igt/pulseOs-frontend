@@ -21,7 +21,7 @@ import { resolveOrCreatePatient } from "../patient/identity.service.js";
 import { resolveLeadSource } from "./lead-source.service.js";
 import { isValidPastDate, MAX_AGE_YEARS } from "../../lib/age.js";
 import { recordTouchpoint } from "../acquisition/attribution.service.js";
-import { createTask } from "../task/task.service.js";
+import { createTask, eligibleAssignee } from "../task/task.service.js";
 import { listFieldsForEntry, resolveSubmittedValues } from "../crm/crm-field.service.js";
 import { pickOwnerForNewJourney } from "../crm/crm-allocation.service.js";
 import type { OwnerFilter } from "../journey/journey.service.js";
@@ -52,6 +52,11 @@ export async function createLead(db: Db, tenantId: string, actorId: string, inpu
   if (input.dateOfBirth !== undefined && !isValidPastDate(input.dateOfBirth, todayKey)) invalid.push("dateOfBirth");
   if (input.age !== undefined && (!Number.isInteger(input.age) || input.age < 0 || input.age > MAX_AGE_YEARS)) invalid.push("age");
   if (input.channel !== undefined && !MANUAL_INTERACTION_CHANNELS.includes(input.channel)) invalid.push("channel");
+  // The first follow-up must be creatable, or the lead is refused up front — never saved without the follow-up it promised.
+  if (input.followUp) {
+    const owner = input.followUp.assignedTo ?? input.ownerId;
+    if (Number.isNaN(new Date(input.followUp.dueAt).getTime()) || (owner && !(await eligibleAssignee(db, tenantId, owner)))) invalid.push("followUp");
+  }
 
   // SOURCE (where the patient originally came from). A person picks from the hospital's offered sources; the
   // legacy coarse value is still accepted for older callers and resolves even to an archived entry.
@@ -167,13 +172,14 @@ export async function createLead(db: Db, tenantId: string, actorId: string, inpu
   });
 
   if (input.followUp) {
-    await createTask(db, tenantId, actorId, {
+    const made = await createTask(db, tenantId, actorId, {
       patientId,
       journeyId: journey.id,
       assignedTo: input.followUp.assignedTo ?? input.ownerId,
       type: input.followUp.type,
       dueAt: input.followUp.dueAt,
-    });
+    }, timezone);
+    if (!made.ok) throw new Error(`lead follow-up could not be created: ${made.reason}`);
   }
 
   return { patientId, journeyId: journey.id, isNewPatient };

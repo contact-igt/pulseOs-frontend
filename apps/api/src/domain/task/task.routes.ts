@@ -1,10 +1,12 @@
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
 import type { CreateTaskInput, TaskReason, TaskView } from "@pulseos/types";
 import { hasPermission } from "@pulseos/types";
 import { requirePermission } from "../auth/permission.middleware.js";
 import {
   addTaskNote,
   completeTask,
+  createFollowUp,
   createTask,
   getTaskById,
   getTaskCounts,
@@ -15,9 +17,29 @@ import {
 
 const REASON_STATUS: Record<string, number> = {
   task_not_found: 404,
+  patient_not_found: 404,
+  journey_not_found: 404,
   already_completed: 409,
   invalid_due_at: 400,
+  due_in_past: 422,
+  note_required: 422,
+  type_invalid: 422,
+  assignee_invalid: 422,
+  invalid_request: 400,
 };
+
+const uuid = z.string().uuid();
+const createFollowUpBody = z
+  .object({
+    followUpTypeId: uuid,
+    dueAt: z.string().min(1),
+    assignedTo: uuid.nullable().optional(),
+    priority: z.enum(["normal", "high"]).optional(),
+    note: z.string().max(500).optional(),
+  })
+  .strict();
+const rescheduleBody = z.object({ dueAt: z.string().min(1), note: z.string().max(500).optional() });
+const reassignBody = z.object({ assignedTo: uuid });
 
 export async function taskRoutes(app: FastifyInstance) {
   // Reading a task list (esp. "My Work" — tasks assigned to yourself) is a
@@ -28,7 +50,7 @@ export async function taskRoutes(app: FastifyInstance) {
 
   app.get("/tasks", async (request) => {
     const tenantId = request.sessionUser!.tenantId;
-    const query = request.query as { view?: TaskView; assignedTo?: string; patientId?: string; reason?: TaskReason };
+    const query = request.query as { view?: TaskView; assignedTo?: string; patientId?: string; reason?: TaskReason; followUpTypeKey?: string };
     // A caller without MANAGE_TASKS (e.g. Doctor: VIEW_TASKS only) gets a
     // narrower capability than the tenant-wide task queue — server-side,
     // never UI-only. Force their assignedTo to themselves regardless of what
@@ -48,7 +70,7 @@ export async function taskRoutes(app: FastifyInstance) {
     // tasks.integration.test.ts's "unassigned view" describe block for proof).
     const canManageTasks = hasPermission(request.sessionUser!.role, "MANAGE_TASKS");
     const assignedTo = canManageTasks ? query.assignedTo : request.sessionUser!.id;
-    return listTasks(app.db, tenantId, { view: query.view, assignedTo, patientId: query.patientId, reason: query.reason }, request.sessionUser!.timezone);
+    return listTasks(app.db, tenantId, { view: query.view, assignedTo, patientId: query.patientId, reason: query.reason, followUpTypeKey: query.followUpTypeKey }, request.sessionUser!.timezone);
   });
 
   // Registered ahead of nothing conflicting — "/tasks/:id/..." mutation
@@ -60,11 +82,25 @@ export async function taskRoutes(app: FastifyInstance) {
     return getTaskCounts(app.db, tenantId, userId, canManageTasks, request.sessionUser!.timezone);
   });
 
-  app.post("/tasks", { preHandler: requirePermission("MANAGE_TASKS") }, async (request) => {
+  app.post("/tasks", { preHandler: requirePermission("MANAGE_TASKS") }, async (request, reply) => {
     const tenantId = request.sessionUser!.tenantId;
     const createdBy = request.sessionUser!.id;
     const input = request.body as CreateTaskInput;
-    return createTask(app.db, tenantId, createdBy, input);
+    const result = await createTask(app.db, tenantId, createdBy, input, request.sessionUser!.timezone);
+    if (!result.ok) return reply.status(REASON_STATUS[result.reason] ?? 400).send({ error: result.reason });
+    return result.task;
+  });
+
+  // Add Follow-up on a Journey: the same Task engine, labelled with the hospital's follow-up type.
+  app.post("/journeys/:id/follow-ups", { preHandler: requirePermission("MANAGE_TASKS") }, async (request, reply) => {
+    const id = uuid.safeParse((request.params as { id: string }).id);
+    if (!id.success) return reply.status(404).send({ error: "journey_not_found" });
+    const parsed = createFollowUpBody.safeParse(request.body);
+    if (!parsed.success) return reply.status(400).send({ error: "invalid_request" });
+    const user = request.sessionUser!;
+    const result = await createFollowUp(app.db, user.tenantId, { id: user.id }, id.data, parsed.data, user.timezone);
+    if (!result.ok) return reply.status(REASON_STATUS[result.reason] ?? 400).send({ error: result.reason });
+    return reply.status(201).send(result.task);
   });
 
   app.patch("/tasks/:id/note", { preHandler: requirePermission("MANAGE_TASKS") }, async (request, reply) => {
@@ -80,8 +116,9 @@ export async function taskRoutes(app: FastifyInstance) {
     const tenantId = request.sessionUser!.tenantId;
     const actorId = request.sessionUser!.id;
     const { id } = request.params as { id: string };
-    const { dueAt } = request.body as { dueAt: string };
-    const result = await rescheduleTask(app.db, tenantId, id, actorId, dueAt, request.sessionUser!.timezone);
+    const parsed = rescheduleBody.safeParse(request.body);
+    if (!parsed.success) return reply.status(400).send({ error: "invalid_request" });
+    const result = await rescheduleTask(app.db, tenantId, id, actorId, parsed.data.dueAt, request.sessionUser!.timezone, parsed.data.note);
     if (!result.ok) return reply.status(REASON_STATUS[result.reason] ?? 400).send({ error: result.reason });
     return getTaskById(app.db, tenantId, id);
   });
@@ -90,8 +127,9 @@ export async function taskRoutes(app: FastifyInstance) {
     const tenantId = request.sessionUser!.tenantId;
     const actorId = request.sessionUser!.id;
     const { id } = request.params as { id: string };
-    const { assignedTo } = request.body as { assignedTo: string };
-    const result = await reassignTask(app.db, tenantId, id, actorId, assignedTo);
+    const parsed = reassignBody.safeParse(request.body);
+    if (!parsed.success) return reply.status(422).send({ error: "assignee_invalid" });
+    const result = await reassignTask(app.db, tenantId, id, actorId, parsed.data.assignedTo);
     if (!result.ok) return reply.status(REASON_STATUS[result.reason] ?? 400).send({ error: result.reason });
     return getTaskById(app.db, tenantId, id);
   });
