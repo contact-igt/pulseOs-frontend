@@ -387,3 +387,51 @@ text from the earlier session change; Developer Login labels too long) and re-ru
 URLs, transcript storage and per-tenant role policy belong to the calls module); age/DOB are fixed intake inputs, not
 yet hideable by an Admin; no Add Department for a hospital-made department (templates only); login still resolves a
 user by email across tenants.
+
+---
+
+## M4 — Calls + Interaction Timeline — 2026-10-01
+
+Extends the existing `calls` table, webhook pipeline, Task engine, outcomes and summarizer port; nothing rebuilt.
+
+**Schema (0023).** `calls.origin` IVR|MANUAL; `connector_id` / `external_call_id` now optional (provider-only);
+`staff_feedback` (+ by/at), `outcome_id`, `logged_by_user_id`, `callback_task_id`, `idempotency_key` (unique per tenant);
+new `call_intelligence` (transcript and summary each with their own status PENDING/PROCESSING/COMPLETED/FAILED/
+NOT_CONFIGURED, mode, provider, attempts, DB-held `next_attempt_at` + claim). Verified from the live schema with data
+(26 existing calls → IVR) and on a fresh DB.
+
+**Manual call.** `POST /journeys/:id/calls` (new `LOG_CALL`: Super Admin, Admin, Staff; not Doctor) — one transaction: Call,
+`call_logged` Timeline line (channel MANUAL_CALL), forward-only outcome, optional callback Task through the ordinary Task
+engine (assignee: journey owner → else the person logging), idempotent via client key. `POST /calls/:id/feedback` adds the
+human side to an IVR call. Call counts are derived per Journey (`callStats`), never stored.
+
+**IVR.** Webhook now transactional and idempotent on the provider call id (no second Call / Timeline line / missed-call
+Task on a re-delivery); an incoming call from someone with no open enquiry opens a "Phone enquiry" Journey (source Phone,
+channel IVR) so its callback has a home; provider transcripts are stored as-is (mode PROVIDER).
+
+**Intelligence.** Transcript and summary are derived and kept apart from staff feedback (separate table/columns; code
+paths never write one into the other). Durable claim-based job (`FOR UPDATE SKIP LOCKED`, stale-claim recovery, backoff,
+3 attempts) registered next to the conversation-summary job. Transcription: provider-neutral port; only a FIXTURE connector
+has a stand-in (returns the script the fixture carries, labelled); anything else is honestly NOT_CONFIGURED. Summaries reuse
+the summarizer port (`medium: "call"`); the default is the labelled FIXTURE summarizer, a real model only when explicitly
+configured. Failures never block the call.
+
+**Recording security.** `GET /calls/:id/recording` streams through PulseOS (Range forwarded, nothing buffered), download
+needs `DOWNLOAD_CALL_RECORDING` + `Content-Disposition: attachment`; SSRF guard (https + public hosts in production,
+manual redirects ≤3 re-validated), single plain Range only, non-audio forced to opaque attachment + nosniff. The provider URL
+never appears in any payload. Transcript text only via `GET /calls/:id/transcript` (`VIEW_CALL_TRANSCRIPT`, no-store).
+
+**UI.** Journey Detail: primary Log call (side sheet), derived call stats strip, call cards in the shared Timeline (also on
+Patient 360): direction / IVR-or-staff / connected badges, labelled summary, Staff feedback block, outcome + callback,
+Play / Download / transcript (collapsed) by permission, honest processing / not-configured / failed states.
+
+**Demo.** Ophthalmology V1 and V2: Cataract IVR call (fixture recording + transcript + demo summary + coordinator feedback +
+callback), a manual outgoing LVC call, a missed IVR call with its callback — built through the real code paths.
+
+**Evidence.** lint 2/2, typecheck 7/7, build OK. API 768 (twice, repeatable), web 97, ui 86, api-client 9, tokens 6.
+Playwright full run 207 passed / 1 skipped / 0 failed; the 9 affected specs re-run with no reseed: 46/46. New
+`calls-m4.spec.ts` 10/10 (staff log → callback → My Work → refresh; admin recording/transcript/summary; staff refused;
+5 viewports incl. 390 with no overflow).
+
+**Fixed on the way (pre-existing, not M4).** `tasks` counts test used the process timezone instead of the hospital's
+(failed after ~18:30 IST under TZ=UTC); Runo missed-call test assumed a shared demo patient had no other manual tasks.
