@@ -4,8 +4,6 @@ import {
   appointments,
   branches,
   campaignTouchpoints,
-  customFieldDefinitions,
-  customFieldValues,
   journeys,
   marketingCampaigns,
   patients,

@@ -4,7 +4,6 @@ import type { Db } from "../../db/client.js";
 import {
   appointments,
   campaignTouchpoints,
-  customFieldDefinitions,
   customFieldValues,
   journeys,
   marketingCampaigns,

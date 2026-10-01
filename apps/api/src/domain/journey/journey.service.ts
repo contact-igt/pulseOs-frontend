@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
 import type { Db } from "../../db/client.js";
 import {
@@ -6,8 +6,6 @@ import {
   branches,
   campaignTouchpoints,
   crmOutcomes,
-  customFieldDefinitions,
-  customFieldValues,
   journeys,
   marketingCampaigns,
   patients,
