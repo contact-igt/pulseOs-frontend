@@ -438,6 +438,8 @@ export interface TimelineEventVm {
   // fresh guess. Null whenever that row has no resolved endpoint, or the
   // event isn't a call/conversation at all.
   endpointLabel: string | null;
+  /** How the summary on a whatsapp_conversation line was produced (FIXTURE/AI/…); null for every other event. */
+  summaryMode: SummaryMode | null;
 }
 
 export interface Patient360 {

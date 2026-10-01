@@ -155,6 +155,17 @@ describe.skipIf(!DEMO_PASSWORD)("conversation sessions and summaries (integratio
     expect(await events(first.patientId, "whatsapp_message")).toHaveLength(0);
   });
 
+  it("the Timeline line says how its summary was made (FIXTURE here, never AI), and carries none before one exists", async () => {
+    const { conversationId, patientId } = await inbound(newPhone(), "What are your Saturday timings?", T0);
+    const timeline = async () => ((await get(coordinator, `/patients/${patientId}/timeline`)).json() as { eventType: string; summaryMode: string | null; description: string | null; relatedEntityId: string | null }[]).filter((e) => e.eventType === "whatsapp_conversation");
+    expect(await timeline()).toMatchObject([{ summaryMode: null, description: null, relatedEntityId: conversationId }]);
+    await run(min(T0, 8), fixture, [conversationId]);
+    const after = await timeline();
+    expect(after).toHaveLength(1);
+    expect(after[0]).toMatchObject({ summaryMode: "FIXTURE" });
+    expect(after[0]!.description).toBeTruthy();
+  });
+
   it("when summarizing fails the raw thread is untouched, it retries later, and gives up quietly after repeated failures", async () => {
     const boom: ConversationSummarizer = { provider: "broken", mode: "AI", summarize: async () => { throw new Error("model unavailable"); } };
     const { conversationId } = await inbound(newPhone(), "Please call me back", T0);

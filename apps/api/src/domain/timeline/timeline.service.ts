@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
-import { timelineEvents, calls, conversations, communicationEndpoints } from "../../db/schema.js";
-import type { TimelineEventVm } from "@pulseos/types";
+import { timelineEvents, calls, conversations, communicationEndpoints, conversationSummaries } from "../../db/schema.js";
+import type { SummaryMode, TimelineEventVm } from "@pulseos/types";
 
 const CATEGORY_BY_EVENT_TYPE: Record<string, "communication" | "appointments" | "clinical" | "tasks" | "other"> = {
   journey_created: "other",
@@ -47,6 +47,7 @@ export async function getPatientTimeline(db: Db, tenantId: string, patientId: st
     .orderBy(asc(timelineEvents.occurredAt));
 
   const endpointLabelByEventId = await resolveEndpointLabels(db, tenantId, rows);
+  const summaryModeByEventId = await resolveSummaryModes(db, tenantId, rows);
 
   return rows.map((r) => ({
     id: r.id,
@@ -59,7 +60,30 @@ export async function getPatientTimeline(db: Db, tenantId: string, patientId: st
     relatedEntityType: r.relatedEntityType,
     relatedEntityId: r.relatedEntityId,
     endpointLabel: endpointLabelByEventId.get(r.id) ?? null,
+    summaryMode: summaryModeByEventId.get(r.id) ?? null,
   }));
+}
+
+// A conversation-session line carries its summary id in metadata once one exists; the mode comes from that
+// summary row, so the UI can say a summary is FIXTURE/AI instead of implying every one is model-written.
+async function resolveSummaryModes(db: Db, tenantId: string, rows: { id: string; metadata: unknown }[]): Promise<Map<string, SummaryMode>> {
+  const summaryIdByEventId = new Map<string, string>();
+  for (const r of rows) {
+    const id = (r.metadata as { summaryId?: unknown } | null)?.summaryId;
+    if (typeof id === "string") summaryIdByEventId.set(r.id, id);
+  }
+  if (summaryIdByEventId.size === 0) return new Map();
+  const found = await db
+    .select({ id: conversationSummaries.id, mode: conversationSummaries.mode })
+    .from(conversationSummaries)
+    .where(and(eq(conversationSummaries.tenantId, tenantId), inArray(conversationSummaries.id, [...new Set(summaryIdByEventId.values())])));
+  const modeBySummaryId = new Map(found.map((f) => [f.id, f.mode as SummaryMode]));
+  const out = new Map<string, SummaryMode>();
+  for (const [eventId, summaryId] of summaryIdByEventId) {
+    const mode = modeBySummaryId.get(summaryId);
+    if (mode) out.set(eventId, mode);
+  }
+  return out;
 }
 
 // A call/conversation-related Timeline event never resolves its own
