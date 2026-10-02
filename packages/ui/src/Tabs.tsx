@@ -92,7 +92,7 @@ export function Tabs({
       data-fade-start={fade.start ? "" : undefined}
       data-fade-end={fade.end ? "" : undefined}
       style={mask ? { maskImage: mask, WebkitMaskImage: mask } : undefined}
-      className={`${wrap} overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${className}`}
+      className={`${wrap} overflow-x-auto overflow-y-hidden overscroll-x-contain scroll-px-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${className}`}
     >
       {items.map((t, i) => {
         const active = t.key === value;
@@ -109,7 +109,8 @@ export function Tabs({
             tabIndex={active ? 0 : -1}
             onClick={() => onChange(t.key)}
             onKeyDown={(e) => onKeyDown(e, i)}
-            className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap transition ${cls}`}
+            // The strip clips its children, so the focus ring is drawn INSIDE the tab (an outer ring would be cut off).
+            className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap transition focus-visible:outline-offset-[-2px] ${cls}`}
             data-testid={t.testId}
           >
             {t.label}

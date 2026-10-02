@@ -42,13 +42,16 @@ export function useReorder<G extends string>({ save, refresh, label }: { save: (
   const [error, setError] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
   const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null);
-  const inFlight = useRef(false);
+  // One guard per group: a save in one group never swallows a move made in another.
+  const inFlight = useRef(new Set<G>());
+  const failTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const counter = useRef(0);
 
   const reorder = useCallback(
     async (group: G, orderedIds: string[], moved: string, control: OrderControl = "grip", before?: string[]) => {
-      if (inFlight.current) return;
-      inFlight.current = true;
+      if (inFlight.current.has(group)) return;
+      inFlight.current.add(group);
+      if (failTimer.current) clearTimeout(failTimer.current);
       const position = orderedIds.indexOf(moved) + 1;
       const name = label(moved);
       setError(null);
@@ -64,23 +67,34 @@ export function useReorder<G extends string>({ save, refresh, label }: { save: (
       } catch {
         setStatus("failed");
         setError("Couldn't save the new order — it has been put back. Try again.");
+        // The failure is shown until the next move, or for a few seconds — it never lingers after unrelated actions.
+        failTimer.current = setTimeout(() => {
+          setStatus("idle");
+          setError(null);
+        }, 8000);
         const back = before ? before.indexOf(moved) + 1 : 0;
         setAnnouncement(back > 0 ? `Couldn't save the new order. ${name} is back at position ${back} of ${orderedIds.length}.` : `Couldn't save the new order. ${name} is back where it was.`);
       } finally {
-        inFlight.current = false;
+        inFlight.current.delete(group);
         setPending(({ [group]: _done, ...rest }) => rest as Partial<Record<G, string[]>>);
       }
     },
     [save, refresh, label],
   );
 
-  /** The list in its optimistic order while a save is in flight; anything not in that order keeps its saved place after it. */
+  /**
+   * The list in its optimistic order while a save is in flight. Rows that are not part of the saved order (archived ones)
+   * keep the place they had: the listed rows are re-dealt into the slots the listed rows already occupied.
+   */
   const ordered = useCallback(
     <T extends { id: string }>(group: G, list: T[]): T[] => {
       const order = pending[group];
       if (!order) return list;
-      const at = (id: string) => (order.indexOf(id) === -1 ? Number.MAX_SAFE_INTEGER : order.indexOf(id));
-      return [...list].sort((a, b) => at(a.id) - at(b.id));
+      const byId = new Map(list.map((x) => [x.id, x]));
+      const listed = order.map((id) => byId.get(id)).filter((x): x is T => !!x);
+      const inOrder = new Set(listed.map((x) => x.id));
+      let next = 0;
+      return list.map((x) => (inOrder.has(x.id) ? listed[next++]! : x));
     },
     [pending],
   );
@@ -208,6 +222,10 @@ export function RowOrderControls({
     if (!focusRequest || focusRequest.id !== rowId || focusRequest.control === "grip") return;
     const wanted = focusRequest.control === "up" ? up.current : down.current;
     const target = wanted && !wanted.disabled ? wanted : grip.current;
+    // Only when the move cost focus (the DOM node was re-inserted and focus fell to <body>) — never steal it from
+    // wherever the person has moved on to since.
+    const active = document.activeElement;
+    if (active && active !== document.body && active !== target) return;
     target?.focus({ preventScroll: true });
   }, [focusRequest, rowId, position]);
 

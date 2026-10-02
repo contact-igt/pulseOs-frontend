@@ -49,3 +49,13 @@ describe("SortableTable", () => {
     expect(screen.queryByRole("button", { name: /Name/ })).toBeNull();
   });
 });
+
+describe("SortableTable — rows that cannot drill", () => {
+  it("renders plain text (no dead button) for a row that is not drillable", () => {
+    const onRowClick = vi.fn();
+    render(<SortableTable caption="Things" rows={rows} columns={cols} rowKey={(r) => r.id} defaultSort={{ key: "n", dir: "desc" }} onRowClick={onRowClick} rowLabel={(r) => `Filter to ${r.name}`} isDrillable={(r) => r.id !== "b"} />);
+    expect(screen.queryByRole("button", { name: "Filter to Alpha" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Filter to Gamma" })).toBeTruthy();
+    expect(screen.getByText("Alpha")).toBeTruthy();
+  });
+});

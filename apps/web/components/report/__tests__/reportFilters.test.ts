@@ -38,7 +38,7 @@ describe("report filters in the URL", () => {
     expect(periodLabel("2025-12-28", "2026-01-03")).toBe("28 Dec 2025 – 3 Jan 2026");
     expect(customDefaults("2026-10-02")).toEqual({ from: "2026-09-26", to: "2026-10-02" });
     const chips = activeReportChips({ branchId: UUID, service: "Cataract", doctorId: "missing" }, { branches: [{ id: UUID, name: "Andheri" }], departments: [], services: [], sources: [], owners: [], doctors: [] });
-    expect(chips.map((c) => c.label)).toEqual(["Branch: Andheri", "Service: Cataract", "Doctor: …"]);
+    expect(chips.map((c) => c.label)).toEqual(["Branch: Andheri", "Service: Cataract", "Doctor: … (visits & surgeries)"]);
   });
 
   it("the Analytics workspace has its own keys and a 30-day default, so it never collides with Marketing analytics' range / branch / source", () => {
@@ -52,5 +52,10 @@ describe("report filters in the URL", () => {
 
   it("a Department chip names the department", () => {
     expect(activeReportChips({ departmentId: UUID }, { branches: [], departments: [{ id: UUID, name: "Eye Care" }], services: [], sources: [], owners: [], doctors: [] }).map((c) => c.label)).toEqual(["Department: Eye Care"]);
+  });
+
+  it("a custom span over a year falls back to the default (the server would refuse it)", () => {
+    expect(readReportFilters(from({ rRange: "custom", rFrom: "2025-01-01", rTo: "2026-10-01" }), "2026-10-02").range).toBe("7d");
+    expect(readReportFilters(from({ rRange: "custom", rFrom: "2025-10-02", rTo: "2026-10-01" }), "2026-10-02").range).toBe("custom"); // exactly 365 days
   });
 });

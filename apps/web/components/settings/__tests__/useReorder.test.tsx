@@ -78,4 +78,39 @@ describe("useReorder", () => {
     await act(async () => void (await result.current.reorder("contacted", ["b", "a", "c"], "b", "down")));
     expect(result.current.focusRequest).toMatchObject({ id: "b", control: "down" });
   });
+
+  it("rows that are not part of the saved order (archived ones) keep their place while a save is in flight", async () => {
+    let release!: () => void;
+    const { result } = setup(vi.fn(() => new Promise<void>((r) => (release = r))));
+    const withArchived = [{ id: "a" }, { id: "x-archived" }, { id: "b" }, { id: "c" }];
+    act(() => void result.current.reorder("contacted", ["c", "b", "a"], "c"));
+    // The three active rows swap among THEIR slots; the archived row stays second.
+    expect(result.current.ordered("contacted", withArchived).map((x) => x.id)).toEqual(["c", "x-archived", "b", "a"]);
+    await act(async () => release());
+  });
+
+  it("saves in different groups are independent: one group saving does not silently swallow a move in another", async () => {
+    const releases: (() => void)[] = [];
+    const save = vi.fn((_g: string) => new Promise<void>((r) => releases.push(r)));
+    const { result } = renderHook(() => useReorder<"one" | "two">({ ...base, save, refresh: async () => {} }));
+    act(() => void result.current.reorder("one", ["b", "a"], "b"));
+    act(() => void result.current.reorder("two", ["c", "a"], "c"));
+    expect(save).toHaveBeenCalledTimes(2);
+    await act(async () => releases.forEach((r) => r()));
+  });
+
+  it("a failed row stops looking failed after a while, and on the next move", async () => {
+    vi.useFakeTimers();
+    try {
+      const { result } = setup(vi.fn(async () => { throw new Error("x"); }));
+      await act(async () => void (await result.current.reorder("contacted", ["b", "a", "c"], "b", "grip", ["a", "b", "c"])));
+      expect(result.current.statusOf("b")).toBe("failed");
+      expect(result.current.error).not.toBeNull();
+      await act(async () => void vi.advanceTimersByTime(9000));
+      expect(result.current.statusOf("b")).toBe("idle");
+      expect(result.current.error).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

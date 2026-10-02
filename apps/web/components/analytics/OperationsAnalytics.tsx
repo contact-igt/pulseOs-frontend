@@ -37,9 +37,9 @@ function kpisOf(r: OperationsReport): Kpi[] {
   const k = r.kpis;
   const n = fmtCountNum;
   return [
-    { key: "enquiries", label: "Enquiries", value: n(k.newEnquiries), sub: k.uncontacted > 0 ? `${n(k.uncontacted)} not contacted` : "all contacted", hint: "Journeys created in the period", attention: k.uncontacted > 0 },
-    { key: "follow-ups", label: "Follow-ups", value: n(k.followUpsDue), sub: `${n(k.followUpsCompleted)} done · ${n(k.followUpsOverdue)} overdue now`, hint: "Open follow-ups due in the period. Done = completed in the period; overdue = already past due right now", attention: k.followUpsOverdue > 0 },
-    { key: "appointments", label: "Appointments", value: n(k.appointmentsScheduled), sub: `${n(k.appointmentsBooked)} booked in period`, hint: "Visits scheduled in the period. Booked = appointments created in the period, whenever the visit is" },
+    { key: "enquiries", label: "Enquiries", value: n(k.newEnquiries), sub: k.uncontacted > 0 ? `${n(k.uncontacted)} not contacted · by enquiry date` : "all contacted · by enquiry date", hint: "Journeys created in the period", attention: k.uncontacted > 0 },
+    { key: "follow-ups", label: "Follow-ups", value: n(k.followUpsDue), sub: `still open and due · ${n(k.followUpsCompleted)} done · ${n(k.followUpsOverdue)} overdue now`, hint: "Open follow-ups due in the period. Done = completed in the period; overdue = already past due right now", attention: k.followUpsOverdue > 0 },
+    { key: "appointments", label: "Appointments", value: n(k.appointmentsScheduled), sub: `${n(k.appointmentsBooked)} booked in period (by booking date)`, hint: "Visits scheduled in the period. Booked = appointments created in the period, whenever the visit is" },
     { key: "checked-in", label: "Checked In", value: n(k.appointmentsAttended), sub: `${fmtPct(attendanceRate(k))} of expected visits`, hint: "Patients who arrived (checked in or later). Expected = scheduled − cancelled" },
     { key: "consultations", label: "Consultations Completed", value: n(k.consultationsCompleted), sub: `${fmtPct(consultationRate(k))} of checked in`, hint: "Visits in the period whose consultation was completed" },
     { key: "no-shows", label: "No-shows", value: n(k.appointmentsNoShow), sub: `${fmtPct(noShowRate(k))} of expected visits`, hint: "Visits in the period marked no-show. Expected = scheduled − cancelled", attention: k.appointmentsNoShow > 0 },
@@ -169,7 +169,8 @@ function TeamTable({ r, onOwner }: { r: OperationsReport; onOwner: (id: string) 
       rowKey={(o) => o.userId ?? "unassigned"}
       defaultSort={{ key: "followUpsOverdue", dir: "desc" }}
       onRowClick={(o) => o.userId && onOwner(o.userId)}
-      rowLabel={(o) => (o.userId ? `Filter to ${o.name}` : o.name)}
+      rowLabel={(o) => `Filter to ${o.name}`}
+      isDrillable={(o) => !!o.userId}
       testId="analytics-by-owner"
       minWidthClass="min-w-[32rem]"
     />
@@ -200,6 +201,13 @@ export function OperationsAnalytics({ role }: { role: Role }) {
       <p className="text-xs text-ink-2" data-testid="analytics-period">
         {period ? periodLabel(period.from, period.to) : "…"} · hospital time ({timeZone}). Enquiries follow the date the journey was created, visits follow the visit date, procedures follow their recorded completion date.
       </p>
+
+      {(q.branchId || q.doctorId) && (
+        <p className="text-xs text-ink-2" data-testid="analytics-scope-note">
+          {q.branchId && "Branch: enquiries and follow-ups follow the patient's branch; visits and surgeries follow where they happen. "}
+          {q.doctorId && "Doctor: narrows visits and surgeries only — enquiries, follow-ups and sources show the whole hospital."}
+        </p>
+      )}
 
       {report.isError && !data ? (
         <ErrorState message="Could not load analytics." />

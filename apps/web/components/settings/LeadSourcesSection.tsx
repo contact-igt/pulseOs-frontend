@@ -144,7 +144,7 @@ export function LeadSourcesSection() {
       {sources.isLoading && <Skeleton className="h-32" />}
       {sources.isError && <ErrorState message="Could not load sources." />}
       {sources.data && (
-        <SortableGroup items={shown.map((x) => ({ id: x.id, label: x.label }))} onReorder={(ids, moved) => void sort.reorder("all", ids, moved, "grip", shown.map((x) => x.id))}>
+        <SortableGroup items={active.map((x) => ({ id: x.id, label: x.label }))} onReorder={(ids, moved) => void sort.reorder("all", ids, moved, "grip", active.map((x) => x.id))}>
           <ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface" aria-label="Lead sources" aria-busy={sort.isSaving("all")} data-testid="source-list">
             {shown.map((src) => {
               const i = active.findIndex((x) => x.id === src.id);

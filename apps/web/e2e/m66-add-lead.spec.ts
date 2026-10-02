@@ -32,6 +32,9 @@ async function fillCore(page: Page, name: string, opts: { channel?: string; sour
   await page.getByTestId("lead-phone-input").fill(phone());
   await page.getByTestId("lead-name-input").fill(name);
   await page.getByTestId("lead-specialty-select").selectOption({ label: "Cataract" });
+  // A multi-branch hospital is asked which branch (never silently the first one); a single-branch hospital is not.
+  const branch = page.locator("#lead-branch");
+  if ((await branch.inputValue()) === "") await branch.selectOption({ index: 1 });
   if (opts.source) await page.getByTestId("lead-source-select").selectOption(opts.source);
   if (opts.channel) await page.getByTestId("lead-channel-select").selectOption(opts.channel);
 }
@@ -207,6 +210,20 @@ test.describe("M6.6 — Add Lead", () => {
     await expect(page.getByTestId("add-lead-error")).toContainText(/future/i);
     await expect(page.getByTestId("lead-name-input")).toHaveValue(name);
     await expect(page.getByTestId("add-lead-drawer")).toBeVisible();
+  });
+
+  test("a multi-branch hospital is asked for the branch: it is never silently the first one, and Save does not go through without it", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await login(page, "eyev1.coordinator@pulseos.local");
+    await openAddLead(page);
+    const branch = page.locator("#lead-branch");
+    expect((await branch.locator("option").count()) - 1).toBeGreaterThan(1); // the demo hospital has several branches
+    await expect(branch).toHaveValue("");
+    await page.getByTestId("lead-phone-input").fill(phone());
+    await page.getByTestId("lead-specialty-select").selectOption({ label: "Cataract" });
+    await page.getByTestId("add-lead-submit").click();
+    await expect(page.getByTestId("add-lead-drawer")).toBeVisible(); // refused: the browser asks for the branch
+    expect(await branch.evaluate((el) => (el as HTMLSelectElement).validity.valueMissing)).toBe(true);
   });
 
   test("keyboard: the drawer traps focus, Escape closes it", async ({ page }) => {

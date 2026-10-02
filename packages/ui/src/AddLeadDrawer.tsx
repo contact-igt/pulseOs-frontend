@@ -14,6 +14,7 @@ import {
   type SpecialtyTemplateVm,
   type TaskPriority,
 } from "@pulseos/types";
+import { X } from "lucide-react";
 import { useDialogFocus } from "./useDialogFocus";
 import { CustomFieldInputs, defaultsFor, normalizeFieldValues } from "./CustomFieldInputs";
 import { hospitalLocalInput } from "./format";
@@ -22,7 +23,7 @@ import { LEAD_CHANNEL_OPTIONS, LEAD_ERROR_COPY, nextStepAvailability, reconcileN
 const inputClass =
   "w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:ring-1 focus:ring-primary-500 max-md:min-h-11";
 const labelClass = "mb-1 block text-xs font-medium text-neutral-600";
-const sectionHead = "mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-400";
+const sectionHead = "mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-600";
 
 /** Tomorrow's date in the HOSPITAL's calendar (pickers are hospital wall time). */
 const tomorrow = () => hospitalLocalInput(new Date(Date.now() + 24 * 3600 * 1000)).slice(0, 10);
@@ -81,7 +82,7 @@ export function AddLeadDrawer({
   onSubmit: (input: CreateLeadInput) => Promise<CreateLeadResult>;
   onCreated?: (result: CreateLeadResult) => void;
 }) {
-  const [form, setForm] = useState<LeadFormValues>(() => emptyForm((defaultSource && leadSources.find((s) => s.bucket === defaultSource)?.key) || leadSources[0]?.key || "", lookups.branches[0]?.id ?? ""));
+  const [form, setForm] = useState<LeadFormValues>(() => emptyForm((defaultSource && leadSources.find((s) => s.bucket === defaultSource)?.key) || leadSources[0]?.key || "", lookups.branches.length === 1 ? lookups.branches[0]!.id : ""));
   const [existingPatient, setExistingPatient] = useState<{ id: string; name: string; activeJourneyCount: number } | null>(null);
   const [phoneChecked, setPhoneChecked] = useState(false);
   const [fields, setFields] = useState<CustomFieldDefinitionVm[]>([]);
@@ -89,6 +90,7 @@ export function AddLeadDrawer({
   const [error, setError] = useState<{ code: string; text: string } | null>(null);
   const [conflict, setConflict] = useState(false);
   const errorRef = useRef<HTMLParagraphElement>(null);
+  const additionalRef = useRef<HTMLDetailsElement>(null);
 
   const dialogRef = useDialogFocus<HTMLFormElement>(open, onClose);
   const set = <K extends keyof LeadFormValues>(key: K, value: LeadFormValues[K]) => {
@@ -157,6 +159,8 @@ export function AddLeadDrawer({
   }
 
   function fail(code: string, text?: string) {
+    // A refusal about a field that lives under "Additional details" must not be about something the person cannot see.
+    if (["invalid_field_values", "missing_required_fields", "invalid_request"].includes(code) && additionalRef.current) additionalRef.current.open = true;
     setError({ code, text: text ?? LEAD_ERROR_COPY[code] ?? "Could not save this lead. Check the details and try again." });
     // Everything typed stays. Pull focus back inside the dialog (a disabled submit button would blur it to <body>).
     requestAnimationFrame(() => (errorRef.current ?? dialogRef.current)?.focus());
@@ -194,8 +198,8 @@ export function AddLeadDrawer({
             <h2 className="text-lg font-semibold text-slate-900">Add Lead</h2>
             <p className="mt-0.5 text-xs text-neutral-500">Who called, what they need, and what happens next.</p>
           </div>
-          <button type="button" onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded text-neutral-400 hover:bg-neutral-100 hover:text-slate-900" aria-label="Close" data-testid="add-lead-drawer-close">
-            ✕
+          <button type="button" onClick={onClose} className="flex h-11 w-11 items-center justify-center rounded text-ink-2 hover:bg-neutral-100 hover:text-slate-900 sm:h-8 sm:w-8" aria-label="Close" data-testid="add-lead-drawer-close">
+            <X size={16} aria-hidden="true" />
           </button>
         </div>
 
@@ -508,7 +512,7 @@ export function AddLeadDrawer({
           </section>
 
           {/* Everything else, out of the way */}
-          <details className="group rounded-lg border border-neutral-100" data-testid="lead-additional">
+          <details ref={additionalRef} className="group rounded-lg border border-neutral-100" data-testid="lead-additional">
             <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 py-2 text-sm font-medium text-slate-700" data-testid="lead-additional-toggle">
               Additional details
               <span className="text-xs font-normal text-neutral-500 group-open:hidden">Email, owner, notes, more…</span>

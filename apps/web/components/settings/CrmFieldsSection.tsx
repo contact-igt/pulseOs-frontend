@@ -106,11 +106,13 @@ export function CrmFieldsSection({ services }: { services: SpecialtyTemplateVm[]
     }
   }
 
-  const move = (group: { key: CrmFieldVm["groupKey"]; fields: CrmFieldVm[] }, index: number, d: -1 | 1) => {
+  // Only active fields are ordered: an archived neighbour is never a swap partner and never counted in positions.
+  const move = (group: { key: CrmFieldVm["groupKey"]; fields: CrmFieldVm[] }, field: CrmFieldVm, d: -1 | 1) => {
+    const ids = group.fields.filter((f) => !f.archived).map((f) => f.id);
+    const index = ids.indexOf(field.id);
     const j = index + d;
-    if (j < 0 || j >= group.fields.length) return;
-    const ids = group.fields.map((f) => f.id);
-    return sort.reorder(group.key, arrayMove(ids, index, j), group.fields[index]!.id, d < 0 ? "up" : "down", ids);
+    if (index < 0 || j < 0 || j >= ids.length) return;
+    return sort.reorder(group.key, arrayMove(ids, index, j), field.id, d < 0 ? "up" : "down", ids);
   };
 
   return (
@@ -164,24 +166,27 @@ export function CrmFieldsSection({ services }: { services: SpecialtyTemplateVm[]
             {g.label}
             <span className="ml-2 hidden font-normal normal-case tracking-normal sm:inline">· shown in this order — drag the handle to reorder</span>
           </h3>
-          <SortableGroup items={g.fields.map((f) => ({ id: f.id, label: f.label }))} onReorder={(ids, moved) => void sort.reorder(g.key, ids, moved, "grip", g.fields.map((f) => f.id))}>
+          <SortableGroup items={g.fields.filter((f) => !f.archived).map((f) => ({ id: f.id, label: f.label }))} onReorder={(ids, moved) => void sort.reorder(g.key, ids, moved, "grip", g.fields.filter((f) => !f.archived).map((f) => f.id))}>
             <ul className="divide-y divide-line rounded-card border border-line bg-white" aria-label={`${g.label} fields`} aria-busy={sort.isSaving(g.key)}>
-              {g.fields.map((f, i) => (
+              {g.fields.map((f) => {
+                const activeFields = g.fields.filter((x) => !x.archived);
+                return (
                 <FieldRow
                   key={f.id}
                   field={f}
-                  position={i + 1}
-                  total={g.fields.length}
+                  position={activeFields.findIndex((x) => x.id === f.id) + 1}
+                  total={activeFields.length}
                   canMove={!f.archived}
                   locked={sort.isSaving(g.key)}
                   status={sort.statusOf(f.id)}
                   focusRequest={sort.focusRequest}
-                  onMove={(d) => move(g, i, d)}
+                  onMove={(d) => move(g, f, d)}
                   onEdit={() => setEditing({ mode: "edit", form: fieldToForm(f), id: f.id })}
                   onArchive={() => setConfirming(f)}
                   onRestore={() => run(() => api.updateCrmField(f.id, { archived: false }), "Couldn't restore that field — try again.")}
                 />
-              ))}
+                );
+              })}
             </ul>
           </SortableGroup>
         </section>

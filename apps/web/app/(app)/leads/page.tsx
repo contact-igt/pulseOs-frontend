@@ -117,6 +117,13 @@ export default function LeadsPage() {
         />
       </Toolbar>
 
+      {workspace && (
+        <p className="-mt-1 px-0.5 text-[11px] text-ink-2" data-testid="leads-view-hint">
+          {LEAD_VIEWS.find((v) => v.key === filters.view)?.hint}
+          {filters.due ? " — overdue only" : ""}
+        </p>
+      )}
+
       {workspace && <LeadsTodayStrip summary={workspace.today} onOpen={openStrip} activeKey={stripActive} />}
 
       <LeadsFilterBar filters={filters} workspace={workspace} sessionUserId={session.data?.user.id} owners={owners} chips={chips} dirty={dirty} onChange={(p) => { setSelected(new Set()); change(p); }} onReset={() => { setSelected(new Set()); void replaceUrlParams(resetLeadPatch()); }} />
@@ -127,7 +134,7 @@ export default function LeadsPage() {
           <Button variant="primary" size="sm" onClick={() => { setNotice(null); setAssigning({ kind: "bulk" }); }} data-testid="bulk-assign">
             Assign to…
           </Button>
-          <button type="button" onClick={() => setSelected(new Set())} className="text-xs text-ink-2 hover:text-ink" data-testid="bulk-clear">
+          <button type="button" onClick={() => setSelected(new Set())} className="text-xs text-ink-2 hover:text-ink max-md:min-h-11 max-md:px-2" data-testid="bulk-clear">
             Clear
           </button>
         </Card>

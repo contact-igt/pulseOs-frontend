@@ -48,7 +48,7 @@ export function LeadsTable({
         <tr>
           {canAssign && (
             <Th leading className="w-10">
-              <input type="checkbox" checked={allSelected} onChange={onToggleAll} aria-label="Select all leads" data-testid="lead-select-all" />
+              <label className="flex items-center justify-center max-md:min-h-11 max-md:min-w-11"><input type="checkbox" checked={allSelected} onChange={onToggleAll} aria-label="Select all leads" data-testid="lead-select-all" className="max-md:h-5 max-md:w-5" /></label>
             </Th>
           )}
           <Th leading={!canAssign}>Patient</Th>
@@ -68,7 +68,7 @@ export function LeadsTable({
             <Tr key={lead.id} onClick={() => onOpen(lead)} data-testid={`lead-row-${lead.id}`} data-stage={lead.stage}>
               {canAssign && (
                 <Td leading className="w-10" onClick={(e) => e.stopPropagation()}>
-                  <input type="checkbox" checked={selected.has(lead.id)} onChange={() => onToggle(lead.id)} aria-label={`Select ${lead.patientName}`} data-testid={`lead-select-${lead.id}`} />
+                  <label className="flex items-center justify-center max-md:min-h-11 max-md:min-w-11"><input type="checkbox" checked={selected.has(lead.id)} onChange={() => onToggle(lead.id)} aria-label={`Select ${lead.patientName}`} data-testid={`lead-select-${lead.id}`} className="max-md:h-5 max-md:w-5" /></label>
                 </Td>
               )}
               <Td leading={!canAssign}>
@@ -102,7 +102,7 @@ export function LeadsTable({
                         onAssign(lead);
                       }}
                       aria-label={`${lead.ownerName ? "Change" : "Assign"} owner for ${lead.patientName}`}
-                      className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-chip text-primary-700 hover:bg-primary-50"
+                      className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-chip text-primary-700 hover:bg-primary-50 max-md:h-11 max-md:w-11"
                       data-testid={`assign-owner-${lead.id}`}
                     >
                       <UserRoundCog size={14} aria-hidden="true" />

@@ -162,9 +162,7 @@ test.describe("CRM critical business flows", () => {
     // Fields never touched this time must show their fresh defaults, not
     // anything left over from the first open (branch/specialty were never
     // set in either open, so they should read as unset, not carry over).
-    // (the branch preselects the hospital's first branch on every fresh open — that default is not "carried over")
-    const firstBranch = await page.locator("#lead-branch option").nth(1).getAttribute("value");
-    await expect(page.locator("#lead-branch")).toHaveValue(firstBranch!);
+    await expect(page.locator("#lead-branch")).toHaveValue("");
     await expect(page.locator("#lead-specialty")).toHaveValue("");
   });
 

@@ -63,6 +63,26 @@ test.describe("M6.6 — Settings tab strip", () => {
     });
   }
 
+  test("a focused tab shows its focus ring inside the strip (an outer ring would be clipped by the scroll box)", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await login(page, "eyev1.admin@pulseos.local");
+    await page.goto("/settings");
+    const first = page.getByRole("tablist", { name: "Settings sections" }).getByRole("tab").first();
+    await first.focus();
+    await page.keyboard.press("ArrowRight");
+    const focused = page.getByRole("tablist", { name: "Settings sections" }).getByRole("tab").nth(1);
+    await expect(focused).toBeFocused();
+    const ring = await focused.evaluate((el) => {
+      const cs = getComputedStyle(el);
+      const strip = el.parentElement!.getBoundingClientRect();
+      const r = el.getBoundingClientRect();
+      return { width: parseFloat(cs.outlineWidth), offset: parseFloat(cs.outlineOffset), style: cs.outlineStyle, insideTop: r.top - parseFloat(cs.outlineWidth) - Math.max(0, parseFloat(cs.outlineOffset)) >= strip.top - 0.5 };
+    });
+    expect(ring.style).not.toBe("none");
+    expect(ring.width).toBeGreaterThanOrEqual(2);
+    expect(ring.offset).toBeLessThanOrEqual(0); // inset: never outside the box the strip clips
+  });
+
   test("keyboard: arrow keys move between tabs and the selection follows focus", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await login(page, "eyev1.admin@pulseos.local");

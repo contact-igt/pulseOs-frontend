@@ -41,7 +41,9 @@ export function readReportFilters(get: (key: string) => string, today: string, c
   let range: ReportRange = RANGES.has(raw) ? (raw as ReportRange) : defaultRange;
   const from = get(K.from);
   const to = get(K.to);
-  if (range === "custom" && !(isRealDate(from) && isRealDate(to) && from <= to && to <= today)) range = defaultRange;
+  // The server refuses a span over a year (400); mirror that here so a hand-made link falls back instead of erroring.
+  const withinYear = isRealDate(from) && isRealDate(to) && (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000 + 1 <= 366;
+  if (range === "custom" && !(isRealDate(from) && isRealDate(to) && from <= to && to <= today && withinYear)) range = defaultRange;
   const id = (k: string) => (UUID.test(get(k)) ? get(k) : undefined);
   const service = get(K.service).slice(0, 120) || undefined;
   return {
@@ -90,7 +92,7 @@ export function activeReportChips(q: ReportQuery, o: ReportFilterOptions | undef
   if (q.service) chips.push({ key: "service", label: `Service: ${q.service}` });
   if (q.sourceId) chips.push({ key: "sourceId", label: `Source: ${name(o?.sources, q.sourceId, (s) => s.label)}` });
   if (q.ownerId) chips.push({ key: "ownerId", label: `Team member: ${name(o?.owners, q.ownerId, (u) => u.name)}` });
-  if (q.doctorId) chips.push({ key: "doctorId", label: `Doctor: ${name(o?.doctors, q.doctorId, (d) => d.name)}` });
+  if (q.doctorId) chips.push({ key: "doctorId", label: `Doctor: ${name(o?.doctors, q.doctorId, (d) => d.name)} (visits & surgeries)` });
   return chips;
 }
 

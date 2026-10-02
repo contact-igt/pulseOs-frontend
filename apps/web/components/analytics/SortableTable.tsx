@@ -54,6 +54,7 @@ export function SortableTable<T>({
   defaultSort,
   onRowClick,
   rowLabel,
+  isDrillable,
   rowTestId,
   testId,
   minWidthClass = "min-w-[32rem]",
@@ -67,6 +68,8 @@ export function SortableTable<T>({
   onRowClick?: (row: T) => void;
   /** The accessible name of a row's drill button, e.g. "Filter to Cataract". */
   rowLabel?: (row: T) => string;
+  /** Rows for which the first cell is NOT a drill button (e.g. "Unassigned"). */
+  isDrillable?: (row: T) => boolean;
   rowTestId?: (row: T) => string;
   testId?: string;
   minWidthClass?: string;
@@ -109,7 +112,7 @@ export function SortableTable<T>({
                 const v = c.get(row);
                 const content = c.render ? c.render(row) : isEmpty(v) ? "—" : v;
                 const cls = `${CELL} ${c.align === "left" ? "text-left" : "text-right"} ${c.cellClass?.(row) ?? ""}`;
-                const drill = onRowClick && i === 0 && rowLabel;
+                const drill = onRowClick && i === 0 && rowLabel && (isDrillable ? isDrillable(row) : true);
                 const inner = drill ? (
                   <button type="button" onClick={() => onRowClick(row)} aria-label={rowLabel(row)} className="max-w-[14rem] truncate text-left font-medium text-primary-700 hover:underline max-md:min-h-11" title={rowLabel(row)}>
                     {content}

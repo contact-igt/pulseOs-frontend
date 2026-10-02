@@ -70,9 +70,9 @@ function PeriodControls({ q, today, onChange }: { q: ReportQuery & { range: Repo
       </FilterSelect>
       {q.range === "custom" && (
         <div className="flex items-center gap-1.5" data-testid="report-custom-dates">
-          <input type="date" aria-label="From date" className={DATE_INPUT} value={q.from ?? ""} max={q.to ?? today} onChange={(e) => e.target.value && onChange({ range: "custom", from: e.target.value, to: q.to })} data-testid="report-from" />
+          <input type="date" aria-label="From date" className={DATE_INPUT} value={q.from ?? ""} max={q.to ?? today} onChange={(e) => e.target.value && onChange({ range: "custom", from: e.target.value, to: q.to && q.to >= e.target.value ? q.to : e.target.value })} data-testid="report-from" />
           <span className="text-xs text-ink-2" aria-hidden="true">–</span>
-          <input type="date" aria-label="To date" className={DATE_INPUT} value={q.to ?? ""} min={q.from} max={today} onChange={(e) => e.target.value && onChange({ range: "custom", from: q.from, to: e.target.value })} data-testid="report-to" />
+          <input type="date" aria-label="To date" className={DATE_INPUT} value={q.to ?? ""} min={q.from} max={today} onChange={(e) => e.target.value && onChange({ range: "custom", from: q.from && q.from <= e.target.value ? q.from : e.target.value, to: e.target.value })} data-testid="report-to" />
         </div>
       )}
     </>
@@ -87,7 +87,11 @@ function ExportMenu({ q }: { q: ReportQuery }) {
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false);
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setOpen(false);
+      ref.current?.querySelector<HTMLElement>("[data-testid=report-export]")?.focus();
+    };
     document.addEventListener("mousedown", onDoc);
     document.addEventListener("keydown", onKey);
     return () => {
@@ -119,18 +123,17 @@ function ExportMenu({ q }: { q: ReportQuery }) {
 
   return (
     <div className="relative" ref={ref}>
-      <Button variant="secondary" size="sm" onClick={() => setOpen((v) => !v)} aria-haspopup="menu" aria-expanded={open} data-testid="report-export">
+      <Button variant="secondary" size="sm" onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-controls="report-export-list" data-testid="report-export">
         <Download size={13} aria-hidden="true" />
         <span className="hidden sm:inline">Export to Excel</span>
         <span className="sm:hidden">Export</span>
       </Button>
       {open && (
-        <div role="menu" aria-label="Export to Excel" className="glass-strong absolute right-0 z-30 mt-1 w-72 rounded-panel border border-line p-1 shadow-glass" data-testid="report-export-menu">
+        <div id="report-export-list" role="group" aria-label="Export to Excel" className="glass-strong absolute right-0 z-30 mt-1 w-72 rounded-panel border border-line p-1 shadow-glass" data-testid="report-export-menu">
           {EXPORTS.map((x) => (
             <button
               key={x.kind}
               type="button"
-              role="menuitem"
               disabled={busy !== null}
               onClick={() => void run(x.kind)}
               className="flex w-full flex-col items-start rounded-control px-2.5 py-2 text-left transition hover:bg-primary-50 disabled:opacity-60"

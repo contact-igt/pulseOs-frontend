@@ -107,7 +107,7 @@ function TypeSheet({ existing, onClose, onSaved }: { existing: FollowUpTypeVm | 
 }
 
 function TypeRow({ t, position, total, busy, status, focusRequest, onMove, onEdit, onToggle }: { t: FollowUpTypeVm; position: number; total: number; busy: boolean; status: RowStatus; focusRequest: { id: string; control: OrderControl; n: number } | null; onMove: (d: -1 | 1) => void; onEdit: () => void; onToggle: () => void }) {
-  const { isDragging, rowProps, gripProps } = useSortableRow(t.id, busy, { status, archived: !t.isActive });
+  const { isDragging, rowProps, gripProps } = useSortableRow(t.id, busy || !t.isActive, { status, archived: !t.isActive });
   return (
     <li {...rowProps} className={`${rowProps.className} flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2`} data-testid={`followup-type-row-${t.key}`}>
       <RowOrderControls
@@ -115,7 +115,7 @@ function TypeRow({ t, position, total, busy, status, focusRequest, onMove, onEdi
         label={t.label}
         position={position}
         total={total}
-        disabled={false}
+        disabled={!t.isActive}
         locked={busy}
         dragging={isDragging}
         gripProps={gripProps}
@@ -177,6 +177,8 @@ export function FollowUpTypesSection() {
   const saveOrder = useCallback((_group: "all", ids: string[]) => api.reorderFollowUpTypes(ids), []);
   const sort = useReorder<"all">({ save: saveOrder, refresh, label: labelOf });
   const shown = sort.ordered("all", list);
+  // Only active types are ordered; an archived neighbour is never a swap partner and never counted in positions.
+  const active = shown.filter((x) => x.isActive);
 
   return (
     <div className="space-y-3" data-testid="followup-types-section">
@@ -192,28 +194,31 @@ export function FollowUpTypesSection() {
       {types.isError && <ErrorState message="Could not load follow-up types." />}
       {types.data && list.length === 0 && <EmptyState message="No follow-up types yet" />}
       {list.length > 0 && (
-        <SortableGroup items={shown.map((t) => ({ id: t.id, label: t.label }))} onReorder={(ids, moved) => void sort.reorder("all", ids, moved, "grip", shown.map((t) => t.id))}>
+        <SortableGroup items={active.map((t) => ({ id: t.id, label: t.label }))} onReorder={(ids, moved) => void sort.reorder("all", ids, moved, "grip", active.map((t) => t.id))}>
           <ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface" aria-label="Follow-up types" aria-busy={sort.isSaving("all")} data-testid="followup-type-list">
-            {shown.map((t, i) => (
+            {shown.map((t) => {
+              const i = active.findIndex((x) => x.id === t.id);
+              return (
               <TypeRow
                 key={t.id}
                 t={t}
                 position={i + 1}
-                total={shown.length}
+                total={active.length}
                 busy={busy || sort.isSaving("all")}
                 status={sort.statusOf(t.id)}
                 focusRequest={sort.focusRequest}
                 onMove={(d) => {
-                  const ids = shown.map((x) => x.id);
+                  const ids = active.map((x) => x.id);
                   const j = i + d;
-                  if (j < 0 || j >= ids.length) return;
+                  if (i < 0 || j < 0 || j >= ids.length) return;
                   [ids[i], ids[j]] = [ids[j]!, ids[i]!];
-                  void sort.reorder("all", ids, t.id, d < 0 ? "up" : "down", shown.map((x) => x.id));
+                  void sort.reorder("all", ids, t.id, d < 0 ? "up" : "down", active.map((x) => x.id));
                 }}
                 onEdit={() => setEditing(t)}
                 onToggle={() => toggle(t)}
               />
-            ))}
+              );
+            })}
           </ul>
         </SortableGroup>
       )}

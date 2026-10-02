@@ -149,6 +149,9 @@ test.describe("M6.6 — Analytics (operations)", () => {
     // A service row.
     await page.getByTestId("analytics-by-service").locator("tbody button").first().click();
     await expect(page).toHaveURL(/aService=/);
+    // "Unassigned" in Team workload is plain text, not a button that does nothing.
+    const unassigned = page.getByTestId("analytics-by-owner").getByRole("row", { name: /^Unassigned/ });
+    if ((await unassigned.count()) > 0) await expect(unassigned.getByRole("button")).toHaveCount(0);
     await page.getByTestId("report-reset").click();
     // A day from the table.
     await page.getByTestId("analytics-daily-table-tab").click();

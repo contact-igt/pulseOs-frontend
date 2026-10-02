@@ -134,7 +134,7 @@ export function OutcomesSection() {
                     {list.length === 0 ? (
                       <EmptyState message={`No outcomes under ${stage.label} yet.`} hint="Add the outcomes your team records." />
                     ) : (
-                      <SortableGroup items={list.map((o) => ({ id: o.id, label: o.label }))} onReorder={(ids, moved) => void sort.reorder(stage.key, ids, moved, "grip", active0(list))}>
+                      <SortableGroup items={list.filter((o) => !o.archived).map((o) => ({ id: o.id, label: o.label }))} onReorder={(ids, moved) => void sort.reorder(stage.key, ids, moved, "grip", active0(list))}>
                         <ul className="divide-y divide-line rounded-card border border-line bg-white" aria-label={`${stage.label} outcomes`} aria-busy={busy} data-testid={`outcome-group-${stage.key}`}>
                           {list.map((o) => {
                             // Only active outcomes are ordered: an archived neighbour is never a swap partner.

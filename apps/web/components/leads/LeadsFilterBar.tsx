@@ -48,6 +48,7 @@ export function LeadsFilterBar({
           reason="This view always means today"
           testIdPrefix="leads"
         />
+        {fixed && <span className="text-[11px] text-ink-2" data-testid="leads-range-reason">This view always means today.</span>}
         <span className="mx-0.5 hidden h-5 w-px bg-line-strong sm:block" aria-hidden="true" />
         <OwnerScopeControl
           value={filters.owner}
@@ -78,7 +79,7 @@ export function LeadsFilterBar({
         <ul className="flex flex-wrap items-center gap-1.5" aria-label="Active filters" data-testid="leads-chips">
           {chips.map((c) => (
             <li key={c.key}>
-              <button type="button" onClick={() => onChange(c.key === "due" ? { due: undefined } : ({ [c.key]: "" } as Partial<LeadFilters>))} className="inline-flex max-w-[16rem] items-center gap-1 rounded-chip bg-primary-100 px-2 py-0.5 text-[11px] font-medium text-primary-800 transition hover:bg-primary-200 max-md:min-h-8" title={`Remove filter — ${c.label}`}>
+              <button type="button" onClick={() => onChange(c.key === "due" ? { due: undefined } : ({ [c.key]: "" } as Partial<LeadFilters>))} className="inline-flex max-w-[16rem] items-center gap-1 rounded-chip bg-primary-100 px-2 py-0.5 text-[11px] font-medium text-primary-800 transition hover:bg-primary-200 max-md:min-h-11" title={`Remove filter — ${c.label}`}>
                 <span className="truncate">{c.label}</span>
                 <X size={11} aria-hidden="true" />
                 <span className="sr-only">remove</span>
@@ -99,7 +100,7 @@ function contextLine(w: LeadsWorkspace, f: LeadFilters): string {
   const zone = w.period.timezone.replace("_", " ");
   const ctx = w.dateContext;
   if (ctx.kind === "today") return `${ctx.label} · ${short(w.period.today)} · ${zone}${f.range ? " — the date range is not used for this view" : ""}`;
-  if (!w.period.from || !w.period.to) return `${ctx.label}: any date · today is ${short(w.period.today)} · ${zone}`;
+  if (!w.period.from || !w.period.to) return ctx.kind === "follow_up_due" ? `${ctx.label} · due today or earlier (overdue included) · ${zone}` : `${ctx.label}: any date · today is ${short(w.period.today)} · ${zone}`;
   const span = w.period.from === w.period.to ? short(w.period.from) : `${short(w.period.from)} – ${short(w.period.to)}`;
   return `${ctx.label} · ${span} · ${zone}`;
 }
