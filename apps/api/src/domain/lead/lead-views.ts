@@ -89,7 +89,7 @@ const sharedFilters = (f: LeadFact, i: LeadsWorkspaceInput, skipOwner = false): 
   return true;
 };
 
-export type LeadsComputation = Pick<LeadsWorkspace, "view" | "dateContext" | "rows" | "counts" | "today" | "ownerCounts">;
+export type LeadsComputation = Pick<LeadsWorkspace, "view" | "dateContext" | "rows" | "counts" | "today" | "ownerCounts" | "options">;
 
 export function computeLeadsWorkspace(facts: LeadFact[], input: LeadsWorkspaceInput): LeadsComputation {
   const view = input.view ?? "all";
@@ -121,8 +121,14 @@ export function computeLeadsWorkspace(facts: LeadFact[], input: LeadsWorkspaceIn
     cur.count++;
     byOwner.set(f.row.ownerId, cur);
   }
+  const sources = new Map<string, string>();
+  for (const f of facts) if (f.sourceKey) sources.set(f.sourceKey, f.row.sourceLabel);
   return {
     view,
+    options: {
+      services: [...new Set(facts.map((f) => f.row.journeyType))].sort((a, b) => a.localeCompare(b)),
+      sources: [...sources.entries()].map(([key, label]) => ({ key, label })).sort((a, b) => a.label.localeCompare(b.label)),
+    },
     dateContext: dateContextFor(view),
     rows,
     counts,

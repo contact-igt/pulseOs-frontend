@@ -19,7 +19,8 @@ export function useOwnerScope(): [string, (next: string) => void] {
 }
 
 /** All / Mine / Unassigned segmented control plus a specific-owner select. */
-export function OwnerScopeControl({ value, onChange, owners }: { value: string; onChange: (next: string) => void; owners: LookupOption[] }) {
+export function OwnerScopeControl({ value, onChange, owners, counts }: { value: string; onChange: (next: string) => void; owners: LookupOption[]; counts?: { all: number; mine: number; unassigned: number; byOwner: Record<string, number> } }) {
+  const n = (c: number | undefined) => (counts && c !== undefined ? ` (${c})` : "");
   const segment = value === "" || value === "mine" || value === "unassigned" ? (value === "" ? "all" : value) : "owner";
   return (
     <FilterBar data-testid="owner-scope">
@@ -28,16 +29,16 @@ export function OwnerScopeControl({ value, onChange, owners }: { value: string; 
         value={segment}
         onChange={(k) => onChange(k === "all" ? "" : k)}
         items={[
-          { key: "all", label: "All owners", testId: "owner-scope-all" },
-          { key: "mine", label: "Mine", testId: "owner-scope-mine" },
-          { key: "unassigned", label: "Unassigned", testId: "owner-scope-unassigned" },
+          { key: "all", label: `All owners${n(counts?.all)}`, testId: "owner-scope-all" },
+          { key: "mine", label: `Mine${n(counts?.mine)}`, testId: "owner-scope-mine" },
+          { key: "unassigned", label: `Unassigned${n(counts?.unassigned)}`, testId: "owner-scope-unassigned" },
         ]}
       />
       {owners.length > 0 && (
         <FilterSelect aria-label="Filter by owner" value={owners.some((o) => o.id === value) ? value : ""} onChange={(e) => onChange(e.target.value)} data-testid="owner-scope-select">
           <option value="">Any owner</option>
           {owners.map((o) => (
-            <option key={o.id} value={o.id}>{o.name}</option>
+            <option key={o.id} value={o.id}>{o.name}{n(counts?.byOwner[o.id] ?? 0)}</option>
           ))}
         </FilterSelect>
       )}

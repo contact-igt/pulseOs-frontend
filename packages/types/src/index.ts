@@ -2335,4 +2335,6 @@ export interface LeadsWorkspace {
   today: LeadsTodaySummary;
   /** Per-owner counts under every active filter except the owner filter itself. */
   ownerCounts: { all: number; unassigned: number; byOwner: { userId: string; name: string; count: number }[] };
+  /** What the Service and Source filters can offer: the values that actually occur across this hospital's leads. */
+  options: { services: string[]; sources: { key: string; label: string }[] };
 }

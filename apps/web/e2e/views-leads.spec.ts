@@ -56,7 +56,7 @@ test.describe("Leads views", () => {
       const table = await tableStageCounts(page);
 
       await page.getByTestId("view-switch-board").click();
-      await expect(page).toHaveURL(/view=board/);
+      await expect(page).toHaveURL(/layout=board/);
       if (api.length === 0) {
         // Nothing matches (e.g. no unassigned leads in this seed): both views show the same empty state.
         await expect(page.getByText("No leads match these filters.")).toBeVisible();
@@ -75,14 +75,14 @@ test.describe("Leads views", () => {
         await expect(page.getByTestId(`kanban-col-${stage}`)).toHaveAttribute("aria-label", new RegExp(`, ${n} cards?$`));
       }
       await page.getByTestId("view-switch-table").click();
-      await expect(page).not.toHaveURL(/view=board/);
+      await expect(page).not.toHaveURL(/layout=board/);
     }
   });
 
   test("board is read-only: no drag, no move menu, a quiet hint; card click opens the journey", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await devLogin(page);
-    await page.goto("/leads?view=board");
+    await page.goto("/leads?layout=board");
     const board = page.getByTestId("kanban-board");
     await expect(board).toHaveAttribute("data-readonly", "true");
     await expect(page.locator("[draggable=true]")).toHaveCount(0);
@@ -95,20 +95,20 @@ test.describe("Leads views", () => {
     await page.waitForURL(new RegExp(`/journeys/${id}`));
     // Back restores the board view (URL state).
     await page.goBack();
-    await expect(page).toHaveURL(/view=board/);
+    await expect(page).toHaveURL(/layout=board/);
     await expect(page.getByTestId("leads-board")).toBeVisible();
   });
 
   test("view and status filter survive reload and back/forward", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await devLogin(page);
-    await page.goto("/leads?status=uncontacted&view=board");
+    await page.goto("/leads?view=uncontacted&layout=board");
     await page.reload();
     await expect(page.getByTestId("leads-board")).toBeVisible();
     await expect(page.getByTestId("leads-tab-uncontacted")).toHaveAttribute("aria-selected", "true");
     await page.goto("/command-centre");
     await page.goBack();
-    await expect(page).toHaveURL(/status=uncontacted/);
+    await expect(page).toHaveURL(/view=uncontacted/);
     await expect(page.getByTestId("leads-board")).toBeVisible();
     await page.goForward();
     await expect(page).toHaveURL(/command-centre/);
@@ -117,7 +117,7 @@ test.describe("Leads views", () => {
   test("390px: the board scrolls inside its card; the page never overflows", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await devLogin(page);
-    await page.goto("/leads?view=board");
+    await page.goto("/leads?layout=board");
     await expect(page.getByTestId("leads-board")).toBeVisible();
     await noPageOverflow(page);
     const scrolls = await page.getByTestId("kanban-board").evaluate((el) => el.scrollWidth > el.clientWidth);

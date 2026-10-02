@@ -103,6 +103,9 @@ describe.skipIf(!DEMO_PASSWORD)("Leads workspace (integration)", () => {
     expect(body.rows.find((r) => r.patientName === "Cancelled Chitra")!.nextAppointment).toBeNull();
     expect(body.period.timezone).toBe(IST);
     expect(body.period.today).toBe(dayIST(0));
+    // Filter options are what occurs in THIS hospital, not the whole catalogue and never another hospital's values.
+    expect(body.options.services).toEqual(["Cataract", "LASIK"]);
+    expect(body.options.sources.map((o) => o.key)).toEqual(["google", "instagram", "walk_in"]);
   });
 
   it("each quick view returns exactly the leads that match it, from real data", async () => {
