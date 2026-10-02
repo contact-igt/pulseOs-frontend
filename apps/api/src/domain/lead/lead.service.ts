@@ -6,6 +6,7 @@ import { computeLeadsWorkspace, type LeadFact } from "./lead-views.js";
 import type { Db } from "../../db/client.js";
 import {
   appointments,
+  branches,
   campaignTouchpoints,
   crmOutcomes,
   customFieldValues,
@@ -106,6 +107,17 @@ async function createLeadIn(db: Db, tenantId: string, actorId: string, input: Cr
   if (step && step.kind !== "none" && !stepAt) invalid.push("nextStep");
   if (step && step.kind === "appointment" && !step.doctorId) invalid.push("nextStep");
   if (input.call && input.channel !== "MANUAL_CALL") invalid.push("call");
+  // Everything a client points at must belong to THIS hospital: a foreign owner, branch or campaign is refused up front,
+  // never stored and never turned into a task assigned to someone else's staff.
+  if (input.ownerId && !(await eligibleAssignee(db, tenantId, input.ownerId))) invalid.push("ownerId");
+  if (input.branchId) {
+    const [b] = await db.select({ id: branches.id }).from(branches).where(and(eq(branches.tenantId, tenantId), eq(branches.id, input.branchId))).limit(1);
+    if (!b) invalid.push("branchId");
+  }
+  if (input.campaignId) {
+    const [c] = await db.select({ id: marketingCampaigns.id }).from(marketingCampaigns).where(and(eq(marketingCampaigns.tenantId, tenantId), eq(marketingCampaigns.id, input.campaignId))).limit(1);
+    if (!c) invalid.push("campaignId");
+  }
 
   // SOURCE (where the patient originally came from). A person picks from the hospital's offered sources; the
   // legacy coarse value is still accepted for older callers and resolves even to an archived entry.
@@ -255,6 +267,8 @@ async function createLeadIn(db: Db, tenantId: string, actorId: string, input: Cr
     const logged = await logManualCall(db, tenantId, { ...actor, name: who?.name ?? "Staff" }, journey.id, { direction: input.call.direction, connected: input.call.connected, durationSeconds: input.call.durationSeconds, staffFeedback: input.call.note }, now, timezone);
     if (!logged.ok) throw new LeadStepError("call", logged.reason);
     result.callId = logged.callId;
+    // Staff actually spoke to the patient: the lead is contacted, whether or not an outcome is recorded below.
+    if (input.call.connected) await db.update(journeys).set({ stage: "contacted", contactedAt: now }).where(and(eq(journeys.id, journey.id), eq(journeys.stage, "enquiry")));
   }
 
   const followUpKind = step && (step.kind === "callback" || step.kind === "follow_up") ? step : null;
@@ -329,7 +343,7 @@ async function buildLeadFacts(db: Db, tenantId: string, timezone: string, now: D
     })
     .from(journeys)
     .innerJoin(patients, eq(journeys.patientId, patients.id))
-    .leftJoin(users, eq(journeys.ownerUserId, users.id))
+    .leftJoin(users, and(eq(journeys.ownerUserId, users.id), eq(users.tenantId, tenantId)))
     .leftJoin(leadSources, eq(journeys.sourceId, leadSources.id))
     .leftJoin(crmOutcomes, eq(journeys.lastOutcomeId, crmOutcomes.id))
     .where(eq(journeys.tenantId, tenantId));

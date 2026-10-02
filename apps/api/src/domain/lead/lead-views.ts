@@ -55,14 +55,13 @@ function matches(view: LeadView, f: LeadFact, i: LeadsWorkspaceInput): boolean {
     case "all":
       return !range || inRange(f.createdDay, range);
     case "new_today":
-      return f.createdDay === i.today;
+      return !lost && f.createdDay === i.today;
     case "uncontacted":
       return !lost && f.row.leadStatus !== "lost" && (f.row.leadStatus === "new" || f.row.leadStatus === "uncontacted") && (!range || inRange(f.createdDay, range));
     case "follow_up_due": {
       if (lost) return false;
-      const due = range ? f.openTaskDays.some((d) => inRange(d, range)) : f.openTaskDays.some((d) => d <= i.today);
-      if (!due) return false;
-      return i.due === "overdue" ? f.openTaskDueAts.some((t) => t < nowMs) : true;
+      // One follow-up must satisfy BOTH the date test and (when asked) the overdue test — not two different ones.
+      return f.openTaskDays.some((d, k) => (range ? inRange(d, range) : d <= i.today) && (i.due !== "overdue" || (f.openTaskDueAts[k] ?? Number.POSITIVE_INFINITY) < nowMs));
     }
     case "appointments_today":
       return !lost && f.appointmentDays.includes(i.today);
@@ -89,6 +88,36 @@ const sharedFilters = (f: LeadFact, i: LeadsWorkspaceInput, skipOwner = false): 
   return true;
 };
 
+/**
+ * Who needs attention first. Today / Follow-up Due / Appointments Today are attention lists, so they are ordered by what
+ * is most urgent (earliest due follow-up, then earliest visit today, then the newest enquiries); every other view is the
+ * newest enquiry first. The id is the tie-break, so the order never reshuffles between requests.
+ */
+function attentionKey(f: LeadFact, view: LeadView, today: string): number[] {
+  const created = Date.parse(f.row.createdAt);
+  const dueToday = f.openTaskDays.map((d, i) => ({ d, at: f.openTaskDueAts[i]! })).filter((x) => x.d <= today).map((x) => x.at);
+  const task = dueToday.length > 0 ? Math.min(...dueToday) : Number.POSITIVE_INFINITY;
+  const visitAt = f.row.nextAppointment && f.appointmentDays.includes(today) ? Date.parse(f.row.nextAppointment.at) : Number.POSITIVE_INFINITY;
+  if (view === "follow_up_due") return [task === Number.POSITIVE_INFINITY ? Math.min(...f.openTaskDueAts, Number.POSITIVE_INFINITY) : task];
+  if (view === "appointments_today") return [visitAt];
+  if (view === "today") {
+    // 0 = overdue / due follow-up, 1 = visit today, 2 = new today (newest first)
+    if (task !== Number.POSITIVE_INFINITY) return [0, task];
+    if (visitAt !== Number.POSITIVE_INFINITY) return [1, visitAt];
+    return [2, -created];
+  }
+  return [-created];
+}
+
+function compareKeys(a: number[], b: number[]): number {
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const x = a[i] ?? 0;
+    const y = b[i] ?? 0;
+    if (x !== y) return x < y ? -1 : 1;
+  }
+  return 0;
+}
+
 export type LeadsComputation = Pick<LeadsWorkspace, "view" | "dateContext" | "rows" | "counts" | "today" | "ownerCounts" | "options">;
 
 export function computeLeadsWorkspace(facts: LeadFact[], input: LeadsWorkspaceInput): LeadsComputation {
@@ -96,7 +125,11 @@ export function computeLeadsWorkspace(facts: LeadFact[], input: LeadsWorkspaceIn
   const scoped = facts.filter((f) => sharedFilters(f, input));
   const counts = Object.fromEntries(LEAD_VIEWS.map((v) => [v.key, scoped.filter((f) => matches(v.key, f, { ...input, due: undefined })).length])) as Record<LeadView, number>;
   // The overdue refinement belongs to Follow-up Due only; every other view ignores it.
-  const rows = scoped.filter((f) => matches(view, f, { ...input, due: view === "follow_up_due" ? input.due : undefined })).map((f) => f.row);
+  const rows = scoped
+    .filter((f) => matches(view, f, { ...input, due: view === "follow_up_due" ? input.due : undefined }))
+    .map((f) => ({ f, key: attentionKey(f, view, input.today) }))
+    .sort((a, b) => compareKeys(a.key, b.key) || (a.f.row.id < b.f.row.id ? -1 : 1))
+    .map((x) => x.f.row);
   // The tab count of the active view tracks the refinement too, so what is counted is what is listed.
   if (view === "follow_up_due" && input.due) counts.follow_up_due = rows.length;
 

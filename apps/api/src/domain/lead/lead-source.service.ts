@@ -108,12 +108,13 @@ export async function updateLeadSource(db: Db, tenantId: string, id: string, inp
  */
 export async function reorderLeadSources(db: Db, tenantId: string, orderedIds: string[]): Promise<Result> {
   if (orderedIds.length === 0 || new Set(orderedIds).size !== orderedIds.length) return { ok: false, reason: "invalid_request" };
-  const rows = await db.select().from(leadSources).where(and(eq(leadSources.tenantId, tenantId), inArray(leadSources.id, orderedIds)));
-  if (rows.length !== orderedIds.length) return { ok: false, reason: "invalid_request" };
-  let slots = rows.map((r) => r.sortOrder).sort((a, b) => a - b);
-  if (new Set(slots).size !== slots.length) slots = slots.map((_, i) => slots[0]! + i);
-  await db.transaction(async (tx) => {
+  // Read the slots INSIDE the transaction with a row lock, so two admins reordering at once serialise instead of interleaving.
+  return db.transaction(async (tx) => {
+    const rows = await tx.select().from(leadSources).where(and(eq(leadSources.tenantId, tenantId), inArray(leadSources.id, orderedIds))).for("update");
+    if (rows.length !== orderedIds.length) return { ok: false as const, reason: "invalid_request" };
+    let slots = rows.map((r) => r.sortOrder).sort((a, b) => a - b);
+    if (new Set(slots).size !== slots.length) slots = slots.map((_, i) => slots[0]! + i);
     for (const [i, id] of orderedIds.entries()) await tx.update(leadSources).set({ sortOrder: slots[i]! }).where(and(eq(leadSources.tenantId, tenantId), eq(leadSources.id, id)));
+    return { ok: true as const };
   });
-  return { ok: true };
 }

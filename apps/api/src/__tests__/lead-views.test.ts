@@ -41,12 +41,14 @@ const facts: LeadFact[] = [
   fact("no-response", { createdDay: "2026-09-10", row: { leadStatus: "no_response", stage: "contacted" } }),
   fact("converted", { createdDay: "2026-09-01", row: { leadStatus: "converted", stage: "completed" } }),
   fact("lost", { createdDay: "2026-09-02", row: { leadStatus: "lost", stage: "lost" }, openTaskDays: [TODAY], openTaskDueAts: [Date.parse("2026-10-02T04:00:00Z")], appointmentDays: [TODAY] }),
+  // Closed on day one (e.g. "Not interested" at Add Lead): never an attention item.
+  fact("lost-today", { createdDay: TODAY, row: { leadStatus: "lost", stage: "lost", createdAt: "2026-10-02T03:00:00Z" } }),
 ];
 
 describe("computeLeadsWorkspace — quick views are filters, not stored statuses", () => {
   it("All returns everything", () => expect(run(facts).rows).toHaveLength(facts.length));
 
-  it("New Today: created on the hospital's today", () => expect(ids(run(facts, { view: "new_today" }))).toEqual(["new-today"]));
+  it("New Today: created on the hospital's today, and never a lead already lost", () => expect(ids(run(facts, { view: "new_today" }))).toEqual(["new-today"]));
 
   it("Uncontacted: never reached, not lost", () => expect(ids(run(facts, { view: "uncontacted" }))).toEqual(["new-today", "old-uncontacted"]));
 
@@ -69,7 +71,7 @@ describe("computeLeadsWorkspace — quick views are filters, not stored statuses
   it("No Response / Converted / Lost use the derived status and stage", () => {
     expect(ids(run(facts, { view: "no_response" }))).toEqual(["no-response"]);
     expect(ids(run(facts, { view: "converted" }))).toEqual(["converted"]);
-    expect(ids(run(facts, { view: "lost" }))).toEqual(["lost"]);
+    expect(ids(run(facts, { view: "lost" }))).toEqual(["lost", "lost-today"]);
   });
 });
 
@@ -77,7 +79,7 @@ describe("date range", () => {
   it("defaults to the journey created date", () => {
     const r = run(facts, { view: "all", range: "7d" });
     // 7d = 2026-09-26..2026-10-02 by created day
-    expect(ids(r)).toEqual(["appt-booked-later", "appt-today", "new-today"]);
+    expect(ids(r)).toEqual(["appt-booked-later", "appt-today", "lost-today", "new-today"]);
     expect(r.dateContext).toMatchObject({ kind: "created" });
   });
 
@@ -135,4 +137,60 @@ describe("counts reconcile with rows", () => {
     expect(r.today.overdue).toBe(run(facts, { view: "follow_up_due", due: "overdue" }).rows.length);
     expect(r.today.newToday).toBe(run(facts, { view: "new_today" }).rows.length);
   });
+
+describe("row order — who needs attention first", () => {
+  const order = (r: ReturnType<typeof run>) => r.rows.map((x) => x.id);
+  const t = (iso: string) => Date.parse(iso);
+
+  it("Follow-up Due lists the earliest due follow-up first (overdue before today's)", () => {
+    const fs = [
+      fact("later", { openTaskDays: [TODAY], openTaskDueAts: [t("2026-10-02T12:00:00Z")], row: { leadStatus: "follow_up_due", stage: "contacted" } }),
+      fact("oldest", { openTaskDays: ["2026-09-28"], openTaskDueAts: [t("2026-09-28T04:00:00Z")], row: { leadStatus: "follow_up_due", stage: "contacted" } }),
+      fact("overdue", { openTaskDays: [TODAY], openTaskDueAts: [t("2026-10-02T04:00:00Z")], row: { leadStatus: "follow_up_due", stage: "contacted" } }),
+    ];
+    expect(order(run(fs, { view: "follow_up_due" }))).toEqual(["oldest", "overdue", "later"]);
+  });
+
+  it("Appointments Today lists visits by time of day", () => {
+    const fs = [
+      fact("afternoon", { appointmentDays: [TODAY], row: { nextAppointment: { id: "a2", at: "2026-10-02T10:00:00Z", status: "scheduled" } } }),
+      fact("morning", { appointmentDays: [TODAY], row: { nextAppointment: { id: "a1", at: "2026-10-02T04:30:00Z", status: "scheduled" } } }),
+    ];
+    expect(order(run(fs, { view: "appointments_today" }))).toEqual(["morning", "afternoon"]);
+  });
+
+  it("Today puts overdue follow-ups first, then today's visits by time, then the newest enquiries", () => {
+    const fs = [
+      fact("new-a", { createdDay: TODAY, row: { createdAt: "2026-10-02T02:00:00Z", leadStatus: "new" } }),
+      fact("new-b", { createdDay: TODAY, row: { createdAt: "2026-10-02T08:00:00Z", leadStatus: "new" } }),
+      fact("visit", { appointmentDays: [TODAY], row: { nextAppointment: { id: "a", at: "2026-10-02T06:00:00Z", status: "scheduled" } } }),
+      fact("overdue", { openTaskDays: [TODAY], openTaskDueAts: [t("2026-10-02T03:00:00Z")], row: { leadStatus: "follow_up_due", stage: "contacted" } }),
+    ];
+    expect(order(run(fs, { view: "today" }))).toEqual(["overdue", "visit", "new-b", "new-a"]);
+  });
+
+  it("every other view is newest enquiry first, with the id as a stable tie-break", () => {
+    const fs = [
+      fact("b", { row: { createdAt: "2026-09-30T05:00:00Z" } }),
+      fact("a", { row: { createdAt: "2026-09-30T05:00:00Z" } }),
+      fact("newest", { row: { createdAt: "2026-10-01T05:00:00Z" } }),
+      fact("oldest", { row: { createdAt: "2026-09-01T05:00:00Z" } }),
+    ];
+    expect(order(run(fs, { view: "all" }))).toEqual(["newest", "a", "b", "oldest"]);
+    expect(order(run([...fs].reverse(), { view: "all" }))).toEqual(["newest", "a", "b", "oldest"]);
+  });
+});
+
+describe("Overdue and a date range apply to the SAME follow-up", () => {
+  it("a lead whose in-range follow-up is not yet due, but has another overdue one out of range, is not 'overdue in range'", () => {
+    const f = fact("two-tasks", {
+      row: { leadStatus: "follow_up_due", stage: "contacted" },
+      openTaskDays: ["2026-09-20", TODAY],
+      openTaskDueAts: [Date.parse("2026-09-20T05:00:00Z"), Date.parse("2026-10-02T12:00:00Z")], // second is due 17:30 IST today, after NOW
+    });
+    expect(run([f], { view: "follow_up_due", due: "overdue", range: "custom", from: TODAY, to: TODAY }).rows).toHaveLength(0);
+    expect(run([f], { view: "follow_up_due", range: "custom", from: TODAY, to: TODAY }).rows).toHaveLength(1);
+    expect(run([f], { view: "follow_up_due", due: "overdue" }).rows).toHaveLength(1); // no range: the Sept task is overdue
+  });
+});
 });

@@ -4,7 +4,7 @@ import type { FastifyInstance } from "fastify";
 import type { Role } from "@pulseos/types";
 import { buildApp } from "../app.js";
 import { db, queryClient } from "../db/client.js";
-import { appointments, calls, followUpTypes, journeys, leadSources, patients, scheduleResources, specialtyTemplates, tasks, timelineEvents } from "../db/schema.js";
+import { appointments, calls, followUpTypes, marketingCampaigns, journeys, leadSources, patients, scheduleResources, specialtyTemplates, tasks, timelineEvents } from "../db/schema.js";
 import { onAppointmentEvent, type AppointmentDomainEvent } from "../domain/appointment/appointment-events.js";
 import { zonedWallTime } from "../lib/hospital-time.js";
 import { createTestTenant, destroyTestTenant, type TestTenant } from "./helpers/edition-tenant.js";
@@ -225,5 +225,36 @@ describe.skipIf(!DEMO_PASSWORD)("Add Lead — one transactional intake (integrat
   it("an unknown channel (IVR cannot be typed in by hand) is refused", async () => {
     const res = await post(base({ channel: "IVR_CALL" }));
     expect([400, 422]).toContain(res.statusCode);
+  });
+
+  it("another hospital's owner, branch or campaign can never be attached to a lead (nothing saved)", async () => {
+    const [foreignCampaign] = await db.insert(marketingCampaigns).values({ tenantId: other.tenantId, name: "Foreign campaign", source: "google", startDate: new Date() }).returning({ id: marketingCampaigns.id });
+    for (const [field, body] of [
+      ["ownerId", { ownerId: other.userIds.PATIENT_COORDINATOR }],
+      ["branchId", { branchId: other.branchId }],
+      ["campaignId", { campaignId: foreignCampaign!.id }],
+    ] as const) {
+      const ph = phone();
+      const res = await post(base({ phone: ph, ...body }));
+      expect(res.statusCode, field).toBe(422);
+      expect(res.json().fields, field).toContain(field);
+      expect(await countFor(ph), field).toMatchObject({ patients: 0, journeys: 0 });
+    }
+    // The same references from this hospital are fine.
+    const ok = await post(base({ ownerId: t.userIds.PATIENT_COORDINATOR, branchId: t.branchId }));
+    expect(ok.statusCode, ok.body).toBe(201);
+    await db.delete(marketingCampaigns).where(eq(marketingCampaigns.tenantId, other.tenantId));
+  });
+
+  it("a connected phone call marks the lead as contacted even without an outcome; an unanswered call does not", async () => {
+    const connected = await post(base({ channel: "MANUAL_CALL", call: { direction: "inbound", connected: true, durationSeconds: 40 }, nextStep: { kind: "none" } }));
+    expect(connected.statusCode, connected.body).toBe(201);
+    const [j1] = await db.select().from(journeys).where(eq(journeys.id, (connected.json() as { journeyId: string }).journeyId));
+    expect(j1!.stage).toBe("contacted");
+    expect(j1!.contactedAt).not.toBeNull();
+    const missed = await post(base({ channel: "MANUAL_CALL", call: { direction: "outbound", connected: false }, nextStep: { kind: "none" } }));
+    const [j2] = await db.select().from(journeys).where(eq(journeys.id, (missed.json() as { journeyId: string }).journeyId));
+    expect(j2!.stage).toBe("enquiry");
+    expect(j2!.contactedAt).toBeNull();
   });
 });
