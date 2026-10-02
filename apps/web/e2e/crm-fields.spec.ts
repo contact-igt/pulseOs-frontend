@@ -101,6 +101,7 @@ test.describe("CRM fields (Settings → CRM Fields → Add Lead → Journey)", (
 
     // Not offered to new entries...
     await openAddLeadFor(page, `9${Math.floor(100000000 + Math.random() * 899999999)}`);
+    await page.getByTestId("lead-additional-toggle").click();
     await expect(page.getByTestId("lead-custom-fields")).toBeVisible();
     await expect(page.getByTestId("lead-custom-field-inputs").getByText(LABEL)).toHaveCount(0);
     await page.getByTestId("add-lead-drawer-close").click();

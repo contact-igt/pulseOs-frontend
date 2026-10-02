@@ -1,97 +1,66 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  INTERACTION_CHANNEL_LABEL,
-  MANUAL_INTERACTION_CHANNELS,
   UNKNOWN_PATIENT_NAME,
   type CreateLeadInput,
-  type InteractionChannel,
-  type LeadSourceVm,
   type CreateLeadResult,
+  type CrmOutcomeVm,
   type CustomFieldDefinitionVm,
   type LeadPhoneLookupResult,
+  type LeadSourceVm,
   type Lookups,
   type SourceChannel,
   type SpecialtyTemplateVm,
   type TaskPriority,
-  type TaskType,
 } from "@pulseos/types";
 import { useDialogFocus } from "./useDialogFocus";
 import { CustomFieldInputs, defaultsFor, normalizeFieldValues } from "./CustomFieldInputs";
-
-const FOLLOW_UP_TYPES: TaskType[] = ["CALLBACK", "FOLLOW_UP", "APPOINTMENT_CONFIRMATION", "OTHER"];
+import { hospitalLocalInput } from "./format";
+import { LEAD_CHANNEL_OPTIONS, LEAD_ERROR_COPY, nextStepAvailability, reconcileNextStep, saveReadiness, toCreateLeadInput, type LeadFormValues, type NextStepKind } from "./addLeadModel";
 
 const inputClass =
-  "w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:ring-1 focus:ring-primary-500";
+  "w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-primary-500 focus:ring-1 focus:ring-primary-500 max-md:min-h-11";
 const labelClass = "mb-1 block text-xs font-medium text-neutral-600";
+const sectionHead = "mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-400";
 
-interface FormState {
-  patientId?: string;
-  name: string;
-  age: string;
-  dateOfBirth: string;
-  phone: string;
-  email: string;
-  preferredLanguage: string;
-  specialtyKey: string;
-  branchId: string;
-  doctorId: string;
-  sourceKey: string;
-  channel: InteractionChannel | "";
-  campaignId: string;
-  journeyType: string;
-  ownerId: string;
-  priority: TaskPriority;
-  notes: string;
-  customFieldValues: Record<string, unknown>;
-  createFollowUp: boolean;
-  followUpType: TaskType;
-  followUpDueAt: string;
-  followUpAssignedTo: string;
-}
+/** Tomorrow's date in the HOSPITAL's calendar (pickers are hospital wall time). */
+const tomorrow = () => hospitalLocalInput(new Date(Date.now() + 24 * 3600 * 1000)).slice(0, 10);
 
-function defaultDueAt(): string {
-  const d = new Date(Date.now() + 24 * 3600 * 1000);
-  d.setMinutes(0, 0, 0);
-  return d.toISOString().slice(0, 16);
-}
-
-function emptyForm(sourceKey: string): FormState {
+function emptyForm(sourceKey: string, branchId: string): LeadFormValues {
+  const d = tomorrow();
   return {
-    name: "",
-    age: "",
-    dateOfBirth: "",
-    phone: "",
-    email: "",
-    preferredLanguage: "English",
-    specialtyKey: "",
-    branchId: "",
-    doctorId: "",
-    sourceKey,
-    channel: "",
-    campaignId: "",
-    journeyType: "",
-    ownerId: "",
-    priority: "normal",
-    notes: "",
-    customFieldValues: {},
-    createFollowUp: false,
-    followUpType: "CALLBACK",
-    followUpDueAt: defaultDueAt(),
-    followUpAssignedTo: "",
+    patientId: undefined, phone: "", name: "", age: "", dateOfBirth: "", specialtyKey: "", journeyType: "", branchId, sourceKey, channel: "", outcomeKey: "", outcomeReason: "",
+    nextStep: "none", callbackDate: d, callbackTime: "11:00", callbackOwner: "", callbackNote: "", apptDate: d, apptTime: "10:00", apptDoctorId: "", apptBranchId: "", apptNote: "",
+    followUpDate: d, followUpTime: "10:00", followUpNote: "", callEnabled: false, callDirection: "inbound", callConnected: true, callMinutes: "", callNote: "",
+    email: "", preferredLanguage: "English", doctorId: "", campaignId: "", ownerId: "", priority: "normal" as TaskPriority, notes: "", customFieldValues: {},
   };
 }
 
+const NEXT_STEPS: { key: NextStepKind; label: string; hint?: string }[] = [
+  { key: "callback", label: "Callback" },
+  { key: "appointment", label: "Appointment" },
+  { key: "follow_up", label: "General follow-up", hint: "Not decided yet" },
+  { key: "none", label: "No follow-up" },
+];
+
+/**
+ * Add Lead: the short path — phone, name, what they asked about, where they came from, what happens next — with the
+ * date/time/doctor fields appearing only for the next step chosen. Everything else sits under "Additional details";
+ * required tenant fields are shown up front. One Save: the server creates the patient, journey, outcome and the
+ * follow-up or appointment together, or none of them.
+ */
 export function AddLeadDrawer({
   open,
   onClose,
   specialties,
   lookups,
   leadSources,
+  outcomes = [],
   defaultSource,
   onPhoneLookup,
   onLoadCustomFields,
+  onCheckSlot,
   onSubmit,
   onCreated,
 }: {
@@ -101,21 +70,58 @@ export function AddLeadDrawer({
   lookups: Lookups;
   /** The sources the hospital offers for a new lead (non-archived). */
   leadSources: LeadSourceVm[];
+  /** The hospital's configured outcomes (active), in their configured order. */
+  outcomes?: CrmOutcomeVm[];
   /** Preselects the first offered source whose coarse bucket matches (e.g. from a campaign page). */
   defaultSource?: SourceChannel;
   onPhoneLookup: (phone: string) => Promise<LeadPhoneLookupResult>;
   onLoadCustomFields: (specialtyKey: string) => Promise<CustomFieldDefinitionVm[]>;
+  /** Advisory: is this doctor free at this hospital wall time? */
+  onCheckSlot?: (doctorId: string, scheduledAt: string) => Promise<{ available: boolean; inPast: boolean }>;
   onSubmit: (input: CreateLeadInput) => Promise<CreateLeadResult>;
   onCreated?: (result: CreateLeadResult) => void;
 }) {
-  const [form, setForm] = useState<FormState>(() => emptyForm((defaultSource && leadSources.find((s) => s.bucket === defaultSource)?.key) || leadSources[0]?.key || ""));
+  const [form, setForm] = useState<LeadFormValues>(() => emptyForm((defaultSource && leadSources.find((s) => s.bucket === defaultSource)?.key) || leadSources[0]?.key || "", lookups.branches[0]?.id ?? ""));
   const [existingPatient, setExistingPatient] = useState<{ id: string; name: string; activeJourneyCount: number } | null>(null);
   const [phoneChecked, setPhoneChecked] = useState(false);
   const [fields, setFields] = useState<CustomFieldDefinitionVm[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ code: string; text: string } | null>(null);
+  const [conflict, setConflict] = useState(false);
+  const errorRef = useRef<HTMLParagraphElement>(null);
 
   const dialogRef = useDialogFocus<HTMLFormElement>(open, onClose);
+  const set = <K extends keyof LeadFormValues>(key: K, value: LeadFormValues[K]) => {
+    setError(null);
+    setForm((f) => ({ ...f, [key]: value }));
+  };
+
+  const outcome = outcomes.find((o) => o.key === form.outcomeKey);
+  const avail = nextStepAvailability(outcome);
+  const requiredFields = fields.filter((f) => f.required);
+  const optionalFields = fields.filter((f) => !f.required);
+  const nowLocal = hospitalLocalInput();
+  const apptAt = form.apptDate && form.apptTime ? `${form.apptDate}T${form.apptTime}` : "";
+  const apptPast = form.nextStep === "appointment" && !!apptAt && apptAt < nowLocal;
+  const callbackPast = form.nextStep === "callback" && !!form.callbackDate && !!form.callbackTime && `${form.callbackDate}T${form.callbackTime}` < nowLocal;
+  const followUpPast = form.nextStep === "follow_up" && !!form.followUpDate && !!form.followUpTime && `${form.followUpDate}T${form.followUpTime}` < nowLocal;
+  const selectedService = specialties.find((s) => s.key === form.specialtyKey);
+  const selectedBucket = leadSources.find((s) => s.key === form.sourceKey)?.bucket;
+  const campaignsForSource = lookups.campaigns.filter((c) => c.source === selectedBucket);
+
+  // Appointment: ask whether the doctor is free then (debounced, advisory — the save itself decides).
+  useEffect(() => {
+    setConflict(false);
+    if (!onCheckSlot || form.nextStep !== "appointment" || !form.apptDoctorId || !apptAt || apptPast) return;
+    let live = true;
+    const t = setTimeout(() => {
+      onCheckSlot(form.apptDoctorId, apptAt).then((r) => live && setConflict(!r.available && !r.inPast)).catch(() => undefined);
+    }, 350);
+    return () => {
+      live = false;
+      clearTimeout(t);
+    };
+  }, [onCheckSlot, form.nextStep, form.apptDoctorId, apptAt, apptPast]);
 
   if (!open) return null;
 
@@ -136,6 +142,7 @@ export function AddLeadDrawer({
 
   async function onSpecialtyChange(key: string) {
     const template = specialties.find((s) => s.key === key);
+    setError(null);
     setForm((f) => ({ ...f, specialtyKey: key, journeyType: template?.defaultJourneyType ?? f.journeyType, customFieldValues: {} }));
     const activeFields = key ? await onLoadCustomFields(key) : [];
     setFields(activeFields);
@@ -143,73 +150,51 @@ export function AddLeadDrawer({
     setForm((f) => (f.specialtyKey === key ? { ...f, customFieldValues: defaultsFor(activeFields) } : f));
   }
 
-  function setCustomField(key: string, value: unknown) {
-    setForm((f) => ({ ...f, customFieldValues: { ...f.customFieldValues, [key]: value } }));
+  function onOutcomeChange(key: string) {
+    const next = outcomes.find((o) => o.key === key);
+    setError(null);
+    setForm((f) => ({ ...f, outcomeKey: key, outcomeReason: "", nextStep: reconcileNextStep(f.nextStep, next) }));
   }
 
-  const canSubmit = form.phone.trim() && form.sourceKey && form.specialtyKey && form.branchId && form.journeyType.trim() && !submitting;
+  function fail(code: string, text?: string) {
+    setError({ code, text: text ?? LEAD_ERROR_COPY[code] ?? "Could not save this lead. Check the details and try again." });
+    // Everything typed stays. Pull focus back inside the dialog (a disabled submit button would blur it to <body>).
+    requestAnimationFrame(() => (errorRef.current ?? dialogRef.current)?.focus());
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!canSubmit) return;
+    if (submitting) return;
+    const readiness = saveReadiness(form, { nowLocal, outcome, requiredFieldKeys: requiredFields.map((f) => f.key), hasAppointmentDoctors: lookups.doctors.length > 0 });
+    if (!readiness.ok) return fail("client", readiness.reasons[0]);
     setSubmitting(true);
     setError(null);
     try {
-      const input: CreateLeadInput = {
-        patientId: form.patientId,
-        name: form.name.trim() || undefined,
-        age: form.age.trim() ? Number(form.age) : undefined,
-        dateOfBirth: form.dateOfBirth || undefined,
-        phone: form.phone.trim(),
-        email: form.email.trim() || undefined,
-        preferredLanguage: form.preferredLanguage || undefined,
-        specialtyKey: form.specialtyKey,
-        branchId: form.branchId,
-        doctorId: form.doctorId || undefined,
-        sourceKey: form.sourceKey,
-        channel: form.channel || undefined,
-        campaignId: form.campaignId || undefined,
-        journeyType: form.journeyType.trim(),
-        ownerId: form.ownerId || undefined,
-        priority: form.priority,
-        notes: form.notes.trim() || undefined,
-        customFieldValues: normalizeFieldValues(fields, form.customFieldValues),
-        followUp: form.createFollowUp ? { type: form.followUpType, dueAt: new Date(form.followUpDueAt).toISOString(), assignedTo: form.followUpAssignedTo || undefined } : null,
-      };
-      const result = await onSubmit(input);
+      const result = await onSubmit(toCreateLeadInput(form, { normalizeFields: (v) => normalizeFieldValues(fields, v) }));
       onCreated?.(result);
       onClose();
-    } catch {
-      setError("Could not create this lead. Check the required fields and try again.");
-      // See AddPatientDrawer: disabling the submit button on `submitting`
-      // blurs it to <body>, outside the dialog, which would let a failed
-      // submit silently escape the Tab trap. Pull focus back in.
-      dialogRef.current?.focus();
+    } catch (err) {
+      // ApiError carries the server's code as its message; the form keeps everything that was typed.
+      const code = err instanceof Error ? err.message : "";
+      fail(code, LEAD_ERROR_COPY[code]);
     } finally {
       setSubmitting(false);
     }
   }
 
-  const selectedBucket = leadSources.find((s) => s.key === form.sourceKey)?.bucket;
-  const campaignsForSource = lookups.campaigns.filter((c) => c.source === selectedBucket);
-  const selectedService = specialties.find((s) => s.key === form.specialtyKey);
+  const doctorBusy = form.nextStep === "appointment" && conflict;
+  const stepHint = avail.hint;
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true" aria-label="Add Lead">
       <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 drawer-backdrop bg-slate-900/30" />
-      <form
-        ref={dialogRef}
-        tabIndex={-1}
-        onSubmit={handleSubmit}
-        className="relative flex h-full w-full max-w-lg flex-col overflow-hidden drawer-panel focus:outline-none"
-        data-testid="add-lead-drawer"
-      >
+      <form ref={dialogRef} tabIndex={-1} onSubmit={handleSubmit} className="relative flex h-full w-full max-w-lg flex-col overflow-hidden drawer-panel focus:outline-none" data-testid="add-lead-drawer">
         <div className="flex items-start justify-between gap-2 border-b border-line p-5">
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Add Lead</h2>
-            <p className="mt-0.5 text-xs text-neutral-500">Create a new enquiry and assign the next action.</p>
+            <p className="mt-0.5 text-xs text-neutral-500">Who called, what they need, and what happens next.</p>
           </div>
-          <button type="button" onClick={onClose} className="rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-slate-900" aria-label="Close" data-testid="add-lead-drawer-close">
+          <button type="button" onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded text-neutral-400 hover:bg-neutral-100 hover:text-slate-900" aria-label="Close" data-testid="add-lead-drawer-close">
             ✕
           </button>
         </div>
@@ -217,7 +202,7 @@ export function AddLeadDrawer({
         <div className="flex-1 space-y-6 overflow-y-auto p-5">
           {/* Patient */}
           <section>
-            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-400">Patient</h3>
+            <h3 className={sectionHead}>Patient</h3>
             <div className="space-y-3">
               <div>
                 <label className={labelClass} htmlFor="lead-phone">
@@ -229,7 +214,7 @@ export function AddLeadDrawer({
                   required
                   value={form.phone}
                   onChange={(e) => {
-                    setForm((f) => ({ ...f, phone: e.target.value }));
+                    set("phone", e.target.value);
                     setPhoneChecked(false);
                   }}
                   onBlur={checkPhone}
@@ -240,8 +225,7 @@ export function AddLeadDrawer({
                 />
                 {phoneChecked && existingPatient && (
                   <p className="mt-1.5 rounded-lg bg-primary-50 px-2.5 py-1.5 text-xs text-primary-700" data-testid="existing-patient-banner">
-                    Existing patient found — {existingPatient.name} ({existingPatient.activeJourneyCount} active journey{existingPatient.activeJourneyCount === 1 ? "" : "s"}). This will
-                    create a new journey, not a duplicate patient.
+                    Existing patient found — {existingPatient.name} ({existingPatient.activeJourneyCount} active journey{existingPatient.activeJourneyCount === 1 ? "" : "s"}). This will create a new journey, not a duplicate patient.
                   </p>
                 )}
               </div>
@@ -253,7 +237,7 @@ export function AddLeadDrawer({
                   id="lead-name"
                   type="text"
                   value={form.name}
-                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  onChange={(e) => set("name", e.target.value)}
                   disabled={!!existingPatient && form.name !== "" && existingPatient.name !== UNKNOWN_PATIENT_NAME}
                   placeholder="Add when you have it"
                   className={`${inputClass} disabled:bg-neutral-50 disabled:text-neutral-500`}
@@ -265,35 +249,21 @@ export function AddLeadDrawer({
                   <label className={labelClass} htmlFor="lead-age">
                     Age
                   </label>
-                  <input id="lead-age" type="number" inputMode="numeric" min={0} max={120} step={1} value={form.age} onChange={(e) => setForm((f) => ({ ...f, age: e.target.value }))} className={inputClass} placeholder="Years" data-testid="lead-age-input" />
+                  <input id="lead-age" type="number" inputMode="numeric" min={0} max={120} step={1} value={form.age} onChange={(e) => set("age", e.target.value)} className={inputClass} placeholder="Years" data-testid="lead-age-input" />
                 </div>
                 <div>
                   <label className={labelClass} htmlFor="lead-dob">
                     Date of birth
                   </label>
-                  <input id="lead-dob" type="date" value={form.dateOfBirth} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setForm((f) => ({ ...f, dateOfBirth: e.target.value }))} className={inputClass} data-testid="lead-dob-input" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelClass} htmlFor="lead-email">
-                    Email
-                  </label>
-                  <input id="lead-email" type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className={inputClass} />
-                </div>
-                <div>
-                  <label className={labelClass} htmlFor="lead-language">
-                    Preferred language
-                  </label>
-                  <input id="lead-language" type="text" value={form.preferredLanguage} onChange={(e) => setForm((f) => ({ ...f, preferredLanguage: e.target.value }))} className={inputClass} />
+                  <input id="lead-dob" type="date" value={form.dateOfBirth} max={hospitalLocalInput().slice(0, 10)} onChange={(e) => set("dateOfBirth", e.target.value)} className={inputClass} data-testid="lead-dob-input" />
                 </div>
               </div>
             </div>
           </section>
 
-          {/* Enquiry details */}
+          {/* Enquiry */}
           <section>
-            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-400">Enquiry Details</h3>
+            <h3 className={sectionHead}>Enquiry</h3>
             <div className="space-y-3">
               <div>
                 <label className={labelClass} htmlFor="lead-specialty">
@@ -313,13 +283,210 @@ export function AddLeadDrawer({
                   </p>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <label className={labelClass} htmlFor="lead-branch">
-                    Branch <span className="text-danger-500">*</span>
+                  <label className={labelClass} htmlFor="lead-source">
+                    Original source <span className="text-danger-500">*</span>
                   </label>
-                  <select id="lead-branch" required value={form.branchId} onChange={(e) => setForm((f) => ({ ...f, branchId: e.target.value }))} className={inputClass}>
-                    <option value="">Select branch…</option>
+                  <select id="lead-source" required value={form.sourceKey} onChange={(e) => setForm((f) => ({ ...f, sourceKey: e.target.value, campaignId: "" }))} className={inputClass} data-testid="lead-source-select">
+                    {leadSources.map((s) => (
+                      <option key={s.key} value={s.key}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className={labelClass} htmlFor="lead-channel">
+                    How did they reach us?
+                  </label>
+                  <select id="lead-channel" value={form.channel} onChange={(e) => set("channel", e.target.value as LeadFormValues["channel"])} className={inputClass} data-testid="lead-channel-select">
+                    <option value="">Not specified</option>
+                    {LEAD_CHANNEL_OPTIONS.map((c) => (
+                      <option key={c.key} value={c.key}>
+                        {c.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <p className="-mt-1 text-[11px] text-neutral-500">Source is where the patient first came from; it stays with them. Channel is how this contact happened.</p>
+              <div>
+                <label className={labelClass} htmlFor="lead-branch">
+                  Branch <span className="text-danger-500">*</span>
+                </label>
+                <select id="lead-branch" required value={form.branchId} onChange={(e) => set("branchId", e.target.value)} className={inputClass}>
+                  <option value="">Select branch…</option>
+                  {lookups.branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {form.channel === "MANUAL_CALL" && (
+                <div className="rounded-lg border border-neutral-100 bg-neutral-50 p-3" data-testid="lead-call-details">
+                  <label className="flex min-h-6 items-center gap-2 text-sm text-slate-700">
+                    <input type="checkbox" checked={form.callEnabled} onChange={(e) => set("callEnabled", e.target.checked)} className="h-4 w-4" data-testid="lead-call-toggle" />
+                    Add call details
+                  </label>
+                  {form.callEnabled && (
+                    <div className="mt-3 grid grid-cols-2 gap-3">
+                      <div>
+                        <label className={labelClass} htmlFor="lead-call-direction">Call</label>
+                        <select id="lead-call-direction" value={form.callDirection} onChange={(e) => set("callDirection", e.target.value as "inbound" | "outbound")} className={inputClass} data-testid="lead-call-direction">
+                          <option value="inbound">Incoming</option>
+                          <option value="outbound">Outgoing</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelClass} htmlFor="lead-call-minutes">Minutes talked</label>
+                        <input id="lead-call-minutes" type="number" min={0} max={600} step={0.5} inputMode="decimal" value={form.callMinutes} disabled={!form.callConnected} onChange={(e) => set("callMinutes", e.target.value)} className={`${inputClass} disabled:bg-neutral-100`} data-testid="lead-call-minutes" />
+                      </div>
+                      <label className="col-span-2 flex min-h-6 items-center gap-2 text-sm text-slate-700">
+                        <input type="checkbox" checked={form.callConnected} onChange={(e) => set("callConnected", e.target.checked)} className="h-4 w-4" data-testid="lead-call-connected" />
+                        The call connected
+                      </label>
+                      <div className="col-span-2">
+                        <label className={labelClass} htmlFor="lead-call-note">Call note</label>
+                        <input id="lead-call-note" type="text" maxLength={500} value={form.callNote} onChange={(e) => set("callNote", e.target.value)} className={inputClass} data-testid="lead-call-note" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* Required tenant fields, surfaced up front */}
+          {requiredFields.length > 0 && (
+            <section data-testid="lead-required-fields">
+              <h3 className={sectionHead}>{selectedService?.displayName ?? "Service"} — required details</h3>
+              <CustomFieldInputs fields={requiredFields} values={form.customFieldValues} onChange={(k, v) => set("customFieldValues", { ...form.customFieldValues, [k]: v })} idPrefix="lead-field" testId="lead-custom-field-inputs" />
+            </section>
+          )}
+
+          {/* Outcome */}
+          {outcomes.length > 0 && (
+            <section>
+              <h3 className={sectionHead}>What happened?</h3>
+              <label className={labelClass} htmlFor="lead-outcome">
+                Outcome of this contact
+              </label>
+              <select id="lead-outcome" value={form.outcomeKey} onChange={(e) => onOutcomeChange(e.target.value)} className={inputClass} data-testid="lead-outcome-select">
+                <option value="">Not recorded yet</option>
+                {outcomes.map((o) => (
+                  <option key={o.key} value={o.key}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              {outcome?.asksReason && (
+                <div className="mt-3">
+                  <label className={labelClass} htmlFor="lead-outcome-reason">
+                    Reason (optional)
+                  </label>
+                  <input id="lead-outcome-reason" type="text" maxLength={500} value={form.outcomeReason} onChange={(e) => set("outcomeReason", e.target.value)} className={inputClass} data-testid="lead-outcome-reason" />
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* Next step */}
+          <section>
+            <h3 className={sectionHead}>Next step</h3>
+            <fieldset>
+              <legend className="sr-only">Next step</legend>
+              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                {NEXT_STEPS.map((s) => {
+                  const allowed = avail[s.key];
+                  const on = form.nextStep === s.key;
+                  return (
+                    <label key={s.key} className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${on ? "border-primary-500 bg-primary-50 text-primary-800" : "border-neutral-200 text-slate-700 hover:bg-neutral-50"} ${allowed ? "" : "cursor-not-allowed opacity-45"}`}>
+                      <input type="radio" name="lead-next-step" value={s.key} checked={on} disabled={!allowed} onChange={() => set("nextStep", s.key)} className="h-4 w-4 text-primary-600" data-testid={`lead-next-${s.key}`} />
+                      <span>
+                        {s.label}
+                        {s.hint && <span className="ml-1 text-[11px] text-neutral-500">· {s.hint}</span>}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
+            {stepHint && <p className="mt-2 text-[11px] text-neutral-600" data-testid="lead-next-hint">{stepHint}</p>}
+
+            {form.nextStep === "callback" && (
+              <div className="mt-3 grid grid-cols-2 gap-3 rounded-lg border border-neutral-100 bg-neutral-50 p-3" data-testid="lead-callback-fields">
+                <div>
+                  <label className={labelClass} htmlFor="lead-callback-date">Date</label>
+                  <input id="lead-callback-date" type="date" required value={form.callbackDate} min={nowLocal.slice(0, 10)} onChange={(e) => set("callbackDate", e.target.value)} aria-invalid={callbackPast || undefined} className={inputClass} data-testid="lead-callback-date" />
+                </div>
+                <div>
+                  <label className={labelClass} htmlFor="lead-callback-time">Time</label>
+                  <input id="lead-callback-time" type="time" required value={form.callbackTime} onChange={(e) => set("callbackTime", e.target.value)} aria-invalid={callbackPast || undefined} className={inputClass} data-testid="lead-callback-time" />
+                </div>
+                <div className="col-span-2">
+                  <label className={labelClass} htmlFor="lead-callback-owner">Who calls back</label>
+                  <select id="lead-callback-owner" value={form.callbackOwner} onChange={(e) => set("callbackOwner", e.target.value)} className={inputClass} data-testid="lead-callback-owner">
+                    <option value="">Lead owner (default)</option>
+                    {lookups.owners.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="col-span-2">
+                  <label className={labelClass} htmlFor="lead-callback-note">Note (optional)</label>
+                  <input id="lead-callback-note" type="text" maxLength={500} value={form.callbackNote} onChange={(e) => set("callbackNote", e.target.value)} className={inputClass} data-testid="lead-callback-note" />
+                </div>
+                {callbackPast && <p className="col-span-2 text-xs text-danger-700" role="status" data-testid="lead-callback-past">Choose a future callback time.</p>}
+              </div>
+            )}
+
+            {form.nextStep === "follow_up" && (
+              <div className="mt-3 grid grid-cols-2 gap-3 rounded-lg border border-neutral-100 bg-neutral-50 p-3" data-testid="lead-followup-fields">
+                <div>
+                  <label className={labelClass} htmlFor="lead-followup-date">Follow up on</label>
+                  <input id="lead-followup-date" type="date" required value={form.followUpDate} min={nowLocal.slice(0, 10)} onChange={(e) => set("followUpDate", e.target.value)} className={inputClass} data-testid="lead-followup-date" />
+                </div>
+                <div>
+                  <label className={labelClass} htmlFor="lead-followup-time">Time</label>
+                  <input id="lead-followup-time" type="time" required value={form.followUpTime} onChange={(e) => set("followUpTime", e.target.value)} className={inputClass} data-testid="lead-followup-time" />
+                </div>
+                <div className="col-span-2">
+                  <label className={labelClass} htmlFor="lead-followup-note">Note (optional)</label>
+                  <input id="lead-followup-note" type="text" maxLength={500} value={form.followUpNote} onChange={(e) => set("followUpNote", e.target.value)} className={inputClass} data-testid="lead-followup-note" />
+                </div>
+                {followUpPast && <p className="col-span-2 text-xs text-danger-700" role="status">Choose a future follow-up time.</p>}
+              </div>
+            )}
+
+            {form.nextStep === "appointment" && (
+              <div className="mt-3 grid grid-cols-2 gap-3 rounded-lg border border-neutral-100 bg-neutral-50 p-3" data-testid="lead-appt-fields">
+                <div>
+                  <label className={labelClass} htmlFor="lead-appt-date">Date</label>
+                  <input id="lead-appt-date" type="date" required value={form.apptDate} min={nowLocal.slice(0, 10)} onChange={(e) => set("apptDate", e.target.value)} aria-invalid={apptPast || undefined} className={inputClass} data-testid="lead-appt-date" />
+                </div>
+                <div>
+                  <label className={labelClass} htmlFor="lead-appt-time">Time</label>
+                  <input id="lead-appt-time" type="time" required value={form.apptTime} onChange={(e) => set("apptTime", e.target.value)} aria-invalid={apptPast || undefined} className={inputClass} data-testid="lead-appt-time" />
+                </div>
+                <div className="col-span-2 sm:col-span-1">
+                  <label className={labelClass} htmlFor="lead-appt-doctor">Doctor <span className="text-danger-500">*</span></label>
+                  <select id="lead-appt-doctor" required value={form.apptDoctorId} onChange={(e) => set("apptDoctorId", e.target.value)} className={inputClass} data-testid="lead-appt-doctor">
+                    <option value="">Select doctor…</option>
+                    {lookups.doctors.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="col-span-2 sm:col-span-1">
+                  <label className={labelClass} htmlFor="lead-appt-branch">Branch</label>
+                  <select id="lead-appt-branch" value={form.apptBranchId || form.branchId} onChange={(e) => set("apptBranchId", e.target.value)} className={inputClass} data-testid="lead-appt-branch">
                     {lookups.branches.map((b) => (
                       <option key={b.id} value={b.id}>
                         {b.name}
@@ -327,11 +494,42 @@ export function AddLeadDrawer({
                     ))}
                   </select>
                 </div>
+                <div className="col-span-2">
+                  <label className={labelClass} htmlFor="lead-appt-note">Note (optional)</label>
+                  <input id="lead-appt-note" type="text" maxLength={500} value={form.apptNote} onChange={(e) => set("apptNote", e.target.value)} className={inputClass} data-testid="lead-appt-note" />
+                </div>
+                {(apptPast || doctorBusy) && (
+                  <p className="col-span-2 text-xs text-danger-700" role="status" data-testid="lead-appt-warning">
+                    {apptPast ? LEAD_ERROR_COPY.appointment_time_in_past : LEAD_ERROR_COPY.resource_unavailable}
+                  </p>
+                )}
+              </div>
+            )}
+          </section>
+
+          {/* Everything else, out of the way */}
+          <details className="group rounded-lg border border-neutral-100" data-testid="lead-additional">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 py-2 text-sm font-medium text-slate-700" data-testid="lead-additional-toggle">
+              Additional details
+              <span className="text-xs font-normal text-neutral-500 group-open:hidden">Email, owner, notes, more…</span>
+            </summary>
+            <div className="space-y-3 border-t border-neutral-100 p-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <label className={labelClass} htmlFor="lead-doctor">
-                    Preferred doctor
-                  </label>
-                  <select id="lead-doctor" value={form.doctorId} onChange={(e) => setForm((f) => ({ ...f, doctorId: e.target.value }))} className={inputClass}>
+                  <label className={labelClass} htmlFor="lead-email">Email</label>
+                  <input id="lead-email" type="email" value={form.email} onChange={(e) => set("email", e.target.value)} className={inputClass} />
+                </div>
+                <div>
+                  <label className={labelClass} htmlFor="lead-language">Preferred language</label>
+                  <input id="lead-language" type="text" value={form.preferredLanguage} onChange={(e) => set("preferredLanguage", e.target.value)} className={inputClass} />
+                </div>
+                <div>
+                  <label className={labelClass} htmlFor="lead-journey-type">Journey type</label>
+                  <input id="lead-journey-type" type="text" value={form.journeyType} onChange={(e) => set("journeyType", e.target.value)} className={inputClass} />
+                </div>
+                <div>
+                  <label className={labelClass} htmlFor="lead-doctor">Preferred doctor</label>
+                  <select id="lead-doctor" value={form.doctorId} onChange={(e) => set("doctorId", e.target.value)} className={inputClass}>
                     <option value="">No preference</option>
                     {lookups.doctors.map((d) => (
                       <option key={d.id} value={d.id}>
@@ -340,33 +538,27 @@ export function AddLeadDrawer({
                     ))}
                   </select>
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={labelClass} htmlFor="lead-source">
-                    Source <span className="text-danger-500">*</span>
-                  </label>
-                  <select
-                    id="lead-source"
-                    required
-                    value={form.sourceKey}
-                    onChange={(e) => setForm((f) => ({ ...f, sourceKey: e.target.value, campaignId: "" }))}
-                    className={inputClass}
-                    data-testid="lead-source-select"
-                  >
-                    {leadSources.map((s) => (
-                      <option key={s.key} value={s.key}>
-                        {s.label}
+                  <label className={labelClass} htmlFor="lead-owner">Owner / Coordinator</label>
+                  <select id="lead-owner" value={form.ownerId} onChange={(e) => set("ownerId", e.target.value)} className={inputClass}>
+                    <option value="">Unassigned</option>
+                    {lookups.owners.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.name}
                       </option>
                     ))}
                   </select>
-                  <p className="mt-1 text-[11px] text-neutral-500">Where the patient originally came from.</p>
                 </div>
                 <div>
-                  <label className={labelClass} htmlFor="lead-campaign">
-                    Campaign
-                  </label>
-                  <select id="lead-campaign" value={form.campaignId} onChange={(e) => setForm((f) => ({ ...f, campaignId: e.target.value }))} className={inputClass} disabled={campaignsForSource.length === 0}>
+                  <label className={labelClass} htmlFor="lead-priority">Priority</label>
+                  <select id="lead-priority" value={form.priority} onChange={(e) => set("priority", e.target.value as TaskPriority)} className={inputClass}>
+                    <option value="normal">Normal</option>
+                    <option value="high">High</option>
+                  </select>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className={labelClass} htmlFor="lead-campaign">Campaign</label>
+                  <select id="lead-campaign" value={form.campaignId} onChange={(e) => set("campaignId", e.target.value)} className={inputClass} disabled={campaignsForSource.length === 0}>
                     <option value="">{campaignsForSource.length === 0 ? "No campaigns for this source" : "None"}</option>
                     {campaignsForSource.map((c) => (
                       <option key={c.id} value={c.id}>
@@ -377,133 +569,31 @@ export function AddLeadDrawer({
                 </div>
               </div>
               <div>
-                <label className={labelClass} htmlFor="lead-channel">
-                  How did they get in touch?
-                </label>
-                <select id="lead-channel" value={form.channel} onChange={(e) => setForm((f) => ({ ...f, channel: e.target.value as InteractionChannel | "" }))} className={inputClass} data-testid="lead-channel-select">
-                  <option value="">Not specified</option>
-                  {MANUAL_INTERACTION_CHANNELS.map((c) => (
-                    <option key={c} value={c}>
-                      {INTERACTION_CHANNEL_LABEL[c]}
-                    </option>
-                  ))}
-                </select>
+                <label className={labelClass} htmlFor="lead-notes">Notes</label>
+                <textarea id="lead-notes" value={form.notes} onChange={(e) => set("notes", e.target.value)} rows={2} className={inputClass} />
               </div>
-              <div>
-                <label className={labelClass} htmlFor="lead-journey-type">
-                  Journey type <span className="text-danger-500">*</span>
-                </label>
-                <input id="lead-journey-type" type="text" required value={form.journeyType} onChange={(e) => setForm((f) => ({ ...f, journeyType: e.target.value }))} className={inputClass} />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelClass} htmlFor="lead-owner">
-                    Owner / Coordinator
-                  </label>
-                  <select id="lead-owner" value={form.ownerId} onChange={(e) => setForm((f) => ({ ...f, ownerId: e.target.value }))} className={inputClass}>
-                    <option value="">Unassigned</option>
-                    {lookups.owners.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.name}
-                      </option>
-                    ))}
-                  </select>
+              {optionalFields.length > 0 && (
+                <div data-testid="lead-custom-fields">
+                  <h4 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">{selectedService?.displayName} details</h4>
+                  <CustomFieldInputs fields={optionalFields} values={form.customFieldValues} onChange={(k, v) => set("customFieldValues", { ...form.customFieldValues, [k]: v })} idPrefix="lead-field" testId="lead-optional-field-inputs" />
                 </div>
-                <div>
-                  <label className={labelClass} htmlFor="lead-priority">
-                    Priority
-                  </label>
-                  <select id="lead-priority" value={form.priority} onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value as TaskPriority }))} className={inputClass}>
-                    <option value="normal">Normal</option>
-                    <option value="high">High</option>
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className={labelClass} htmlFor="lead-notes">
-                  Notes
-                </label>
-                <textarea id="lead-notes" value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} rows={2} className={inputClass} />
-              </div>
+              )}
             </div>
-          </section>
-
-          {/* Specialty custom fields */}
-          {fields.length > 0 && (
-            <section data-testid="lead-custom-fields">
-              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-400">{specialties.find((s) => s.key === form.specialtyKey)?.displayName} Details</h3>
-              <CustomFieldInputs fields={fields} values={form.customFieldValues} onChange={setCustomField} idPrefix="lead-field" testId="lead-custom-field-inputs" />
-            </section>
-          )}
-
-          {/* Next action */}
-          <section>
-            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-400">Next Action</h3>
-            <div className="space-y-2">
-              <label className="flex items-center gap-2 text-sm text-slate-700">
-                <input type="radio" name="followup" checked={!form.createFollowUp} onChange={() => setForm((f) => ({ ...f, createFollowUp: false }))} className="h-3.5 w-3.5 text-primary-600" />
-                No follow-up yet
-              </label>
-              <label className="flex items-center gap-2 text-sm text-slate-700">
-                <input type="radio" name="followup" checked={form.createFollowUp} onChange={() => setForm((f) => ({ ...f, createFollowUp: true }))} className="h-3.5 w-3.5 text-primary-600" />
-                Create first follow-up
-              </label>
-            </div>
-            {form.createFollowUp && (
-              <div className="mt-3 grid grid-cols-2 gap-3 rounded-lg border border-neutral-100 bg-neutral-50 p-3">
-                <div>
-                  <label className={labelClass} htmlFor="followup-type">
-                    Type
-                  </label>
-                  <select id="followup-type" value={form.followUpType} onChange={(e) => setForm((f) => ({ ...f, followUpType: e.target.value as TaskType }))} className={inputClass}>
-                    {FOLLOW_UP_TYPES.map((t) => (
-                      <option key={t} value={t}>
-                        {t.replace(/_/g, " ")}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className={labelClass} htmlFor="followup-due">
-                    Due date/time
-                  </label>
-                  <input id="followup-due" type="datetime-local" value={form.followUpDueAt} onChange={(e) => setForm((f) => ({ ...f, followUpDueAt: e.target.value }))} className={inputClass} />
-                </div>
-                <div className="col-span-2">
-                  <label className={labelClass} htmlFor="followup-assignee">
-                    Assigned user
-                  </label>
-                  <select id="followup-assignee" value={form.followUpAssignedTo} onChange={(e) => setForm((f) => ({ ...f, followUpAssignedTo: e.target.value }))} className={inputClass}>
-                    <option value="">Same as owner</option>
-                    {lookups.owners.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            )}
-          </section>
+          </details>
 
           {error && (
-            <p role="alert" className="rounded-lg bg-danger-100 px-3 py-2 text-xs text-danger-700">
-              {error}
+            <p ref={errorRef} tabIndex={-1} role="alert" className="rounded-lg bg-danger-100 px-3 py-2 text-xs text-danger-700 outline-none" data-testid="add-lead-error" data-code={error.code}>
+              {error.text}
             </p>
           )}
         </div>
 
         <div className="sticky bottom-0 flex gap-2 border-t border-line bg-white/90 p-4">
-          <button type="button" onClick={onClose} className="flex-1 rounded-control border border-line-strong px-3 py-2.5 text-sm font-medium text-neutral-600 transition hover:bg-neutral-50">
+          <button type="button" onClick={onClose} className="flex-1 rounded-control border border-line-strong px-3 py-2.5 text-sm font-medium text-neutral-600 transition hover:bg-neutral-50 max-md:min-h-11">
             Cancel
           </button>
-          <button
-            type="submit"
-            disabled={!canSubmit}
-            className="flex-1 rounded-control bg-primary-600 px-3 py-2.5 text-sm font-medium text-white transition hover:bg-primary-700 disabled:opacity-40"
-            data-testid="add-lead-submit"
-          >
-            {submitting ? "Creating…" : "Create Lead"}
+          <button type="submit" disabled={submitting} className="flex-1 rounded-control bg-primary-600 px-3 py-2.5 text-sm font-medium text-white transition hover:bg-primary-700 disabled:opacity-40 max-md:min-h-11" data-testid="add-lead-submit">
+            {submitting ? "Saving…" : "Save Lead"}
           </button>
         </div>
       </form>

@@ -35,6 +35,7 @@ test.describe("CRM + specialty + marketing-efficiency checkpoint screenshots", (
 
     // 03 — Add Lead specialty fields
     await page.getByTestId("lead-specialty-select").selectOption("GYNECOLOGY");
+    await page.getByTestId("lead-additional-toggle").click();
     await expect(page.getByTestId("lead-custom-fields")).toBeVisible();
     await page.getByTestId("lead-custom-fields").scrollIntoViewIfNeeded();
     await shot(page, "03-add-lead-specialty-fields.png");

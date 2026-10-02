@@ -132,7 +132,7 @@ test.describe("Multi-specialty demo environments", () => {
     await page.goto("/leads");
     await expect(page.getByTestId("leads-page")).toBeVisible();
     for (const service of ["Cataract", "Oculoplasty", "Laser Vision Correction", "Squint"]) {
-      await expect(page.getByText(service, { exact: true }).first()).toBeVisible();
+      await expect(page.locator('[data-testid^="lead-enquiry-"]').filter({ hasText: service }).first()).toBeVisible();
     }
     for (const gynTerm of ["Fertility", "Pregnancy Care", "IVF", "Priya Sharma"]) {
       await expect(page.getByText(gynTerm)).toHaveCount(0);
@@ -228,6 +228,7 @@ test.describe("Multi-specialty demo environments", () => {
     expect(eyeOptions.join("|")).not.toContain("Gynecology");
 
     await select.selectOption("CATARACT");
+    await page.getByTestId("lead-additional-toggle").click(); // service fields live under "Additional details"
     await expect(page.getByLabel("Recorded cataract status")).toBeVisible();
     await expect(page.getByLabel("Surgery interest")).toBeVisible();
     await expect(page.getByLabel("Laterality").first()).toBeVisible();
@@ -247,6 +248,7 @@ test.describe("Multi-specialty demo environments", () => {
     expect(gynOptions.join("|")).toContain("Gynecology");
     expect(gynOptions.join("|")).not.toContain("Cataract");
     await page.getByTestId("lead-specialty-select").selectOption("GYNECOLOGY");
+    await page.getByTestId("lead-additional-toggle").click();
     await expect(page.getByLabel("Pregnancy status")).toBeVisible();
     await expect(page.getByLabel("Laterality")).toHaveCount(0);
   });

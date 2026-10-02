@@ -36,6 +36,8 @@ test.describe("CRM critical business flows", () => {
     await page.getByTestId("lead-phone-input").fill(phone);
     await page.locator("#lead-name").fill(patientName);
     await page.getByTestId("lead-specialty-select").selectOption("GYNECOLOGY");
+    // Configured service fields sit under "Additional details".
+    await page.getByTestId("lead-additional-toggle").click();
     await expect(page.getByTestId("lead-custom-fields")).toBeVisible();
 
     const branchSelect = page.locator("#lead-branch");
@@ -48,8 +50,7 @@ test.describe("CRM critical business flows", () => {
     const firstOwnerValue = await ownerSelect.locator("option").nth(1).getAttribute("value");
     await ownerSelect.selectOption(firstOwnerValue!);
 
-    await page.getByText("Create first follow-up").click();
-    await page.locator("#followup-type").selectOption("CALLBACK");
+    await page.getByTestId("lead-next-callback").check(); // date and time default to tomorrow
 
     await page.getByTestId("add-lead-submit").click();
     await expect(page.getByTestId("add-lead-drawer")).not.toBeVisible();
@@ -161,7 +162,9 @@ test.describe("CRM critical business flows", () => {
     // Fields never touched this time must show their fresh defaults, not
     // anything left over from the first open (branch/specialty were never
     // set in either open, so they should read as unset, not carry over).
-    await expect(page.locator("#lead-branch")).toHaveValue("");
+    // (the branch preselects the hospital's first branch on every fresh open — that default is not "carried over")
+    const firstBranch = await page.locator("#lead-branch option").nth(1).getAttribute("value");
+    await expect(page.locator("#lead-branch")).toHaveValue(firstBranch!);
     await expect(page.locator("#lead-specialty")).toHaveValue("");
   });
 

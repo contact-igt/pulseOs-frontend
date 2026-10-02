@@ -44,10 +44,13 @@ export function QuickCreateProvider({ role, children }: { role: Role; children: 
   const specialties = useQuery({ queryKey: ["specialties"], queryFn: () => api.specialties(), staleTime: 60_000 });
   const lookups = useQuery({ queryKey: ["lookups"], queryFn: api.lookups, staleTime: 60_000 });
   const leadSources = useQuery({ queryKey: ["lead-sources"], queryFn: () => api.leadSources(), staleTime: 60_000 });
+  // The hospital's configured outcomes (Settings → Workflow Outcomes): offered on Add Lead as "What happened?".
+  const outcomes = useQuery({ queryKey: ["crm-outcomes", "active"], queryFn: () => api.crmOutcomes(), staleTime: 60_000 });
 
   function invalidateAfterCreate() {
     queryClient.invalidateQueries({ queryKey: ["leads"] });
     queryClient.invalidateQueries({ queryKey: ["leads-summary"] });
+    queryClient.invalidateQueries({ queryKey: ["calls"] });
     queryClient.invalidateQueries({ queryKey: ["journeys"] });
     queryClient.invalidateQueries({ queryKey: ["journey"] });
     queryClient.invalidateQueries({ queryKey: ["patients"] });
@@ -83,9 +86,11 @@ export function QuickCreateProvider({ role, children }: { role: Role; children: 
               specialties={specialties.data}
               lookups={lookups.data}
               leadSources={leadSources.data}
+              outcomes={outcomes.data ?? []}
               defaultSource={drawer.source}
               onPhoneLookup={api.leadPhoneLookup}
               onLoadCustomFields={api.specialtyFields}
+              onCheckSlot={(doctorId, scheduledAt) => api.appointmentSlotCheck(doctorId, scheduledAt)}
               onSubmit={api.createLead}
               onCreated={invalidateAfterCreate}
             />
