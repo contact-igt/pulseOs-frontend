@@ -28,11 +28,11 @@ test.describe("Beta V1 foundation (M1 + M2)", () => {
     sql(`DELETE FROM lead_sources WHERE key LIKE 'custom_e2e_%' AND tenant_id IN (SELECT id FROM tenants WHERE name = 'PulseOS Ophthalmology V1 Demo')`);
   });
 
-  test("a V1 tenant sees the core CRM, a dimmed Beta V2 Inbox, and is sent home from a growth URL", async ({ page }) => {
+  test("a V1 tenant sees the core CRM and operational Analytics, a dimmed Beta V2 Inbox, and is sent home from a growth URL", async ({ page }) => {
     await login(page, "eyev1.admin@pulseos.local");
     await expect(page.getByTestId("nav-/leads")).toBeVisible();
     await expect(page.getByTestId("nav-/campaigns")).toHaveCount(0);
-    await expect(page.getByTestId("nav-/analytics")).toHaveCount(0);
+    await expect(page.getByTestId("nav-/analytics")).toBeVisible(); // operational analytics is core (M6.6); marketing analytics stays V2
     await expect(page.getByTestId("nav-/inbox")).toHaveCount(0);
     await expect(page.getByTestId("nav-locked-/inbox")).toContainText("Beta V2");
     // No spend / ROAS panels on the V1 Command Centre.
