@@ -32,7 +32,7 @@ describe("form <-> API", () => {
     const form = fieldToForm(existing);
     expect(form.defaultText).toBe("50000");
     const input = formToUpdateInput({ ...form, label: "Budget (INR)", defaultText: "75000" });
-    expect(input).toEqual({ label: "Budget (INR)", fieldType: "NUMBER", options: undefined, required: true, groupKey: "qualification", placements: ["add_lead", "followup_outcome"], defaultValue: 75000, visibleTo: "front_office" });
+    expect(input).toEqual({ label: "Budget (INR)", fieldType: "NUMBER", options: undefined, required: true, groupKey: "qualification", placements: ["add_lead", "followup_outcome"], defaultValue: 75000, visibleTo: "front_office", readOnly: false, filterable: false, carryForward: false, rules: [] });
     expect(input).not.toHaveProperty("key");
     expect(input).not.toHaveProperty("specialtyKey");
   });
