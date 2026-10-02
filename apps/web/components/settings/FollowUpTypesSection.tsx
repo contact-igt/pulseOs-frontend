@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { api, ApiError } from "@pulseos/api-client";
 import { Badge, Button, EmptyState, ErrorState, SideSheet, Skeleton } from "@pulseos/ui";
 import { FOLLOW_UP_BEHAVIOURS, FOLLOW_UP_OWNER_LABEL, type FollowUpDefaultOwner, type FollowUpTypeVm, type TaskPriority, type TaskType } from "@pulseos/types";
 import { CheckRow, FormError, SelectInput, TextInput } from "./FormBits";
+import { ReorderStatus, RowOrderControls, SortableGroup, useReorder, useSortableRow, type OrderControl, type RowStatus } from "./SortableList";
 
 const BEHAVIOUR_LABEL = new Map(FOLLOW_UP_BEHAVIOURS.map((b) => [b.key, b.label]));
 
@@ -105,6 +106,46 @@ function TypeSheet({ existing, onClose, onSaved }: { existing: FollowUpTypeVm | 
   );
 }
 
+function TypeRow({ t, position, total, busy, status, focusRequest, onMove, onEdit, onToggle }: { t: FollowUpTypeVm; position: number; total: number; busy: boolean; status: RowStatus; focusRequest: { id: string; control: OrderControl; n: number } | null; onMove: (d: -1 | 1) => void; onEdit: () => void; onToggle: () => void }) {
+  const { isDragging, rowProps, gripProps } = useSortableRow(t.id, busy, { status, archived: !t.isActive });
+  return (
+    <li {...rowProps} className={`${rowProps.className} flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2`} data-testid={`followup-type-row-${t.key}`}>
+      <RowOrderControls
+        rowId={t.id}
+        label={t.label}
+        position={position}
+        total={total}
+        disabled={false}
+        locked={busy}
+        dragging={isDragging}
+        gripProps={gripProps}
+        onMove={onMove}
+        focusRequest={focusRequest}
+        ids={{ drag: `followup-type-drag-${t.key}`, up: `followup-type-up-${t.key}`, down: `followup-type-down-${t.key}` }}
+      />
+      <button type="button" onClick={onEdit} className="min-w-0 flex-1 basis-40 text-left" aria-label={`Edit ${t.label}`}>
+        <span className="block truncate text-sm font-medium text-ink">{t.label}</span>
+        <span className="block truncate text-[11px] text-ink-2">
+          {BEHAVIOUR_LABEL.get(t.canonicalTaskType) ?? "Follow-up"} · {t.departmentName ?? "All departments"}
+        </span>
+      </button>
+      <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+        {t.defaultPriority === "high" && <Badge tone="warning">High priority</Badge>}
+        {t.requiresNote && <Badge tone="neutral">Needs a note</Badge>}
+        {!t.isActive && <Badge tone="warning">Archived</Badge>}
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        <Button size="sm" variant="ghost" className="min-h-11 sm:min-h-0" onClick={onEdit}>
+          Edit
+        </Button>
+        <Button size="sm" variant="ghost" className="min-h-11 sm:min-h-0" onClick={onToggle} disabled={busy} data-testid={`followup-type-toggle-${t.key}`}>
+          {t.isActive ? "Archive" : "Restore"}
+        </Button>
+      </div>
+    </li>
+  );
+}
+
 /**
  * Settings → Follow-up Types. The names staff pick when they schedule work on a journey. Each one behaves like a stable
  * kind of task underneath, so renaming or adding types never disturbs My Work, reports or history. Archive hides a type
@@ -132,24 +173,10 @@ export function FollowUpTypesSection() {
     }
   }
 
-  async function move(index: number, delta: -1 | 1) {
-    const next = [...list];
-    const j = index + delta;
-    if (j < 0 || j >= next.length) return;
-    [next[index], next[j]] = [next[j]!, next[index]!];
-    setBusy(true);
-    setError(null);
-    try {
-      await api.reorderFollowUpTypes(next.map((t) => t.id));
-      refresh();
-    } catch {
-      setError("Couldn't change the order — try again.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const btn = "inline-flex h-11 w-9 items-center justify-center rounded-control text-ink-2 hover:bg-primary-50 hover:text-ink disabled:opacity-30 sm:h-8 sm:w-7";
+  const labelOf = useCallback((id: string) => (types.data ?? []).find((t) => t.id === id)?.label ?? "Follow-up type", [types.data]);
+  const saveOrder = useCallback((_group: "all", ids: string[]) => api.reorderFollowUpTypes(ids), []);
+  const sort = useReorder<"all">({ save: saveOrder, refresh, label: labelOf });
+  const shown = sort.ordered("all", list);
 
   return (
     <div className="space-y-3" data-testid="followup-types-section">
@@ -159,44 +186,36 @@ export function FollowUpTypesSection() {
           <Plus size={14} aria-hidden="true" /> Add type
         </Button>
       </div>
-      <FormError message={error} />
+      <FormError message={error ?? sort.error} />
+      <ReorderStatus message={sort.announcement} />
       {types.isLoading && <Skeleton className="h-40" />}
       {types.isError && <ErrorState message="Could not load follow-up types." />}
       {types.data && list.length === 0 && <EmptyState message="No follow-up types yet" />}
       {list.length > 0 && (
-        <ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface" data-testid="followup-type-list">
-          {list.map((t, i) => (
-            <li key={t.id} className={`flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 ${t.isActive ? "" : "bg-neutral-50 text-ink-2"}`} data-testid={`followup-type-row-${t.key}`}>
-              <div className="flex shrink-0 items-center">
-                <button type="button" className={btn} onClick={() => move(i, -1)} disabled={busy || i === 0} aria-label={`Move ${t.label} up`} data-testid={`followup-type-up-${t.key}`}>
-                  <ArrowUp size={14} aria-hidden="true" />
-                </button>
-                <button type="button" className={btn} onClick={() => move(i, 1)} disabled={busy || i === list.length - 1} aria-label={`Move ${t.label} down`} data-testid={`followup-type-down-${t.key}`}>
-                  <ArrowDown size={14} aria-hidden="true" />
-                </button>
-              </div>
-              <button type="button" onClick={() => setEditing(t)} className="min-w-0 flex-1 basis-40 text-left" aria-label={`Edit ${t.label}`}>
-                <span className="block truncate text-sm font-medium text-ink">{t.label}</span>
-                <span className="block truncate text-[11px] text-ink-2">
-                  {BEHAVIOUR_LABEL.get(t.canonicalTaskType) ?? "Follow-up"} · {t.departmentName ?? "All departments"}
-                </span>
-              </button>
-              <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-                {t.defaultPriority === "high" && <Badge tone="warning">High priority</Badge>}
-                {t.requiresNote && <Badge tone="neutral">Needs a note</Badge>}
-                {!t.isActive && <Badge tone="warning">Archived</Badge>}
-              </div>
-              <div className="flex shrink-0 items-center gap-1">
-                <Button size="sm" variant="ghost" className="min-h-11 sm:min-h-0" onClick={() => setEditing(t)}>
-                  Edit
-                </Button>
-                <Button size="sm" variant="ghost" className="min-h-11 sm:min-h-0" onClick={() => toggle(t)} disabled={busy} data-testid={`followup-type-toggle-${t.key}`}>
-                  {t.isActive ? "Archive" : "Restore"}
-                </Button>
-              </div>
-            </li>
-          ))}
-        </ul>
+        <SortableGroup items={shown.map((t) => ({ id: t.id, label: t.label }))} onReorder={(ids, moved) => void sort.reorder("all", ids, moved, "grip", shown.map((t) => t.id))}>
+          <ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface" aria-label="Follow-up types" aria-busy={sort.isSaving("all")} data-testid="followup-type-list">
+            {shown.map((t, i) => (
+              <TypeRow
+                key={t.id}
+                t={t}
+                position={i + 1}
+                total={shown.length}
+                busy={busy || sort.isSaving("all")}
+                status={sort.statusOf(t.id)}
+                focusRequest={sort.focusRequest}
+                onMove={(d) => {
+                  const ids = shown.map((x) => x.id);
+                  const j = i + d;
+                  if (j < 0 || j >= ids.length) return;
+                  [ids[i], ids[j]] = [ids[j]!, ids[i]!];
+                  void sort.reorder("all", ids, t.id, d < 0 ? "up" : "down", shown.map((x) => x.id));
+                }}
+                onEdit={() => setEditing(t)}
+                onToggle={() => toggle(t)}
+              />
+            ))}
+          </ul>
+        </SortableGroup>
       )}
       {editing && (
         <TypeSheet

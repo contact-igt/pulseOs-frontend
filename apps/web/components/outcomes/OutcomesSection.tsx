@@ -1,48 +1,51 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, Lock, Plus } from "lucide-react";
+import { Lock, Plus } from "lucide-react";
 import { api } from "@pulseos/api-client";
 import { Badge, Button, EmptyState, ErrorState, Skeleton } from "@pulseos/ui";
 import type { CrmOutcomeVm, JourneyStage } from "@pulseos/types";
 import { CheckRow, FormError } from "@/components/settings/FormBits";
-import { DragGrip, SortableGroup, useSortableRow } from "@/components/settings/SortableList";
+import { ReorderStatus, RowOrderControls, SortableGroup, useReorder, useSortableRow, type OrderControl, type RowStatus } from "@/components/settings/SortableList";
 import { OutcomeEditorSheet } from "./OutcomeEditorSheet";
 import { blankOutcome, outcomeHint, outcomeToForm, type OutcomeForm } from "./outcomeForm";
 import { SYSTEM_STAGES, outcomesForStage } from "./stageModel";
 
-const BTN = "inline-flex h-11 w-11 items-center justify-center rounded-control text-ink-2 hover:bg-primary-50 hover:text-ink disabled:opacity-30 sm:h-8 sm:w-7";
+type FocusRequest = { id: string; control: OrderControl; n: number } | null;
 
-function OutcomeRow({ o, position, isFirst, isLast, locked, onMove, onEdit, onArchive, onRestore }: { o: CrmOutcomeVm; position: number; isFirst: boolean; isLast: boolean; locked: boolean; onMove: (d: -1 | 1) => void; onEdit: () => void; onArchive: () => void; onRestore: () => void }) {
-  const { isDragging, rowProps, gripProps } = useSortableRow(o.id, o.archived || locked);
+function OutcomeRow({ o, position, total, locked, status, focusRequest, onMove, onEdit, onArchive, onRestore }: { o: CrmOutcomeVm; position: number; total: number; locked: boolean; status: RowStatus; focusRequest: FocusRequest; onMove: (d: -1 | 1) => void; onEdit: () => void; onArchive: () => void; onRestore: () => void }) {
+  const { isDragging, rowProps, gripProps } = useSortableRow(o.id, o.archived || locked, { status, archived: o.archived });
   return (
-    <li {...rowProps} className={`flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 first:rounded-t-card last:rounded-b-card ${o.archived ? "bg-neutral-50 text-ink-2" : "bg-white"} ${isDragging ? "rounded-card shadow-glass ring-2 ring-primary-400" : ""}`} data-testid={`outcome-row-${o.key}`}>
-      <div className="flex shrink-0 items-center">
-        <DragGrip label={o.label} disabled={o.archived || locked} dragging={isDragging} testId={`outcome-drag-${o.key}`} gripProps={gripProps} />
-        <span className="w-6 text-center text-[11px] tabular-nums text-ink-2" aria-hidden="true">{position}</span>
-        <button type="button" className={BTN} disabled={o.archived || locked || isFirst} onClick={() => onMove(-1)} aria-label={`Move ${o.label} up`} data-testid={`outcome-move-up-${o.key}`}>
-          <ArrowUp size={14} aria-hidden="true" />
-        </button>
-        <button type="button" className={BTN} disabled={o.archived || locked || isLast} onClick={() => onMove(1)} aria-label={`Move ${o.label} down`} data-testid={`outcome-move-down-${o.key}`}>
-          <ArrowDown size={14} aria-hidden="true" />
-        </button>
-      </div>
+    <li {...rowProps} className={`${rowProps.className} flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 first:rounded-t-card last:rounded-b-card`} data-testid={`outcome-row-${o.key}`}>
+      <RowOrderControls
+        rowId={o.id}
+        label={o.label}
+        position={position}
+        total={total}
+        disabled={o.archived}
+        locked={locked}
+        dragging={isDragging}
+        gripProps={gripProps}
+        onMove={onMove}
+        focusRequest={focusRequest}
+        ids={{ drag: `outcome-drag-${o.key}`, up: `outcome-move-up-${o.key}`, down: `outcome-move-down-${o.key}` }}
+      />
       <button type="button" className="min-w-0 flex-1 basis-40 text-left" onClick={onEdit} aria-label={`Edit ${o.label}`} data-testid={`outcome-edit-${o.key}`}>
         <span className="block truncate text-sm font-medium text-ink">{o.label}</span>
         <span className="block truncate text-[11px] text-ink-2">{outcomeHint(o) || "No extra steps"}</span>
       </button>
       <div className="flex shrink-0 items-center gap-1.5">{o.archived && <Badge tone="warning">Archived</Badge>}</div>
       <div className="flex shrink-0 items-center gap-1">
-        <Button size="sm" variant="ghost" onClick={onEdit}>
+        <Button size="sm" variant="ghost" className="min-h-11 sm:min-h-0" onClick={onEdit}>
           Edit
         </Button>
         {o.archived ? (
-          <Button size="sm" variant="ghost" onClick={onRestore} data-testid={`outcome-restore-${o.key}`}>
+          <Button size="sm" variant="ghost" className="min-h-11 sm:min-h-0" onClick={onRestore} data-testid={`outcome-restore-${o.key}`}>
             Restore
           </Button>
         ) : (
-          <Button size="sm" variant="ghost" onClick={onArchive} data-testid={`outcome-archive-${o.key}`}>
+          <Button size="sm" variant="ghost" className="min-h-11 sm:min-h-0" onClick={onArchive} data-testid={`outcome-archive-${o.key}`}>
             Archive
           </Button>
         )}
@@ -56,12 +59,13 @@ function OutcomeRow({ o, position, isFirst, isLast, locked, onMove, onEdit, onAr
  * state machines stay consistent. What a hospital configures is the OUTCOMES recorded under the two stages a call or
  * follow-up can move a journey to (Contacted, Lost): add, rename, reorder, archive, and three simple rules.
  */
+const active0 = (list: CrmOutcomeVm[]) => list.filter((x) => !x.archived).map((x) => x.id);
+
 export function OutcomesSection() {
   const queryClient = useQueryClient();
   const [showArchived, setShowArchived] = useState(false);
   const [editing, setEditing] = useState<{ mode: "create" | "edit"; form: OutcomeForm; id?: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState<Record<string, string[]>>({});
   const outcomes = useQuery({ queryKey: ["crm-outcomes", "all"], queryFn: () => api.crmOutcomes({ includeArchived: true }) });
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["crm-outcomes"] });
 
@@ -79,27 +83,11 @@ export function OutcomesSection() {
   }
 
   // One reorder path for drag and arrows: show the order at once, save it, put it back with a message on failure.
-  async function reorder(stage: JourneyStage, orderedIds: string[]) {
-    setError(null);
-    setPending((p) => ({ ...p, [stage]: orderedIds }));
-    try {
-      await api.reorderCrmOutcomes(orderedIds);
-      await refresh();
-    } catch {
-      setError("Couldn't save the new order — it has been put back. Try again.");
-    } finally {
-      setPending(({ [stage]: _done, ...rest }) => rest);
-    }
-  }
+  const labelOf = useCallback((id: string) => all.find((o) => o.id === id)?.label ?? "Outcome", [all]);
+  const saveOrder = useCallback((_stage: JourneyStage, ids: string[]) => api.reorderCrmOutcomes(ids), []);
+  const sort = useReorder<JourneyStage>({ save: saveOrder, refresh, label: labelOf });
 
-  const listFor = (stage: JourneyStage) => {
-    const list = outcomesForStage(all, stage, showArchived);
-    const order = pending[stage];
-    if (!order) return list;
-    // While a save is in flight show the new order; anything not in it (just restored / newly shown) keeps its saved place after.
-    const at = (id: string) => (order.indexOf(id) === -1 ? Number.MAX_SAFE_INTEGER : order.indexOf(id));
-    return [...list].sort((a, b) => at(a.id) - at(b.id) || a.sortOrder - b.sortOrder);
-  };
+  const listFor = (stage: JourneyStage) => sort.ordered(stage, outcomesForStage(all, stage, showArchived));
   const add = (stage: "contacted" | "lost") => setEditing({ mode: "create", form: { ...blankOutcome(), stage } });
 
   return (
@@ -113,7 +101,8 @@ export function OutcomesSection() {
           <Plus size={14} aria-hidden="true" /> Add outcome
         </Button>
       </div>
-      <FormError message={error} testId="outcomes-error" />
+      <FormError message={error ?? sort.error} testId="outcomes-error" />
+      <ReorderStatus message={sort.announcement} />
       {outcomes.isLoading && <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-14" />)}</div>}
       {outcomes.isError && <ErrorState message="Could not load outcomes." />}
 
@@ -121,7 +110,7 @@ export function OutcomesSection() {
         <ol className="space-y-3" aria-label="Journey stages" data-testid="outcome-list">
           {SYSTEM_STAGES.map((stage) => {
             const list = stage.outcomes ? listFor(stage.key) : [];
-            const busy = !!pending[stage.key];
+            const busy = sort.isSaving(stage.key);
             return (
               <li key={stage.key} data-testid={`stage-${stage.key}`}>
                 <div className={`flex flex-wrap items-center gap-x-2 gap-y-1 rounded-card border px-3 py-2 ${stage.outcomes ? "border-line bg-primary-50/60" : "border-line/70 bg-neutral-50/70"}`}>
@@ -145,7 +134,7 @@ export function OutcomesSection() {
                     {list.length === 0 ? (
                       <EmptyState message={`No outcomes under ${stage.label} yet.`} hint="Add the outcomes your team records." />
                     ) : (
-                      <SortableGroup items={list.map((o) => ({ id: o.id, label: o.label }))} onReorder={(ids) => void reorder(stage.key, ids)}>
+                      <SortableGroup items={list.map((o) => ({ id: o.id, label: o.label }))} onReorder={(ids, moved) => void sort.reorder(stage.key, ids, moved, "grip", active0(list))}>
                         <ul className="divide-y divide-line rounded-card border border-line bg-white" aria-label={`${stage.label} outcomes`} aria-busy={busy} data-testid={`outcome-group-${stage.key}`}>
                           {list.map((o) => {
                             // Only active outcomes are ordered: an archived neighbour is never a swap partner.
@@ -156,15 +145,16 @@ export function OutcomesSection() {
                               key={o.id}
                               o={o}
                               position={i + 1}
-                              isFirst={i <= 0}
-                              isLast={i === active.length - 1}
+                              total={active.length}
                               locked={busy}
+                              status={sort.statusOf(o.id)}
+                              focusRequest={sort.focusRequest}
                               onMove={(d) => {
                                 const ids = active.map((x) => x.id);
                                 const j = i + d;
                                 if (j < 0 || j >= ids.length) return;
                                 [ids[i], ids[j]] = [ids[j]!, ids[i]!];
-                                void reorder(stage.key, ids);
+                                void sort.reorder(stage.key, ids, o.id, d < 0 ? "up" : "down", active0(list));
                               }}
                               onEdit={() => setEditing({ mode: "edit", form: outcomeToForm(o), id: o.id })}
                               onArchive={() => run(() => api.updateCrmOutcome(o.id, { archived: true }), "Couldn't archive that outcome — try again.")}

@@ -248,16 +248,16 @@ test.describe("M6.5 — system stages and configurable outcomes", () => {
     await expect(page.getByTestId(`outcome-row-${KEYS[0]}`)).toContainText("Archived");
   });
 
-  test("F2: at 390px the stages and outcomes are usable with arrows and nothing overflows", async ({ page }) => {
+  test("F2: at 390px the stages and outcomes are usable (handle + arrows, 44px targets) and nothing overflows", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await login(page, "eyev1.admin@pulseos.local");
     await page.goto("/settings?section=outcomes");
     await expect(page.getByTestId("stage-contacted")).toBeVisible();
     await expect(page.getByTestId("stage-locked-booked")).toBeVisible();
-    await expect(page.locator('[data-testid^="outcome-drag-"]').first()).toBeHidden(); // touch uses the arrows
+    // The handle is the primary control on every screen; the quiet arrows stay on touch too. Each is a real 44px target.
+    await expect(page.locator('[data-testid^="outcome-drag-"]').first()).toBeVisible();
     await expect(page.locator('[data-testid^="outcome-move-down-"]').first()).toBeVisible();
-    // The arrows are the only reorder control on touch: each is a real 44px target.
-    for (const id of await page.locator('[data-testid^="outcome-move-down-"]').evaluateAll((els) => els.slice(0, 3).map((e) => e.getAttribute("data-testid")!))) {
+    for (const id of await page.locator('[data-testid^="outcome-move-down-"], [data-testid^="outcome-drag-"]').evaluateAll((els) => els.slice(0, 4).map((e) => e.getAttribute("data-testid")!))) {
       const box = (await page.getByTestId(id).boundingBox())!;
       expect(box.width, `${id} width`).toBeGreaterThanOrEqual(44);
       expect(box.height, `${id} height`).toBeGreaterThanOrEqual(44);

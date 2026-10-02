@@ -96,13 +96,14 @@ test.describe("CRM field ordering", () => {
     await expect.poll(() => order(page)).toEqual(before);
   });
 
-  test("phones reorder with the arrow buttons (no drag handle); unrendered placements are not offered", async ({ page }) => {
+  test("phones keep the handle (a 44px target) and the arrow buttons; unrendered placements are not offered", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await login(page, "eyev1.admin@pulseos.local");
     await page.goto("/settings?section=fields&service=CATARACT");
     await expect.poll(async () => (await order(page)).length).toBe(3);
     const first = (await order(page))[0]!;
-    await expect(page.getByTestId(`field-drag-${first}`)).toBeHidden();
+    await expect(page.getByTestId(`field-drag-${first}`)).toBeVisible();
+    expect((await page.getByTestId(`field-drag-${first}`).boundingBox())!.height).toBeGreaterThanOrEqual(44);
     await expect(page.getByTestId(`field-move-down-${first}`)).toBeVisible();
     await page.getByTestId("crm-fields-add").click();
     await expect(page.getByTestId("field-placement-add_lead")).toBeVisible();
