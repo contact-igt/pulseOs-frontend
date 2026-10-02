@@ -102,3 +102,21 @@ export function minutesOfDayIn(instant: Date, timezone: string): number {
   );
   return Number(p.hour) * 60 + Number(p.minute);
 }
+
+/**
+ * An instant from a client. An explicit instant ("…Z" or "+05:30") is kept as is; an offset-less local date-time
+ * ("2026-10-02T09:00") is the HOSPITAL's wall time — never the API server's zone. Null when it is not a real date-time.
+ */
+export function parseInstant(value: unknown, timezone: string): Date | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const v = value.trim();
+  const local = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?$/.exec(v);
+  if (local) {
+    const [, ymd, hh, mm, ss] = local;
+    if (!isRealDate(ymd!) || Number(hh) > 23 || Number(mm) > 59 || Number(ss ?? 0) > 59) return null;
+    return new Date(zonedWallTime(ymd!, Number(hh), Number(mm), timezone).getTime() + Number(ss ?? 0) * 1000);
+  }
+  if (!/(Z|[+-]\d{2}:?\d{2})$/i.test(v)) return null; // a bare date or anything else ambiguous is refused
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d;
+}

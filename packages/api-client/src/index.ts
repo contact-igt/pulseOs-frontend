@@ -324,6 +324,9 @@ export const api = {
     request<{ ok: true; syncedCount: number } | { ok: false; reason: string; message?: string }>(`/connectors/${id}/sync-campaigns`, { method: "POST", body: JSON.stringify({}) }),
   syncConnectorPerformance: (id: string) =>
     request<{ ok: true; syncedCount: number } | { ok: false; reason: string; message?: string }>(`/connectors/${id}/sync-performance`, { method: "POST", body: JSON.stringify({}) }),
+  /** Advisory only: is this doctor free at this instant? The booking itself is the authoritative check. */
+  appointmentSlotCheck: (doctorId: string, scheduledAt: string, excludeId?: string) =>
+    request<{ available: boolean; inPast: boolean }>(`/appointments/slot-check${toQuery({ doctorId, scheduledAt, excludeId })}`),
   createAppointment: (input: CreateAppointmentInput) => request<AppointmentRow>("/appointments", { method: "POST", body: JSON.stringify(input) }),
 
   // Communication endpoints (multi-hospital-number layer over a Connector)

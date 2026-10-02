@@ -4,6 +4,11 @@ import { queryClient } from "../db/client.js";
 import type { FastifyInstance } from "fastify";
 import type { AppointmentRow, CreateLeadResult, Lookups } from "@pulseos/types";
 
+// The same doctor cannot hold two visits in one minute, and these suites run against the shared seeded tenant (rows
+// from earlier runs stay), so every future slot is a distinct, randomly placed minute within the next ~weeks.
+let slotSeq = 0;
+const futureSlot = (minDays = 1) => new Date(Date.now() + minDays * 86_400_000 + (Math.floor(Math.random() * 20_000) + ++slotSeq) * 60_000).toISOString();
+
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD;
 
 async function loginAs(app: FastifyInstance, email: string): Promise<string> {
@@ -64,7 +69,7 @@ describe.skipIf(!DEMO_PASSWORD)("appointments / front desk (integration)", () =>
       method: "POST",
       url: "/appointments",
       cookies: { pulseos_session: frontDeskCookie },
-      payload: { patientId, journeyId, branchId: branches[0].id, doctorId: doctors[0].id, scheduledAt: new Date(Date.now() + 86400000).toISOString() },
+      payload: { patientId, journeyId, branchId: branches[0].id, doctorId: doctors[0].id, scheduledAt: futureSlot() },
     });
     return create.json() as AppointmentRow;
   }
@@ -168,6 +173,10 @@ describe.skipIf(!DEMO_PASSWORD)("appointments / front desk (integration)", () =>
     const scheduled = await freshScheduledAppointment();
     const list = await app.inject({ method: "GET", url: `/appointments?journeyId=${scheduled.journeyId}`, cookies: { pulseos_session: frontDeskCookie } });
     expect((list.json() as AppointmentRow[])[0].arrivedAt ?? null).toBeNull();
+
+    // This visit sits at "now": cancel it so a rerun in the same minute finds the doctor's slot free (cancelled frees it).
+    const freed = await app.inject({ method: "PATCH", url: `/appointments/${appt.id}/action`, cookies: { pulseos_session: frontDeskCookie }, payload: { action: "cancel", reasonCode: "other" } });
+    expect(freed.statusCode).toBe(200);
   });
 
   it("cannot complete an appointment that isn't currently with the doctor", async () => {
@@ -185,7 +194,7 @@ describe.skipIf(!DEMO_PASSWORD)("appointments / front desk (integration)", () =>
     });
     expect(noShow.json().status).toBe("no_show");
 
-    const newTime = new Date(Date.now() + 7 * 86400000).toISOString();
+    const newTime = futureSlot(7);
     const reschedule = await app.inject({
       method: "PATCH", url: `/appointments/${target.id}/reschedule`, cookies: { pulseos_session: frontDeskCookie }, payload: { scheduledAt: newTime, reasonCode: "patient_requested" },
     });
@@ -209,7 +218,7 @@ describe.skipIf(!DEMO_PASSWORD)("appointments / front desk (integration)", () =>
     });
     const { patientId, journeyId } = lead.json() as { patientId: string; journeyId: string };
 
-    const scheduledAt = new Date(Date.now() + 2 * 86400000).toISOString();
+    const scheduledAt = futureSlot(2);
     const create = await app.inject({
       method: "POST",
       url: "/appointments",

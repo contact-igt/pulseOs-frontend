@@ -1,7 +1,7 @@
-import { and, asc, eq, or, sql } from "drizzle-orm";
+import { and, asc, eq, ne, notInArray, or, sql } from "drizzle-orm";
 import { patientNameSql } from "../../lib/patient-name.js";
-import type { Db, Tx } from "../../db/client.js";
-import { inLocalRange, localToday, tenantTimezone } from "../../lib/hospital-time.js";
+import type { Db, DbOrTx, Tx } from "../../db/client.js";
+import { inLocalRange, localToday, parseInstant, tenantTimezone } from "../../lib/hospital-time.js";
 import { appointments, branches, journeys, patients, scheduleResources, timelineEvents } from "../../db/schema.js";
 import {
   APPOINTMENT_REASONS,
@@ -31,6 +31,51 @@ const MAX_NOTE = 500;
 const PAST_SLACK_MS = 60_000;
 
 type Result<T = object> = ({ ok: true } & T) | { ok: false; reason: string };
+
+
+// ---------------------------------------------------------------------------
+// Slot collisions. An appointment has a start time but no duration, so a "collision" is the same doctor/resource at
+// the same start MINUTE (seconds never make a free slot). Cancelled and no-show visits free the slot; everything else
+// — including a visit already completed — held it. Bookings and reschedules take a per-resource transaction lock
+// first, so two requests racing for one slot are serialised and exactly one wins; the loser is told, never double-booked.
+// (A unique index is not used: historical data may legitimately hold same-minute rows, and a migration must not fail.)
+// ---------------------------------------------------------------------------
+
+const SLOT_FREE_STATUSES: AppointmentStatus[] = ["cancelled", "no_show"];
+
+async function lockResourceSlots(tx: Tx, tenantId: string, resourceId: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`appt-slot:${tenantId}:${resourceId}`}))`);
+}
+
+async function resourceSlotTaken(tx: DbOrTx, tenantId: string, resourceId: string, at: Date, excludeAppointmentId?: string): Promise<boolean> {
+  const [hit] = await tx
+    .select({ id: appointments.id })
+    .from(appointments)
+    .where(
+      and(
+        eq(appointments.tenantId, tenantId),
+        eq(appointments.resourceId, resourceId),
+        notInArray(appointments.status, SLOT_FREE_STATUSES),
+        sql`date_trunc('minute', ${appointments.scheduledAt}) = date_trunc('minute', ${at.toISOString()}::timestamptz)`,
+        excludeAppointmentId ? ne(appointments.id, excludeAppointmentId) : undefined,
+      ),
+    )
+    .limit(1);
+  return !!hit;
+}
+
+/**
+ * Advisory pre-check for the booking form: is this doctor free at this time? Says nothing about WHO holds a taken slot.
+ * The authoritative check is still the booking itself (create/reschedule), under the resource lock.
+ */
+export async function checkSlot(db: Db, tenantId: string, doctorId: string, scheduledAt: unknown, timezone: string, excludeAppointmentId?: string, now: Date = new Date()): Promise<Result<{ available: boolean; inPast: boolean }>> {
+  const at = parseInstant(scheduledAt, timezone);
+  if (!at) return { ok: false, reason: "invalid_request" };
+  const resource = await findActiveResource(db, tenantId, doctorId);
+  if (!resource) return { ok: false, reason: "doctor_not_found" };
+  const inPast = at.getTime() < now.getTime() - PAST_SLACK_MS;
+  return { ok: true, inPast, available: !inPast && !(await resourceSlotTaken(db, tenantId, resource.id, at, excludeAppointmentId)) };
+}
 
 /** The hospital's IANA zone and its current local day - what "today" means for every appointment view. */
 export async function getCalendarContext(db: Db, tenantId: string, now: Date = new Date()): Promise<{ timezone: string; today: string }> {
@@ -162,9 +207,12 @@ function clock(at: Date, timezone: string): string {
  * that patient), the branch, and an active doctor/resource. A bad reference is refused — it never lands as a
  * cross-hospital row.
  */
-export async function createAppointment(db: Db, tenantId: string, actorId: string, input: CreateAppointmentInput, timezone = "Asia/Kolkata"): Promise<{ ok: true; appointment: AppointmentRow } | { ok: false; reason: string }> {
-  const scheduledAt = new Date(input.scheduledAt);
-  if (Number.isNaN(scheduledAt.getTime())) return { ok: false, reason: "invalid_request" };
+export async function createAppointment(db: Db, tenantId: string, actorId: string, input: CreateAppointmentInput, timezone = "Asia/Kolkata", now: Date = new Date()): Promise<{ ok: true; appointment: AppointmentRow } | { ok: false; reason: string }> {
+  // An offset-less time is the hospital's wall time; the past is judged on the instant, so the browser's and the
+  // server's zones never matter. Refused here, not just in the picker: a direct API call cannot book the past.
+  const scheduledAt = parseInstant(input.scheduledAt, timezone);
+  if (!scheduledAt) return { ok: false, reason: "invalid_request" };
+  if (scheduledAt.getTime() < now.getTime() - PAST_SLACK_MS) return { ok: false, reason: "appointment_time_in_past" };
   const [journey] = await db.select({ id: journeys.id }).from(journeys).where(and(eq(journeys.tenantId, tenantId), eq(journeys.id, input.journeyId), eq(journeys.patientId, input.patientId))).limit(1);
   if (!journey) return { ok: false, reason: "journey_not_found" };
   const [branch] = await db.select({ id: branches.id }).from(branches).where(and(eq(branches.tenantId, tenantId), eq(branches.id, input.branchId))).limit(1);
@@ -173,6 +221,8 @@ export async function createAppointment(db: Db, tenantId: string, actorId: strin
   if (!resource) return { ok: false, reason: "doctor_not_found" };
 
   const row = await db.transaction(async (tx) => {
+    await lockResourceSlots(tx, tenantId, resource.id);
+    if (await resourceSlotTaken(tx, tenantId, resource.id, scheduledAt)) return null;
     const [created] = await tx
       .insert(appointments)
       .values({ tenantId, patientId: input.patientId, journeyId: input.journeyId, branchId: input.branchId, resourceId: resource.id, scheduledAt, reason: input.reason ?? null, status: "scheduled" })
@@ -191,6 +241,7 @@ export async function createAppointment(db: Db, tenantId: string, actorId: strin
     });
     return created!;
   });
+  if (!row) return { ok: false, reason: "resource_unavailable" };
   emitAppointmentEvent({ type: "appointment.booked", tenantId, appointmentId: row.id, scheduledAt });
   return { ok: true, appointment: (await getAppointmentRow(db, tenantId, row.id))! };
 }
@@ -431,8 +482,8 @@ export async function rescheduleAppointment(
   timezone = "Asia/Kolkata",
   now: Date = new Date(),
 ): Promise<Result<{ alreadyApplied?: boolean }>> {
-  const newAt = new Date(input?.scheduledAt);
-  if (Number.isNaN(newAt.getTime())) return { ok: false, reason: "invalid_request" };
+  const newAt = parseInstant(input?.scheduledAt, timezone);
+  if (!newAt) return { ok: false, reason: "invalid_request" };
   const [existing] = await db.select().from(appointments).where(and(eq(appointments.tenantId, tenantId), eq(appointments.id, appointmentId))).limit(1);
   if (!existing) return { ok: false, reason: "appointment_not_found" };
   if (existing.status === "completed") return { ok: false, reason: "appointment_closed" };
@@ -443,6 +494,9 @@ export async function rescheduleAppointment(
   if (!reason.ok) return reason;
 
   const moved = await db.transaction(async (tx) => {
+    // Re-activating a cancelled / no-show visit or moving a live one must not land on another visit's slot.
+    await lockResourceSlots(tx, tenantId, existing.resourceId!);
+    if (await resourceSlotTaken(tx, tenantId, existing.resourceId!, newAt, appointmentId)) return "unavailable" as const;
     const [updated] = await tx
       .update(appointments)
       .set({ scheduledAt: newAt, status: "scheduled", noShowAt: null, cancelledAt: null, statusReasonCode: reason.code, statusReasonNote: reason.note })
@@ -467,6 +521,7 @@ export async function rescheduleAppointment(
     }
     return true;
   });
+  if (moved === "unavailable") return { ok: false, reason: "resource_unavailable" };
   if (!moved) {
     const [again] = await db.select({ at: appointments.scheduledAt, status: appointments.status }).from(appointments).where(and(eq(appointments.id, appointmentId), eq(appointments.tenantId, tenantId))).limit(1);
     if (again && again.status === "scheduled" && again.at.getTime() === newAt.getTime()) return { ok: true, alreadyApplied: true };

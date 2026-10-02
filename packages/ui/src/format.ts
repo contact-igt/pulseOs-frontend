@@ -61,6 +61,14 @@ export function hospitalDayKey(iso: string | Date): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: displayTimeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
 }
 
+/** A `datetime-local` value ("YYYY-MM-DDTHH:mm") for an instant, in the HOSPITAL's zone — pickers read and write hospital wall time. */
+export function hospitalLocalInput(instant: Date | string = new Date()): string {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", { timeZone: displayTimeZone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).formatToParts(new Date(instant)).map((x) => [x.type, x.value]),
+  );
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
+}
+
 /** Same hospital calendar day — not a raw ISO-prefix compare and not the browser's day. */
 export function isSameHospitalDay(a: string | Date, b: string | Date): boolean {
   return hospitalDayKey(a) === hospitalDayKey(b);

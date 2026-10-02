@@ -48,14 +48,26 @@ export async function seedAppointmentDemo(tenantId: string, a: Actors) {
   };
   const claimed = new Set<string>();
 
+  // These stories book through the real service, which (rightly) refuses a doctor's occupied minute. Demo slots come
+  // from the demo clock and can land on a minute another seeded visit already holds, so move by 15 minutes until free.
+  const heldMinutes = async () =>
+    new Set((await db.select({ at: appointments.scheduledAt }).from(appointments).where(and(eq(appointments.tenantId, tenantId), eq(appointments.resourceId, linked.id), notInArray(appointments.status, ["cancelled", "no_show"])))).map((r) => Math.floor(r.at.getTime() / 60_000)));
+  const freeSlot = async (wanted: Date, stepMinutes: number) => {
+    const held = await heldMinutes();
+    let at = wanted;
+    while (held.has(Math.floor(at.getTime() / 60_000))) at = new Date(at.getTime() + stepMinutes * 60_000);
+    return at;
+  };
+
   // 1 — Booked today, patient not yet arrived.
   const booked = take((j) => !used.has(j.id), "today's booked visit");
-  const b = await createAppointment(db, tenantId, a.frontDesk.id, { patientId: booked.patientId, journeyId: booked.id, branchId: a.branchId, doctorId: linked.id, scheduledAt: todaySlot("scheduled", 4).toISOString(), reason: "Consultation" }, TZ);
+  const b = await createAppointment(db, tenantId, a.frontDesk.id, { patientId: booked.patientId, journeyId: booked.id, branchId: a.branchId, doctorId: linked.id, scheduledAt: (await freeSlot(todaySlot("scheduled", 4), 15)).toISOString(), reason: "Consultation" }, TZ);
   if (!b.ok) throw new Error(`seed: booked visit failed (${b.reason})`);
 
   // 2 — A no-show today: marked through the lifecycle, so its Appointment Risk task exists exactly once.
   const missed = take((j) => !used.has(j.id), "the no-show");
-  const m = await createAppointment(db, tenantId, a.frontDesk.id, { patientId: missed.patientId, journeyId: missed.id, branchId: a.branchId, doctorId: linked.id, scheduledAt: todaySlot("no_show", 3).toISOString(), reason: "Cataract consultation" }, TZ);
+  const noShowSlot = await freeSlot(todaySlot("no_show", 3), -15); // earlier today: the visit was booked before it and the patient did not come
+  const m = await createAppointment(db, tenantId, a.frontDesk.id, { patientId: missed.patientId, journeyId: missed.id, branchId: a.branchId, doctorId: linked.id, scheduledAt: noShowSlot.toISOString(), reason: "Cataract consultation" }, TZ, new Date(noShowSlot.getTime() - 3_600_000)); // booked earlier, so the backdated visit is a legitimate booking
   if (!m.ok) throw new Error(`seed: no-show visit failed (${m.reason})`);
   const ns = await applyAppointmentAction(db, tenantId, m.appointment.id, a.frontDesk.id, { action: "mark_no_show", note: "Phone was switched off" }, TZ);
   if (!ns.ok) throw new Error(`seed: no-show failed (${ns.reason})`);

@@ -6,6 +6,7 @@ import { diffDays, isRealDate } from "../../lib/hospital-time.js";
 import {
   MAX_APPOINTMENT_RANGE_DAYS,
   applyAppointmentAction,
+  checkSlot,
   completeAppointment,
   createAppointment,
   getCalendarContext,
@@ -70,6 +71,8 @@ const REASON_STATUS: Record<string, number> = {
   reason_required: 422,
   reason_invalid: 422,
   scheduled_in_past: 422,
+  appointment_time_in_past: 422,
+  resource_unavailable: 409,
   // completion's embedded follow-up / surgery
   type_invalid: 422,
   due_in_past: 422,
@@ -83,6 +86,9 @@ const REASON_STATUS: Record<string, number> = {
   surgery_already_scheduled: 409,
   forbidden: 403,
 };
+
+// create: bad input 400, the time rules 422, a taken slot 409, an unknown patient/journey/branch/doctor 404.
+const CREATE_STATUS: Record<string, number> = { invalid_request: 400, appointment_time_in_past: 422, resource_unavailable: 409 };
 
 const uuid = z.string().uuid();
 
@@ -102,6 +108,15 @@ export async function appointmentRoutes(app: FastifyInstance) {
     return getCalendarContext(app.db, request.sessionUser!.tenantId);
   });
 
+  // Is this doctor free then? An advisory answer for the booking form (yes/no only — never who holds the slot).
+  app.get("/appointments/slot-check", async (request, reply) => {
+    const parsed = z.object({ doctorId: z.string().uuid(), scheduledAt: z.string().min(1).max(40), excludeId: z.string().uuid().optional() }).safeParse(request.query);
+    if (!parsed.success) return reply.status(400).send({ error: "invalid_request" });
+    const result = await checkSlot(app.db, request.sessionUser!.tenantId, parsed.data.doctorId, parsed.data.scheduledAt, request.sessionUser!.timezone, parsed.data.excludeId);
+    if (!result.ok) return reply.status(result.reason === "invalid_request" ? 400 : 404).send({ error: result.reason });
+    return { available: result.available, inPast: result.inPast };
+  });
+
   app.get("/front-desk", async (request) => {
     const tenantId = request.sessionUser!.tenantId;
     const query = request.query as { branchId?: string };
@@ -118,7 +133,7 @@ export async function appointmentRoutes(app: FastifyInstance) {
       if (!parsed.success) return reply.status(400).send({ error: "invalid_request" });
 
       const result = await createAppointment(app.db, tenantId, actorId, parsed.data, request.sessionUser!.timezone);
-      if (!result.ok) return reply.status(result.reason === "invalid_request" ? 400 : 404).send({ error: result.reason });
+      if (!result.ok) return reply.status(CREATE_STATUS[result.reason] ?? 404).send({ error: result.reason });
       return reply.status(201).send(result.appointment);
     });
 

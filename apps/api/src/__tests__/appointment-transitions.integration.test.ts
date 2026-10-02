@@ -6,6 +6,11 @@ import { appointments } from "../db/schema.js";
 import type { FastifyInstance } from "fastify";
 import type { AppointmentRow, CreateLeadResult, Lookups } from "@pulseos/types";
 
+// The same doctor cannot hold two visits in one minute, and these suites run against the shared seeded tenant (rows
+// from earlier runs stay), so every future slot is a distinct, randomly placed minute within the next ~weeks.
+let slotSeq = 0;
+const futureSlot = (minDays = 1) => new Date(Date.now() + minDays * 86_400_000 + (Math.floor(Math.random() * 20_000) + ++slotSeq) * 60_000).toISOString();
+
 // applyAppointmentAction previously only rejected acting on an already
 // completed/cancelled appointment — it never checked that the requested
 // action is a legal NEXT step from the appointment's CURRENT status. The
@@ -61,7 +66,7 @@ describe.skipIf(!DEMO_PASSWORD)("appointment state machine — server-side trans
       method: "POST",
       url: "/appointments",
       cookies: { pulseos_session: frontDeskCookie },
-      payload: { patientId, journeyId, branchId: branches[0].id, doctorId: doctors[0].id, scheduledAt: new Date(Date.now() + 86400000).toISOString() },
+      payload: { patientId, journeyId, branchId: branches[0].id, doctorId: doctors[0].id, scheduledAt: futureSlot() },
     });
     return create.json() as AppointmentRow;
   }

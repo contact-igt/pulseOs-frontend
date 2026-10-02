@@ -64,7 +64,9 @@ describe.skipIf(!DEMO_PASSWORD)("M6 appointment lifecycle, resources, risk and s
   const as = (tt: TestTenant, role: Role) => ({ pulseos_session: tt.cookie[role]! });
   const call = (tt: TestTenant, role: Role, method: "GET" | "POST" | "PATCH", url: string, payload?: object) => app.inject({ method, url, cookies: as(tt, role), ...(payload ? { payload } : {}) });
   const phone = () => `+9196${String(52000000 + ++n * 29).padStart(8, "0")}`;
-  const inHours = (h: number) => new Date(Date.now() + h * 3_600_000).toISOString();
+  // Future instants are spread one distinct minute apart: the same doctor cannot hold two visits in one minute.
+  let slotSeq = 0;
+  const inHours = (h: number) => new Date(Date.now() + h * 3_600_000 + (h > 0 ? ++slotSeq * 60_000 : 0)).toISOString();
   const cataract = () => catalog.find((d) => d.key === "CATARACT_SURGERY")!;
 
   async function newJourney(tt: TestTenant = t) {

@@ -107,6 +107,7 @@ export function QuickCreateProvider({ role, children }: { role: Role; children: 
               onSearchPatients={(q) => api.patients({ search: q })}
               onLoadPatientJourneys={async (patientId) => (await api.patient360(patientId)).journeys}
               onSubmit={api.createAppointment}
+              onCheckSlot={(doctorId, instant) => api.appointmentSlotCheck(doctorId, instant)}
               onCreated={invalidateAfterCreate}
               onCreateLeadInstead={() => setDrawer({ kind: "lead" })}
             />

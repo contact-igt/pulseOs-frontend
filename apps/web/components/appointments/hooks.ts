@@ -20,6 +20,7 @@ const INPUT_ERROR: Record<string, string> = {
   reason_required: "Choose a reason first.",
   reason_invalid: "Choose one of the listed reasons.",
   scheduled_in_past: "That time has already passed — choose a time in the future.",
+  resource_unavailable: "This doctor already has another appointment at this time. Choose a different time or doctor.",
   invalid_request: "Check the date, time and reason, then try again.",
 };
 
