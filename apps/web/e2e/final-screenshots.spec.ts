@@ -78,7 +78,7 @@ test.describe("Final review screenshots", () => {
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "04-doctor-home.png"), fullPage: true });
 
     await login(page, "gyn.admin@pulseos.local");
-    await page.goto("/integrations");
+    await page.goto("/integrations?view=connectors");
     await expect(page.getByTestId("integrations-page")).toBeVisible();
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "13-integrations.png"), fullPage: true });
 

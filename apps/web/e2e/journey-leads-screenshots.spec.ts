@@ -37,7 +37,7 @@ test.describe("Journey + Leads screenshots", () => {
       const abhishek = await journeyId(page, "Abhishek Nayak");
 
       await page.goto("/leads");
-      await expect(page.getByTestId(`lead-row-${geetha}`)).toBeVisible();
+      await expect(page.getByTestId(`lead-row-${geetha}`).or(page.getByTestId(`lead-card-${geetha}`))).toBeVisible();
       await page.waitForLoadState("networkidle");
       expect(await overflow(page), `/leads overflows at ${width}`).toBeLessThanOrEqual(0);
       await page.screenshot({ path: path.join(OUT, `leads-${width}.png`) });

@@ -136,7 +136,7 @@ test.describe("Master visual reconstruction loop — required screenshot set", (
     await page.setViewportSize({ width: 1440, height: 900 });
 
     // 22 — Integrations
-    await page.goto("/integrations");
+    await page.goto("/integrations?view=connectors");
     await expect(page.getByTestId("integrations-page")).toBeVisible();
     await shot(page, "22-integrations.png");
 

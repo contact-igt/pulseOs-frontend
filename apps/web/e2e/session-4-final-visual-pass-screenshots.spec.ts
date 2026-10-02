@@ -61,7 +61,7 @@ test.describe("Session 4 final visual pass screenshots", () => {
 
     // Integrations — success (teal) "Connected" badges, distinct from the
     // neutral "Fixture" tag and gray "Not configured".
-    await page.goto("/integrations");
+    await page.goto("/integrations?view=connectors");
     await expect(page.getByText("Connectors")).toBeVisible();
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "38-integrations-success-tone.png") });
 

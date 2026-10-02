@@ -76,7 +76,7 @@ export function FeaturesSection() {
             </div>
             <div className="flex items-center gap-3 text-xs">
               {c.provider && (
-                <Link href={`/integrations?open=${c.provider}`} className="text-primary-700 underline-offset-2 hover:underline" data-testid={`feature-setup-${c.key}`}>
+                <Link href={`/integrations?open=${c.provider}`} className="inline-flex items-center text-primary-700 underline-offset-2 hover:underline max-sm:min-h-11" data-testid={`feature-setup-${c.key}`}>
                   Set up in Integration Hub
                 </Link>
               )}
@@ -89,7 +89,7 @@ export function FeaturesSection() {
                   disabled={!c.editable}
                   aria-label={`${c.label} enabled`}
                   onChange={(e) => flip(c.key, e.target.checked)}
-                  className="h-5 w-9 cursor-pointer accent-primary-600 disabled:cursor-not-allowed"
+                  className="h-5 w-9 cursor-pointer accent-primary-600 disabled:cursor-not-allowed max-sm:h-11 max-sm:w-11"
                   data-testid={`feature-toggle-${c.key}`}
                 />
               </label>

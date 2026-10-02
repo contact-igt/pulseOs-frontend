@@ -101,7 +101,7 @@ test.describe("Enterprise UI loop screenshot package", () => {
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "17-campaign-detail.png") });
 
     // 18 Integrations
-    await page.goto("/integrations");
+    await page.goto("/integrations?view=connectors");
     await expect(page.getByTestId("integrations-page")).toBeVisible();
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "18-integrations.png") });
 

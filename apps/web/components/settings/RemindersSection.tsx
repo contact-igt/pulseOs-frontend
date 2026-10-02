@@ -34,7 +34,7 @@ function RuleRow({ rule, templates }: { rule: NotificationRuleVm; templates: Mes
       <div className="min-w-0 flex-1 basis-48">
         <p className="text-sm font-medium text-ink">{kind}</p>
         <label className="mt-1 flex min-h-11 items-center gap-2 text-ink-2 sm:min-h-0">
-          <input type="checkbox" checked={rule.enabled} onChange={(e) => save.mutate({ enabled: e.target.checked })} aria-label={`${kind} enabled`} data-testid={`rule-enabled-${rule.id}`} />
+          <input type="checkbox" className="max-sm:size-11" checked={rule.enabled} onChange={(e) => save.mutate({ enabled: e.target.checked })} aria-label={`${kind} enabled`} data-testid={`rule-enabled-${rule.id}`} />
           {rule.enabled ? "On" : "Off"}
         </label>
       </div>
@@ -83,7 +83,7 @@ function TemplateEditor({ template }: { template: MessageTemplateVm }) {
       </label>
       <div className="flex flex-wrap items-center gap-3">
         <Button size="sm" variant="primary" onClick={() => save.mutate({ body, providerTemplateName: providerName })} disabled={save.isPending} data-testid={`template-save-${template.purpose}`}>Save</Button>
-        <label className="flex min-h-11 items-center gap-2 text-ink-2 sm:min-h-0"><input type="checkbox" checked={template.enabled} onChange={(e) => save.mutate({ enabled: e.target.checked })} />Enabled</label>
+        <label className="flex min-h-11 items-center gap-2 text-ink-2 sm:min-h-0"><input type="checkbox" className="max-sm:size-11" checked={template.enabled} onChange={(e) => save.mutate({ enabled: e.target.checked })} />Enabled</label>
         {msg && <span role="status" className="text-ink-2">{msg}</span>}
       </div>
     </li>

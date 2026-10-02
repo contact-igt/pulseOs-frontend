@@ -82,7 +82,7 @@ test.describe("UI refinement v2 — before screenshots", () => {
     await expect(page.getByText("Back to Campaigns")).toBeVisible();
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "18-campaign-detail-1440.png") });
 
-    await page.goto("/integrations");
+    await page.goto("/integrations?view=connectors");
     await expect(page.getByTestId("integrations-page")).toBeVisible();
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "19-integrations-1440.png") });
 

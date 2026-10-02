@@ -121,7 +121,7 @@ test.describe("Brain review screenshot package", () => {
     await shot(page, "18-campaign-detail.png");
 
     // 19 — Integrations
-    await page.goto("/integrations");
+    await page.goto("/integrations?view=connectors");
     await expect(page.getByTestId("integrations-page")).toBeVisible();
     await shot(page, "19-integrations.png");
 
