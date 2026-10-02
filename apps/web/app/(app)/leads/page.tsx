@@ -15,6 +15,10 @@ import { replaceUrlParams } from "@/lib/urlParams";
 import { LeadsStageBoard } from "@/components/leads/LeadsStageBoard";
 import { LeadsFilterBar } from "@/components/leads/LeadsFilterBar";
 import { LeadsTable } from "@/components/leads/LeadsTable";
+import { LeadCards } from "@/components/leads/LeadCards";
+import { ColumnPicker, PaginationBar } from "@/components/leads/LeadsListControls";
+import { DEFAULT_COLUMNS, loadColumnPref, paginate, readPageSize, saveColumnPref, searchLeads, type LeadColumn, type PageSize } from "@/components/leads/leadList";
+import { useIsNarrow } from "@/lib/useIsNarrow";
 import { LeadsTodayStrip } from "@/components/leads/LeadsTodayStrip";
 import { activeLeadChips, isDefaultLeadFilters, leadFilterPatch, readLeadFilters, resetLeadPatch, toWorkspaceQuery, type LeadFilters } from "@/components/leads/leadFilters";
 
@@ -51,11 +55,30 @@ export default function LeadsPage() {
 
   const canAssign = session.data ? hasPermission(session.data.user.role, "MANAGE_JOURNEYS") : false;
   const owners = lookups.data?.owners ?? [];
-  const rows = useMemo(() => workspace?.rows ?? [], [workspace]);
+  // Search narrows the loaded list; paging only shapes how it is shown (counts above come from the server's filters).
+  const found = useMemo(() => searchLeads(workspace?.rows ?? [], filters.q), [workspace, filters.q]);
+  const [pageSize, setPageSizeState] = useState<PageSize>(() => readPageSize(searchParams.get("size")));
+  const paged = useMemo(() => paginate(found, Number(searchParams.get("page")) || 1, pageSize), [found, searchParams, pageSize]);
+  const rows = paged.rows;
+  const narrow = useIsNarrow();
+  // Which columns to show: a saved VIEW preference for this person on this browser.
+  const userId = session.data?.user.id;
+  const [chosenColumns, setChosenColumns] = useState<{ userId: string; columns: LeadColumn[] } | null>(null);
+  const columns = useMemo(() => (chosenColumns && chosenColumns.userId === userId ? chosenColumns.columns : userId ? loadColumnPref(userId) : DEFAULT_COLUMNS), [chosenColumns, userId]);
+  const chooseColumns = (next: LeadColumn[]) => {
+    if (!userId) return;
+    setChosenColumns({ userId, columns: next });
+    saveColumnPref(userId, next);
+  };
+  const setPage = (p: number) => void replaceUrlParams({ page: p > 1 ? String(p) : undefined });
+  const setPageSize = (s: PageSize) => {
+    setPageSizeState(s);
+    void replaceUrlParams({ size: s === 50 ? undefined : String(s), page: undefined });
+  };
   // Selection only ever counts rows still on screen (filters can hide selected rows).
   const selectedIds = useMemo(() => rows.filter((r) => selected.has(r.id)).map((r) => r.id), [rows, selected]);
   const allSelected = rows.length > 0 && selectedIds.length === rows.length;
-  const chips = activeLeadChips(filters, { sources: workspace?.options.sources ?? [], owners });
+  const chips = activeLeadChips(filters, { sources: workspace?.options.sources ?? [], owners, fields: workspace?.options.filterableFields ?? [] });
   const dirty = !isDefaultLeadFilters(filters);
 
   const openStrip = (key: keyof LeadsTodaySummary) => {
@@ -98,6 +121,7 @@ export default function LeadsPage() {
       <Toolbar
         actions={
           <>
+            {view === "table" && !narrow && <ColumnPicker value={columns} onChange={chooseColumns} onReset={() => chooseColumns(DEFAULT_COLUMNS)} />}
             <ViewSwitcher ariaLabel="Leads view" value={view} onChange={setView} options={VIEW_OPTIONS} />
             <Button variant="primary" onClick={() => quickCreate.openAddLead()} className="max-md:min-h-11" data-testid="add-lead-button">
               + Add Lead
@@ -145,16 +169,16 @@ export default function LeadsPage() {
         </p>
       )}
 
-      {view === "board" && rows.length > 0 && (
+      {view === "board" && found.length > 0 && (
         <div id="leads-view-panel" role="tabpanel" aria-label="Board">
-          <LeadsStageBoard rows={rows} onOpen={(lead) => router.push(withFrom(`/journeys/${lead.id}`, "leads"))} />
+          <LeadsStageBoard rows={found} onOpen={(lead) => router.push(withFrom(`/journeys/${lead.id}`, "leads"))} />
         </div>
       )}
 
-      <Card className={`overflow-x-auto p-0 ${view === "board" && rows.length > 0 ? "hidden" : ""}`} id={view === "table" ? "leads-view-panel" : undefined}>
+      <Card className={`overflow-x-auto p-0 ${view === "board" && found.length > 0 ? "hidden" : ""}`} id={view === "table" ? "leads-view-panel" : undefined}>
         {leads.isLoading && <div className="space-y-2 p-4">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-8" />)}</div>}
         {leads.isError && <div className="p-4"><ErrorState message="Could not load leads." /></div>}
-        {workspace && rows.length === 0 && (
+        {workspace && found.length === 0 && (
           <div className="p-8" data-testid="leads-empty">
             <EmptyState message={dirty ? "No leads match these filters." : "No leads yet."} />
             <div className="mt-3 flex justify-center gap-4">
@@ -169,9 +193,15 @@ export default function LeadsPage() {
             </div>
           </div>
         )}
-        {rows.length > 0 && view === "table" && (
+        {rows.length > 0 && view === "table" && narrow && <LeadCards rows={rows} onOpen={(lead) => router.push(withFrom(`/journeys/${lead.id}`, "leads"))} />}
+        {rows.length > 0 && view === "table" && !narrow && (
           <LeadsTable
             rows={rows}
+            columns={columns}
+            actions={{
+              onAddFollowUp: (lead) => quickCreate.openAddTask({ patient: { id: lead.patientId, name: lead.patientName, phone: lead.phone }, journeyId: lead.id }),
+              onBookAppointment: (lead) => quickCreate.openNewAppointment({ patient: { id: lead.patientId, name: lead.patientName, phone: lead.phone }, journeyId: lead.id }),
+            }}
             canAssign={canAssign}
             selected={selected}
             allSelected={allSelected}
@@ -184,6 +214,7 @@ export default function LeadsPage() {
             }}
           />
         )}
+        {workspace && found.length > 0 && <PaginationBar page={paged} size={pageSize} onPage={setPage} onSize={setPageSize} />}
       </Card>
 
       {assigning && canAssign && (

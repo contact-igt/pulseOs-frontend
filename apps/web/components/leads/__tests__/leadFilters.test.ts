@@ -10,7 +10,7 @@ const UUID = "0a1b2c3d-1111-4222-8333-444455556666";
 
 describe("readLeadFilters (URL → filters)", () => {
   it("an empty URL is every lead, any date, any owner", () => {
-    expect(read("")).toEqual({ view: DEFAULT_LEAD_VIEW, range: undefined, from: undefined, to: undefined, owner: "", source: "", service: "", status: undefined, due: undefined });
+    expect(read("")).toEqual({ view: DEFAULT_LEAD_VIEW, range: undefined, from: undefined, to: undefined, owner: "", source: "", service: "", status: undefined, due: undefined, q: "", fieldKey: "", fieldValue: "" });
   });
 
   it("reads view, preset range, owner, source, service", () => {
@@ -56,7 +56,7 @@ describe("leadFilterPatch (change → URL patch)", () => {
   });
 
   it("reset clears every Leads filter and nothing else", () => {
-    expect(Object.keys(resetLeadPatch()).sort()).toEqual(["due", "from", "owner", "range", "service", "source", "status", "to", "view"]);
+    expect(Object.keys(resetLeadPatch()).sort()).toEqual(["due", "field", "from", "fv", "owner", "page", "q", "range", "service", "source", "status", "to", "view"]);
   });
 });
 

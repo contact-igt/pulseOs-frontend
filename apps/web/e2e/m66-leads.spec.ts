@@ -194,12 +194,12 @@ test.describe("M6.6 — Leads operational views", () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await login(page, "eyev1.coordinator@pulseos.local");
     await page.goto("/leads?range=30d");
-    for (const h of ["Patient", "Enquiry", "Original source", "Status", "Owner", "Last interaction", "Next action", "Enquiry date"]) await expect(page.getByRole("columnheader", { name: h, exact: true })).toBeVisible();
+    for (const h of ["Patient", "Enquiry", "Original source", "Journey status", "Outcome", "Owner", "Created", "Appointment", "Last interaction", "Next action"]) await expect(page.getByRole("columnheader", { name: h, exact: true })).toBeVisible();
     const overdue = page.getByTestId(`lead-row-${ids["Overdue"]!.journeyId}`);
     await expect(overdue.getByTestId(`lead-next-${ids["Overdue"]!.journeyId}`)).toContainText("Callback");
     await expect(overdue.getByTestId(`lead-next-${ids["Overdue"]!.journeyId}`)).toContainText(/overdue|ago/i);
     await expect(overdue).toContainText("Google");
-    await expect(page.getByTestId(`lead-visit-${ids["Visit"]!.journeyId}`)).toContainText("Visit");
+    await expect(page.getByTestId(`lead-visit-${ids["Visit"]!.journeyId}`)).toBeVisible(); // Appointment column
     await overdue.click({ position: { x: 300, y: 10 } });
     await page.waitForURL(new RegExp(`/journeys/${ids["Overdue"]!.journeyId}`));
   });

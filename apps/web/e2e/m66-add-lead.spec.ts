@@ -116,7 +116,7 @@ test.describe("M6.6 — Add Lead", () => {
 
     await page.goto("/leads");
     const row = page.locator('[data-testid^="lead-row-"]').filter({ hasText: name });
-    await expect(row).toContainText("Visit");
+    await expect(row.locator('[data-testid^="lead-visit-"]')).toBeVisible(); // the Appointment column shows the booked visit
     await row.click({ position: { x: 300, y: 10 } });
     await expect(page.getByTestId("journey-detail")).toBeVisible();
     await expect(page.getByText(/Appointment booked/).first()).toBeVisible();
