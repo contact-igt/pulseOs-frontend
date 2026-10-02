@@ -481,10 +481,16 @@ export const treatmentOpportunities = pgTable("treatment_opportunities", {
   scheduledResourceId: uuid("scheduled_resource_id").references(() => scheduleResources.id, { onDelete: "set null" }),
   scheduledBranchId: uuid("scheduled_branch_id").references(() => branches.id, { onDelete: "set null" }),
   scheduleNote: text("schedule_note"),
+  // When the treatment was COMPLETED, stamped by the transition service with the server clock. COMPLETED is final, so
+  // it is set once and never changes. Distinct from plannedDate (when it was SCHEDULED for) and from revenue dates
+  // (when money was recorded). NULL on rows completed before this column existed unless the Timeline held the
+  // moment of completion — never inferred from a payment date.
+  completedAt: timestamp("completed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   tenantIdx: index("treatment_opportunities_tenant_idx").on(t.tenantId),
+  completedIdx: index("treatment_opportunities_completed_idx").on(t.tenantId, t.completedAt).where(sql`${t.completedAt} is not null`),
   journeyIdx: index("treatment_opportunities_journey_idx").on(t.journeyId),
   definitionIdx: index("treatment_opportunities_definition_idx").on(t.treatmentDefinitionId),
 }));

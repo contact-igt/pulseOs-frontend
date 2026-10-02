@@ -1,5 +1,6 @@
 "use client";
 
+import { treatmentDateLine, treatmentDoctorLabel } from "./treatmentDates";
 import { useCallback, useMemo } from "react";
 import { Lock } from "lucide-react";
 import { KanbanBoard, TREATMENT_STATUS_LABEL, formatInr, formatKey, localDayKey } from "@pulseos/ui";
@@ -63,12 +64,13 @@ export function TreatmentPipelineBoard({
             <span className="truncate text-sm font-medium text-ink">{r.patientName}</span>
             <span className="truncate text-xs text-ink-2">{r.treatmentLabel}</span>
             <span className="mt-1 flex min-w-0 items-center justify-between gap-2 text-[11px] text-ink-2">
-              <span className="truncate">{r.doctorName ?? r.service ?? "—"}</span>
+              <span className="truncate">{r.status === "SCHEDULED" || r.status === "COMPLETED" ? treatmentDoctorLabel(r) : (r.doctorName ?? r.service ?? "—")}</span>
               <span className="shrink-0 font-medium tabular-nums text-ink">{formatInr(r.estimatedValue)}</span>
             </span>
-            {r.plannedDate && (
-              <span className="text-[11px] text-ink-2">Planned {formatKey(localDayKey(r.plannedDate, timeZone), { day: "numeric", month: "short" })}</span>
-            )}
+            {(() => {
+              const line = treatmentDateLine(r, (iso) => formatKey(localDayKey(iso, timeZone), { day: "numeric", month: "short" }));
+              return line && <span className="text-[11px] text-ink-2">{line.label} {line.text}</span>;
+            })()}
           </span>
         )}
       />

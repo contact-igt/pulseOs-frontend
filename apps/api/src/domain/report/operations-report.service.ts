@@ -102,12 +102,31 @@ export interface FollowUpFact {
   completedInPeriod: boolean;
 }
 
+export interface ProcedureFact {
+  id: string;
+  status: string;
+  label: string;
+  patientName: string | null;
+  phone: string;
+  service: string;
+  plannedDate: Date | null;
+  completedAt: Date | null;
+  paymentAt: Date | null;
+  doctorName: string | null;
+  branchName: string | null;
+  estimatedValue: number;
+  plannedInPeriod: boolean;
+  completedInPeriod: boolean;
+}
+
 export interface ReportFacts {
   period: ReportPeriod;
   enquiries: EnquiryFact[];
   appointments: AppointmentFact[];
   followUps: FollowUpFact[];
-  procedures: { status: string; plannedInPeriod: boolean; completedInPeriod: boolean }[];
+  procedures: ProcedureFact[];
+  /** Completed procedures (all time, same filters) whose completion time was never recorded — never dated by payment. */
+  completedUndated: number;
 }
 
 /** Journey-level scope (journeys + patients must be in FROM). Branch is the patient's branch. */
@@ -244,33 +263,62 @@ export async function loadReportFacts(db: Db, tenantId: string, q: ReportQuery, 
     )
     .orderBy(tasks.dueAt);
 
-  // A procedure is "planned" in the period by its planned date, and "completed" in it by when it was completed. There is
-  // no completion timestamp column: revenue is only ever booked against a COMPLETED treatment (seed + service
-  // guarantee), so its first revenue event dates the completion; the planned date is the fallback.
-  const completedAt = sql`coalesce((select min(r.occurred_at) from revenue_events r where r.treatment_opportunity_id = ${treatmentOpportunities.id} and r.tenant_id = ${tenantId}), ${treatmentOpportunities.plannedDate})`;
+  // Three different dates, three different questions — never substituted for one another:
+  //   planned_date  = Scheduled for   (the procedure calendar; "Procedures planned")
+  //   completed_at  = Completed on    ("Procedures completed", stamped by the treatment transition)
+  //   revenue_events.occurred_at = Payment date (revenue; shown for reference, never used to date a completion)
+  // A COMPLETED procedure with no completed_at (completed before it was recorded) is not guessed from a payment: it is
+  // excluded from date-specific completed counts and surfaced as "completed, date not recorded".
+  const procedureScope = [
+    eq(treatmentOpportunities.tenantId, tenantId),
+    q.branchId ? eq(treatmentOpportunities.scheduledBranchId, q.branchId) : undefined,
+    q.service ? eq(journeys.journeyType, q.service) : undefined,
+    q.sourceId ? eq(journeys.sourceId, q.sourceId) : undefined,
+    q.ownerId ? eq(journeys.ownerUserId, q.ownerId) : undefined,
+    q.doctorId ? eq(treatmentOpportunities.scheduledResourceId, q.doctorId) : undefined,
+  ];
   const procedureRows = await db
     .select({
+      id: treatmentOpportunities.id,
       status: treatmentOpportunities.status,
+      label: treatmentOpportunities.treatmentLabel,
+      patientName: patients.name,
+      phone: patients.phone,
+      service: journeys.journeyType,
+      plannedDate: treatmentOpportunities.plannedDate,
+      completedAt: treatmentOpportunities.completedAt,
+      paymentAt: sql<Date | null>`(select min(r.occurred_at) from revenue_events r where r.treatment_opportunity_id = ${treatmentOpportunities.id} and r.tenant_id = ${tenantId})`,
+      doctorName: scheduleResources.name,
+      branchName: branches.name,
+      estimatedValue: treatmentOpportunities.estimatedValue,
       plannedInPeriod: sql<boolean>`(${treatmentOpportunities.plannedDate} is not null and ${inLocalRange(treatmentOpportunities.plannedDate, timezone, from, to)})`,
-      completedInPeriod: sql<boolean>`(${treatmentOpportunities.status} = 'COMPLETED' and ${completedAt} is not null and ${inLocalRange(completedAt, timezone, from, to)})`,
+      completedInPeriod: sql<boolean>`(${treatmentOpportunities.status} = 'COMPLETED' and ${treatmentOpportunities.completedAt} is not null and ${inLocalRange(treatmentOpportunities.completedAt, timezone, from, to)})`,
     })
     .from(treatmentOpportunities)
     .innerJoin(journeys, and(eq(journeys.id, treatmentOpportunities.journeyId), eq(journeys.tenantId, tenantId)))
+    .innerJoin(patients, eq(patients.id, treatmentOpportunities.patientId))
+    .leftJoin(scheduleResources, and(eq(scheduleResources.id, treatmentOpportunities.scheduledResourceId), eq(scheduleResources.tenantId, tenantId)))
+    .leftJoin(branches, and(eq(branches.id, treatmentOpportunities.scheduledBranchId), eq(branches.tenantId, tenantId)))
     .where(
       and(
-        eq(treatmentOpportunities.tenantId, tenantId),
+        ...procedureScope,
         inArray(treatmentOpportunities.status, [...PROCEDURE_PLANNED]),
         or(
           and(isNotNull(treatmentOpportunities.plannedDate), inLocalRange(treatmentOpportunities.plannedDate, timezone, from, to)),
-          and(eq(treatmentOpportunities.status, "COMPLETED"), inLocalRange(completedAt, timezone, from, to)),
+          and(eq(treatmentOpportunities.status, "COMPLETED"), isNotNull(treatmentOpportunities.completedAt), inLocalRange(treatmentOpportunities.completedAt, timezone, from, to)),
+          // Completed with no recorded time: carried along (flagged "date not recorded" in the workbook) so they can be found; counted nowhere by date.
+          and(eq(treatmentOpportunities.status, "COMPLETED"), sql`${treatmentOpportunities.completedAt} is null`),
         ),
-        q.branchId ? eq(treatmentOpportunities.scheduledBranchId, q.branchId) : undefined,
-        q.service ? eq(journeys.journeyType, q.service) : undefined,
-        q.sourceId ? eq(journeys.sourceId, q.sourceId) : undefined,
-        q.ownerId ? eq(journeys.ownerUserId, q.ownerId) : undefined,
-        q.doctorId ? eq(treatmentOpportunities.scheduledResourceId, q.doctorId) : undefined,
       ),
-    );
+    )
+    .orderBy(treatmentOpportunities.plannedDate);
+
+  // How many completed procedures (whole history, same non-date filters) have no completion time recorded.
+  const [{ undated }] = await db
+    .select({ undated: sql<number>`count(*)::int` })
+    .from(treatmentOpportunities)
+    .innerJoin(journeys, and(eq(journeys.id, treatmentOpportunities.journeyId), eq(journeys.tenantId, tenantId)))
+    .where(and(...procedureScope, eq(treatmentOpportunities.status, "COMPLETED"), sql`${treatmentOpportunities.completedAt} is null`));
 
   return {
     period,
@@ -278,7 +326,8 @@ export async function loadReportFacts(db: Db, tenantId: string, q: ReportQuery, 
     appointments: apptRows as AppointmentFact[],
     // Overdue-but-out-of-period rows are kept for the "Overdue now" count only.
     followUps: taskRows as FollowUpFact[],
-    procedures: procedureRows,
+    procedures: procedureRows as ProcedureFact[],
+    completedUndated: undated,
   };
 }
 
@@ -314,6 +363,7 @@ export function buildOperationsReport(f: ReportFacts): OperationsReport {
     appointmentsCancelled: scheduled.filter((a) => a.status === "cancelled").length,
     proceduresScheduled: procedures.filter((p) => p.plannedInPeriod).length,
     proceduresCompleted: procedures.filter((p) => p.completedInPeriod).length,
+    proceduresCompletedUndated: f.completedUndated,
     converted,
     conversionRate: rate(converted, enquiries.length),
   };

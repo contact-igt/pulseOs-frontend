@@ -1,5 +1,6 @@
 "use client";
 
+import { treatmentDateLine } from "@/components/treatments/treatmentDates";
 import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -317,7 +318,7 @@ export default function JourneyDetailPage() {
                       <div className="min-w-0">
                         <p className="truncate text-ink">{t.treatmentLabel}</p>
                         <p className="truncate text-xs text-ink-2">
-                          {formatInr(t.estimatedValue)}{t.plannedDate ? ` · planned ${fmtDate(t.plannedDate)}` : ""}
+                          {formatInr(t.estimatedValue)}{(() => { const line = treatmentDateLine(t, fmtDate); return !line ? "" : line.recorded ? ` · ${line.label.toLowerCase()} ${line.text}` : ` · ${line.label === "Completed on" ? "completed" : "scheduled"}, date not recorded`; })()}
                         </p>
                       </div>
                       <Badge tone={TREATMENT_STATUS_TONE[t.status] ?? "neutral"}>{TREATMENT_STATUS_LABEL[t.status] ?? t.status}</Badge>

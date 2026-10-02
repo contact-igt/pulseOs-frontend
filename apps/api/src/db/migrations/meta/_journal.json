@@ -183,6 +183,13 @@
       "when": 1790874946526,
       "tag": "0025_m6_appointment_lifecycle_resources",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1790919377211,
+      "tag": "0026_m65_treatment_completed_at",
+      "breakpoints": true
     }
   ]
 }

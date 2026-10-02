@@ -82,7 +82,8 @@ function summarySheets(wb: ExcelJS.Workbook, facts: ReportFacts) {
     { m: "No-shows", v: k.appointmentsNoShow, d: "Visits in the period marked no-show" },
     { m: "Cancelled", v: k.appointmentsCancelled, d: "Visits in the period that were cancelled" },
     { m: "Procedures planned", v: k.proceduresScheduled, d: "Procedures with a planned date in the period (scheduled or done)" },
-    { m: "Procedures completed", v: k.proceduresCompleted, d: "Procedures completed in the period" },
+    { m: "Procedures completed", v: k.proceduresCompleted, d: "Procedures completed in the period, by the recorded completion time (never by payment date)" },
+    { m: "Completed, date not recorded", v: k.proceduresCompletedUndated, d: "Completed procedures (all time, same filters) with no completion time recorded — not counted by date" },
     { m: "Converted", v: k.converted, d: "Enquiries of the period whose treatment is completed" },
     { m: "Conversion rate (%)", v: pct(k.conversionRate), d: "Converted ÷ new enquiries" },
   ]);
@@ -185,6 +186,30 @@ function followUpsSheet(wb: ExcelJS.Workbook, facts: ReportFacts) {
   );
 }
 
+const NOT_RECORDED = "Date not recorded";
+
+function proceduresSheet(wb: ExcelJS.Workbook, facts: ReportFacts) {
+  const tz = facts.period.timezone;
+  // Scheduled for / Completed on / Payment date are three different facts; a missing one is said plainly, never filled in from another.
+  addSheet(
+    wb,
+    "Procedures",
+    [
+      { header: "Procedure", key: "label", width: 30 }, { header: "Patient", key: "patient", width: 24 }, { header: "Phone", key: "phone", width: 16 },
+      { header: "Service", key: "service", width: 20 }, { header: "Status", key: "status", width: 14 }, { header: "Scheduled for", key: "planned", width: 20 },
+      { header: "Completed on", key: "completed", width: 20 }, { header: "Payment date", key: "paid", width: 20 }, { header: "Doctor", key: "doctor", width: 22 },
+      { header: "Branch", key: "branch", width: 18 }, { header: "Estimated value (₹)", key: "value", width: 18 },
+    ],
+    facts.procedures.map((p) => ({
+      label: p.label, patient: p.patientName ?? UNKNOWN_PATIENT, phone: p.phone, service: p.service, status: p.status === "COMPLETED" ? "Completed" : "Scheduled",
+      planned: p.plannedDate ? dateTime(p.plannedDate, tz) : NOT_RECORDED,
+      completed: p.status !== "COMPLETED" ? "" : p.completedAt ? dateTime(p.completedAt, tz) : NOT_RECORDED,
+      paid: p.paymentAt ? dateTime(new Date(p.paymentAt), tz) : "",
+      doctor: p.doctorName ?? "Doctor not recorded", branch: p.branchName ?? "", value: p.estimatedValue,
+    })),
+  );
+}
+
 export interface ExportContext {
   hospital: string;
   generatedBy: string;
@@ -200,6 +225,7 @@ export async function buildReportWorkbook(db: Db, tenantId: string, kind: Report
   if (kind === "enquiries") enquiriesSheet(wb, facts);
   if (kind === "appointments") appointmentsSheet(wb, facts);
   if (kind === "follow-ups") followUpsSheet(wb, facts);
+  if (kind === "procedures") proceduresSheet(wb, facts);
   filtersSheet(wb, facts.period, ctx.filterLabels, ctx.hospital, ctx.generatedBy, now);
   const rows = wb.worksheets.filter((w) => w.name !== "About").reduce((s, w) => s + Math.max(0, w.rowCount - 1), 0);
   const buffer = Buffer.from(await wb.xlsx.writeBuffer());

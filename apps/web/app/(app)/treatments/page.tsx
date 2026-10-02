@@ -1,5 +1,6 @@
 "use client";
 
+import { treatmentDateLine, treatmentDoctorLabel } from "@/components/treatments/treatmentDates";
 import { useCallback, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
@@ -286,12 +287,15 @@ export default function TreatmentPage() {
                     </Td>
                     <Td className="text-ink" nowrap>{row.treatmentLabel}</Td>
                     <Td align="right" className="text-ink">{formatInr(row.estimatedValue)}</Td>
-                    <Td className="text-ink-2" nowrap>{row.doctorName ?? "—"}</Td>
+                    <Td className="text-ink-2" nowrap>{treatmentDoctorLabel(row)}</Td>
                     <Td className="text-ink-2" nowrap>{row.ownerName ?? "—"}</Td>
                     <Td nowrap>
                       <span className="flex flex-col items-start gap-0.5">
                         <Badge tone={STATUS_TONE[row.status]}>{STATUS_LABEL[row.status]}</Badge>
-                        {row.plannedDate && <span className="text-[11px] text-ink-2">Planned {fmtDate(row.plannedDate)}</span>}
+                        {(() => {
+                          const line = treatmentDateLine(row, fmtDate);
+                          return line && <span className={`text-[11px] ${line.recorded ? "text-ink-2" : "text-ink-2/80 italic"}`} data-testid={`treatment-date-${row.id}`}>{line.label} {line.text}</span>;
+                        })()}
                       </span>
                     </Td>
                     <Td className="text-ink-2" nowrap>{fmtDate(row.nextActionDueAt)}</Td>

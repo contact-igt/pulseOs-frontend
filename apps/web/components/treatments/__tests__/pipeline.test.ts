@@ -105,3 +105,18 @@ describe("treatment URL state", () => {
     expect(readTreatmentFilters(new URLSearchParams("state=BOGUS")).status).toBe("");
   });
 });
+
+describe("Procedure Calendar uses the scheduled date only (not the completion date)", () => {
+  const row = (over: Partial<TreatmentRow>): TreatmentRow =>
+    ({ id: "t", patientId: "p", patientName: "Asha", journeyId: "j", doctorName: null, treatmentLabel: "Cataract", estimatedValue: 0, status: "SCHEDULED", ownerName: null, nextActionDueAt: null, lastContactAt: null, plannedDate: null, ...over }) as TreatmentRow;
+
+  it("a scheduled procedure sits on its scheduled-for time; a completed one is not on the calendar even though it has a completion time", () => {
+    const { events, undated } = scheduledProcedures([
+      row({ id: "s", status: "SCHEDULED", plannedDate: "2026-10-10T05:30:00Z", completedAt: null }),
+      row({ id: "c", status: "COMPLETED", plannedDate: "2026-10-01T05:30:00Z", completedAt: "2026-10-03T07:00:00Z" }),
+      row({ id: "legacy", status: "SCHEDULED", plannedDate: null }),
+    ]);
+    expect(events.map((e) => [e.id, e.start])).toEqual([["s", "2026-10-10T05:30:00Z"]]);
+    expect(undated).toBe(1); // a legacy scheduled row without a date is counted, not placed on an invented day
+  });
+});

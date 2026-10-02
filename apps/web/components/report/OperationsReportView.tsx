@@ -20,6 +20,7 @@ const EXPORTS: { kind: ReportExportKind; label: string; hint: string }[] = [
   { kind: "enquiries", label: "Enquiries", hint: "Every enquiry created in the period" },
   { kind: "appointments", label: "Appointments", hint: "Every visit scheduled in the period" },
   { kind: "follow-ups", label: "Follow-ups", hint: "Due or completed in the period" },
+  { kind: "procedures", label: "Procedures", hint: "Scheduled for, Completed on and Payment date, separately" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -263,7 +264,7 @@ function KpiGroups({ r }: { r: OperationsReport }) {
       title: "Conversion",
       metrics: [
         { key: "procedures", label: "Procedures planned", value: n(k.proceduresScheduled), hint: "Procedures with a planned date in the period (scheduled or done)" },
-        { key: "procedures-done", label: "Completed", value: n(k.proceduresCompleted), hint: "Procedures completed in the period" },
+        { key: "procedures-done", label: "Completed", value: n(k.proceduresCompleted), hint: "Procedures completed in the period, by the time completion was recorded (never by payment date)" },
         { key: "converted", label: "Enquiries converted", value: `${n(k.converted)} · ${fmtPct(k.conversionRate)}`, hint: "New enquiries of the period whose treatment is completed, and their share of all new enquiries" },
       ],
     },
@@ -445,6 +446,11 @@ export function OperationsReportView({ role }: { role: Role }) {
       ) : (
         <div className={`space-y-4 ${report.isFetching ? "opacity-60 transition-opacity" : "transition-opacity"}`} aria-busy={report.isFetching}>
           <KpiGroups r={report.data} />
+          {report.data.kpis.proceduresCompletedUndated > 0 && (
+            <p className="text-xs text-ink-2" data-testid="report-undated-note">
+              {fmtCountNum(report.data.kpis.proceduresCompletedUndated)} completed procedure{report.data.kpis.proceduresCompletedUndated === 1 ? " has" : "s have"} no completion date recorded (completed before it was kept), so {report.data.kpis.proceduresCompletedUndated === 1 ? "it is" : "they are"} not counted in any period.
+            </p>
+          )}
 
           <AnalyticsPanel
             title="Day by day"

@@ -46,14 +46,14 @@ describe("operations report aggregation (unit)", () => {
 
   it("'No response' = latest outcome No answer AND never got past Contacted AND not closed as lost", () => {
     const r = buildOperationsReport({
-      period, appointments: [], followUps: [], procedures: [],
+      period, appointments: [], followUps: [], procedures: [], completedUndated: 0,
       enquiries: [e({ lastOutcomeKey: "no_answer" }), e({ lastOutcomeKey: "no_answer", booked: true }), e({ lastOutcomeKey: "no_answer", stage: "lost" }), e({ lastOutcomeKey: "interested" })],
     });
     expect(r.kpis.noResponse).toBe(1);
   });
 
   it("an empty period is all zeros with a null rate, one row per day, and no invented breakdown rows", () => {
-    const r = buildOperationsReport({ period, enquiries: [], appointments: [], followUps: [], procedures: [] });
+    const r = buildOperationsReport({ period, enquiries: [], appointments: [], followUps: [], procedures: [], completedUndated: 0 });
     expect(r.kpis.conversionRate).toBeNull();
     expect(Object.values(r.kpis).filter((v) => typeof v === "number" && v !== 0)).toEqual([]);
     expect(r.daily.map((d) => d.day)).toEqual(["2026-09-01", "2026-09-02"]);
@@ -114,9 +114,10 @@ describe.skipIf(!DEMO_PASSWORD)("operations report + Excel export (integration)"
       { tenantId: t.tenantId, patientId: j1.patientId, journeyId: j1.journeyId, branchId: t.branchId, resourceId: doctor!.id, status: "completed", scheduledAt: at(D2, 11), createdAt: at(D1, 12), completedAt: at(D2, 11, 30) },
       { tenantId: t.tenantId, patientId: j3.patientId, journeyId: j3.journeyId, branchId: t.branchId, resourceId: doctor!.id, status: "no_show", scheduledAt: at(D2, 15), createdAt: at(D2, 13), noShowAt: at(D2, 16) },
     ]);
-    await db.insert(treatmentOpportunities).values({ tenantId: t.tenantId, patientId: j1.patientId, journeyId: j1.journeyId, treatmentLabel: "Cataract surgery", status: "COMPLETED", plannedDate: at(D2, 14) });
-    // An older enquiry's procedure, completed in the period with no planned date: dated by its revenue event.
-    const [older] = await db.insert(treatmentOpportunities).values({ tenantId: t.tenantId, patientId: j4.patientId, journeyId: j4.journeyId, treatmentLabel: "YAG laser", status: "COMPLETED" }).returning({ id: treatmentOpportunities.id });
+    await db.insert(treatmentOpportunities).values({ tenantId: t.tenantId, patientId: j1.patientId, journeyId: j1.journeyId, treatmentLabel: "Cataract surgery", status: "COMPLETED", plannedDate: at(D2, 14), completedAt: at(D2, 14, 30) });
+    // An older enquiry's procedure, completed in the period with no planned date: dated by its recorded completion time
+    // (its payment on the same day is a separate fact).
+    const [older] = await db.insert(treatmentOpportunities).values({ tenantId: t.tenantId, patientId: j4.patientId, journeyId: j4.journeyId, treatmentLabel: "YAG laser", status: "COMPLETED", completedAt: at(D1, 16, 45) }).returning({ id: treatmentOpportunities.id });
     await db.insert(revenueEvents).values({ tenantId: t.tenantId, patientId: j4.patientId, journeyId: j4.journeyId, treatmentOpportunityId: older!.id, amount: 12000, occurredAt: at(D1, 17) });
     await db.insert(tasks).values([
       { tenantId: t.tenantId, patientId: j3.patientId, journeyId: j3.journeyId, assignedTo: t.userIds.PATIENT_COORDINATOR!, type: "CALLBACK", status: "pending", dueAt: at(D2, 10) },
@@ -146,7 +147,7 @@ describe.skipIf(!DEMO_PASSWORD)("operations report + Excel export (integration)"
       newEnquiries: 3, uncontacted: 1, noResponse: 0,
       followUpsDue: 1, followUpsOverdue: 1, followUpsCompleted: 1,
       appointmentsBooked: 2, appointmentsScheduled: 2, appointmentsAttended: 1, appointmentsNoShow: 1, appointmentsCancelled: 0,
-      proceduresScheduled: 1, proceduresCompleted: 2, converted: 1, conversionRate: 1 / 3,
+      proceduresScheduled: 1, proceduresCompleted: 2, proceduresCompletedUndated: 0, converted: 1, conversionRate: 1 / 3,
     });
     expect(r.daily).toEqual([
       { day: D1, enquiries: 1, appointmentsScheduled: 0, attended: 0, noShow: 0, cancelled: 0, followUpsDue: 0, followUpsCompleted: 1 },

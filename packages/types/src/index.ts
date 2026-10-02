@@ -382,6 +382,9 @@ export interface RecordOutcomeInput {
 
 export type JourneyStage = ConversionStageKey | "lost";
 
+/** The canonical journey stages, in lifecycle order. PulseOS-owned: no hospital renames, removes or reorders them. */
+export const JOURNEY_STAGES: readonly JourneyStage[] = ["enquiry", "contacted", "booked", "attended", "consulted", "treatment_advised", "scheduled", "completed", "lost"];
+
 export interface PatientListRow {
   id: string;
   name: string;
@@ -1123,7 +1126,10 @@ export interface TreatmentRow {
   ownerName: string | null;
   nextActionDueAt: string | null;
   lastContactAt: string | null;
+  /** When the procedure is SCHEDULED for ("Scheduled for"). Null on a legacy row with no date recorded. */
   plannedDate: string | null;
+  /** When it was COMPLETED ("Completed on"), stamped by the transition. Null on rows completed before it was recorded — never inferred. */
+  completedAt?: string | null;
   /** Scheduled procedure: who it is with, where, and the operational note (set once it is SCHEDULED). */
   resourceId?: string | null;
   resourceName?: string | null;
@@ -2186,8 +2192,10 @@ export interface OperationsKpis {
   appointmentsCancelled: number;
   /** Procedures with a planned date inside the period (scheduled or done). */
   proceduresScheduled: number;
-  /** Procedures completed inside the period (dated by their first revenue event, else their planned date). */
+  /** Procedures completed inside the period, by their recorded completion time (treatment_opportunities.completed_at). */
   proceduresCompleted: number;
+  /** Completed procedures (all time, same filters) with no completion time recorded — not counted by date, never dated by payment. */
+  proceduresCompletedUndated: number;
   /** Enquiries of the period whose procedure/treatment is completed. */
   converted: number;
   /** converted / newEnquiries, null without enquiries. */
@@ -2260,4 +2268,4 @@ export interface ReportFilterOptions {
 }
 
 /** Row-level exports offered next to the report. */
-export type ReportExportKind = "summary" | "enquiries" | "appointments" | "follow-ups";
+export type ReportExportKind = "summary" | "enquiries" | "appointments" | "follow-ups" | "procedures";

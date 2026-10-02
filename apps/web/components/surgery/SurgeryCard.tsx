@@ -60,7 +60,7 @@ export function SurgeryCard({ treatments, canManage }: { treatments: TreatmentRo
               <CalendarClock size={13} aria-hidden="true" className="text-primary-600" />
               {when(t.plannedDate!, timeZone)}
             </p>
-            <p className="mt-0.5 text-xs text-ink-2" data-testid="surgery-where">{[t.resourceName ?? t.doctorName, t.branchName].filter(Boolean).join(" · ") || "Doctor and branch to be confirmed"}</p>
+            <p className="mt-0.5 text-xs text-ink-2" data-testid="surgery-where">{[t.resourceName ?? t.doctorName, t.branchName].filter(Boolean).join(" · ") || "Doctor not recorded"}</p>
             {t.scheduleNote && <p className="mt-0.5 text-xs text-ink-2">{t.scheduleNote}</p>}
           </div>
           {canManage && (

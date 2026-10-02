@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Edition } from "@pulseos/types";
 import { db } from "../../db/client.js";
 import {
@@ -23,6 +23,7 @@ import {
   tenants,
   timelineEvents,
   treatmentDefinitions,
+  scheduleResources,
   treatmentOpportunities,
   users,
   type SourceChannelDb,
@@ -570,6 +571,14 @@ export async function seedJourneys(ctx: DemoContext, configs: DemoJourneyConfig[
       const definition = catalog.get(config.treatment.definitionKey);
       if (!definition) throw new Error(`seed: no treatment catalog entry "${config.treatment.definitionKey}" for tenant`);
       const treatmentLabel = config.treatment.label ?? definition.label;
+      // The moment the treatment reached its current status (fixture): for a COMPLETED one it is also its completion time.
+      const treatmentAt = treatmentEventTime(config, scheduledAt);
+      // A SCHEDULED procedure carries who/where (the same fields scheduleSurgery stores): its doctor is the one the
+      // story already names, its branch the journey's. Nothing is invented — a story without a planned date stays unscheduled-looking.
+      const scheduledResource =
+        config.treatment.status === "SCHEDULED" && doctor
+          ? (await db.select({ id: scheduleResources.id }).from(scheduleResources).where(and(eq(scheduleResources.tenantId, ctx.tenantId), eq(scheduleResources.linkedUserId, doctor.id))).limit(1))[0]
+          : undefined;
       const [treatment] = await db
         .insert(treatmentOpportunities)
         .values({
@@ -577,13 +586,15 @@ export async function seedJourneys(ctx: DemoContext, configs: DemoJourneyConfig[
           estimatedValue: config.treatment.estimatedValue, ownerUserId: owner.id,
           decisionDate: config.treatment.decisionOffsetDays !== undefined ? daysFromNow(config.treatment.decisionOffsetDays) : null,
           plannedDate: config.treatment.plannedOffsetDays !== undefined ? daysFromNow(config.treatment.plannedOffsetDays) : null,
+          completedAt: config.treatment.status === "COMPLETED" ? treatmentAt : null,
+          ...(scheduledResource ? { scheduledResourceId: scheduledResource.id, scheduledBranchId: branch.id } : {}),
         })
         .returning();
       treatmentId = treatment.id;
       timelineRows.push({
         ...base, actorType: "system", eventType: "treatment_status_changed",
         title: `Treatment "${treatmentLabel}" — ${config.treatment.status.replace(/_/g, " ").toLowerCase()}`,
-        occurredAt: treatmentEventTime(config, scheduledAt),
+        occurredAt: treatmentAt,
         relatedEntityType: "treatment_opportunity", relatedEntityId: treatment.id,
       });
     }

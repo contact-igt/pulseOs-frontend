@@ -31,6 +31,7 @@ export async function listTreatments(db: Db, tenantId: string, filters: Treatmen
       status: treatmentOpportunities.status,
       ownerName: users.name,
       plannedDate: treatmentOpportunities.plannedDate,
+      completedAt: treatmentOpportunities.completedAt,
       resourceId: treatmentOpportunities.scheduledResourceId,
       resourceName: scheduleResources.name,
       branchId: treatmentOpportunities.scheduledBranchId,
@@ -121,6 +122,7 @@ export async function listTreatments(db: Db, tenantId: string, filters: Treatmen
     nextActionDueAt: nextActionByJourney.get(r.journeyId)?.toISOString() ?? null,
     lastContactAt: lastContactByJourney.get(r.journeyId)?.toISOString() ?? null,
     plannedDate: r.plannedDate?.toISOString() ?? null,
+    completedAt: r.completedAt?.toISOString() ?? null,
     resourceId: r.resourceId,
     resourceName: r.resourceName,
     branchId: r.branchId,
@@ -161,11 +163,16 @@ export async function updateTreatmentStatus(
   // WHERE against the now-committed (changed) row and affects zero rows — so
   // at most one caller ever proceeds past this point for a given transition.
   const transitioned = await db.transaction(async (tx) => {
+    // One server-clock instant for the whole transition: the completion stamp, the payment event and updatedAt agree.
+    const at = new Date();
     const [updated] = await tx
       .update(treatmentOpportunities)
       .set({
         status: nextStatus,
-        updatedAt: new Date(),
+        updatedAt: at,
+        // COMPLETED is final (no transition leaves it), so this is stamped exactly once; the conditional UPDATE below
+        // lets only one of two racing completions through. Nothing else writes this column.
+        ...(nextStatus === "COMPLETED" ? { completedAt: at } : {}),
         decisionDate: nextStatus === "ACCEPTED" || nextStatus === "DECLINED" ? new Date() : existing.decisionDate,
         plannedDate: plannedDate ? new Date(plannedDate) : existing.plannedDate,
       })
@@ -246,7 +253,7 @@ export async function updateTreatmentStatus(
             amount: existing.estimatedValue,
             currency: "INR",
             type: "treatment_payment",
-            occurredAt: new Date(),
+            occurredAt: at,
             sourceSystem: "treatment_completion",
           });
         });

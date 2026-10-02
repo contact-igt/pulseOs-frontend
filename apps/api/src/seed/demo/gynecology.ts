@@ -152,7 +152,7 @@ export const JOURNEY_CONFIGS: DemoJourneyConfig[] = [
     contactedOffsetDays: -4, createdOffsetDays: -5,
     appt: { status: "completed", offsetDays: -3, doctor: "arjun" },
     outcome: { value: "TREATMENT_ADVISED" },
-    treatment: { definitionKey: "IVF_CYCLE_1", status: "SCHEDULED", estimatedValue: 70_000, decisionOffsetDays: -1 },
+    treatment: { definitionKey: "IVF_CYCLE_1", status: "SCHEDULED", estimatedValue: 70_000, decisionOffsetDays: -1, plannedOffsetDays: 6 },
   },
   {
     patientIdx: 10, journeyType: "Fertility", specialtyKey: "FERTILITY", source: "google", campaignKey: "google", stage: "completed",

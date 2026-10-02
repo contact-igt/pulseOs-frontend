@@ -23,7 +23,7 @@ const querySchema = z.object({
   doctorId: opt(z.string().uuid()),
 });
 
-const exportSchema = querySchema.extend({ kind: z.enum(["summary", "enquiries", "appointments", "follow-ups"]) });
+const exportSchema = querySchema.extend({ kind: z.enum(["summary", "enquiries", "appointments", "follow-ups", "procedures"]) });
 
 function badQuery(reply: FastifyReply, issues: z.ZodIssue[]) {
   return reply.status(400).send({ error: "invalid_query", issues: issues.map((i) => ({ path: i.path.join("."), message: i.message })) });
