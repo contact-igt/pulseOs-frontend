@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeReportChips, customDefaults, periodLabel, readReportFilters, reportFilterPatch, resetReportPatch } from "../reportFilters";
+import { ANALYTICS_CONFIG, activeReportChips, customDefaults, periodLabel, readReportFilters, reportFilterPatch, resetReportPatch } from "../reportFilters";
 
 const UUID = "0b482130-f32a-41d3-8e4d-e4794ebab621";
 const from = (params: Record<string, string>) => (k: string) => params[k] ?? "";
@@ -37,7 +37,20 @@ describe("report filters in the URL", () => {
     expect(periodLabel("2026-09-26", "2026-10-02")).toBe("26 Sep – 2 Oct 2026");
     expect(periodLabel("2025-12-28", "2026-01-03")).toBe("28 Dec 2025 – 3 Jan 2026");
     expect(customDefaults("2026-10-02")).toEqual({ from: "2026-09-26", to: "2026-10-02" });
-    const chips = activeReportChips({ branchId: UUID, service: "Cataract", doctorId: "missing" }, { branches: [{ id: UUID, name: "Andheri" }], services: [], sources: [], owners: [], doctors: [] });
+    const chips = activeReportChips({ branchId: UUID, service: "Cataract", doctorId: "missing" }, { branches: [{ id: UUID, name: "Andheri" }], departments: [], services: [], sources: [], owners: [], doctors: [] });
     expect(chips.map((c) => c.label)).toEqual(["Branch: Andheri", "Service: Cataract", "Doctor: …"]);
+  });
+
+  it("the Analytics workspace has its own keys and a 30-day default, so it never collides with Marketing analytics' range / branch / source", () => {
+    expect(readReportFilters(from({}), "2026-10-02", ANALYTICS_CONFIG)).toEqual({ range: "30d" });
+    expect(readReportFilters(from({ range: "7d", branch: UUID }), "2026-10-02", ANALYTICS_CONFIG)).toEqual({ range: "30d" }); // Marketing's keys are not ours
+    expect(readReportFilters(from({ aRange: "last_month", aDept: UUID, aSource: UUID, aDoctor: UUID }), "2026-10-02", ANALYTICS_CONFIG)).toEqual({ range: "last_month", departmentId: UUID, sourceId: UUID, doctorId: UUID });
+    expect(reportFilterPatch({ range: "30d" }, ANALYTICS_CONFIG)).toEqual({ aRange: undefined, aFrom: undefined, aTo: undefined });
+    expect(reportFilterPatch({ range: "custom", from: "2026-09-01", to: "2026-09-02", departmentId: UUID }, ANALYTICS_CONFIG)).toEqual({ aRange: "custom", aFrom: "2026-09-01", aTo: "2026-09-02", aDept: UUID });
+    expect(Object.keys(resetReportPatch(ANALYTICS_CONFIG)).every((k) => k.startsWith("a"))).toBe(true);
+  });
+
+  it("a Department chip names the department", () => {
+    expect(activeReportChips({ departmentId: UUID }, { branches: [], departments: [{ id: UUID, name: "Eye Care" }], services: [], sources: [], owners: [], doctors: [] }).map((c) => c.label)).toEqual(["Department: Eye Care"]);
   });
 });

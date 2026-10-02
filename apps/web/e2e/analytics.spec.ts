@@ -57,6 +57,10 @@ test.describe("Analytics workspace", () => {
     await devLogin(page, "HOSPITAL_ADMIN", /\/command-centre/);
     await page.locator('nav a[href="/analytics"]').first().click();
     await page.waitForURL(/\/analytics/);
+    // Operations is the default area; Marketing & revenue (growth edition) sits beside it.
+    await expect(page.getByTestId("operations-analytics")).toBeVisible();
+    await page.getByTestId("analytics-area-marketing").click();
+    await expect(page).toHaveURL(/section=marketing/);
     for (const id of ["analytics-kpis", "panel-daily-source", "panel-source-mix", "panel-funnel", "panel-revenue", "panel-campaigns"]) {
       await expect(page.getByTestId(id)).toBeVisible();
     }
@@ -67,7 +71,7 @@ test.describe("Analytics workspace", () => {
   test("filters live in the URL, drive every panel, and chart totals equal the KPI and the API", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await devLogin(page, "HOSPITAL_ADMIN", /\/command-centre/);
-    await page.goto("/analytics?range=90d");
+    await page.goto("/analytics?section=marketing&range=90d");
     await expect(page.getByTestId("kpi-leads")).toBeVisible();
 
     // Unfiltered: KPI == chart legend == source-mix centre == funnel top == API.
@@ -114,11 +118,11 @@ test.describe("Analytics workspace", () => {
   test("a shared link restores range, filters and tab; a bad link falls back safely", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await devLogin(page, "HOSPITAL_ADMIN", /\/command-centre/);
-    await page.goto("/analytics?tab=revenue&range=14d&service=Cataract");
+    await page.goto("/analytics?section=marketing&tab=revenue&range=14d&service=Cataract");
     await expect(page.getByTestId("panel-revenue")).toBeVisible();
     await expect(page.getByTestId("range-14d")).toHaveAttribute("aria-selected", "true");
     await expect(page.getByTestId("filter-service")).toHaveValue("Cataract");
-    await page.goto("/analytics?tab=bogus&range=5y&source=telepathy");
+    await page.goto("/analytics?section=marketing&tab=bogus&range=5y&source=telepathy");
     await expect(page.getByTestId("panel-daily-source")).toBeVisible();
     await expect(page.getByTestId("range-30d")).toHaveAttribute("aria-selected", "true");
   });
@@ -126,7 +130,7 @@ test.describe("Analytics workspace", () => {
   test("every tab renders its panels and campaign rows link to the campaign", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await devLogin(page, "HOSPITAL_ADMIN", /\/command-centre/);
-    await page.goto("/analytics?tab=acquisition");
+    await page.goto("/analytics?section=marketing&tab=acquisition");
     for (const id of ["panel-lead-trend", "panel-source-conversion", "panel-campaigns"]) await expect(page.getByTestId(id)).toBeVisible();
     await page.getByTestId("conv-toTreatment").click();
     await expect(page.getByTestId("source-conversion")).toContainText("were advised treatment");
@@ -161,13 +165,13 @@ test.describe("Analytics workspace", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await devLogin(page, "HOSPITAL_ADMIN", /\/command-centre/);
     for (const tab of ["overview", "acquisition", "journey", "revenue", "team"]) {
-      await page.goto(`/analytics?tab=${tab}`);
+      await page.goto(`/analytics?section=marketing&tab=${tab}`);
       await expect(page.getByTestId("analytics-page")).toBeVisible();
       await page.waitForLoadState("networkidle");
       await noHorizontalOverflow(page);
     }
 
-    await page.goto("/analytics");
+    await page.goto("/analytics?section=marketing");
     await expect(page.getByTestId("filter-selects-desktop")).toBeHidden();
     const opener = page.getByTestId("filters-open");
     await opener.click();

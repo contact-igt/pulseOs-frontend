@@ -45,7 +45,8 @@ export function QuickCreateProvider({ role, children }: { role: Role; children: 
   const lookups = useQuery({ queryKey: ["lookups"], queryFn: api.lookups, staleTime: 60_000 });
   const leadSources = useQuery({ queryKey: ["lead-sources"], queryFn: () => api.leadSources(), staleTime: 60_000 });
   // The hospital's configured outcomes (Settings → Workflow Outcomes): offered on Add Lead as "What happened?".
-  const outcomes = useQuery({ queryKey: ["crm-outcomes", "active"], queryFn: () => api.crmOutcomes(), staleTime: 60_000 });
+  // Only for roles that can add leads: asking for it as a Doctor would be a 403.
+  const outcomes = useQuery({ queryKey: ["crm-outcomes", "active"], queryFn: () => api.crmOutcomes(), staleTime: 60_000, enabled: role === "SUPER_ADMIN" || role === "HOSPITAL_ADMIN" || role === "FRONT_DESK" || role === "PATIENT_COORDINATOR" });
 
   function invalidateAfterCreate() {
     queryClient.invalidateQueries({ queryKey: ["leads"] });

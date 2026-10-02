@@ -4,8 +4,11 @@ import { Suspense, useCallback, useMemo } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { api } from "@pulseos/api-client";
-import type { AnalyticsPeriod, SourceChannel } from "@pulseos/types";
+import { hasPermission, type AnalyticsPeriod, type SourceChannel } from "@pulseos/types";
 import { AnalyticsPanel, DailySourceChart, ChartSkeleton, Tabs, fmtDayShort } from "@pulseos/ui";
+import { OperationsAnalytics } from "@/components/analytics/OperationsAnalytics";
+import { useCapability } from "@/lib/useEdition";
+import { replaceUrlParams } from "@/lib/urlParams";
 import { AnalyticsFilterBar } from "@/components/analytics/AnalyticsFilterBar";
 import { ANALYTICS_TABS, DEFAULT_FILTERS, parseFilters, toApiQuery, toSearch, type AnalyticsFilters, type AnalyticsTab } from "@/components/analytics/filters";
 import { Async } from "@/components/analytics/common";
@@ -21,7 +24,8 @@ function periodCaption(p: AnalyticsPeriod) {
   return `${range} · ${p.days} ${p.days === 1 ? "day" : "days"} · ${p.timezone.replace("_", " ")} · compared with ${fmtDayShort(p.previousFrom)} – ${fmtDayShort(p.previousTo)}${p.previousUntil ? " (to the same time of day, as today is still in progress)" : ""}`;
 }
 
-function AnalyticsWorkspace() {
+/** Marketing & revenue analytics (Beta V2 growth edition): campaigns, spend, ROAS, revenue. Unchanged. */
+function MarketingAnalytics() {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -35,7 +39,8 @@ function AnalyticsWorkspace() {
       // A campaign belongs to one source: changing the source drops a campaign that no longer fits.
       if (patch.source !== undefined && patch.campaignId === undefined && filters.campaignId) next.campaignId = undefined;
       const qs = toSearch(next);
-      router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+      // `section=marketing` keeps this page on the Marketing area while its own filters change.
+      router.push(`${pathname}?${qs ? `${qs}&` : ""}section=marketing`, { scroll: false });
     },
     [filters, pathname, router],
   );
@@ -62,7 +67,7 @@ function AnalyticsWorkspace() {
   const toggleService = (service: string) => update({ service: filters.service === service ? undefined : service });
 
   return (
-    <div className="mx-auto max-w-7xl space-y-4 lg:space-y-5" data-testid="analytics-page">
+    <div className="space-y-4 lg:space-y-5" data-testid="marketing-analytics">
       <div className="space-y-3">
         <Tabs
           variant="underline"
@@ -194,10 +199,36 @@ function AnalyticsWorkspace() {
   );
 }
 
+function AnalyticsHome() {
+  const params = useSearchParams();
+  const session = useQuery({ queryKey: ["session"], queryFn: api.session, retry: false });
+  const hasMarketing = useCapability("MARKETING_ANALYTICS");
+  const role = session.data?.user.role;
+  // Marketing & revenue analytics need the growth edition AND the marketing + revenue permissions; V1 hospitals see Operations only.
+  const canMarketing = hasMarketing && !!role && hasPermission(role, "VIEW_MARKETING") && hasPermission(role, "VIEW_REVENUE");
+  const section = params.get("section") === "marketing" && canMarketing ? "marketing" : "operations";
+
+  if (!role) return <div className="mx-auto max-w-7xl"><ChartSkeleton height={320} /></div>;
+  return (
+    <div className="mx-auto max-w-7xl space-y-4 lg:space-y-5" data-testid="analytics-page">
+      {canMarketing && (
+        <Tabs
+          variant="underline"
+          ariaLabel="Analytics areas"
+          value={section}
+          items={[{ key: "operations", label: "Operations", testId: "analytics-area-operations" }, { key: "marketing", label: "Marketing & revenue", testId: "analytics-area-marketing" }]}
+          onChange={(k) => (k === "marketing" ? void replaceUrlParams({ section: "marketing" }) : void replaceUrlParams({ section: undefined }))}
+        />
+      )}
+      {section === "operations" ? <OperationsAnalytics role={role} /> : <MarketingAnalytics />}
+    </div>
+  );
+}
+
 export default function AnalyticsPage() {
   return (
     <Suspense fallback={<div className="mx-auto max-w-7xl"><ChartSkeleton height={320} /></div>}>
-      <AnalyticsWorkspace />
+      <AnalyticsHome />
     </Suspense>
   );
 }

@@ -28,12 +28,9 @@ const FULL_NAV: NavGroup[] = [
     label: "Main",
     items: [
       { label: "Command Centre", href: "/command-centre", icon: "LayoutDashboard", implemented: true, permission: "VIEW_ADMIN_COMMAND_CENTRE" },
+      { label: "Leads", href: "/leads", icon: "UserPlus", implemented: true, permission: "MANAGE_LEADS" },
       { label: "My Work", href: "/my-work", icon: "ListChecks", implemented: true, permission: "VIEW_TASKS" },
     ],
-  },
-  {
-    label: "Acquisition",
-    items: [{ label: "Leads", href: "/leads", icon: "UserPlus", implemented: true, permission: "MANAGE_LEADS" }],
   },
   {
     label: "Patients",
@@ -45,9 +42,10 @@ const FULL_NAV: NavGroup[] = [
   {
     label: "Operations",
     items: [
-      { label: "Front Desk", href: "/front-desk", icon: "CalendarCheck", implemented: true, permission: "VIEW_APPOINTMENTS" },
       { label: "Appointments", href: "/appointments", icon: "CalendarCheck", implemented: true, permission: "VIEW_APPOINTMENTS" },
+      { label: "Front Desk", href: "/front-desk", icon: "CalendarCheck", implemented: true, permission: "VIEW_APPOINTMENTS" },
       { label: "Treatments", href: "/treatments", icon: "Stethoscope", implemented: true, permission: "VIEW_TREATMENT" },
+      { label: "Analytics", href: "/analytics", icon: "BarChart3", implemented: true, permission: "VIEW_ADMIN_COMMAND_CENTRE" },
       { label: "Inbox", href: "/inbox", icon: "Inbox", implemented: true, permission: "VIEW_INBOX", capability: "FULL_INBOX", previewWhenLocked: true },
     ],
   },
@@ -55,7 +53,6 @@ const FULL_NAV: NavGroup[] = [
     label: "Growth",
     items: [
       { label: "Campaigns / Sources", href: "/campaigns", icon: "Megaphone", implemented: true, permission: "VIEW_MARKETING", capability: "CAMPAIGNS" },
-      { label: "Analytics", href: "/analytics", icon: "BarChart3", implemented: true, permission: "VIEW_MARKETING", capability: "MARKETING_ANALYTICS" },
     ],
   },
   {

@@ -6,7 +6,21 @@ import { REPORT_RANGES, type ReportFilterOptions, type ReportQuery, type ReportR
 
 export const DEFAULT_REPORT_RANGE: ReportRange = "7d";
 
-const KEYS = { range: "rRange", from: "rFrom", to: "rTo", branchId: "rBranch", service: "rService", sourceId: "rSource", ownerId: "rOwner", doctorId: "rDoctor" } as const;
+export type ReportFilterKey = "range" | "from" | "to" | "branchId" | "service" | "sourceId" | "ownerId" | "doctorId" | "departmentId";
+export type ReportUrlKeys = Record<ReportFilterKey, string>;
+
+/** The Command Centre tab's keys (`r` prefix: they must not collide with the overview's own `branchId` / `journeyType`). */
+export const REPORT_KEYS: ReportUrlKeys = { range: "rRange", from: "rFrom", to: "rTo", branchId: "rBranch", service: "rService", sourceId: "rSource", ownerId: "rOwner", doctorId: "rDoctor", departmentId: "rDept" };
+/** The Analytics workspace's keys (`a` prefix: Marketing analytics on the same page keeps `range`, `branch`, `source`…). */
+export const ANALYTICS_KEYS: ReportUrlKeys = { range: "aRange", from: "aFrom", to: "aTo", branchId: "aBranch", service: "aService", sourceId: "aSource", ownerId: "aOwner", doctorId: "aDoctor", departmentId: "aDept" };
+
+export interface ReportFilterConfig {
+  keys: ReportUrlKeys;
+  defaultRange: ReportRange;
+}
+export const REPORT_CONFIG: ReportFilterConfig = { keys: REPORT_KEYS, defaultRange: DEFAULT_REPORT_RANGE };
+export const ANALYTICS_CONFIG: ReportFilterConfig = { keys: ANALYTICS_KEYS, defaultRange: "30d" };
+
 const RANGES = new Set<string>(REPORT_RANGES.map((r) => r.key));
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -21,37 +35,40 @@ export function addDays(ymd: string, n: number): string {
 }
 
 /** URL → a valid query. A custom range without valid dates becomes the default preset. */
-export function readReportFilters(get: (key: string) => string, today: string): ReportQuery & { range: ReportRange } {
-  const raw = get(KEYS.range);
-  let range: ReportRange = RANGES.has(raw) ? (raw as ReportRange) : DEFAULT_REPORT_RANGE;
-  const from = get(KEYS.from);
-  const to = get(KEYS.to);
-  if (range === "custom" && !(isRealDate(from) && isRealDate(to) && from <= to && to <= today)) range = DEFAULT_REPORT_RANGE;
+export function readReportFilters(get: (key: string) => string, today: string, config: ReportFilterConfig = REPORT_CONFIG): ReportQuery & { range: ReportRange } {
+  const { keys: K, defaultRange } = config;
+  const raw = get(K.range);
+  let range: ReportRange = RANGES.has(raw) ? (raw as ReportRange) : defaultRange;
+  const from = get(K.from);
+  const to = get(K.to);
+  if (range === "custom" && !(isRealDate(from) && isRealDate(to) && from <= to && to <= today)) range = defaultRange;
   const id = (k: string) => (UUID.test(get(k)) ? get(k) : undefined);
-  const service = get(KEYS.service).slice(0, 120) || undefined;
+  const service = get(K.service).slice(0, 120) || undefined;
   return {
     range,
     ...(range === "custom" ? { from, to } : {}),
-    ...(id(KEYS.branchId) ? { branchId: id(KEYS.branchId) } : {}),
+    ...(id(K.branchId) ? { branchId: id(K.branchId) } : {}),
+    ...(id(K.departmentId) ? { departmentId: id(K.departmentId) } : {}),
     ...(service ? { service } : {}),
-    ...(id(KEYS.sourceId) ? { sourceId: id(KEYS.sourceId) } : {}),
-    ...(id(KEYS.ownerId) ? { ownerId: id(KEYS.ownerId) } : {}),
-    ...(id(KEYS.doctorId) ? { doctorId: id(KEYS.doctorId) } : {}),
+    ...(id(K.sourceId) ? { sourceId: id(K.sourceId) } : {}),
+    ...(id(K.ownerId) ? { ownerId: id(K.ownerId) } : {}),
+    ...(id(K.doctorId) ? { doctorId: id(K.doctorId) } : {}),
   };
 }
 
 /** A filter change → the URL patch (undefined clears a key). Leaving "custom" drops its dates. */
-export function reportFilterPatch(patch: Partial<ReportQuery>): Record<string, string | undefined> {
+export function reportFilterPatch(patch: Partial<ReportQuery>, config: ReportFilterConfig = REPORT_CONFIG): Record<string, string | undefined> {
+  const { keys: K, defaultRange } = config;
   const out: Record<string, string | undefined> = {};
-  for (const [k, v] of Object.entries(patch) as [keyof typeof KEYS, string | undefined][]) out[KEYS[k]] = v || undefined;
-  if (patch.range && patch.range !== "custom") Object.assign(out, { [KEYS.from]: undefined, [KEYS.to]: undefined });
-  if (patch.range === DEFAULT_REPORT_RANGE) out[KEYS.range] = undefined;
+  for (const [k, v] of Object.entries(patch) as [ReportFilterKey, string | undefined][]) out[K[k]] = v || undefined;
+  if (patch.range && patch.range !== "custom") Object.assign(out, { [K.from]: undefined, [K.to]: undefined });
+  if (patch.range === defaultRange) out[K.range] = undefined;
   return out;
 }
 
 /** Clears every report filter (and only the report's). */
-export function resetReportPatch(): Record<string, undefined> {
-  return Object.fromEntries(Object.values(KEYS).map((k) => [k, undefined]));
+export function resetReportPatch(config: ReportFilterConfig = REPORT_CONFIG): Record<string, undefined> {
+  return Object.fromEntries(Object.values(config.keys).map((k) => [k, undefined]));
 }
 
 /** A custom range opens on the last 7 hospital days. */
@@ -69,6 +86,7 @@ export function activeReportChips(q: ReportQuery, o: ReportFilterOptions | undef
   const chips: ActiveChip[] = [];
   const name = <T extends { id: string }>(list: T[] | undefined, id: string, pick: (x: T) => string) => (list?.find((x) => x.id === id) ? pick(list.find((x) => x.id === id)!) : "…");
   if (q.branchId) chips.push({ key: "branchId", label: `Branch: ${name(o?.branches, q.branchId, (b) => b.name)}` });
+  if (q.departmentId) chips.push({ key: "departmentId", label: `Department: ${name(o?.departments, q.departmentId, (d) => d.name)}` });
   if (q.service) chips.push({ key: "service", label: `Service: ${q.service}` });
   if (q.sourceId) chips.push({ key: "sourceId", label: `Source: ${name(o?.sources, q.sourceId, (s) => s.label)}` });
   if (q.ownerId) chips.push({ key: "ownerId", label: `Team member: ${name(o?.owners, q.ownerId, (u) => u.name)}` });

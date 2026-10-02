@@ -1,223 +1,19 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Download, SlidersHorizontal, X } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { api, ApiError } from "@pulseos/api-client";
-import { REPORT_RANGES, hasPermission, type OperationsReport, type ReportExportKind, type ReportFilterOptions, type ReportQuery, type ReportRange, type Role } from "@pulseos/types";
-import { AnalyticsPanel, Button, CHART_INK, Card, ChartEmptyState, ChartLegend, ChartSkeleton, ErrorState, FilterSelect, Tabs, fmtCountNum, fmtDayShort, fmtPct, localDayKey, niceCountAxis, useDialogFocus } from "@pulseos/ui";
+import { api } from "@pulseos/api-client";
+import { hasPermission, type OperationsReport, type ReportQuery, type Role } from "@pulseos/types";
+import { AnalyticsPanel, CHART_INK, Card, ChartEmptyState, ChartLegend, ChartSkeleton, ErrorState, Tabs, fmtCountNum, fmtDayShort, fmtPct, localDayKey, niceCountAxis } from "@pulseos/ui";
 import { useHospitalTimeZone } from "@/lib/useHospitalTimeZone";
 import { useUrlFilters } from "@/lib/useUrlFilters";
 import { Async, RankedBars, TH } from "@/components/analytics/common";
-import { activeReportChips, customDefaults, periodLabel, readReportFilters, reportFilterPatch, resetReportPatch } from "./reportFilters";
+import { ReportFilterBar } from "./ReportFilterBar";
+import { DEFAULT_REPORT_RANGE, periodLabel, readReportFilters, reportFilterPatch, resetReportPatch } from "./reportFilters";
 
-const DATE_INPUT = "glass-control h-8 min-w-0 flex-1 rounded-control px-2 text-xs text-ink outline-none focus-visible:border-primary-500 sm:flex-none";
 const TD = "px-2.5 py-1.5 text-xs tabular-nums text-ink";
 
-const EXPORTS: { kind: ReportExportKind; label: string; hint: string }[] = [
-  { kind: "summary", label: "Report summary", hint: "KPIs, day by day, funnel, sources, services, team" },
-  { kind: "enquiries", label: "Enquiries", hint: "Every enquiry created in the period" },
-  { kind: "appointments", label: "Appointments", hint: "Every visit scheduled in the period" },
-  { kind: "follow-ups", label: "Follow-ups", hint: "Due or completed in the period" },
-  { kind: "procedures", label: "Procedures", hint: "Scheduled for, Completed on and Payment date, separately" },
-];
-
-// ---------------------------------------------------------------------------
-// Filters
-// ---------------------------------------------------------------------------
-
-function FilterSelects({ q, options, onChange }: { q: ReportQuery; options?: ReportFilterOptions; onChange: (p: Partial<ReportQuery>) => void }) {
-  return (
-    <>
-      <FilterSelect aria-label="Branch" value={q.branchId ?? ""} onChange={(e) => onChange({ branchId: e.target.value })} data-testid="report-filter-branch">
-        <option value="">All branches</option>
-        {options?.branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-      </FilterSelect>
-      <FilterSelect aria-label="Service" value={q.service ?? ""} onChange={(e) => onChange({ service: e.target.value })} data-testid="report-filter-service">
-        <option value="">All services</option>
-        {options?.services.map((s) => <option key={s} value={s}>{s}</option>)}
-      </FilterSelect>
-      <FilterSelect aria-label="Source" value={q.sourceId ?? ""} onChange={(e) => onChange({ sourceId: e.target.value })} data-testid="report-filter-source">
-        <option value="">All sources</option>
-        {options?.sources.map((s) => <option key={s.id} value={s.id}>{s.label}{s.archived ? " (archived)" : ""}</option>)}
-      </FilterSelect>
-      <FilterSelect aria-label="Team member" value={q.ownerId ?? ""} onChange={(e) => onChange({ ownerId: e.target.value })} data-testid="report-filter-owner">
-        <option value="">All team members</option>
-        {options?.owners.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-      </FilterSelect>
-      <FilterSelect aria-label="Doctor" value={q.doctorId ?? ""} onChange={(e) => onChange({ doctorId: e.target.value })} data-testid="report-filter-doctor">
-        <option value="">All doctors</option>
-        {options?.doctors.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-      </FilterSelect>
-    </>
-  );
-}
-
-function PeriodControls({ q, today, onChange }: { q: ReportQuery & { range: ReportRange }; today: string; onChange: (p: Partial<ReportQuery>) => void }) {
-  return (
-    <>
-      <FilterSelect
-        aria-label="Period"
-        value={q.range}
-        onChange={(e) => {
-          const range = e.target.value as ReportRange;
-          onChange(range === "custom" ? { range, ...customDefaults(today) } : { range });
-        }}
-        data-testid="report-range"
-      >
-        {REPORT_RANGES.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
-      </FilterSelect>
-      {q.range === "custom" && (
-        <div className="flex items-center gap-1.5" data-testid="report-custom-dates">
-          <input type="date" aria-label="From date" className={DATE_INPUT} value={q.from ?? ""} max={q.to ?? today} onChange={(e) => e.target.value && onChange({ range: "custom", from: e.target.value, to: q.to })} data-testid="report-from" />
-          <span className="text-xs text-ink-2" aria-hidden="true">–</span>
-          <input type="date" aria-label="To date" className={DATE_INPUT} value={q.to ?? ""} min={q.from} max={today} onChange={(e) => e.target.value && onChange({ range: "custom", from: q.from, to: e.target.value })} data-testid="report-to" />
-        </div>
-      )}
-    </>
-  );
-}
-
-function ExportMenu({ q }: { q: ReportQuery }) {
-  const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState<ReportExportKind | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false);
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDoc);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
-  async function run(kind: ReportExportKind) {
-    setBusy(kind);
-    setError(null);
-    try {
-      const { blob, filename } = await api.downloadReport(kind, q);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-      setOpen(false);
-    } catch (err) {
-      setError(err instanceof ApiError && err.status === 403 ? "You do not have permission to export." : err instanceof ApiError && err.status === 413 ? "Too many rows — narrow the period or filters." : "Export failed. Try again.");
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  return (
-    <div className="relative" ref={ref}>
-      <Button variant="secondary" size="sm" onClick={() => setOpen((v) => !v)} aria-haspopup="menu" aria-expanded={open} data-testid="report-export">
-        <Download size={13} aria-hidden="true" />
-        <span className="hidden sm:inline">Export to Excel</span>
-        <span className="sm:hidden">Export</span>
-      </Button>
-      {open && (
-        <div role="menu" aria-label="Export to Excel" className="glass-strong absolute right-0 z-30 mt-1 w-72 rounded-panel border border-line p-1 shadow-glass" data-testid="report-export-menu">
-          {EXPORTS.map((x) => (
-            <button
-              key={x.kind}
-              type="button"
-              role="menuitem"
-              disabled={busy !== null}
-              onClick={() => void run(x.kind)}
-              className="flex w-full flex-col items-start rounded-control px-2.5 py-2 text-left transition hover:bg-primary-50 disabled:opacity-60"
-              data-testid={`report-export-${x.kind}`}
-            >
-              <span className="text-xs font-medium text-ink">{busy === x.kind ? `Preparing ${x.label.toLowerCase()}…` : x.label}</span>
-              <span className="text-[11px] text-ink-2">{x.hint}</span>
-            </button>
-          ))}
-          <p className="px-2.5 pb-1 pt-1.5 text-[11px] text-ink-2">Uses the period and filters above · hospital time</p>
-        </div>
-      )}
-      {error && (
-        <p role="alert" className="absolute right-0 z-30 mt-1 w-64 rounded-control bg-white px-2.5 py-1.5 text-xs text-danger-700 shadow-panel" data-testid="report-export-error">
-          {error}
-        </p>
-      )}
-    </div>
-  );
-}
-
-function ReportFilterBar({ q, today, options, canExport, onChange, onReset }: { q: ReportQuery & { range: ReportRange }; today: string; options?: ReportFilterOptions; canExport: boolean; onChange: (p: Partial<ReportQuery>) => void; onReset: () => void }) {
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const sheetRef = useDialogFocus<HTMLDivElement>(sheetOpen, () => setSheetOpen(false));
-  const chips = activeReportChips(q, options);
-  const dirty = chips.length > 0 || q.range !== "7d";
-
-  return (
-    <div className="space-y-2" data-testid="report-filters">
-      <div className="glass flex flex-wrap items-center gap-x-2 gap-y-2 rounded-panel px-2.5 py-2">
-        <PeriodControls q={q} today={today} onChange={onChange} />
-        <div className="hidden flex-wrap items-center gap-2 lg:flex [&_select]:max-w-[9.5rem] xl:[&_select]:max-w-[11rem]">
-          <span className="mx-0.5 h-5 w-px bg-line-strong" aria-hidden="true" />
-          <FilterSelects q={q} options={options} onChange={onChange} />
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          {dirty && (
-            <Button variant="ghost" size="sm" onClick={onReset} className="hidden lg:inline-flex" data-testid="report-reset">
-              Reset
-            </Button>
-          )}
-          <Button variant="secondary" size="sm" onClick={() => setSheetOpen(true)} className="lg:hidden" aria-haspopup="dialog" data-testid="report-filters-open">
-            <SlidersHorizontal size={13} aria-hidden="true" />
-            Filters
-            {chips.length > 0 && <span className="rounded-full bg-primary-600 px-1.5 text-[10px] font-semibold leading-4 text-white">{chips.length}</span>}
-          </Button>
-          {canExport && <ExportMenu q={q} />}
-        </div>
-      </div>
-
-      {chips.length > 0 && (
-        <ul className="flex flex-wrap items-center gap-1.5" aria-label="Active filters" data-testid="report-chips">
-          {chips.map((c) => (
-            <li key={c.key}>
-              <button type="button" onClick={() => onChange({ [c.key]: "" })} className="inline-flex max-w-[16rem] items-center gap-1 rounded-chip bg-primary-100 px-2 py-0.5 text-[11px] font-medium text-primary-800 transition hover:bg-primary-200" title={`Remove filter — ${c.label}`}>
-                <span className="truncate">{c.label}</span>
-                <X size={11} aria-hidden="true" />
-                <span className="sr-only">remove</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {sheetOpen && (
-        <div className="fixed inset-0 z-40 lg:hidden">
-          <div className="drawer-backdrop absolute inset-0 bg-slate-900/30" onClick={() => setSheetOpen(false)} aria-hidden="true" />
-          <div ref={sheetRef} role="dialog" aria-modal="true" aria-label="Report filters" tabIndex={-1} className="dialog-panel absolute inset-x-0 bottom-0 max-h-[85dvh] overflow-y-auto rounded-t-shell border-b-0 p-4 outline-none" data-testid="report-filters-sheet">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-ink">Filters</h2>
-              <button type="button" onClick={() => setSheetOpen(false)} className="flex h-9 w-9 items-center justify-center rounded-control text-ink-2 hover:bg-primary-50" aria-label="Close filters">
-                <X size={16} aria-hidden="true" />
-              </button>
-            </div>
-            <div className="flex flex-col gap-2 [&_span]:w-full [&_select]:h-10 [&_select]:text-sm">
-              <FilterSelects q={q} options={options} onChange={onChange} />
-            </div>
-            <div className="mt-4 flex items-center justify-between gap-2">
-              <Button variant="ghost" onClick={onReset} disabled={!dirty}>Reset</Button>
-              <Button variant="primary" onClick={() => setSheetOpen(false)}>Show results</Button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // KPIs
@@ -431,7 +227,7 @@ export function OperationsReportView({ role }: { role: Role }) {
 
   return (
     <div className="space-y-4" data-testid="operations-report">
-      <ReportFilterBar q={q} today={today} options={options.data} canExport={hasPermission(role, "EXPORT_REPORTS")} onChange={onChange} onReset={onReset} />
+      <ReportFilterBar q={q} today={today} options={options.data} canExport={hasPermission(role, "EXPORT_REPORTS")} defaultRange={DEFAULT_REPORT_RANGE} onChange={onChange} onReset={onReset} />
       <p className="text-xs text-ink-2" data-testid="report-period">
         {period ? periodLabel(period.from, period.to) : "…"} · hospital time ({timeZone}). Enquiry figures follow journeys created in the period; appointments follow the visit date.
       </p>
