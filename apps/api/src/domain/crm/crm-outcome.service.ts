@@ -151,6 +151,8 @@ export async function logInteraction(
   input: LogInteractionInput,
   now: Date = new Date(),
   timezone = "Asia/Kolkata",
+  /** `skipFollowUpTask`: the caller creates the follow-up itself (Add Lead uses the follow-up engine); `followUpAt` still satisfies "requires a follow-up". */
+  opts: { skipFollowUpTask?: boolean } = {},
 ): Promise<LogResult> {
   await ensureDefaultOutcomes(db, tenantId);
   const [journey] = await db.select().from(journeys).where(and(eq(journeys.tenantId, tenantId), eq(journeys.id, journeyId))).limit(1);
@@ -223,7 +225,7 @@ export async function logInteraction(
     });
 
     let followUpTaskId: string | null = null;
-    if (followUpAt) {
+    if (followUpAt && !opts.skipFollowUpTask) {
       const [task] = await tx
         .insert(tasks)
         .values({

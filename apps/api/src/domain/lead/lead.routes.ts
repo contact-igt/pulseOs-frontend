@@ -22,6 +22,21 @@ const workspaceQuery = z.object({
   due: opt(z.literal("overdue")),
 });
 
+// A refused step keeps the HTTP meaning the same refusal has elsewhere (booking: 422 past / 409 taken).
+const STEP_STATUS: Record<string, number> = {
+  resource_unavailable: 409,
+  appointment_time_in_past: 422,
+  due_in_past: 422,
+  doctor_not_found: 422,
+  branch_not_found: 422,
+  assignee_invalid: 422,
+  follow_up_required: 422,
+  outcome_not_found: 422,
+  outcome_closes_journey: 422,
+  outcome_disallows_appointment: 422,
+  type_invalid: 422,
+};
+
 const createLeadBody = z.object({
   patientId: z.string().uuid().optional(),
   name: z.string().trim().min(1).max(120).optional(),
@@ -42,6 +57,17 @@ const createLeadBody = z.object({
   priority: z.enum(["normal", "high"]).optional(),
   notes: z.string().optional(),
   customFieldValues: z.record(z.string(), z.unknown()).optional(),
+  outcomeKey: z.string().min(1).max(60).optional(),
+  outcomeNote: z.string().max(2000).optional(),
+  outcomeReason: z.string().max(500).optional(),
+  nextStep: z
+    .discriminatedUnion("kind", [
+      z.object({ kind: z.enum(["callback", "follow_up"]), dueAt: z.string().min(1).max(40), assignedTo: z.string().uuid().optional(), note: z.string().max(1000).optional() }),
+      z.object({ kind: z.literal("appointment"), scheduledAt: z.string().min(1).max(40), doctorId: z.string().uuid(), branchId: z.string().uuid().optional(), note: z.string().max(500).optional() }),
+      z.object({ kind: z.literal("none") }),
+    ])
+    .optional(),
+  call: z.object({ direction: z.enum(["inbound", "outbound"]), connected: z.boolean(), durationSeconds: z.number().int().min(0).max(86_400).optional(), note: z.string().max(2000).optional() }).optional(),
   followUp: z
     .object({
       type: z.enum(["CALLBACK", "FOLLOW_UP", "APPOINTMENT_CONFIRMATION", "NO_SHOW_RECOVERY", "TREATMENT_DECISION", "POST_CARE", "RECALL", "OTHER"]),
@@ -98,6 +124,11 @@ export async function leadRoutes(app: FastifyInstance) {
     if (!parsed.success) return reply.status(400).send({ error: "invalid_request", details: parsed.error.flatten() });
 
     const result = await createLead(app.db, tenantId, actorId, parsed.data, request.sessionUser!.role, request.sessionUser!.timezone);
+    if ("stepError" in result) {
+      // The whole lead was refused and rolled back; the step and reason say which part and why.
+      const { step, reason } = result.stepError;
+      return reply.status(STEP_STATUS[reason] ?? 422).send({ error: reason, step });
+    }
     if ("validationError" in result) {
       // Required fields missing wins; otherwise the values that do not fit their field type.
       if (result.missingRequiredFields.length > 0) return reply.status(422).send({ error: "missing_required_fields", fields: result.missingRequiredFields });

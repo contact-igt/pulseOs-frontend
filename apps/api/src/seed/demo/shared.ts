@@ -725,6 +725,7 @@ export async function createLeadsInOrder(tenantId: string, actorUserId: string, 
   for (const input of inputs) {
     const result = await createLead(db, tenantId, actorUserId, input);
     if ("validationError" in result) throw new Error(`seed lead unexpectedly missing required field(s): ${result.missingRequiredFields.join(", ")}`);
+    if ("stepError" in result) throw new Error(`seed lead refused at ${result.stepError.step}: ${result.stepError.reason}`);
     results.push(result);
   }
   return results;

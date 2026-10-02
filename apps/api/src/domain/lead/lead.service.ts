@@ -1,6 +1,6 @@
 import { and, eq, inArray, ne, or } from "drizzle-orm";
 import { patientNameSql } from "../../lib/patient-name.js";
-import { dayKeyIn, diffDays, isRealDate, localToday } from "../../lib/hospital-time.js";
+import { dayKeyIn, diffDays, isRealDate, localToday, parseInstant } from "../../lib/hospital-time.js";
 import { resolveReportRange, ReportInputError } from "../report/report-period.js";
 import { computeLeadsWorkspace, type LeadFact } from "./lead-views.js";
 import type { Db } from "../../db/client.js";
@@ -25,11 +25,15 @@ import { resolveOrCreatePatient } from "../patient/identity.service.js";
 import { resolveLeadSource } from "./lead-source.service.js";
 import { isValidPastDate, MAX_AGE_YEARS } from "../../lib/age.js";
 import { recordTouchpoint } from "../acquisition/attribution.service.js";
-import { createTask, eligibleAssignee } from "../task/task.service.js";
+import { createFollowUp, createTask, eligibleAssignee } from "../task/task.service.js";
+import { createAppointment } from "../appointment/appointment.service.js";
+import { logManualCall } from "../call/call.service.js";
+import { ensureDefaultOutcomes, logInteraction } from "../crm/crm-outcome.service.js";
+import { ensureFollowUpTypes } from "../task/followup-type.service.js";
 import { listFieldsForEntry, resolveSubmittedValues } from "../crm/crm-field.service.js";
 import { pickOwnerForNewJourney } from "../crm/crm-allocation.service.js";
 import type { OwnerFilter } from "../journey/journey.service.js";
-import { MANUAL_INTERACTION_CHANNELS, type CreateLeadInput, CreateLeadResult, LeadPhoneLookupResult, LeadRow, LeadStatus, LeadsSummary, LeadsWorkspace, LeadsWorkspaceQuery, Role, TASK_TYPE_LABEL } from "@pulseos/types";
+import { FOLLOW_UP_KEYS, INTERACTION_CHANNEL_LABEL, MANUAL_INTERACTION_CHANNELS, type CreateLeadInput, type LeadSaveStep, CreateLeadResult, LeadPhoneLookupResult, LeadRow, LeadStatus, LeadsSummary, LeadsWorkspace, LeadsWorkspaceQuery, Role, TASK_TYPE_LABEL } from "@pulseos/types";
 
 export async function lookupPatientByPhone(db: Db, tenantId: string, rawPhone: string): Promise<LeadPhoneLookupResult> {
   const defaultRegion = await resolveDefaultPhoneRegion(db, tenantId);
@@ -47,12 +51,44 @@ export async function lookupPatientByPhone(db: Db, tenantId: string, rawPhone: s
   return { patient: { id: patient.id, name: patient.name, phone: patient.phone, activeJourneyCount: journeyRows.length } };
 }
 
-export type CreateLeadOutcome = CreateLeadResult | { validationError: true; missingRequiredFields: string[]; invalidFields: string[] };
+export type CreateLeadOutcome = CreateLeadResult | { validationError: true; missingRequiredFields: string[]; invalidFields: string[] } | { stepError: { step: LeadSaveStep; reason: string } };
 
-export async function createLead(db: Db, tenantId: string, actorId: string, input: CreateLeadInput, actorRole: Role = "HOSPITAL_ADMIN", timezone = "Asia/Kolkata"): Promise<CreateLeadOutcome> {
+/** A child step of the intake refused the save: the whole lead is rolled back and the step is named. */
+class LeadStepError extends Error {
+  constructor(readonly step: LeadSaveStep, readonly reason: string) {
+    super(`${step}: ${reason}`);
+  }
+}
+
+/** How the first contact is described on the Timeline: honest about being typed in by staff, never a provider message. */
+function manualCaptureNote(channel: NonNullable<CreateLeadInput["channel"]>): string {
+  if (channel === "MANUAL_CALL") return "Phone call recorded manually";
+  if (channel === "WALK_IN") return "Walk-in recorded manually";
+  return `${INTERACTION_CHANNEL_LABEL[channel]} manually captured`;
+}
+
+/**
+ * Add Lead in ONE transaction: patient (found or created) → journey → first contact on the Timeline → manual call →
+ * outcome → follow-up task (the M5 engine) or appointment (the M6 booking rules) → custom fields. If any step refuses,
+ * everything is rolled back — no half-saved lead, no orphan patient — and the failing step and reason are returned.
+ * Appointment events are published only after the commit.
+ */
+export async function createLead(db: Db, tenantId: string, actorId: string, input: CreateLeadInput, actorRole: Role = "HOSPITAL_ADMIN", timezone = "Asia/Kolkata", now: Date = new Date()): Promise<CreateLeadOutcome> {
+  const afterCommit: (() => void)[] = [];
+  try {
+    const out = await db.transaction((tx) => createLeadIn(tx as unknown as Db, tenantId, actorId, input, actorRole, timezone, now, (publish) => afterCommit.push(publish)));
+    if (!("validationError" in out)) for (const publish of afterCommit) publish();
+    return out;
+  } catch (err) {
+    if (err instanceof LeadStepError) return { stepError: { step: err.step, reason: err.reason } };
+    throw err;
+  }
+}
+
+async function createLeadIn(db: Db, tenantId: string, actorId: string, input: CreateLeadInput, actorRole: Role, timezone: string, now: Date, afterCommit: (publish: () => void) => void): Promise<CreateLeadOutcome> {
   // Intake basics. All validated before any write.
   const invalid: string[] = [];
-  const todayKey = dayKeyIn(new Date(), timezone);
+  const todayKey = dayKeyIn(now, timezone);
   if (input.dateOfBirth !== undefined && !isValidPastDate(input.dateOfBirth, todayKey)) invalid.push("dateOfBirth");
   if (input.age !== undefined && (!Number.isInteger(input.age) || input.age < 0 || input.age > MAX_AGE_YEARS)) invalid.push("age");
   if (input.channel !== undefined && !MANUAL_INTERACTION_CHANNELS.includes(input.channel)) invalid.push("channel");
@@ -61,6 +97,15 @@ export async function createLead(db: Db, tenantId: string, actorId: string, inpu
     const owner = input.followUp.assignedTo ?? input.ownerId;
     if (Number.isNaN(new Date(input.followUp.dueAt).getTime()) || (owner && !(await eligibleAssignee(db, tenantId, owner)))) invalid.push("followUp");
   }
+  // Next step: a hospital wall time ("2026-10-03T11:00") or an absolute instant, never the server's zone.
+  const step = input.nextStep;
+  if (step && input.followUp) invalid.push("nextStep");
+  let stepAt: Date | null = null;
+  if (step && (step.kind === "callback" || step.kind === "follow_up")) stepAt = parseInstant(step.dueAt, timezone);
+  if (step && step.kind === "appointment") stepAt = parseInstant(step.scheduledAt, timezone);
+  if (step && step.kind !== "none" && !stepAt) invalid.push("nextStep");
+  if (step && step.kind === "appointment" && !step.doctorId) invalid.push("nextStep");
+  if (input.call && input.channel !== "MANUAL_CALL") invalid.push("call");
 
   // SOURCE (where the patient originally came from). A person picks from the hospital's offered sources; the
   // legacy coarse value is still accepted for older callers and resolves even to an archived entry.
@@ -73,6 +118,18 @@ export async function createLead(db: Db, tenantId: string, actorId: string, inpu
     return { validationError: true, missingRequiredFields: input.sourceKey || input.source ? [] : ["source"], invalidFields: [...invalid, ...(input.sourceKey || input.source ? ["source"] : [])] };
   }
   if (invalid.length > 0) return { validationError: true, missingRequiredFields: [], invalidFields: invalid };
+
+  // The outcome and the next step must agree, checked before anything is written.
+  let outcome: typeof crmOutcomes.$inferSelect | null = null;
+  if (input.outcomeKey) {
+    await ensureDefaultOutcomes(db, tenantId);
+    [outcome = null] = await db.select().from(crmOutcomes).where(and(eq(crmOutcomes.tenantId, tenantId), eq(crmOutcomes.key, input.outcomeKey), eq(crmOutcomes.archived, false))).limit(1);
+    if (!outcome) throw new LeadStepError("outcome", "outcome_not_found");
+    const kind = step?.kind ?? "none";
+    if (outcome.stage === "lost" && (kind !== "none" || input.followUp)) throw new LeadStepError("outcome", "outcome_closes_journey");
+    if (outcome.requiresFollowUp && kind !== "callback" && kind !== "follow_up") throw new LeadStepError("outcome", "follow_up_required");
+    if (kind === "appointment" && !outcome.allowsAppointment) throw new LeadStepError("outcome", "outcome_disallows_appointment");
+  }
 
   // Required-field enforcement happens before any write — server-side, not
   // just the Add Lead form's `required` attribute, so an API call that
@@ -170,6 +227,8 @@ export async function createLead(db: Db, tenantId: string, actorId: string, inpu
     actorId,
     eventType: "lead_created",
     title: `Lead created — ${input.journeyType}`,
+    // Honest: staff typed this in. No provider message, call or conversation is invented from the channel.
+    description: input.channel ? manualCaptureNote(input.channel) : null,
     sourceChannel: source.key,
     // How this first contact happened, when staff said. Never inferred from the source.
     channel: input.channel ?? null,
@@ -183,10 +242,55 @@ export async function createLead(db: Db, tenantId: string, actorId: string, inpu
       type: input.followUp.type,
       dueAt: input.followUp.dueAt,
     }, timezone);
-    if (!made.ok) throw new Error(`lead follow-up could not be created: ${made.reason}`);
+    if (!made.ok) throw new LeadStepError("follow_up", made.reason);
   }
 
-  return { patientId, journeyId: journey.id, isNewPatient };
+  const result: CreateLeadResult = { patientId, journeyId: journey.id, isNewPatient };
+  const actor = { id: actorId, role: actorRole };
+
+  // Phone enquiry with call details: the M4 manual call log (a Call row + Timeline line). No outcome or callback here —
+  // those are handled once, below, so a call can never create a second task.
+  if (input.call) {
+    const [who] = await db.select({ name: users.name }).from(users).where(and(eq(users.tenantId, tenantId), eq(users.id, actorId))).limit(1);
+    const logged = await logManualCall(db, tenantId, { ...actor, name: who?.name ?? "Staff" }, journey.id, { direction: input.call.direction, connected: input.call.connected, durationSeconds: input.call.durationSeconds, staffFeedback: input.call.note }, now, timezone);
+    if (!logged.ok) throw new LeadStepError("call", logged.reason);
+    result.callId = logged.callId;
+  }
+
+  const followUpKind = step && (step.kind === "callback" || step.kind === "follow_up") ? step : null;
+
+  if (outcome) {
+    const logged = await logInteraction(
+      db,
+      tenantId,
+      actor,
+      journey.id,
+      { outcomeKey: outcome.key, note: input.outcomeNote, reason: input.outcomeReason, channel: input.channel, ...(outcome.requiresFollowUp && stepAt ? { followUpAt: stepAt.toISOString() } : {}) },
+      now,
+      timezone,
+      { skipFollowUpTask: true },
+    );
+    if (!logged.ok) throw new LeadStepError(logged.reason === "follow_up_in_past" ? "follow_up" : "outcome", logged.reason === "follow_up_in_past" ? "due_in_past" : logged.reason);
+  }
+
+  if (followUpKind && stepAt) {
+    const key = followUpKind.kind === "callback" ? FOLLOW_UP_KEYS.callback : FOLLOW_UP_KEYS.general;
+    const [type] = await db.select({ id: followUpTypes.id }).from(followUpTypes).where(and(eq(followUpTypes.tenantId, tenantId), eq(followUpTypes.key, key), eq(followUpTypes.isActive, true))).limit(1);
+    // Install the defaults on first use, then look again: a brand-new hospital has none yet.
+    const typeId = type?.id ?? (await ensureFollowUpTypes(db, tenantId), (await db.select({ id: followUpTypes.id }).from(followUpTypes).where(and(eq(followUpTypes.tenantId, tenantId), eq(followUpTypes.key, key), eq(followUpTypes.isActive, true))).limit(1))[0]?.id);
+    if (!typeId) throw new LeadStepError("follow_up", "type_invalid");
+    const made = await createFollowUp(db, tenantId, { id: actorId }, journey.id, { followUpTypeId: typeId, dueAt: stepAt.toISOString(), note: followUpKind.note, ...(followUpKind.assignedTo ? { assignedTo: followUpKind.assignedTo } : {}) }, timezone, now);
+    if (!made.ok) throw new LeadStepError("follow_up", made.reason);
+    result.followUpTaskId = made.task.id;
+  }
+
+  if (step && step.kind === "appointment" && stepAt) {
+    const booked = await createAppointment(db, tenantId, actorId, { patientId, journeyId: journey.id, branchId: step.branchId ?? input.branchId, doctorId: step.doctorId, scheduledAt: stepAt.toISOString(), reason: step.note?.trim() || "Consultation" }, timezone, now, afterCommit);
+    if (!booked.ok) throw new LeadStepError("appointment", booked.reason);
+    result.appointmentId = booked.appointment.id;
+  }
+
+  return result;
 }
 
 // ---------------------------------------------------------------------------

@@ -63,7 +63,7 @@ export async function seedFollowUpDemo(tenantId: string, a: Actors) {
 
   // 5 — a Journey with NO follow-up scheduled: a fresh walk-in enquiry.
   const lead = await createLead(db, tenantId, a.frontDesk.id, { phone: "+91 98450 61122", name: "Kavitha Reddy", specialtyKey: "GENERAL_EYE_CONSULTATION", branchId: a.branchId, journeyType: "General Eye Consultation", sourceKey: "walk_in", channel: "WALK_IN", customFieldValues: {} }, "FRONT_DESK", TZ);
-  if ("validationError" in lead) throw new Error("seed: walk-in lead failed");
+  if ("validationError" in lead || "stepError" in lead) throw new Error("seed: walk-in lead failed");
 
   // 6 — a Journey with an appointment booked tomorrow morning.
   const tomorrow = new Date(endOfDay.getTime() + 10.5 * 3_600_000); // 10:30 hospital time tomorrow

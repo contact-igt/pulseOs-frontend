@@ -207,7 +207,16 @@ function clock(at: Date, timezone: string): string {
  * that patient), the branch, and an active doctor/resource. A bad reference is refused — it never lands as a
  * cross-hospital row.
  */
-export async function createAppointment(db: Db, tenantId: string, actorId: string, input: CreateAppointmentInput, timezone = "Asia/Kolkata", now: Date = new Date()): Promise<{ ok: true; appointment: AppointmentRow } | { ok: false; reason: string }> {
+export async function createAppointment(
+  db: Db,
+  tenantId: string,
+  actorId: string,
+  input: CreateAppointmentInput,
+  timezone = "Asia/Kolkata",
+  now: Date = new Date(),
+  /** Inside a caller's transaction: receives the "booked" event to publish once THAT transaction has committed. */
+  afterCommit?: (publish: () => void) => void,
+): Promise<{ ok: true; appointment: AppointmentRow } | { ok: false; reason: string }> {
   // An offset-less time is the hospital's wall time; the past is judged on the instant, so the browser's and the
   // server's zones never matter. Refused here, not just in the picker: a direct API call cannot book the past.
   const scheduledAt = parseInstant(input.scheduledAt, timezone);
@@ -242,7 +251,9 @@ export async function createAppointment(db: Db, tenantId: string, actorId: strin
     return created!;
   });
   if (!row) return { ok: false, reason: "resource_unavailable" };
-  emitAppointmentEvent({ type: "appointment.booked", tenantId, appointmentId: row.id, scheduledAt });
+  const publish = () => emitAppointmentEvent({ type: "appointment.booked", tenantId, appointmentId: row.id, scheduledAt });
+  if (afterCommit) afterCommit(publish);
+  else publish();
   return { ok: true, appointment: (await getAppointmentRow(db, tenantId, row.id))! };
 }
 

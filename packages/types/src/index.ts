@@ -1732,14 +1732,38 @@ export interface CreateLeadInput {
   priority?: TaskPriority;
   notes?: string;
   customFieldValues?: Record<string, unknown>;
+  /** Legacy: one follow-up task by canonical type. New callers use `nextStep`. */
   followUp?: CreateLeadFollowUp | null;
+  /** What the first contact led to (a configured outcome key, e.g. "needs_callback"). Optional. */
+  outcomeKey?: string;
+  outcomeNote?: string;
+  /** Asked only by outcomes that ask a reason (e.g. "Not interested"). */
+  outcomeReason?: string;
+  /** What happens next. Times are the HOSPITAL's wall time ("YYYY-MM-DDTHH:mm") or an absolute instant. */
+  nextStep?: CreateLeadNextStep;
+  /** Phone enquiries only: the call itself, recorded by hand through the M4 call log. */
+  call?: { direction: "inbound" | "outbound"; connected: boolean; durationSeconds?: number; note?: string };
 }
+
+export type CreateLeadNextStep =
+  | { kind: "callback" | "follow_up"; dueAt: string; assignedTo?: string; note?: string }
+  | { kind: "appointment"; scheduledAt: string; doctorId: string; branchId?: string; note?: string }
+  | { kind: "none" };
 
 export interface CreateLeadResult {
   patientId: string;
   journeyId: string;
   isNewPatient: boolean;
+  /** The follow-up Task made from `nextStep` (callback / general), if any. */
+  followUpTaskId?: string;
+  /** The Appointment made from `nextStep`, if any. */
+  appointmentId?: string;
+  /** The manual Call recorded from `call`, if any. */
+  callId?: string;
 }
+
+/** The one step of Add Lead that refused the save (nothing was kept), and why. */
+export type LeadSaveStep = "outcome" | "follow_up" | "appointment" | "call";
 
 // ---------------------------------------------------------------------------
 // Source vs Channel, lead sources, departments
