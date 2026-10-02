@@ -48,6 +48,9 @@ export const CAPABILITY_DEPENDENCIES: Partial<Record<Capability, Capability[]>> 
   CONVERSATION_INTELLIGENCE: ["WHATSAPP_INBOX"],
   SPEND_ATTRIBUTION: ["MARKETING_ANALYTICS"],
   CAMPAIGNS: ["MARKETING_ANALYTICS"],
+  // Their only read surface is Marketing Analytics; syncing spend nobody can see would be silent cost.
+  GOOGLE_ADS: ["MARKETING_ANALYTICS"],
+  META_ADS: ["MARKETING_ANALYTICS"],
 };
 
 /** Capabilities nobody can switch off (the core product). */
@@ -2761,7 +2764,7 @@ export interface AdsAnalytics {
   period: { from: string; to: string; timezone: string };
   providers: AdsProviderStatus[];
   /** Why there is nothing to show (setup, capability, or a slice the ad accounts cannot be split by). */
-  unavailable: "NO_PROVIDER_ENABLED" | "NO_DATA_YET" | "NOT_SLICEABLE" | "MIXED_CURRENCY" | null;
+  unavailable: "NO_PROVIDER_ENABLED" | "NO_PROVIDER_FOR_SOURCE" | "NO_DATA_YET" | "NOT_SLICEABLE" | "MIXED_CURRENCY" | null;
   currency: string | null;
   totals: { spend: number; impressions: number; clicks: number; providerConversions: number | null } | null;
   /** Derived over the campaigns PulseOS could match only, so a cost is never divided by outcomes of a different set. */

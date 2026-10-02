@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { recordActivity } from "../activity/activity.service.js";
 import { requireCapability, requirePermission } from "../auth/permission.middleware.js";
 import { listNotificationsFor, listRules, listTemplates, previewFollowUpMessage, sendFollowUpMessage, updateRule, updateTemplate } from "./notification.service.js";
 
@@ -42,6 +43,8 @@ export async function notificationRoutes(app: FastifyInstance) {
     if (!parsed.success) return reply.status(400).send({ error: "invalid_request" });
     const r = await updateTemplate(app.db, request.sessionUser!.tenantId, (request.params as { id: string }).id, parsed.data);
     if (!r.ok) return reply.status(REASON_STATUS[r.reason] ?? 400).send({ error: r.reason });
+    // The template's identity and which fields changed; the message text itself is configuration, not logged.
+    await recordActivity(app.db, { tenantId: request.sessionUser!.tenantId, actorId: request.sessionUser!.id, action: "template.updated", entityType: "message_template", entityKey: r.template.purpose, metadata: { changed: Object.keys(parsed.data), enabled: r.template.enabled } });
     return r.template;
   });
 
@@ -50,6 +53,7 @@ export async function notificationRoutes(app: FastifyInstance) {
     if (!parsed.success) return reply.status(400).send({ error: "invalid_request" });
     const r = await updateRule(app.db, request.sessionUser!.tenantId, (request.params as { id: string }).id, parsed.data);
     if (!r.ok) return reply.status(REASON_STATUS[r.reason] ?? 400).send({ error: r.reason });
+    await recordActivity(app.db, { tenantId: request.sessionUser!.tenantId, actorId: request.sessionUser!.id, action: "reminder_rule.updated", entityType: "reminder_rule", entityKey: r.rule.id, metadata: { subject: r.rule.subject, kind: r.rule.kind, changed: parsed.data } });
     return r.rule;
   });
 

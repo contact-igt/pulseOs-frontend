@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { lookup as dnsLookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { WEBHOOK_CONDITION_OPS, WEBHOOK_EVENT_TYPES, type WebhookCondition } from "@pulseos/types";
 import { z } from "zod";
@@ -45,10 +46,25 @@ function isPrivateHost(host: string): boolean {
   const kind = isIP(h);
   if (kind === 4) {
     const [a, b] = h.split(".").map(Number) as [number, number];
-    return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
+    const c = Number(h.split(".")[2]);
+    return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127)
+      || (a === 192 && b === 0 && c === 0) || (a === 198 && (b === 18 || b === 19)) || a >= 224; // IETF protocol, benchmarking, multicast/reserved
   }
-  if (kind === 6) return h === "::1" || h === "::" || h.startsWith("fc") || h.startsWith("fd") || h.startsWith("fe80") || h.startsWith("::ffff:");
+  if (kind === 6) return h === "::1" || h === "::" || h.startsWith("fc") || h.startsWith("fd") || h.startsWith("fe80") || h.startsWith("::ffff:") || h.startsWith("64:ff9b:") || h.startsWith("2002:") || h.startsWith("ff");
   return false;
+}
+
+export { isPrivateHost };
+
+/** Every address a hostname resolves to must be public (a public NAME that points at 127.0.0.1 or the metadata address is refused). */
+export async function resolvesToPublicAddresses(host: string, lookup: (h: string) => Promise<{ address: string }[]> = (h) => dnsLookup(h, { all: true })): Promise<boolean> {
+  if (isIP(host.replace(/^\[|\]$/g, ""))) return !isPrivateHost(host);
+  try {
+    const addrs = await lookup(host);
+    return addrs.length > 0 && addrs.every((a) => !isPrivateHost(a.address));
+  } catch {
+    return false;
+  }
 }
 
 /** HTTPS to a public host only (a webhook must never be a way to reach the hospital's own network). */

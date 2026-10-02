@@ -20,7 +20,7 @@ export function registerIntegrationConsumers(db: Db): void {
       case "appointment.booked":
         return emitIntegrationEvent({ type: "appointment.booked", tenantId: e.tenantId, eventId: `appointment.booked:${e.appointmentId}`, occurredAt: at, data: { appointmentId: e.appointmentId, scheduledAt: e.scheduledAt.toISOString() } });
       case "appointment.rescheduled":
-        return emitIntegrationEvent({ type: "appointment.rescheduled", tenantId: e.tenantId, eventId: `appointment.rescheduled:${e.appointmentId}:${e.scheduledAt.toISOString()}`, occurredAt: at, data: { appointmentId: e.appointmentId, previousScheduledAt: e.previousScheduledAt.toISOString(), scheduledAt: e.scheduledAt.toISOString(), hospitalAction: e.hospitalAction } });
+        return emitIntegrationEvent({ type: "appointment.rescheduled", tenantId: e.tenantId, eventId: `appointment.rescheduled:${e.appointmentId}:${e.previousScheduledAt.getTime()}>${e.scheduledAt.getTime()}`, occurredAt: at, data: { appointmentId: e.appointmentId, previousScheduledAt: e.previousScheduledAt.toISOString(), scheduledAt: e.scheduledAt.toISOString(), hospitalAction: e.hospitalAction } });
       case "appointment.cancelled":
         return emitIntegrationEvent({ type: "appointment.cancelled", tenantId: e.tenantId, eventId: `appointment.cancelled:${e.appointmentId}`, occurredAt: at, data: { appointmentId: e.appointmentId, reasonCode: e.reasonCode, hospitalAction: e.hospitalAction } });
       case "appointment.completed":

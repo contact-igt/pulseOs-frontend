@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, lte, sql } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { adsDailyFacts, adsSyncRuns, connectors } from "../../db/schema.js";
 import { ADS_PROVIDERS, type AdsProvider, type AdsSyncRunVm, type Capability } from "@pulseos/types";
@@ -83,10 +83,11 @@ export async function syncAds(db: Db, tenantId: string, provider: AdsProvider, o
 
   const [run] = await db.insert(adsSyncRuns).values({ tenantId, connectorId: connector.id, provider, trigger: opts.trigger, rangeFrom: range.from, rangeTo: range.to, startedAt: now }).returning();
   const config = { ...((connector.configuration as Record<string, unknown> | null) ?? {}), mode: connector.mode.toLowerCase() };
-  const secrets = connector.mode === "FIXTURE" ? {} : (await getConnectorSecrets(db, connector.id)) ?? {};
 
   let attempts = 0;
   try {
+    // Inside the try: a credential that cannot be read must end the run as FAILED, never strand it RUNNING.
+    const secrets = connector.mode === "FIXTURE" ? {} : (await getConnectorSecrets(db, connector.id)) ?? {};
     let facts;
     for (;;) {
       attempts++;
@@ -101,6 +102,9 @@ export async function syncAds(db: Db, tenantId: string, provider: AdsProvider, o
 
     // All-or-nothing: a half-written sync would leave a day with some campaigns and not others.
     await db.transaction(async (tx) => {
+      // The provider's answer for this window REPLACES what was stored for it: a day or campaign it no longer reports
+      // (restated to nothing, removed) must not keep its old spend forever.
+      await tx.delete(adsDailyFacts).where(and(eq(adsDailyFacts.tenantId, tenantId), eq(adsDailyFacts.connectorId, connector.id), gte(adsDailyFacts.factDate, range.from), lte(adsDailyFacts.factDate, range.to)));
       for (let i = 0; i < facts.length; i += 500) {
         const chunk = facts.slice(i, i + 500).map((f) => ({
           tenantId, connectorId: connector.id, provider, accountId: f.accountId, entityType: f.entityType, entityId: f.entityId, entityName: f.entityName, factDate: f.date,

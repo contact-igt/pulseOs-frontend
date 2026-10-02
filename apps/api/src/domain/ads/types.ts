@@ -21,6 +21,18 @@ export interface NormalizedAdFact {
 export class TransientAdsError extends Error {}
 
 /**
+ * One fetch for every ads call: a hard timeout, and network failures (reset, DNS, timeout) classified as transient so the
+ * bounded retry applies. Read-only providers only: callers pass GET or a read-only POST (OAuth, GAQL SELECT).
+ */
+export async function adsFetch(url: string, init: RequestInit & { method: "GET" | "POST" }): Promise<Response> {
+  try {
+    return await fetch(url, { ...init, signal: AbortSignal.timeout(30_000) });
+  } catch (err) {
+    throw new TransientAdsError(`Ads request failed: ${err instanceof Error ? err.name : "network error"}`);
+  }
+}
+
+/**
  * Read-only reporting. An adapter can fetch numbers and nothing else: no method creates, edits, pauses or deletes anything at
  * the provider, and no such method may ever be added to this interface.
  */

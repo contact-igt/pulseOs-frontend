@@ -72,8 +72,10 @@ export async function getAdsAnalytics(db: Db, tenantId: string, query: Analytics
   const active = ADS_PROVIDERS.filter((p) => caps[CAPABILITY_FOR[p]] && (!query.source || query.source === CHANNEL[p]));
   if (!ADS_PROVIDERS.some((p) => caps[CAPABILITY_FOR[p]])) return { ...base, unavailable: "NO_PROVIDER_ENABLED" };
   // Ad accounts are not split by branch or service line: say so rather than show an account total as if it were a slice.
-  if (query.branchId || query.service) return { ...base, unavailable: "NOT_SLICEABLE" };
+  if (query.branchId || query.service || query.campaignId) return { ...base, unavailable: "NOT_SLICEABLE" };
 
+  // A source filter that excludes every enabled ad account (e.g. Phone) is not "no data yet": say what the filter did.
+  if (active.length === 0) return { ...base, unavailable: "NO_PROVIDER_FOR_SOURCE" };
   const facts = active.length
     ? await db.select().from(adsDailyFacts).where(and(eq(adsDailyFacts.tenantId, tenantId), inArray(adsDailyFacts.provider, active), between(adsDailyFacts.factDate, period.from, period.to)))
     : [];

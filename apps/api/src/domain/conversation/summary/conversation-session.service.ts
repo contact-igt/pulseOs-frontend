@@ -1,3 +1,4 @@
+import { tenantCapabilityMap } from "../../capability/capability.service.js";
 import { and, asc, desc, eq, inArray, isNotNull, lte, or, sql } from "drizzle-orm";
 import type { Db } from "../../../db/client.js";
 import { conversationSummaries, conversations, messages, patients, tenantSettings, timelineEvents } from "../../../db/schema.js";
@@ -42,6 +43,8 @@ export async function updateConversationSettings(db: Db, tenantId: string, idleM
  * and keeps the one concise Timeline line for the current session up to date.
  */
 export async function recordConversationActivity(db: Db, tenantId: string, conversationId: string, activity: { at: Date; sender: Sender }): Promise<void> {
+  // Conversation Intelligence off: no summary deadline, no session line, no summarizer cost for this hospital.
+  if (!(await tenantCapabilityMap(db, tenantId)).CONVERSATION_INTELLIGENCE) return;
   const { idleMinutes } = await getConversationSettings(db, tenantId);
   const due = dueAfter(activity.at, idleMinutes).toISOString();
   const at = activity.at.toISOString();
@@ -231,7 +234,7 @@ async function claim(db: Db, conversationId: string, now: Date, opts: { requireD
 export async function processDueConversationSummaries(db: Db, now: Date, summarizer: ConversationSummarizer, opts: { onlyConversationIds?: string[]; limit?: number } = {}): Promise<{ processed: number; failed: number }> {
   const staleBefore = new Date(now.getTime() - STALE_CLAIM_MS).toISOString();
   const due = await db
-    .select({ id: conversations.id })
+    .select({ id: conversations.id, tenantId: conversations.tenantId })
     .from(conversations)
     .where(
       and(
@@ -246,7 +249,14 @@ export async function processDueConversationSummaries(db: Db, now: Date, summari
 
   let processed = 0;
   let failed = 0;
-  for (const { id } of due) {
+  const capByTenant = new Map<string, boolean>();
+  for (const { id, tenantId } of due) {
+    if (!capByTenant.has(tenantId)) capByTenant.set(tenantId, (await tenantCapabilityMap(db, tenantId)).CONVERSATION_INTELLIGENCE);
+    if (!capByTenant.get(tenantId)) {
+      // Switched off since the deadline was set: drop the deadline instead of summarizing.
+      await db.update(conversations).set({ summaryDueAt: null }).where(eq(conversations.id, id));
+      continue;
+    }
     const conv = await claim(db, id, now, { requireDue: true });
     if (!conv) continue; // another worker took it
     try {

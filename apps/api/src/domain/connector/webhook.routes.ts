@@ -107,7 +107,7 @@ export async function webhookRoutes(app: FastifyInstance) {
       try {
         await processWhatsAppStatusUpdate(app.db, connectorId, status);
         // The same provider status also moves a reminder/follow-up message along (sent → delivered → read, or failed).
-        await applyDeliveryStatus(app.db, status.providerMessageId, status.status, status.occurredAt);
+        await applyDeliveryStatus(app.db, connector.tenantId, status.providerMessageId, status.status, status.occurredAt);
         await markEventProcessed(app.db, eventId);
         await touchConnectorSuccess(app.db, connectorId);
       } catch (err) {

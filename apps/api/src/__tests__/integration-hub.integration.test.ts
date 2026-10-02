@@ -103,9 +103,12 @@ describe.skipIf(!DEMO_PASSWORD)("integration hub (integration)", () => {
       expect((await call(v1, role, "POST", "/integrations/webhooks", { name: "n", url: "https://example.org/h", events: ["lead.created"] })).statusCode, role).toBe(403);
     }
     delete process.env.WEBHOOK_ALLOW_INSECURE;
-    expect((await call(v1, "SUPER_ADMIN", "POST", "/integrations/webhooks", { name: "n", url: "http://127.0.0.1/h", events: ["lead.created"] })).statusCode).toBe(422);
-    expect((await call(v1, "SUPER_ADMIN", "POST", "/integrations/webhooks", { name: "n", url: "https://example.org/h", events: ["patient.exported"] })).statusCode).toBe(400);
-    process.env.WEBHOOK_ALLOW_INSECURE = "true";
+    try {
+      expect((await call(v1, "SUPER_ADMIN", "POST", "/integrations/webhooks", { name: "n", url: "http://127.0.0.1/h", events: ["lead.created"] })).statusCode).toBe(422);
+      expect((await call(v1, "SUPER_ADMIN", "POST", "/integrations/webhooks", { name: "n", url: "https://example.org/h", events: ["patient.exported"] })).statusCode).toBe(400);
+    } finally {
+      process.env.WEBHOOK_ALLOW_INSECURE = "true"; // restored even when an assertion above fails
+    }
     const created = await call(v1, "SUPER_ADMIN", "POST", "/integrations/webhooks", { name: "CRM sync", url: "https://hooks.example.org/pulse", events: ["lead.created", "appointment.booked"], conditions: [{ field: "sourceKey", op: "eq", value: "google" }] });
     expect(created.statusCode).toBe(201);
     expect(created.json().signingSecret).toMatch(/^whsec_/);
@@ -124,24 +127,25 @@ describe.skipIf(!DEMO_PASSWORD)("integration hub (integration)", () => {
     emitIntegrationEvent({ ...base, type: "lead.created", eventId: "lead.created:j-2", data: { journeyId: "j-2", sourceKey: "meta" } }); // condition fails
     emitIntegrationEvent({ ...base, type: "call.completed", eventId: "call.completed:c-1", data: { callId: "c-1" } }); // not subscribed
     emitIntegrationEvent({ ...base, tenantId: other.tenantId, type: "lead.created", eventId: "lead.created:j-9", data: { sourceKey: "google" } }); // other tenant
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise((r) => setTimeout(r, 400));
     // Repeating the same event never queues twice (idempotent).
     expect(await enqueueWebhookDeliveries(db, { ...base, type: "lead.created", eventId: "lead.created:j-1", data: { journeyId: "j-1", sourceKey: "google" } })).toBe(0);
 
     const first = await deliverDueWebhooks(db, new Date(), ok);
-    expect(first.sent).toBe(1);
-    expect(sent).toHaveLength(1);
-    expect(sent[0]!.url).toBe("https://hooks.example.org/pulse");
-    const body = JSON.parse(sent[0]!.body);
+    expect(first.sent).toBeGreaterThanOrEqual(1); // the dev DB may hold other hospitals' due deliveries; ours is the one asserted below
+    expect(sent.filter((x) => x.url === "https://hooks.example.org/pulse")).toHaveLength(1);
+    const ours = sent.filter((x) => x.url === "https://hooks.example.org/pulse");
+    expect(ours[0]!.url).toBe("https://hooks.example.org/pulse");
+    const body = JSON.parse(ours[0]!.body);
     expect(body).toMatchObject({ id: "lead.created:j-1", type: "lead.created", data: { sourceKey: "google" } });
-    expect(sent[0]!.body).not.toContain(v1.tenantId); // no tenant id on the wire
-    expect(sent[0]!.headers["x-pulseos-signature"]).toMatch(/^sha256=/);
-    expect(verifyWebhookSignature("wrong", sent[0]!.headers["x-pulseos-timestamp"]!, sent[0]!.body, sent[0]!.headers["x-pulseos-signature"]!)).toBe(false);
+    expect(ours[0]!.body).not.toContain(v1.tenantId); // no tenant id on the wire
+    expect(ours[0]!.headers["x-pulseos-signature"]).toMatch(/^sha256=/);
+    expect(verifyWebhookSignature("wrong", ours[0]!.headers["x-pulseos-timestamp"]!, ours[0]!.body, ours[0]!.headers["x-pulseos-signature"]!)).toBe(false);
     expect((await deliverDueWebhooks(db, new Date(), ok)).sent).toBe(0); // already sent: never again
 
     // A failing receiver is retried a bounded number of times, then marked failed.
     emitIntegrationEvent({ ...base, type: "lead.created", eventId: "lead.created:j-3", data: { journeyId: "j-3", sourceKey: "google" } });
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise((r) => setTimeout(r, 400));
     const bad: WebhookFetch = async () => ({ status: 500 });
     let t = Date.now();
     const outcomes = [];

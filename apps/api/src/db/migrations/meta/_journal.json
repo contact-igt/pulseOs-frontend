@@ -225,6 +225,13 @@
       "when": 1790943913017,
       "tag": "0031_m7_notifications_cascade",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1790944527872,
+      "tag": "0032_m7_activity_log",
+      "breakpoints": true
     }
   ]
 }

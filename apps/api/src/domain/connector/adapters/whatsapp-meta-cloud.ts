@@ -121,6 +121,8 @@ export const whatsAppMetaCloudAdapter: MessagingProviderAdapter = {
     const res = await fetch(`https://graph.facebook.com/${META_GRAPH_API_VERSION}/${phoneNumberId}/messages`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      // A hung provider must not hold a message in PROCESSING until another worker reclaims (and re-sends) it.
+      signal: AbortSignal.timeout(15_000),
       body: JSON.stringify({
         messaging_product: "whatsapp",
         to,

@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { tenantCapabilities, tenants } from "../../db/schema.js";
+import { recordActivity } from "../activity/activity.service.js";
 import {
   CAPABILITIES,
   CAPABILITY_DEPENDENCIES,
@@ -79,7 +80,12 @@ export type SetCapabilityResult = { ok: true; capabilities: CapabilityMap } | { 
 export async function setCapability(db: Db, tenantId: string, actor: { id: string; role: Role }, key: string, enabled: boolean | null): Promise<SetCapabilityResult> {
   if (!isCapability(key)) return { ok: false, reason: "unknown_capability" };
   if (!canEditCapability(actor.role, key)) return { ok: false, reason: "forbidden" };
-  const [tenant] = await db.select({ edition: tenants.edition }).from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+  return db.transaction(async (tx) => applyCapabilityChange(tx as unknown as Db, tenantId, actor, key, enabled));
+}
+
+async function applyCapabilityChange(db: Db, tenantId: string, actor: { id: string; role: Role }, key: Capability, enabled: boolean | null): Promise<SetCapabilityResult> {
+  // One change at a time per hospital: the dependency check and the write see the same state (FOR UPDATE on the tenant row).
+  const [tenant] = await db.select({ edition: tenants.edition }).from(tenants).where(eq(tenants.id, tenantId)).for("update").limit(1);
   if (!tenant) return { ok: false, reason: "tenant_not_found" };
 
   const overrides = await loadCapabilityOverrides(db, tenantId);
@@ -96,6 +102,7 @@ export async function setCapability(db: Db, tenantId: string, actor: { id: strin
       .insert(tenantCapabilities)
       .values({ tenantId, capability: key, enabled, updatedBy: actor.id })
       .onConflictDoUpdate({ target: [tenantCapabilities.tenantId, tenantCapabilities.capability], set: { enabled, updatedBy: actor.id, updatedAt: new Date() } });
+  await recordActivity(db, { tenantId, actorId: actor.id, action: "capability.changed", entityType: "capability", entityKey: key, metadata: { enabled, from: current[key], to: target } });
   return { ok: true, capabilities: await resolveTenantCapabilities(db, tenantId, tenant.edition) };
 }
 

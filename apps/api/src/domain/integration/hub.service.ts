@@ -147,7 +147,10 @@ export async function configureIntegration(db: Db, tenantId: string, key: string
   const complete =
     entry.requiredConfig.every((k) => configuration[k] != null && String(configuration[k]) !== "") && entry.requiredSecrets.every((k) => secretsNow[k] != null && secretsNow[k] !== "");
   // Configured is NOT connected: a fully configured connector waits (CONNECTING) until a real event or sync confirms it.
-  const status = connector.status === "CONNECTED" || connector.status === "ERROR" || connector.status === "DEGRADED" ? connector.status : complete ? "CONNECTING" : "NOT_CONFIGURED";
+  // What was confirmed under the OLD mode/credentials proves nothing about the new ones: a changed mode or secret starts over
+  // (a fixture's "connected" must never carry into Live). Plain setting edits keep the status.
+  const identityChanged = input.mode !== undefined && input.mode !== connector.mode || !!input.secrets && Object.values(input.secrets).some((v) => v.trim() !== "");
+  const status = !identityChanged && (connector.status === "CONNECTED" || connector.status === "ERROR" || connector.status === "DEGRADED") ? connector.status : complete ? "CONNECTING" : "NOT_CONFIGURED";
   await db.update(connectors).set({ configuration, mode, status, updatedAt: new Date() }).where(eq(connectors.id, connector.id));
   return { ok: true };
 }

@@ -3,16 +3,18 @@ import { and, desc, eq, lte, sql } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { outboundWebhookDeliveries, outboundWebhooks } from "../../db/schema.js";
 import { decryptSecret, encryptSecret } from "../security/encryption.js";
+import { redactLogText } from "../security/redact.js";
 import type { OutboundWebhookVm, WebhookCondition, WebhookEventType } from "@pulseos/types";
 import type { IntegrationEvent } from "./domain-events.js";
-import { WEBHOOK_MAX_ATTEMPTS, conditionsWellFormed, matchesConditions, nextAttemptDelayMs, signWebhookBody, validateWebhookUrl } from "./webhook-rules.js";
+import { WEBHOOK_MAX_ATTEMPTS, conditionsWellFormed, matchesConditions, nextAttemptDelayMs, resolvesToPublicAddresses, signWebhookBody, validateWebhookUrl } from "./webhook-rules.js";
 import type { z } from "zod";
 import type { webhookInputSchema } from "./webhook-rules.js";
 
 type Input = z.infer<typeof webhookInputSchema>;
 type Result<T> = ({ ok: true } & T) | { ok: false; reason: string };
 
-const allowInsecure = () => process.env.WEBHOOK_ALLOW_INSECURE === "true";
+// A development/test escape hatch only: never honoured in production, whatever the environment says.
+const allowInsecure = () => process.env.WEBHOOK_ALLOW_INSECURE === "true" && process.env.NODE_ENV !== "production";
 
 function toVm(w: typeof outboundWebhooks.$inferSelect, last?: { at: Date | null; status: string | null }): OutboundWebhookVm {
   return {
@@ -109,9 +111,9 @@ export async function enqueueWebhookDeliveries(db: Db, event: IntegrationEvent):
   return queued;
 }
 
-export type WebhookFetch = (url: string, init: { method: "POST"; headers: Record<string, string>; body: string; signal: AbortSignal }) => Promise<{ status: number }>;
+export type WebhookFetch = (url: string, init: { method: "POST"; headers: Record<string, string>; body: string; signal: AbortSignal; redirect: "manual" }) => Promise<{ status: number }>;
 
-const redact = (s: string) => s.replace(/(bearer\s+|whsec_|token=|secret=)[^\s"']+/gi, "$1[redacted]").slice(0, 300);
+const redact = (s: string) => redactLogText(s) ?? "failed";
 
 /** Attempt every due delivery once. Bounded retries with backoff; a failing receiver never affects anything else. */
 export async function deliverDueWebhooks(db: Db, now: Date, fetchImpl: WebhookFetch = fetch as unknown as WebhookFetch): Promise<{ sent: number; failed: number; retrying: number }> {
@@ -136,6 +138,8 @@ export async function deliverDueWebhooks(db: Db, now: Date, fetchImpl: WebhookFe
     let error: string | null = null;
     const check = validateWebhookUrl(w.url, { allowInsecure: allowInsecure() });
     if (!check.ok) error = check.reason;
+    // The address is validated at DELIVERY time too, against what the name resolves to now.
+    else if (!allowInsecure() && !(await resolvesToPublicAddresses(new URL(check.url).hostname))) error = "private_address";
     else {
       try {
         const body = JSON.stringify(d.payload);
@@ -146,9 +150,12 @@ export async function deliverDueWebhooks(db: Db, now: Date, fetchImpl: WebhookFe
           headers: { "content-type": "application/json", "x-pulseos-event": d.eventType, "x-pulseos-delivery": d.eventId, "x-pulseos-timestamp": ts, "x-pulseos-signature": signWebhookBody(secret, ts, body) },
           body,
           signal: AbortSignal.timeout(5000),
+          // A redirect is never followed: it could point anywhere, including this network.
+          redirect: "manual",
         });
         status = res.status;
-        if (res.status < 200 || res.status >= 300) error = `HTTP ${res.status}`;
+        if (res.status >= 300 && res.status < 400) error = "redirect_refused";
+        else if (res.status < 200 || res.status >= 300) error = `HTTP ${res.status}`;
       } catch (err) {
         error = redact(err instanceof Error ? err.message : String(err));
       }

@@ -38,6 +38,7 @@ import {
   specialtyTemplates,
   tenants,
   tenantCapabilities,
+  activityLog,
   notifications,
   notificationRules,
   messageTemplates,
@@ -72,6 +73,7 @@ async function main() {
 
   console.log("Clearing existing demo data...");
   await db.delete(sessions);
+  await db.delete(activityLog);
   await db.delete(notifications);
   await db.delete(notificationRules);
   await db.delete(messageTemplates);

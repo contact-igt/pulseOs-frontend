@@ -1,3 +1,4 @@
+import { activityRoutes } from "./domain/activity/activity.routes.js";
 import { notificationRoutes } from "./domain/notification/notification.routes.js";
 import { integrationHubRoutes } from "./domain/integration/hub.routes.js";
 import { registerNotificationConsumers } from "./domain/notification/consumers.js";
@@ -124,6 +125,7 @@ export async function buildApp() {
     await protectedApp.register(capabilityRoutes);
     await protectedApp.register(integrationHubRoutes);
     await protectedApp.register(notificationRoutes);
+    await protectedApp.register(activityRoutes);
   });
 
   registerIntegrationConsumers(app.db);

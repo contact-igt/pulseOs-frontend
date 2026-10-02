@@ -1225,3 +1225,21 @@ export const adsSyncRuns = pgTable("ads_sync_runs", {
 }, (t) => ({
   tenantProviderIdx: index("ads_sync_runs_tenant_provider_idx").on(t.tenantId, t.provider, t.startedAt),
 }));
+
+// ---------------------------------------------------------------------------
+// Activity log (M7): who changed which setting, when. Admin-safe by construction: `metadata` is scrubbed of anything
+// credential-shaped before it is stored, and only identifiers/flags of the change are kept (never values of secrets).
+// ---------------------------------------------------------------------------
+
+export const activityLog = pgTable("activity_log", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  actorId: uuid("actor_id").references(() => users.id, { onDelete: "set null" }),
+  action: text("action").notNull(),
+  entityType: text("entity_type").notNull(),
+  entityKey: text("entity_key"),
+  metadata: jsonb("metadata").notNull().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  tenantTimeIdx: index("activity_log_tenant_time_idx").on(t.tenantId, t.createdAt),
+}));

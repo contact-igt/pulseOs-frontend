@@ -15,6 +15,8 @@ type Result<T> = ({ ok: true } & T) | { ok: false; reason: string };
 export const MAX_SEND_ATTEMPTS = 3;
 const RETRY_DELAYS_MS = [2 * 60_000, 10 * 60_000];
 const STALE_PROCESSING_MS = 5 * 60_000;
+/** How long after its moment a planned reminder may still go out (the worker ticks every 30 s). */
+const LATE_GRACE_MS = 15 * 60_000;
 const WA_PROVIDER = "whatsapp_meta_cloud";
 
 // ---------------------------------------------------------------------------
@@ -264,7 +266,26 @@ export interface SendDeps {
 type Row = typeof notifications.$inferSelect;
 
 async function finish(db: Db, id: string, patch: Partial<typeof notifications.$inferInsert>): Promise<void> {
-  await db.update(notifications).set(patch).where(eq(notifications.id, id));
+  // Only a row that is still being processed may be finished: a late writer can never overwrite a CANCELLED or reclaimed row.
+  await db.update(notifications).set(patch).where(and(eq(notifications.id, id), eq(notifications.status, "PROCESSING")));
+}
+
+/** Bookkeeping after the provider ACCEPTED a message: retried, and never allowed to turn a delivered message into a resend. */
+async function recordAfterSend(db: Db, n: Row, connectorId: string, tenantId: string, now: Date, patch: Partial<typeof notifications.$inferInsert>): Promise<void> {
+  for (let i = 0; i < 3; i++) {
+    try {
+      await finish(db, n.id, patch);
+      break;
+    } catch (err) {
+      if (i === 2) console.error("could not record a sent notification", n.id, err);
+    }
+  }
+  try {
+    await db.insert(connectorEvents).values({ tenantId, connectorId, externalEventId: `notification:${n.id}:${n.attempts}`, direction: "outbound", status: "processed", payload: { type: "notification" }, processedAt: now }).onConflictDoNothing();
+    await touchConnectorSuccess(db, connectorId);
+  } catch (err) {
+    console.error("could not log a sent notification", n.id, err);
+  }
 }
 
 /** Resolve the connector/adapter/template and send ONE notification row that is already claimed (PROCESSING). */
@@ -286,6 +307,8 @@ async function sendClaimed(db: Db, n: Row, now: Date, deps: SendDeps): Promise<"
     if (ctx.inactiveReason) return (await finish(db, n.id, { status: "CANCELLED", reason: ctx.inactiveReason }), "cancelled");
     if (n.subjectAt && ctx.start && ctx.start.getTime() !== n.subjectAt.getTime()) return (await finish(db, n.id, { status: "CANCELLED", reason: "RESCHEDULED" }), "cancelled");
     if (ctx.start && ctx.start.getTime() <= now.getTime()) return (await finish(db, n.id, { status: "CANCELLED", reason: "TRIGGER_ALREADY_PASSED" }), "cancelled");
+    // A reminder is never sent late: after downtime or a backlog its moment has gone (retries of one already tried are exempt).
+    if (n.attempts <= 1 && now.getTime() - n.scheduledFor.getTime() > LATE_GRACE_MS) return (await finish(db, n.id, { status: "CANCELLED", reason: "TRIGGER_ALREADY_PASSED" }), "cancelled");
     patientPhone = ctx.phone;
     values = ctx.values;
   }
@@ -303,24 +326,26 @@ async function sendClaimed(db: Db, n: Row, now: Date, deps: SendDeps): Promise<"
 
   const config = { ...((connector.configuration as Record<string, unknown> | null) ?? {}), mode: connector.mode.toLowerCase() };
   const secrets = connector.mode === "FIXTURE" ? {} : (await getConnectorSecrets(db, connector.id)) ?? {};
+  let providerMessageId: string;
   try {
     const res = await adapter.sendTemplate(config, secrets, patientPhone, { name: template.providerTemplateName, language: template.language, parameters: templateParameters(template.body, values) });
-    await finish(db, n.id, { status: "SENT", providerMessageId: res.providerMessageId, renderedText: rendered.text, sentAt: now, reason: null });
-    await db.insert(connectorEvents).values({ tenantId, connectorId: connector.id, externalEventId: `notification:${n.id}:${n.attempts}`, direction: "outbound", status: "processed", payload: { type: "notification" }, processedAt: now }).onConflictDoNothing();
-    await touchConnectorSuccess(db, connector.id);
-    return "sent";
+    providerMessageId = res.providerMessageId;
   } catch (err) {
     const message = redactLogText(err instanceof Error ? err.message : String(err)) ?? "send failed";
     await db.insert(connectorEvents).values({ tenantId, connectorId: connector.id, externalEventId: `notification:${n.id}:${n.attempts}`, direction: "outbound", status: "failed", error: message, payload: { type: "notification" } }).onConflictDoNothing();
     await touchConnectorError(db, connector.id, message);
     const delay = RETRY_DELAYS_MS[n.attempts - 1];
-    if (n.attempts >= MAX_SEND_ATTEMPTS || delay === undefined) {
+    // A message a person chose to send is never retried behind their back (they saw it fail and decide what to do).
+    if (n.subjectType === "FOLLOW_UP" || n.attempts >= MAX_SEND_ATTEMPTS || delay === undefined) {
       await finish(db, n.id, { status: "FAILED", reason: message });
       return "failed";
     }
     await finish(db, n.id, { status: "PENDING", reason: message, scheduledFor: new Date(now.getTime() + delay) });
     return "retry";
   }
+  // The provider has the message. Nothing below may route into the retry path.
+  await recordAfterSend(db, n, connector.id, tenantId, now, { status: "SENT", providerMessageId, renderedText: rendered.text, sentAt: now, reason: null });
+  return "sent";
 }
 
 /** The worker tick: send everything due, once. Claiming first means two workers (or a repeated tick) can never double-send. */
@@ -353,16 +378,19 @@ export async function processDueNotifications(db: Db, now: Date, deps: SendDeps 
 
 const RANK: Record<string, number> = { PENDING: 0, PROCESSING: 1, SENT: 2, DELIVERED: 3, READ: 4 };
 
-export async function applyDeliveryStatus(db: Db, providerMessageId: string, status: "sent" | "delivered" | "read" | "failed", at: Date): Promise<boolean> {
-  const [n] = await db.select().from(notifications).where(eq(notifications.providerMessageId, providerMessageId)).limit(1);
+/** `tenantId` is the connector's tenant: a status event can only ever touch that hospital's own messages. */
+export async function applyDeliveryStatus(db: Db, tenantId: string, providerMessageId: string, status: "sent" | "delivered" | "read" | "failed", at: Date): Promise<boolean> {
+  const [n] = await db.select().from(notifications).where(and(eq(notifications.tenantId, tenantId), eq(notifications.providerMessageId, providerMessageId))).limit(1);
   if (!n) return false;
+  // Provider status updates are not part of a send: they apply to a row in whatever state it has reached.
+  const update = (patch: Partial<typeof notifications.$inferInsert>) => db.update(notifications).set(patch).where(eq(notifications.id, n.id));
   if (status === "failed") {
-    if (n.status === "SENT" || n.status === "PROCESSING") await finish(db, n.id, { status: "FAILED", reason: "PROVIDER_REPORTED_FAILURE" });
+    if (n.status === "SENT" || n.status === "PROCESSING") await update({ status: "FAILED", reason: "PROVIDER_REPORTED_FAILURE" });
     return true;
   }
   const next = status.toUpperCase();
   if ((RANK[next] ?? 0) <= (RANK[n.status] ?? 0)) return true;
-  await finish(db, n.id, { status: next, ...(next === "DELIVERED" ? { deliveredAt: at } : {}), ...(next === "READ" ? { readAt: at, ...(n.deliveredAt ? {} : { deliveredAt: at }) } : {}) });
+  await update({ status: next, ...(next === "DELIVERED" ? { deliveredAt: at } : {}), ...(next === "READ" ? { readAt: at, ...(n.deliveredAt ? {} : { deliveredAt: at }) } : {}) });
   return true;
 }
 

@@ -1,4 +1,4 @@
-import { TransientAdsError, type AdsReportingProvider, type NormalizedAdFact } from "./types.js";
+import { TransientAdsError, adsFetch, type AdsReportingProvider, type NormalizedAdFact } from "./types.js";
 import { fixtureFacts } from "./fixture.js";
 
 export const META_ADS_GRAPH_VERSION = "v23.0";
@@ -22,7 +22,7 @@ export function parseMetaInsights(accountId: string, rows: InsightRow[]): Normal
     for (const a of r.actions ?? []) actions[a.action_type] = (actions[a.action_type] ?? 0) + Number(a.value);
     out.push({
       accountId, entityType: "CAMPAIGN", entityId: r.campaign_id, entityName: r.campaign_name ?? r.campaign_id, date: r.date_start,
-      currency: r.account_currency ?? "INR", spend: Math.round(Number(r.spend ?? 0) * 100) / 100, impressions: Number(r.impressions ?? 0), clicks: Number(r.clicks ?? 0),
+      currency: r.account_currency ?? "", spend: Math.round(Number(r.spend ?? 0) * 100) / 100, impressions: Number(r.impressions ?? 0), clicks: Number(r.clicks ?? 0),
       providerConversions: null, actions,
     });
   }
@@ -54,14 +54,24 @@ export const metaAdsProvider: AdsReportingProvider = {
     });
     const rows: InsightRow[] = [];
     let url: string | null = `https://graph.facebook.com/${version}/act_${accountId}/insights?${params}`;
-    for (let page = 0; url && page < 20; page++) {
-      const res: Response = await fetch(url, { method: "GET", headers: { Authorization: `Bearer ${accessToken}` } });
+    const MAX_PAGES = 40;
+    for (let page = 0; url; page++) {
+      // A truncated pull must fail the run, never be stored as a complete snapshot.
+      if (page >= MAX_PAGES) throw new Error("Meta Ads returned more data than one sync can take; narrow the date range");
+      const res: Response = await adsFetch(url, { method: "GET", headers: { Authorization: `Bearer ${accessToken}` } });
       if (res.status === 429 || res.status >= 500) throw new TransientAdsError(`Meta Ads request failed: HTTP ${res.status}`);
-      if (!res.ok) throw new Error(`Meta Ads request failed: HTTP ${res.status}`);
+      if (!res.ok) {
+        // Meta signals throttling with HTTP 400 and error codes 4 / 17 / 32 / 613.
+        const code = res.status === 400 ? ((await res.json().catch(() => null)) as { error?: { code?: number } } | null)?.error?.code : undefined;
+        if (code !== undefined && [4, 17, 32, 613].includes(code)) throw new TransientAdsError(`Meta Ads rate limited: code ${code}`);
+        throw new Error(`Meta Ads request failed: HTTP ${res.status}`);
+      }
       const body = (await res.json()) as { data?: InsightRow[]; paging?: { next?: string } };
       rows.push(...(body.data ?? []));
       url = body.paging?.next ?? null;
     }
-    return parseMetaInsights(accountId, rows);
+    const facts = parseMetaInsights(accountId, rows);
+    if (facts.some((f) => !f.currency)) throw new Error("Meta Ads returned amounts without a currency");
+    return facts;
   },
 };

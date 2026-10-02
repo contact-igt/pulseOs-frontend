@@ -5,6 +5,7 @@ import type { AppointmentRow, MessageTemplateVm, NotificationRuleVm, Role, Treat
 import { buildApp } from "../app.js";
 import { db, queryClient } from "../db/client.js";
 import { appointments, notifications, scheduleResources, tasks, timelineEvents } from "../db/schema.js";
+import { getMessagingAdapter } from "../domain/connector/registry.js";
 import { applyDeliveryStatus, planForSubject, processDueNotifications } from "../domain/notification/notification.service.js";
 import type { MessagingProviderAdapter } from "../domain/connector/types.js";
 import { createTestTenant, destroyTestTenant, type TestTenant } from "./helpers/edition-tenant.js";
@@ -48,6 +49,13 @@ describe.skipIf(!DEMO_PASSWORD)("notifications: reminders and staff WhatsApp (in
     }
   }
   const planned = (subjectId: string, count: number) => until(() => rows(subjectId), (r) => r.length >= count);
+  /** The shared dev DB may hold other tenants' due rows: whatever the worker touches here must be a fixture, never a live provider. */
+  const fixtureOnly = {
+    adapterFor: (provider: string) => {
+      const real = getMessagingAdapter(provider)!;
+      return { ...real, sendTemplate: async (cfg: Record<string, unknown>, sec: Record<string, unknown>, to: string, tpl: { name: string; language: string; parameters: string[] }) => { if (cfg.mode !== "fixture") throw new Error("test guard: refusing a non-fixture send"); return real.sendTemplate(cfg, sec, to, tpl); } };
+    },
+  };
   const sorted = <T extends { scheduledFor: Date }>(xs: T[]) => [...xs].sort((a, b) => a.scheduledFor.getTime() - b.scheduledFor.getTime());
 
   beforeAll(async () => {
@@ -116,7 +124,7 @@ describe.skipIf(!DEMO_PASSWORD)("notifications: reminders and staff WhatsApp (in
   it("the worker sends what is due once (confirmation), leaves the future alone, and never resends", async () => {
     const a = await book(72);
     await planned(a.id, 3);
-    const first = await processDueNotifications(db, new Date());
+    const first = await processDueNotifications(db, new Date(), fixtureOnly);
     expect(first.sent).toBeGreaterThanOrEqual(1);
     const after = sorted(await rows(a.id));
     expect(after[0]).toMatchObject({ status: "SENT" });
@@ -124,7 +132,7 @@ describe.skipIf(!DEMO_PASSWORD)("notifications: reminders and staff WhatsApp (in
     expect(after[0]!.renderedText).toContain("Hello Asha Rao");
     expect(after[0]!.renderedText).toContain("with doctor "); // the doctor resource of the test tenant
     expect(after[1]!.status).toBe("PENDING");
-    const second = await processDueNotifications(db, new Date());
+    const second = await processDueNotifications(db, new Date(), fixtureOnly);
     expect(second.sent).toBe(0);
     expect((await rows(a.id)).filter((r) => r.status === "SENT")).toHaveLength(1);
   });
@@ -132,7 +140,7 @@ describe.skipIf(!DEMO_PASSWORD)("notifications: reminders and staff WhatsApp (in
   it("reschedule: pending reminders for the old time are cancelled, new ones follow the new time; what was already sent stays", async () => {
     const a = await book(72);
     await planned(a.id, 3);
-    await processDueNotifications(db, new Date()); // confirmation goes out
+    await processDueNotifications(db, new Date(), fixtureOnly); // confirmation goes out
     const newAt = inHours(120);
     expect((await call(t, "FRONT_DESK", "PATCH", `/appointments/${a.id}/reschedule`, { scheduledAt: newAt.toISOString(), reasonCode: "patient_requested" })).statusCode).toBe(200);
     const all = await until(() => rows(a.id), (r) => r.length >= 6);
@@ -148,8 +156,9 @@ describe.skipIf(!DEMO_PASSWORD)("notifications: reminders and staff WhatsApp (in
     await planned(a.id, 3);
     expect((await call(t, "FRONT_DESK", "PATCH", `/appointments/${a.id}/action`, { action: "cancel", reasonCode: "patient_requested" })).statusCode).toBe(200);
     const after = await until(() => rows(a.id), (r) => r.every((x) => x.status !== "PENDING"));
+    expect(after.length).toBe(3);
     expect(after.every((r) => r.status === "CANCELLED" && r.reason === "APPOINTMENT_CANCELLED")).toBe(true);
-    await processDueNotifications(db, new Date(Date.now() + 80 * 3_600_000));
+    await processDueNotifications(db, new Date(Date.now() + 80 * 3_600_000), fixtureOnly);
     expect((await rows(a.id)).some((r) => r.status === "SENT")).toBe(false);
   });
 
@@ -160,8 +169,10 @@ describe.skipIf(!DEMO_PASSWORD)("notifications: reminders and staff WhatsApp (in
     await planned(cancelled.id, 3);
     await db.update(appointments).set({ scheduledAt: inHours(200) }).where(eq(appointments.id, moved.id)); // no event published
     await db.update(appointments).set({ status: "cancelled" }).where(eq(appointments.id, cancelled.id));
-    await processDueNotifications(db, new Date(Date.now() + 71.5 * 3_600_000)); // every reminder is now due
-    expect((await rows(moved.id)).every((r) => r.status === "CANCELLED" && r.reason === "RESCHEDULED")).toBe(true);
+    await processDueNotifications(db, new Date(Date.now() + 71.5 * 3_600_000), fixtureOnly); // every reminder is now due
+    const movedRows = await rows(moved.id);
+    expect(movedRows.length).toBe(3);
+    expect(movedRows.every((r) => r.status === "CANCELLED" && r.reason === "RESCHEDULED")).toBe(true);
     expect((await rows(cancelled.id)).filter((r) => r.status === "SENT")).toHaveLength(0);
     expect((await rows(cancelled.id))[0]!.reason).toBe("APPOINTMENT_CANCELLED");
   });
@@ -169,7 +180,7 @@ describe.skipIf(!DEMO_PASSWORD)("notifications: reminders and staff WhatsApp (in
   it("provider not configured → BLOCKED with the reason, not silently dropped; capability off → nothing is planned", async () => {
     const b = await book(72, bare);
     await planned(b.id, 3);
-    await processDueNotifications(db, new Date());
+    await processDueNotifications(db, new Date(), fixtureOnly);
     const blocked = (await rows(b.id)).filter((r) => r.status === "BLOCKED");
     expect(blocked.length).toBeGreaterThanOrEqual(1);
     expect(blocked[0]!.reason).toBe("PROVIDER_NOT_CONFIGURED");
@@ -185,8 +196,10 @@ describe.skipIf(!DEMO_PASSWORD)("notifications: reminders and staff WhatsApp (in
     const a = await book(72, other);
     await planned(a.id, 3);
     expect((await call(other, "HOSPITAL_ADMIN", "PUT", "/capabilities/WHATSAPP_NOTIFICATIONS", { enabled: false })).statusCode).toBe(200);
-    await processDueNotifications(db, new Date());
-    expect((await rows(a.id)).filter((r) => r.status === "BLOCKED").every((r) => r.reason === "CAPABILITY_DISABLED")).toBe(true);
+    await processDueNotifications(db, new Date(), fixtureOnly);
+    const blocked = (await rows(a.id)).filter((r) => r.status === "BLOCKED");
+    expect(blocked.length).toBeGreaterThanOrEqual(1); // the confirmation was due: it must have been blocked, not silently skipped
+    expect(blocked.every((r) => r.reason === "CAPABILITY_DISABLED")).toBe(true);
     expect((await rows(a.id)).some((r) => r.status === "SENT")).toBe(false);
   });
 
@@ -215,18 +228,18 @@ describe.skipIf(!DEMO_PASSWORD)("notifications: reminders and staff WhatsApp (in
   it("delivery status only moves forward: sent → delivered → read, and a late 'delivered' never regresses a read", async () => {
     const a = await book(72);
     await planned(a.id, 3);
-    await processDueNotifications(db, new Date());
+    await processDueNotifications(db, new Date(), fixtureOnly);
     const [sent] = sorted(await rows(a.id));
     const id = sent!.providerMessageId!;
-    expect(await applyDeliveryStatus(db, id, "delivered", new Date())).toBe(true);
+    expect(await applyDeliveryStatus(db, t.tenantId, id, "delivered", new Date())).toBe(true);
     expect((await rows(a.id)).find((r) => r.providerMessageId === id)!.status).toBe("DELIVERED");
-    await applyDeliveryStatus(db, id, "read", new Date());
-    await applyDeliveryStatus(db, id, "delivered", new Date());
-    await applyDeliveryStatus(db, id, "failed", new Date());
+    await applyDeliveryStatus(db, t.tenantId, id, "read", new Date());
+    await applyDeliveryStatus(db, t.tenantId, id, "delivered", new Date());
+    await applyDeliveryStatus(db, t.tenantId, id, "failed", new Date());
     const final = (await rows(a.id)).find((r) => r.providerMessageId === id)!;
     expect(final.status).toBe("READ");
     expect(final.readAt).toBeTruthy();
-    expect(await applyDeliveryStatus(db, "unknown-id", "read", new Date())).toBe(false);
+    expect(await applyDeliveryStatus(db, t.tenantId, "unknown-id", "read", new Date())).toBe(false);
   });
 
   it("surgery reminders: 1 day, 2 hours, 1 hour before; cancelling the surgery stops them", async () => {
@@ -289,10 +302,13 @@ describe.skipIf(!DEMO_PASSWORD)("notifications: reminders and staff WhatsApp (in
     const { journeyId } = await journey(bare);
     expect((await call(bare, "FRONT_DESK", "GET", `/journeys/${journeyId}/whatsapp/preview`)).statusCode).toBe(403); // capability switched off above
     const mine = await journey();
-    expect((await call(other, "FRONT_DESK", "GET", `/journeys/${mine.journeyId}/whatsapp/preview`)).statusCode).toBe(403); // other: capability off too
+    // Switch `other` back on first, so the 404 below is the TENANT check, not the capability gate answering early.
+    expect((await call(other, "HOSPITAL_ADMIN", "PUT", "/capabilities/WHATSAPP_NOTIFICATIONS", { enabled: null })).statusCode).toBe(200);
+    expect((await call(other, "FRONT_DESK", "GET", `/journeys/${mine.journeyId}/whatsapp/preview`)).statusCode).toBe(404);
+    expect((await call(other, "FRONT_DESK", "POST", `/journeys/${mine.journeyId}/whatsapp`, { idempotencyKey: `x-${Date.now()}-abcdefgh` })).statusCode).toBe(404);
     expect((await call(t, "FRONT_DESK", "GET", `/journeys/00000000-0000-0000-0000-000000000000/whatsapp/preview`)).statusCode).toBe(404);
     const unconfigured = await journey(t);
     const key = `k-${Date.now()}-zzzzzz`;
-    expect((await call(t, "DOCTOR", "POST", `/journeys/${unconfigured.journeyId}/whatsapp`, { idempotencyKey: key })).statusCode).toBeGreaterThanOrEqual(403);
+    expect((await call(t, "DOCTOR", "POST", `/journeys/${unconfigured.journeyId}/whatsapp`, { idempotencyKey: key })).statusCode).toBe(403); // a Doctor may not send follow-up messages
   });
 });
