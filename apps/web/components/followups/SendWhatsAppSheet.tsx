@@ -20,7 +20,8 @@ export function SendWhatsAppSheet({ journeyId, onClose }: { journeyId: string; o
   const queryClient = useQueryClient();
   const preview = useQuery({ queryKey: ["whatsapp-preview", journeyId], queryFn: () => api.whatsappPreview(journeyId), retry: false });
   // One key per sheet: a double-click or a retry after a timeout can never send the message twice.
-  const [key] = useState(() => `ui-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`);
+  const newKey = () => `ui-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  const [key, setKey] = useState(newKey);
   const [state, setState] = useState<"idle" | "sending" | "sent">("idle");
   const [error, setError] = useState<string | null>(null);
 
@@ -30,7 +31,10 @@ export function SendWhatsAppSheet({ journeyId, onClose }: { journeyId: string; o
     try {
       const r = await api.sendWhatsApp(journeyId, key);
       setState(r.status === "SENT" || r.status === "DELIVERED" || r.status === "READ" ? "sent" : "idle");
-      if (r.status === "FAILED" || r.status === "BLOCKED") setError("The message could not be sent. It has been recorded; try again later.");
+      if (r.status === "FAILED" || r.status === "BLOCKED") {
+        setError("The message could not be sent. It has been recorded; you can try again.");
+        setKey(newKey()); // a deliberate retry after a definite failure is a new message, not a duplicate of the failed one
+      }
       queryClient.invalidateQueries({ queryKey: ["journey", journeyId] });
       queryClient.invalidateQueries({ queryKey: ["timeline"] });
     } catch (e) {

@@ -121,7 +121,7 @@ export async function deliverDueWebhooks(db: Db, now: Date, fetchImpl: WebhookFe
     .select({ d: outboundWebhookDeliveries, w: outboundWebhooks })
     .from(outboundWebhookDeliveries)
     .innerJoin(outboundWebhooks, eq(outboundWebhooks.id, outboundWebhookDeliveries.webhookId))
-    .where(and(eq(outboundWebhookDeliveries.status, "PENDING"), lte(outboundWebhookDeliveries.nextAttemptAt, now)))
+    .where(and(eq(outboundWebhookDeliveries.status, "PENDING"), eq(outboundWebhooks.enabled, true), lte(outboundWebhookDeliveries.nextAttemptAt, now)))
     .limit(50);
   const tally = { sent: 0, failed: 0, retrying: 0 };
   for (const { d, w } of due) {

@@ -72,3 +72,8 @@ export interface TelephonyProviderAdapter {
   verifyWebhook(payload: unknown, headers: Record<string, string | undefined>, secrets: Record<string, unknown>): boolean;
   parseWebhookPayload(payload: unknown): InboundCallEvent[];
 }
+
+/** The provider may already have accepted the message (timeout after sending, 2xx with an unreadable body): never retried, or the patient could get it twice. */
+export class AmbiguousSendError extends Error {
+  readonly ambiguous = true;
+}

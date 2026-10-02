@@ -5,7 +5,7 @@ import { TEMPLATE_VARIABLES, type MessageTemplateVm, type NotificationOffsetUnit
 import { tenantCapabilityMap } from "../capability/capability.service.js";
 import { getConnectorByTenantAndProvider, getConnectorSecrets, touchConnectorError, touchConnectorSuccess } from "../connector/connector.service.js";
 import { getMessagingAdapter } from "../connector/registry.js";
-import type { MessagingProviderAdapter } from "../connector/types.js";
+import { AmbiguousSendError, type MessagingProviderAdapter } from "../connector/types.js";
 import { redactLogText } from "../security/redact.js";
 import { DEFAULT_RULES, notificationKey, planNotifications, type PlanRule } from "./notification-plan.js";
 import { DEFAULT_TEMPLATES, renderTemplate, templateParameters, validateTemplateBody } from "./message-template.js";
@@ -336,7 +336,7 @@ async function sendClaimed(db: Db, n: Row, now: Date, deps: SendDeps): Promise<"
     await touchConnectorError(db, connector.id, message);
     const delay = RETRY_DELAYS_MS[n.attempts - 1];
     // A message a person chose to send is never retried behind their back (they saw it fail and decide what to do).
-    if (n.subjectType === "FOLLOW_UP" || n.attempts >= MAX_SEND_ATTEMPTS || delay === undefined) {
+    if (err instanceof AmbiguousSendError || n.subjectType === "FOLLOW_UP" || n.attempts >= MAX_SEND_ATTEMPTS || delay === undefined) {
       await finish(db, n.id, { status: "FAILED", reason: message });
       return "failed";
     }
@@ -350,8 +350,9 @@ async function sendClaimed(db: Db, n: Row, now: Date, deps: SendDeps): Promise<"
 
 /** The worker tick: send everything due, once. Claiming first means two workers (or a repeated tick) can never double-send. */
 export async function processDueNotifications(db: Db, now: Date, deps: SendDeps = {}): Promise<Record<string, number>> {
-  // A worker that died mid-send leaves PROCESSING rows; give them back after a grace period.
-  await db.update(notifications).set({ status: "PENDING" }).where(and(eq(notifications.status, "PROCESSING"), lt(notifications.processingStartedAt, new Date(now.getTime() - STALE_PROCESSING_MS))));
+  // A worker that died mid-send leaves PROCESSING rows; after a grace period they are marked failed (never re-sent).
+  // Not back to PENDING: the provider may already have the message, and a resend (or a late staff send) is worse than a visible failure.
+  await db.update(notifications).set({ status: "FAILED", reason: "SEND_INTERRUPTED" }).where(and(eq(notifications.status, "PROCESSING"), lt(notifications.processingStartedAt, new Date(now.getTime() - STALE_PROCESSING_MS))));
 
   const due = await db.select({ id: notifications.id }).from(notifications).where(and(eq(notifications.status, "PENDING"), lte(notifications.scheduledFor, now))).orderBy(asc(notifications.scheduledFor)).limit(50);
   const tally: Record<string, number> = { sent: 0, blocked: 0, cancelled: 0, retry: 0, failed: 0 };

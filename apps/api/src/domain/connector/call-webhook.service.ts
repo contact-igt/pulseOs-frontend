@@ -187,7 +187,7 @@ export async function persistInboundCall(db: Db, tenantId: string, connectorId: 
   });
   const call = stored as { id: string; journeyId: string | null } | null;
   if (call && (event.status === "completed" || event.status === "missed")) {
-    emitIntegrationEvent({ type: event.status === "completed" ? "call.completed" : "call.missed", tenantId, eventId: `call.${event.status}:${call.id}`, occurredAt: event.endedAt ?? event.startedAt ?? new Date(), data: { callId: call.id, journeyId: call.journeyId, direction: event.direction, origin: "IVR" } });
+    emitIntegrationEvent({ type: event.status === "completed" ? "call.completed" : "call.missed", tenantId, eventId: `call.${event.status}:${call.id}`, occurredAt: event.endedAt ?? event.startedAt ?? new Date(), data: { callId: call.id, journeyId: call.journeyId, direction: event.direction } });
   }
 }
 

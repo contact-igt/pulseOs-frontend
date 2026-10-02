@@ -7,7 +7,7 @@ import { db, queryClient } from "../db/client.js";
 import { appointments, notifications, scheduleResources, tasks, timelineEvents } from "../db/schema.js";
 import { getMessagingAdapter } from "../domain/connector/registry.js";
 import { applyDeliveryStatus, planForSubject, processDueNotifications } from "../domain/notification/notification.service.js";
-import type { MessagingProviderAdapter } from "../domain/connector/types.js";
+import { AmbiguousSendError, type MessagingProviderAdapter } from "../domain/connector/types.js";
 import { createTestTenant, destroyTestTenant, type TestTenant } from "./helpers/edition-tenant.js";
 
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD;
@@ -223,6 +223,30 @@ describe.skipIf(!DEMO_PASSWORD)("notifications: reminders and staff WhatsApp (in
     for (let i = 0; i < 3; i++) { at += 3_600_000; await processDueNotifications(db, new Date(at), deps); }
     const [fin] = sorted(await rows(a.id));
     expect(fin).toMatchObject({ status: "FAILED", attempts: 3 });
+  });
+
+  it("an ambiguous provider outcome (timeout after sending) is never retried; a send interrupted mid-flight is failed, never re-sent", async () => {
+    const a = await book(72);
+    await planned(a.id, 3);
+    const calls: string[] = [];
+    const ambiguous: MessagingProviderAdapter = {
+      capabilities: [], verifyWebhookChallenge: () => null, verifyWebhookSignature: () => false, parseWebhookPayload: () => ({ messages: [], statuses: [] }),
+      sendMessage: async () => { throw new Error("no"); },
+      sendTemplate: async () => { calls.push("send"); throw new AmbiguousSendError("timed out; delivery unknown"); },
+    };
+    await processDueNotifications(db, new Date(), { adapterFor: () => ambiguous });
+    const first = sorted(await rows(a.id))[0]!;
+    expect(first.status).toBe("FAILED");
+    await processDueNotifications(db, new Date(Date.now() + 3_600_000), { adapterFor: () => ambiguous });
+    expect(calls.length).toBe(1);
+    // A row stuck PROCESSING (worker died after the provider call) is failed after the grace period, not handed back to PENDING.
+    const b = await book(96);
+    await planned(b.id, 3);
+    const [row] = sorted(await rows(b.id));
+    await db.update(notifications).set({ status: "PROCESSING", processingStartedAt: new Date(Date.now() - 10 * 60_000) }).where(eq(notifications.id, row!.id));
+    await processDueNotifications(db, new Date(), fixtureOnly);
+    const after = (await rows(b.id)).find((r) => r.id === row!.id)!;
+    expect(after).toMatchObject({ status: "FAILED", reason: "SEND_INTERRUPTED" });
   });
 
   it("delivery status only moves forward: sent → delivered → read, and a late 'delivered' never regresses a read", async () => {

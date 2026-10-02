@@ -1,5 +1,5 @@
 import { META_GRAPH_API_VERSION, verifyMetaChallenge, verifyMetaSignature } from "../meta-webhook.js";
-import type { MessagingProviderAdapter, ParsedWhatsAppWebhook } from "../types.js";
+import { AmbiguousSendError, type MessagingProviderAdapter, type ParsedWhatsAppWebhook } from "../types.js";
 
 // Ported patterns from invictus-chatbot's AuthWhatsApp controller/service (read
 // fully, reference-only): the GET challenge check (hub.mode/hub.verify_token/
@@ -118,7 +118,9 @@ export const whatsAppMetaCloudAdapter: MessagingProviderAdapter = {
     if (typeof phoneNumberId !== "string" || typeof accessToken !== "string") {
       throw new Error("WhatsApp connector is missing phoneNumberId configuration or accessToken secret");
     }
-    const res = await fetch(`https://graph.facebook.com/${META_GRAPH_API_VERSION}/${phoneNumberId}/messages`, {
+    let res: Response;
+    try {
+      res = await fetch(`https://graph.facebook.com/${META_GRAPH_API_VERSION}/${phoneNumberId}/messages`, {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
       // A hung provider must not hold a message in PROCESSING until another worker reclaims (and re-sends) it.
@@ -133,14 +135,24 @@ export const whatsAppMetaCloudAdapter: MessagingProviderAdapter = {
           components: template.parameters.length ? [{ type: "body", parameters: template.parameters.map((text) => ({ type: "text", text })) }] : [],
         },
       }),
-    });
+      });
+    } catch (err) {
+      // An aborted request may have been accepted by the provider after we stopped waiting.
+      if (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) throw new AmbiguousSendError("WhatsApp send timed out; delivery unknown");
+      throw err;
+    }
     if (!res.ok) {
       // Status only: the provider's error body can echo request details, and nothing credential-shaped may reach a log.
       throw new Error(`WhatsApp template send failed: HTTP ${res.status}`);
     }
-    const data = (await res.json()) as { messages?: { id?: string }[] };
+    let data: { messages?: { id?: string }[] };
+    try {
+      data = (await res.json()) as { messages?: { id?: string }[] };
+    } catch {
+      throw new AmbiguousSendError("WhatsApp send accepted but the response was unreadable");
+    }
     const providerMessageId = data.messages?.[0]?.id;
-    if (!providerMessageId) throw new Error("WhatsApp send succeeded but returned no message id");
+    if (!providerMessageId) throw new AmbiguousSendError("WhatsApp send succeeded but returned no message id");
     return { providerMessageId };
   },
 };
