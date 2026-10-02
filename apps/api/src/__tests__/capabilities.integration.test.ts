@@ -57,21 +57,23 @@ describe.skipIf(!DEMO_PASSWORD)("tenant capabilities (integration)", () => {
 
   it("V2: marketing is on by default; switching it off blocks the API", async () => {
     expect((await call(v2, "HOSPITAL_ADMIN", "GET", "/analytics/summary")).statusCode).toBe(200);
-    // Spend attribution and campaigns depend on marketing analytics, so they go first.
+    // Spend attribution, campaigns and the ad providers depend on marketing analytics, so they go first.
     expect((await put(v2, "SUPER_ADMIN", "MARKETING_ANALYTICS", false)).statusCode).toBe(409);
-    for (const k of ["SPEND_ATTRIBUTION", "CAMPAIGNS"]) expect((await put(v2, "SUPER_ADMIN", k, false)).statusCode).toBe(200);
+    for (const k of ["SPEND_ATTRIBUTION", "CAMPAIGNS", "GOOGLE_ADS", "META_ADS"]) expect((await put(v2, "SUPER_ADMIN", k, false)).statusCode).toBe(200);
     expect((await put(v2, "SUPER_ADMIN", "MARKETING_ANALYTICS", false)).statusCode).toBe(200);
     expect((await call(v2, "HOSPITAL_ADMIN", "GET", "/analytics/summary")).statusCode).toBe(403);
     // Core analytics is untouched.
     expect((await call(v2, "HOSPITAL_ADMIN", "GET", "/reports/operations")).statusCode).toBe(200);
-    for (const k of ["MARKETING_ANALYTICS", "SPEND_ATTRIBUTION", "CAMPAIGNS"]) await put(v2, "SUPER_ADMIN", k, null);
+    for (const k of ["MARKETING_ANALYTICS", "SPEND_ATTRIBUTION", "CAMPAIGNS", "GOOGLE_ADS", "META_ADS"]) await put(v2, "SUPER_ADMIN", k, null);
   });
 
   it("one tenant's switches never touch another tenant", async () => {
+    expect((await put(v1, "SUPER_ADMIN", "MARKETING_ANALYTICS", true)).statusCode).toBe(200);
     expect((await put(v1, "SUPER_ADMIN", "GOOGLE_ADS", true)).statusCode).toBe(200);
     expect((await session(v1b, "HOSPITAL_ADMIN")).GOOGLE_ADS).toBe(false);
     expect((await session(v1, "HOSPITAL_ADMIN")).GOOGLE_ADS).toBe(true);
     await put(v1, "SUPER_ADMIN", "GOOGLE_ADS", null);
+    await put(v1, "SUPER_ADMIN", "MARKETING_ANALYTICS", null);
   });
 
   it("who may switch what: Staff and Doctor never; Admin only the operational ones; Super Admin all", async () => {

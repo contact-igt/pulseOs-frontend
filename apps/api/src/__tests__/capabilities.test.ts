@@ -58,8 +58,9 @@ describe("dependency rules", () => {
     const v1 = resolveCapabilities("BETA_V1_CORE", {});
     expect(validateCapabilityChange(v1, "SPEND_ATTRIBUTION", true)).toMatchObject({ ok: false, reason: "requires", capabilities: ["MARKETING_ANALYTICS"] });
   });
-  it("ads providers can be on without marketing analytics (setup first, analytics later), and marketing without providers (setup state)", () => {
-    expect(validateCapabilityChange(resolveCapabilities("BETA_V1_CORE", {}), "GOOGLE_ADS", true)).toEqual({ ok: true });
+  it("ads providers need marketing analytics (their only read surface); marketing without providers is a valid setup state", () => {
+    expect(validateCapabilityChange(resolveCapabilities("BETA_V1_CORE", {}), "GOOGLE_ADS", true)).toMatchObject({ ok: false, reason: "requires" });
+    expect(validateCapabilityChange(resolveCapabilities("BETA_V1_CORE", { MARKETING_ANALYTICS: true }), "GOOGLE_ADS", true)).toEqual({ ok: true });
     expect(validateCapabilityChange(resolveCapabilities("BETA_V1_CORE", {}), "MARKETING_ANALYTICS", true)).toEqual({ ok: true });
   });
   it("core analytics cannot be switched off", () => {
