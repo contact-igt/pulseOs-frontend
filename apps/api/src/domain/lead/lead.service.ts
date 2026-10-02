@@ -36,7 +36,7 @@ import { ensureFollowUpTypes } from "../task/followup-type.service.js";
 import { listFieldsForEntry, resolveSubmittedValues } from "../crm/crm-field.service.js";
 import { pickOwnerForNewJourney } from "../crm/crm-allocation.service.js";
 import type { OwnerFilter } from "../journey/journey.service.js";
-import { FOLLOW_UP_KEYS, INTERACTION_CHANNEL_LABEL, MANUAL_INTERACTION_CHANNELS, type CreateLeadInput, type LeadSaveStep, CreateLeadResult, LeadPhoneLookupResult, LeadRow, LeadStatus, LeadsSummary, LeadsWorkspace, LeadsWorkspaceQuery, Role, TASK_TYPE_LABEL } from "@pulseos/types";
+import { canRoleSeeField, type FieldVisibility, FOLLOW_UP_KEYS, INTERACTION_CHANNEL_LABEL, MANUAL_INTERACTION_CHANNELS, type CreateLeadInput, type LeadSaveStep, CreateLeadResult, LeadPhoneLookupResult, LeadRow, LeadStatus, LeadsSummary, LeadsWorkspace, LeadsWorkspaceQuery, Role, TASK_TYPE_LABEL } from "@pulseos/types";
 
 export async function lookupPatientByPhone(db: Db, tenantId: string, rawPhone: string): Promise<LeadPhoneLookupResult> {
   const defaultRegion = await resolveDefaultPhoneRegion(db, tenantId);
@@ -517,13 +517,13 @@ function resolveLeadRange(range: NonNullable<LeadsWorkspaceQuery["range"]>, toda
  * filters, the compact "today" strip and per-owner counts. All days are hospital-local (tenants.timezone).
  * `owner` accepts mine | unassigned | <userId>, "mine" being the SESSION user (resolved by the route).
  */
-export async function getLeadsWorkspace(db: Db, tenantId: string, query: Omit<LeadsWorkspaceQuery, "owner"> & { owner?: OwnerFilter }, timezone: string, now: Date = new Date()): Promise<LeadsWorkspace> {
+export async function getLeadsWorkspace(db: Db, tenantId: string, query: Omit<LeadsWorkspaceQuery, "owner"> & { owner?: OwnerFilter }, timezone: string, now: Date = new Date(), role?: Role): Promise<LeadsWorkspace> {
   const today = await localToday(db, timezone, now);
   const hasRange = !!query.range && !(query.range === "custom" && !query.from);
   const range = query.range ? resolveLeadRange(query.range, today, query.from, query.to) : undefined;
   let facts = await buildLeadFacts(db, tenantId, timezone, now);
   // A "filterable" CRM field narrows the list to journeys whose recorded answer matches (only fields the hospital marked so).
-  const { options: fieldOptions, matchingJourneyIds } = await filterableFieldSupport(db, tenantId, query.fieldKey, query.fieldValue);
+  const { options: fieldOptions, matchingJourneyIds } = await filterableFieldSupport(db, tenantId, role, query.fieldKey, query.fieldValue);
   if (matchingJourneyIds) facts = facts.filter((f) => matchingJourneyIds.has(f.row.id));
   const result = computeLeadsWorkspace(facts, {
     view: query.view,
@@ -540,8 +540,11 @@ export async function getLeadsWorkspace(db: Db, tenantId: string, query: Omit<Le
 }
 
 /** The filterable CRM fields (deduped by key, choice / Yes-No only) and, when one is applied, the journeys that match it. */
-async function filterableFieldSupport(db: Db, tenantId: string, fieldKey?: string, fieldValue?: string): Promise<{ options: LeadsWorkspace["options"]["filterableFields"]; matchingJourneyIds: Set<string> | null }> {
-  const defs = await db.select().from(customFieldDefinitions).where(and(eq(customFieldDefinitions.tenantId, tenantId), eq(customFieldDefinitions.filterable, true), eq(customFieldDefinitions.archived, false)));
+async function filterableFieldSupport(db: Db, tenantId: string, role: Role | undefined, fieldKey?: string, fieldValue?: string): Promise<{ options: LeadsWorkspace["options"]["filterableFields"]; matchingJourneyIds: Set<string> | null }> {
+  // Only fields this role may see: a hidden clinical field must not be inferable through the filter either (no role → "everyone" only).
+  const defs = (await db.select().from(customFieldDefinitions).where(and(eq(customFieldDefinitions.tenantId, tenantId), eq(customFieldDefinitions.filterable, true), eq(customFieldDefinitions.archived, false)))).filter((d) =>
+    role ? canRoleSeeField(role, d.visibleTo as FieldVisibility) : d.visibleTo === "everyone",
+  );
   const byKey = new Map<string, { key: string; label: string; options: string[] }>();
   for (const d of defs) {
     if (byKey.has(d.key)) continue;
@@ -550,9 +553,10 @@ async function filterableFieldSupport(db: Db, tenantId: string, fieldKey?: strin
   }
   const options = [...byKey.values()];
   if (!fieldKey || fieldValue === undefined || !byKey.has(fieldKey)) return { options, matchingJourneyIds: null };
+  const visibleIds = defs.filter((d) => d.key === fieldKey).map((d) => d.id);
   const rows = await db.execute<{ journey_id: string }>(sql`
     select v.journey_id from custom_field_values v join custom_field_definitions d on d.id = v.field_definition_id
-    where d.tenant_id = ${tenantId} and d.key = ${fieldKey} and d.filterable = true
+    where d.tenant_id = ${tenantId} and d.id in (${sql.join(visibleIds.map((id) => sql`${id}`), sql`, `)})
       and ((jsonb_typeof(v.value) = 'array' and v.value ? ${fieldValue}) or (jsonb_typeof(v.value) <> 'array' and (v.value #>> '{}') = ${fieldValue}))`);
   return { options, matchingJourneyIds: new Set([...rows].map((r) => r.journey_id)) };
 }

@@ -100,7 +100,7 @@ export async function leadRoutes(app: FastifyInstance) {
     const owner = parseOwnerFilter(q.owner, request.sessionUser!.id);
     if (owner === "invalid") return reply.status(400).send({ error: "invalid_owner_filter" });
     try {
-      return await getLeadsWorkspace(app.db, request.sessionUser!.tenantId, { ...q, owner } as Parameters<typeof getLeadsWorkspace>[2], request.sessionUser!.timezone);
+      return await getLeadsWorkspace(app.db, request.sessionUser!.tenantId, { ...q, owner } as Parameters<typeof getLeadsWorkspace>[2], request.sessionUser!.timezone, new Date(), request.sessionUser!.role);
     } catch (err) {
       if (err instanceof LeadRangeError) return reply.status(400).send({ error: "invalid_query", message: err.message });
       throw err;

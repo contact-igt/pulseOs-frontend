@@ -4,7 +4,7 @@ import type { FastifyInstance } from "fastify";
 import { evaluateFieldRules, type CrmFieldVm, type FieldRule, type LeadsWorkspace, type Role } from "@pulseos/types";
 import { buildApp } from "../app.js";
 import { db, queryClient } from "../db/client.js";
-import { activityLog, customFieldValues, timelineEvents } from "../db/schema.js";
+import { activityLog, customFieldDefinitions, customFieldValues, timelineEvents } from "../db/schema.js";
 import { createTestTenant, destroyTestTenant, type TestTenant } from "./helpers/edition-tenant.js";
 
 const PW = process.env.DEMO_PASSWORD;
@@ -156,6 +156,29 @@ describe.skipIf(!PW)("CRM field behaviour (integration)", () => {
     const theirs = (await call(other, "HOSPITAL_ADMIN", "GET", "/leads/workspace?fieldKey=t_smoker&fieldValue=Yes")).json() as LeadsWorkspace;
     expect(theirs.options.filterableFields).toEqual([]);
     expect(theirs.rows).toHaveLength(0);
+  });
+
+  it("review fixes: a clinical-only filterable field is not offered or usable by front desk; updates keep carry-forward and rules consistent", async () => {
+    expect((await mkField({ key: "t_clin", label: "Clinical flag", filterable: true, visibleTo: "clinical" })).statusCode).toBe(201);
+    const jr = await call(t, "HOSPITAL_ADMIN", "POST", "/leads", { phone: phone(), name: "Clin Patient", specialtyKey: "CATARACT", branchId: t.branchId, journeyType: "Cataract", sourceKey: "google", customFieldValues: { t_primary: "LASIK", t_clin: "Yes" } });
+    expect(jr.statusCode, jr.body).toBe(201);
+    const j = jr.json().journeyId as string;
+    const fdRes = await call(t, "FRONT_DESK", "GET", "/leads/workspace?fieldKey=t_clin&fieldValue=Yes");
+    expect(fdRes.statusCode, fdRes.body).toBe(200);
+    const fd = fdRes.json() as LeadsWorkspace;
+    expect(fd.options.filterableFields.map((f) => f.key)).not.toContain("t_clin");
+    expect(fd.rows.length).toBeGreaterThan(0); // filter ignored, not applied: nothing is inferable
+    const doc = (await call(t, "HOSPITAL_ADMIN", "GET", "/leads/workspace?fieldKey=t_clin&fieldValue=Yes")).json() as LeadsWorkspace;
+    expect(doc.rows.map((r) => r.id)).toContain(j);
+    // Carry-forward needs an entry form, on update as on create.
+    const detailOnly = (await mkField({ key: "t_detail_only", label: "Detail only", placements: ["journey_detail"] })).json().id as string;
+    expect((await call(t, "HOSPITAL_ADMIN", "PATCH", `/crm/fields/${detailOnly}`, { carryForward: true })).statusCode).toBe(422);
+    // Removing an option a child rule matches on is refused.
+    const parent = (await mkField({ key: "t_parent", label: "Parent", options: ["A", "B"] })).json().id as string;
+    expect((await mkField({ key: "t_child", label: "Child", rules: [{ when: { field: "t_parent", equals: ["B"] }, then: "show" }] })).statusCode).toBe(201);
+    expect((await call(t, "HOSPITAL_ADMIN", "PATCH", `/crm/fields/${parent}`, { options: ["A"] })).statusCode).toBe(409);
+    const clin = (await db.select({ id: customFieldDefinitions.id }).from(customFieldDefinitions).where(and(eq(customFieldDefinitions.tenantId, t.tenantId), eq(customFieldDefinitions.key, "t_clin"))))[0]!.id;
+    await call(t, "HOSPITAL_ADMIN", "PATCH", `/crm/fields/${clin}`, { archived: true });
   });
 
   it("archiving keeps history and values; a field others depend on cannot be archived", async () => {

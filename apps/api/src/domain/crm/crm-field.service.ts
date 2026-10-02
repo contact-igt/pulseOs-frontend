@@ -324,6 +324,15 @@ export async function updateCrmField(db: Db, tenantId: string, fieldId: string, 
     const ruleError = await validateRules(db, tenantId, existing.specialtyKey, existing.key, input.rules);
     if (ruleError) return { ok: false, reason: ruleError };
   }
+  // Same carry-forward rule as create: it only makes sense on a field captured in an entry form.
+  const nextPlacements = input.placements ?? (existing.placements as string[]);
+  const nextCarry = input.carryForward ?? existing.carryForward;
+  if (nextCarry && nextPlacements.every((p) => p !== "followup_outcome" && p !== "add_lead")) return { ok: false, reason: "carry_forward_needs_entry_form" };
+  // Changing a field's choices or type must not strand rules that match on one of its options.
+  if (input.options !== undefined || (input.fieldType !== undefined && input.fieldType !== existing.fieldType)) {
+    const dependants = (await listCrmFields(db, tenantId, { specialtyKey: existing.specialtyKey })).filter((f) => !f.archived && f.rules.some((r) => "field" in r.when && r.when.field === existing.key && r.when.equals.some((v) => !(nextOptions ?? []).includes(v) && !(nextType === "BOOLEAN" && (v === "true" || v === "false")))));
+    if (dependants.length > 0) return { ok: false, reason: "field_has_dependants" };
+  }
   // Archiving a field other fields depend on would leave their rules pointing at nothing visible: refuse and say so.
   if (input.archived === true && !existing.archived) {
     const dependants = (await listCrmFields(db, tenantId, { specialtyKey: existing.specialtyKey })).filter((f) => !f.archived && f.rules.some((r) => "field" in r.when && r.when.field === existing.key));
