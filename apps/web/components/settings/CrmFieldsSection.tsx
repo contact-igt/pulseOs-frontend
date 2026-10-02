@@ -34,7 +34,7 @@ function FieldRow({ field, position, total, canMove, locked, status, focusReques
         focusRequest={focusRequest}
         ids={{ drag: `field-drag-${field.key}`, up: `field-move-up-${field.key}`, down: `field-move-down-${field.key}`, position: `field-position-${field.key}` }}
       />
-      <button type="button" onClick={onEdit} className="min-w-0 flex-1 basis-40 text-left" aria-label={`Edit ${field.label}`} data-testid={`field-edit-${field.key}`}>
+      <button type="button" onClick={onEdit} className="min-w-0 flex-1 basis-40 text-left max-md:flex max-md:min-h-11 max-md:flex-col max-md:justify-center" aria-label={`Edit ${field.label}`} data-testid={`field-edit-${field.key}`}>
         <span className="block truncate text-sm font-medium text-ink">{field.label}</span>
         <span className="block truncate text-[11px] text-ink-2">
           {TYPE_LABEL.get(field.fieldType) ?? field.fieldType} · {placementSummary(field.placements)}

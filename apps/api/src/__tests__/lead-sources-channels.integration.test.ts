@@ -183,4 +183,31 @@ describe.skipIf(!DEMO_PASSWORD)("lead sources and interaction channels (integrat
     const events = await db.select().from(timelineEvents).where(and(eq(timelineEvents.eventType, "call_logged"), eq(timelineEvents.tenantId, t.tenantId))).orderBy(desc(timelineEvents.occurredAt));
     for (const e of events) expect(e.channel).toBe("IVR_CALL");
   });
+
+  it("sources can be reordered by an Admin: the order is saved for this hospital only, Staff and foreign ids are refused", async () => {
+    const list = async (tt: TestTenant, role: "HOSPITAL_ADMIN" | "FRONT_DESK" = "HOSPITAL_ADMIN") => (await app.inject({ method: "GET", url: "/lead-sources", cookies: as(tt, role) })).json() as LeadSourceVm[];
+    const before = await list(t);
+    const ids = before.map((s) => s.id);
+    const reversed = [...ids].reverse();
+    const res = await app.inject({ method: "POST", url: "/lead-sources/reorder", cookies: as(t, "HOSPITAL_ADMIN"), payload: { orderedIds: reversed } });
+    expect(res.statusCode, res.body).toBe(200);
+    expect((await list(t)).map((s) => s.id)).toEqual(reversed);
+    // The order Staff see in Add Lead follows.
+    expect((await list(t, "FRONT_DESK")).map((s) => s.id)).toEqual(reversed);
+    // A partial list (a subset of the sources) reorders just those, keeping the others where they were.
+    const [a, b] = [reversed[0]!, reversed[1]!];
+    expect((await app.inject({ method: "POST", url: "/lead-sources/reorder", cookies: as(t, "HOSPITAL_ADMIN"), payload: { orderedIds: [b, a] } })).statusCode).toBe(200);
+    const after = (await list(t)).map((s) => s.id);
+    expect(after.slice(0, 2)).toEqual([b, a]);
+    expect(after.slice(2)).toEqual(reversed.slice(2));
+
+    // Refusals: Staff, duplicates, empty, another hospital's id, and unknown ids.
+    expect((await app.inject({ method: "POST", url: "/lead-sources/reorder", cookies: as(t, "FRONT_DESK"), payload: { orderedIds: ids } })).statusCode).toBe(403);
+    expect((await app.inject({ method: "POST", url: "/lead-sources/reorder", cookies: as(t, "HOSPITAL_ADMIN"), payload: { orderedIds: [ids[0], ids[0]] } })).statusCode).toBe(400);
+    expect((await app.inject({ method: "POST", url: "/lead-sources/reorder", cookies: as(t, "HOSPITAL_ADMIN"), payload: { orderedIds: [] } })).statusCode).toBe(400);
+    const foreign = (await list(other))[0]!.id;
+    expect((await app.inject({ method: "POST", url: "/lead-sources/reorder", cookies: as(t, "HOSPITAL_ADMIN"), payload: { orderedIds: [ids[0], foreign] } })).statusCode).toBe(400);
+    // …and the other hospital's order was never touched.
+    expect((await list(other))[0]!.id).toBe(foreign);
+  });
 });

@@ -307,6 +307,7 @@ export const api = {
     request<ConversationAutomationPreference>(`/conversations/${id}/automation`, { method: "PATCH", body: JSON.stringify(input) }),
   leadSources: (opts: { includeArchived?: boolean } = {}) => request<LeadSourceVm[]>(`/lead-sources${opts.includeArchived ? "?includeArchived=true" : ""}`),
   createLeadSource: (input: CreateLeadSourceInput) => request<LeadSourceVm>("/lead-sources", { method: "POST", body: JSON.stringify(input) }),
+  reorderLeadSources: (orderedIds: string[]) => request<{ ok: true }>("/lead-sources/reorder", { method: "POST", body: JSON.stringify({ orderedIds }) }),
   updateLeadSource: (id: string, input: UpdateLeadSourceInput) => request<LeadSourceVm>(`/lead-sources/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
   departments: () => request<DepartmentVm[]>("/departments"),
   departmentTemplates: () => request<DepartmentTemplateVm[]>("/department-templates"),

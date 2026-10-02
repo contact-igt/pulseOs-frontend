@@ -79,6 +79,37 @@ test.describe("M6.6 — Settings tab strip", () => {
   });
 });
 
+test.describe("M6.6 — Settings mobile targets", () => {
+  test.skip(!DEMO_PASSWORD, "DEMO_PASSWORD must be set to run this suite");
+
+  test("390px: every button, link and field in every Settings section is at least 44px tall; no section overflows the page", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await login(page, "eyev1.admin@pulseos.local");
+    await page.goto("/settings");
+    await page.getByRole("tablist", { name: "Settings sections" }).waitFor();
+    const sections = await page.getByRole("tablist", { name: "Settings sections" }).getByRole("tab").evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")!.replace("settings-tab-", "")));
+    expect(sections.length).toBeGreaterThan(5);
+    const small: string[] = [];
+    for (const section of sections) {
+      await page.goto(`/settings?section=${section}`);
+      await page.waitForLoadState("networkidle");
+      small.push(
+        ...(await page.evaluate((name) => {
+          const out: string[] = [];
+          for (const el of document.querySelectorAll<HTMLElement>("[data-testid=settings-page] button, [data-testid=settings-page] a, [data-testid=settings-page] input:not([type=hidden]), [data-testid=settings-page] select, [data-testid=settings-page] textarea")) {
+            const r = el.getBoundingClientRect();
+            if (r.width === 0 || r.height === 0 || getComputedStyle(el).visibility === "hidden" || el.closest("[role=tablist]")) continue;
+            if (r.height < 43.5) out.push(`${name}: ${el.tagName.toLowerCase()}[${el.getAttribute("data-testid") ?? (el.textContent ?? "").trim().slice(0, 24)}] ${Math.round(r.width)}x${Math.round(r.height)}`);
+          }
+          return out;
+        }, section)),
+      );
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), `${section} overflows`).toBeLessThanOrEqual(0);
+    }
+    expect(small).toEqual([]);
+  });
+});
+
 test.describe("M6.6 — Workflow Outcomes: handle-first drag", () => {
   test.skip(!DEMO_PASSWORD, "DEMO_PASSWORD must be set to run this suite");
   test.describe.configure({ mode: "serial" });
@@ -238,5 +269,56 @@ test.describe("M6.6 — Workflow Outcomes: handle-first drag", () => {
       expect(box.height, id).toBeGreaterThanOrEqual(44);
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+  });
+});
+
+test.describe("M6.6 — Lead Sources use the same sortable list", () => {
+  test.skip(!DEMO_PASSWORD, "DEMO_PASSWORD must be set to run this suite");
+  test.describe.configure({ mode: "serial" });
+  let original: string[] = [];
+
+  test.afterAll(async ({ browser }) => {
+    if (original.length === 0) return;
+    const page = await browser.newPage();
+    await login(page, "eyev1.admin@pulseos.local");
+    await page.request.post(`${API}/lead-sources/reorder`, { data: { orderedIds: original } });
+    await page.close();
+  });
+
+  test("handle drag and Move down both save, are announced, persist across refresh and set the Add Lead order", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await login(page, "eyev1.admin@pulseos.local");
+    original = ((await (await page.request.get(`${API}/lead-sources`)).json()) as { id: string }[]).map((s) => s.id);
+    await page.goto("/settings?section=sources");
+    const order = () => page.locator('[data-testid="source-list"] > li').evaluateAll((rows) => rows.map((r) => r.getAttribute("data-testid")!.replace("source-row-", "")));
+    await expect.poll(async () => (await order()).length).toBeGreaterThan(3);
+    const start = await order();
+
+    // Quiet arrows: move the first source down one place.
+    const saved = page.waitForResponse((r) => r.url().includes("/lead-sources/reorder") && r.ok());
+    await page.getByTestId(`source-move-down-${start[0]}`).click();
+    await saved;
+    await expect(page.getByTestId("reorder-status")).toContainText("moved to position 2");
+    await expect.poll(order).toEqual([start[1]!, start[0]!, ...start.slice(2)]);
+
+    // Handle drag: the third source onto the first.
+    const grip = page.getByTestId(`source-drag-${start[2]}`);
+    const target = page.getByTestId(`source-row-${start[1]}`);
+    const g = (await grip.boundingBox())!;
+    const t = (await target.boundingBox())!;
+    const saved2 = page.waitForResponse((r) => r.url().includes("/lead-sources/reorder") && r.ok());
+    await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2 - 12, { steps: 6 });
+    await page.mouse.move(t.x + 40, t.y + 4, { steps: 12 });
+    await page.mouse.up();
+    await saved2;
+    await expect.poll(async () => (await order())[0]).toBe(start[2]);
+
+    await page.reload();
+    await expect.poll(async () => (await order())[0]).toBe(start[2]);
+    // The order Staff pick from in Add Lead is the same.
+    const offered = ((await (await page.request.get(`${API}/lead-sources`)).json()) as { key: string }[]).map((s) => s.key);
+    expect(offered[0]).toBe(start[2]);
   });
 });

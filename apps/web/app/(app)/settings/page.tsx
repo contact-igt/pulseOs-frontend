@@ -84,7 +84,7 @@ function ServiceDetail({ specialtyKey, onManageFields }: { specialtyKey: string;
             data-testid="specialty-default-journey-type"
           />
         </label>
-        <button type="button" onClick={onManageFields} className="pb-2 text-xs font-medium text-primary-700 hover:underline sm:pb-1.5" data-testid="specialty-manage-fields">
+        <button type="button" onClick={onManageFields} className="min-h-11 text-xs font-medium text-primary-700 hover:underline sm:min-h-0 sm:pb-1.5" data-testid="specialty-manage-fields">
           Manage {d.fieldCount} CRM field{d.fieldCount === 1 ? "" : "s"} →
         </button>
       </div>
@@ -166,13 +166,13 @@ export default function SettingsPage() {
                 <li key={s.key}>
                   <div className="flex items-center justify-between px-4 py-3">
                     {canManage ? (
-                      <button type="button" onClick={() => setExpanded(expanded === s.key ? null : s.key)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                      <button type="button" onClick={() => setExpanded(expanded === s.key ? null : s.key)} className="flex min-h-11 min-w-0 flex-1 items-center gap-3 text-left sm:min-h-0">
                         <span className="text-sm font-medium text-ink">{s.displayName}</span>
                         <Badge tone={s.enabled ? "success" : "neutral"}>{s.enabled ? "Enabled" : "Disabled"}</Badge>
                         <span className="min-w-0 truncate text-xs text-ink-2">{s.fieldCount} custom field{s.fieldCount === 1 ? "" : "s"}</span>
                       </button>
                     ) : (
-                      <div className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                      <div className="flex min-h-11 min-w-0 flex-1 items-center gap-3 text-left sm:min-h-0">
                         <span className="text-sm font-medium text-ink">{s.displayName}</span>
                         <Badge tone={s.enabled ? "success" : "neutral"}>{s.enabled ? "Enabled" : "Disabled"}</Badge>
                         <span className="min-w-0 truncate text-xs text-ink-2">{s.fieldCount} custom field{s.fieldCount === 1 ? "" : "s"}</span>

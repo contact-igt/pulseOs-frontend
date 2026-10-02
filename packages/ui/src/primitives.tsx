@@ -155,8 +155,9 @@ const BUTTON_VARIANT: Record<ButtonVariant, string> = {
 };
 
 const BUTTON_SIZE: Record<ButtonSize, string> = {
-  sm: "rounded-chip px-2 py-1 text-xs font-medium",
-  md: "rounded-control px-3.5 py-2 text-sm font-medium",
+  // On phones every button is a 44px target (a minimum, not a maximum).
+  sm: "rounded-chip px-2 py-1 text-xs font-medium max-md:min-h-11 max-md:px-3",
+  md: "rounded-control px-3.5 py-2 text-sm font-medium max-md:min-h-11",
 };
 
 /** The one shared button treatment — variant carries the action-hierarchy signal (primary/secondary/ghost/danger) so pages stop hand-rolling the same className strings with small, accidental drifts. */

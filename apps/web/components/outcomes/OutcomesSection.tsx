@@ -31,7 +31,7 @@ function OutcomeRow({ o, position, total, locked, status, focusRequest, onMove, 
         focusRequest={focusRequest}
         ids={{ drag: `outcome-drag-${o.key}`, up: `outcome-move-up-${o.key}`, down: `outcome-move-down-${o.key}` }}
       />
-      <button type="button" className="min-w-0 flex-1 basis-40 text-left" onClick={onEdit} aria-label={`Edit ${o.label}`} data-testid={`outcome-edit-${o.key}`}>
+      <button type="button" className="min-w-0 flex-1 basis-40 text-left max-md:flex max-md:min-h-11 max-md:flex-col max-md:justify-center" onClick={onEdit} aria-label={`Edit ${o.label}`} data-testid={`outcome-edit-${o.key}`}>
         <span className="block truncate text-sm font-medium text-ink">{o.label}</span>
         <span className="block truncate text-[11px] text-ink-2">{outcomeHint(o) || "No extra steps"}</span>
       </button>

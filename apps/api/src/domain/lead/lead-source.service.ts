@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { leadSources } from "../../db/schema.js";
 import type { CreateLeadSourceInput, LeadSourceVm, SourceChannel, UpdateLeadSourceInput } from "@pulseos/types";
@@ -100,4 +100,20 @@ export async function updateLeadSource(db: Db, tenantId: string, id: string, inp
     .where(eq(leadSources.id, id))
     .returning();
   return { ok: true, source: toVm(row) };
+}
+
+/**
+ * Saves a new order for (some of) this hospital's sources. The ids listed take, in the order given, the sort slots they
+ * already held together — so reordering a few never disturbs the others. Every id must belong to THIS hospital.
+ */
+export async function reorderLeadSources(db: Db, tenantId: string, orderedIds: string[]): Promise<Result> {
+  if (orderedIds.length === 0 || new Set(orderedIds).size !== orderedIds.length) return { ok: false, reason: "invalid_request" };
+  const rows = await db.select().from(leadSources).where(and(eq(leadSources.tenantId, tenantId), inArray(leadSources.id, orderedIds)));
+  if (rows.length !== orderedIds.length) return { ok: false, reason: "invalid_request" };
+  let slots = rows.map((r) => r.sortOrder).sort((a, b) => a - b);
+  if (new Set(slots).size !== slots.length) slots = slots.map((_, i) => slots[0]! + i);
+  await db.transaction(async (tx) => {
+    for (const [i, id] of orderedIds.entries()) await tx.update(leadSources).set({ sortOrder: slots[i]! }).where(and(eq(leadSources.tenantId, tenantId), eq(leadSources.id, id)));
+  });
+  return { ok: true };
 }

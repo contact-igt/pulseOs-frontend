@@ -123,7 +123,7 @@ function TypeRow({ t, position, total, busy, status, focusRequest, onMove, onEdi
         focusRequest={focusRequest}
         ids={{ drag: `followup-type-drag-${t.key}`, up: `followup-type-up-${t.key}`, down: `followup-type-down-${t.key}` }}
       />
-      <button type="button" onClick={onEdit} className="min-w-0 flex-1 basis-40 text-left" aria-label={`Edit ${t.label}`}>
+      <button type="button" onClick={onEdit} className="min-w-0 flex-1 basis-40 text-left max-md:flex max-md:min-h-11 max-md:flex-col max-md:justify-center" aria-label={`Edit ${t.label}`}>
         <span className="block truncate text-sm font-medium text-ink">{t.label}</span>
         <span className="block truncate text-[11px] text-ink-2">
           {BEHAVIOUR_LABEL.get(t.canonicalTaskType) ?? "Follow-up"} · {t.departmentName ?? "All departments"}

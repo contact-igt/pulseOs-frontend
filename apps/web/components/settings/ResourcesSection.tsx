@@ -116,7 +116,7 @@ export function ResourcesSection() {
         <ul className="divide-y divide-line overflow-hidden rounded-card border border-line bg-surface" data-testid="resource-list">
           {list.map((r) => (
             <li key={r.id} className={`flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 ${r.isActive ? "" : "bg-neutral-50 text-ink-2"}`} data-testid={`resource-row-${r.id}`}>
-              <button type="button" onClick={() => setEditing(r)} className="min-w-0 flex-1 basis-40 text-left" aria-label={`Edit ${r.name}`}>
+              <button type="button" onClick={() => setEditing(r)} className="min-w-0 flex-1 basis-40 text-left max-md:flex max-md:min-h-11 max-md:flex-col max-md:justify-center" aria-label={`Edit ${r.name}`}>
                 <span className="block truncate text-sm font-medium text-ink">{r.name}</span>
                 <span className="block truncate text-[11px] text-ink-2">{r.departmentName ?? "Any department"}</span>
               </button>
