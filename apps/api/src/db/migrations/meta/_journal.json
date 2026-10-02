@@ -190,6 +190,13 @@
       "when": 1790919377211,
       "tag": "0026_m65_treatment_completed_at",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1790940786553,
+      "tag": "0027_m7_tenant_capabilities",
+      "breakpoints": true
     }
   ]
 }

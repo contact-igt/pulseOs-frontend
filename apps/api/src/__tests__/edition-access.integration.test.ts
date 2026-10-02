@@ -8,10 +8,10 @@ import { createTestTenant, destroyTestTenant, type TestTenant } from "./helpers/
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD;
 
 describe("edition capabilities and role groups (unit)", () => {
-  it("V1 has none of the growth capabilities; V2 has all of them", () => {
-    expect(EDITION_CAPABILITIES.BETA_V1_CORE).toEqual([]);
+  it("V1 has none of the growth capabilities by default; V2 has all of them", () => {
+    expect(EDITION_CAPABILITIES.BETA_V1_CORE).toEqual(["ANALYTICS_CORE", "RUNO_CALLING", "WHATSAPP_NOTIFICATIONS"]);
     expect(editionHasCapability("BETA_V1_CORE", "CAMPAIGNS")).toBe(false);
-    for (const c of ["FULL_INBOX", "CONVERSATION_INTELLIGENCE", "CAMPAIGNS", "MARKETING_ANALYTICS", "SPEND_ATTRIBUTION"] as const) expect(editionHasCapability("BETA_V2_GROWTH", c)).toBe(true);
+    for (const c of ["WHATSAPP_INBOX", "CONVERSATION_INTELLIGENCE", "CAMPAIGNS", "MARKETING_ANALYTICS", "SPEND_ATTRIBUTION"] as const) expect(editionHasCapability("BETA_V2_GROWTH", c)).toBe(true);
   });
 
   it("every stored role keeps existing and maps to a Beta V1 group", () => {

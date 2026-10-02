@@ -30,12 +30,12 @@ export function PulseMark({ size = 24, tone = "onWhite", className = "" }: { siz
 }
 
 /** Small, quiet pre-release marker: tiny letter-spaced outline pill, never a loud badge. */
-export function BetaBadge({ tone = "onWhite", className = "" }: { tone?: BrandTone; className?: string }) {
+export function BetaBadge({ tone = "onWhite", className = "", label = "Beta" }: { tone?: BrandTone; className?: string; label?: string }) {
   const c = MARK_COLORS[tone];
   const style = { color: c.betaInk, borderColor: c.betaBorder, backgroundColor: c.betaBg } as CSSProperties;
   return (
     <span className={`inline-flex items-center rounded-full border px-1.5 py-px text-[9px] font-semibold uppercase leading-none tracking-[0.14em] ${className}`} style={style}>
-      Beta
+      {label}
     </span>
   );
 }
@@ -45,11 +45,14 @@ export function PulseLockup({
   tone = "onWhite",
   size = 28,
   showBeta = true,
+  betaLabel = "Beta",
   className = "",
 }: {
   tone?: BrandTone;
   size?: number;
   showBeta?: boolean;
+  /** e.g. "Beta V1" / "Beta V2": the tenant's edition, shown quietly beside the product name. */
+  betaLabel?: string;
   className?: string;
 }) {
   return (
@@ -58,7 +61,7 @@ export function PulseLockup({
       <span className="font-semibold tracking-tight" style={{ fontSize: Math.round(size * 0.62), color: MARK_COLORS[tone].word }}>
         PulseOS
       </span>
-      {showBeta && <BetaBadge tone={tone} />}
+      {showBeta && <BetaBadge tone={tone} label={betaLabel} />}
     </span>
   );
 }

@@ -12,20 +12,107 @@ export const EDITIONS: { key: Edition; label: string }[] = [
 ];
 export const DEFAULT_EDITION: Edition = "BETA_V2_GROWTH";
 
-/** Capabilities that exist only beyond the V1 core. Everything not listed here is part of every edition. */
-export type EditionCapability = "FULL_INBOX" | "CONVERSATION_INTELLIGENCE" | "CAMPAIGNS" | "MARKETING_ANALYTICS" | "SPEND_ATTRIBUTION";
+// ---------------------------------------------------------------------------
+// Capabilities. An edition is only a DEFAULT BUNDLE of capabilities; a tenant's own settings (tenant_capabilities)
+// are the runtime authority. Nothing in the product asks "is this V1?" — it asks "does this tenant have X?".
+// Enabled, configured and healthy are three different facts: a capability being ON never implies a provider is connected.
+// ---------------------------------------------------------------------------
 
-export const EDITION_CAPABILITIES: Record<Edition, EditionCapability[]> = {
-  BETA_V1_CORE: [],
-  BETA_V2_GROWTH: ["FULL_INBOX", "CONVERSATION_INTELLIGENCE", "CAMPAIGNS", "MARKETING_ANALYTICS", "SPEND_ATTRIBUTION"],
+export const CAPABILITIES = [
+  "ANALYTICS_CORE",
+  "MARKETING_ANALYTICS",
+  "GOOGLE_ADS",
+  "META_ADS",
+  "RUNO_CALLING",
+  "CCS_IVR",
+  "WHATSAPP_NOTIFICATIONS",
+  "WHATSAPP_INBOX",
+  "CONVERSATION_INTELLIGENCE",
+  "SMS_NOTIFICATIONS",
+  "CAMPAIGNS",
+  "SPEND_ATTRIBUTION",
+] as const;
+export type Capability = (typeof CAPABILITIES)[number];
+/** Kept for existing call sites: a capability name. */
+export type EditionCapability = Capability;
+export type CapabilityMap = Record<Capability, boolean>;
+
+/** What each edition switches on by default. Super Admin may override any of them per tenant. */
+export const EDITION_CAPABILITIES: Record<Edition, Capability[]> = {
+  BETA_V1_CORE: ["ANALYTICS_CORE", "RUNO_CALLING", "WHATSAPP_NOTIFICATIONS"],
+  BETA_V2_GROWTH: ["ANALYTICS_CORE", "MARKETING_ANALYTICS", "GOOGLE_ADS", "META_ADS", "RUNO_CALLING", "WHATSAPP_NOTIFICATIONS", "WHATSAPP_INBOX", "CONVERSATION_INTELLIGENCE", "CAMPAIGNS", "SPEND_ATTRIBUTION"],
+};
+
+/** A capability that needs another one on. Explicit and small; nothing else is implied. */
+export const CAPABILITY_DEPENDENCIES: Partial<Record<Capability, Capability[]>> = {
+  CONVERSATION_INTELLIGENCE: ["WHATSAPP_INBOX"],
+  SPEND_ATTRIBUTION: ["MARKETING_ANALYTICS"],
+  CAMPAIGNS: ["MARKETING_ANALYTICS"],
+};
+
+/** Capabilities nobody can switch off (the core product). */
+export const LOCKED_CAPABILITIES: Capability[] = ["ANALYTICS_CORE"];
+
+/** Operational switches a Hospital Admin may flip; everything else is a commercial entitlement (Super Admin). */
+export const OPERATIONAL_CAPABILITIES: Capability[] = ["WHATSAPP_NOTIFICATIONS", "SMS_NOTIFICATIONS"];
+
+export interface CapabilityMeta {
+  label: string;
+  description: string;
+  /** The integration provider that makes this capability do anything (its configured / healthy facts), when there is one. */
+  provider?: string;
+  /** Shown as "Beta V2" while off. */
+  growth?: boolean;
+}
+
+export const CAPABILITY_META: Record<Capability, CapabilityMeta> = {
+  ANALYTICS_CORE: { label: "Core Analytics", description: "Leads, follow-ups, appointments, treatments and team performance." },
+  MARKETING_ANALYTICS: { label: "Advanced Marketing Analytics", description: "Spend, campaigns, cost per lead / appointment / treatment, ROAS.", growth: true },
+  GOOGLE_ADS: { label: "Google Ads", description: "Read-only campaign reporting from Google Ads.", provider: "google_ads", growth: true },
+  META_ADS: { label: "Meta Ads", description: "Read-only campaign reporting from Meta Ads.", provider: "meta_ads", growth: true },
+  RUNO_CALLING: { label: "Runo Calling", description: "Call events, recordings and dispositions from Runo.", provider: "runo" },
+  CCS_IVR: { label: "CCS IVR", description: "IVR call events from CCS (provider documentation required).", provider: "ccs_ivr" },
+  WHATSAPP_NOTIFICATIONS: { label: "WhatsApp Notifications", description: "Appointment and surgery confirmations and reminders, and staff follow-up messages.", provider: "whatsapp_meta_cloud" },
+  WHATSAPP_INBOX: { label: "WhatsApp Inbox", description: "Two-way conversations with patients.", provider: "whatsapp_meta_cloud", growth: true },
+  CONVERSATION_INTELLIGENCE: { label: "Conversation Intelligence", description: "Conversation summaries and context. Needs the WhatsApp Inbox.", growth: true },
+  SMS_NOTIFICATIONS: { label: "SMS Notifications", description: "Text-message reminders (provider required).", provider: "sms" },
+  CAMPAIGNS: { label: "Campaigns & Sources", description: "Campaign and source management.", growth: true },
+  SPEND_ATTRIBUTION: { label: "Spend & Attribution", description: "Spend at risk and source performance on the Command Centre.", growth: true },
 };
 
 export function isEdition(value: unknown): value is Edition {
   return value === "BETA_V1_CORE" || value === "BETA_V2_GROWTH";
 }
 
-export function editionHasCapability(edition: Edition, capability: EditionCapability): boolean {
+/** The tenant's effective capabilities: the edition's defaults, then the tenant's own overrides on top. */
+export function resolveCapabilities(edition: Edition, overrides: Partial<Record<Capability, boolean>>): CapabilityMap {
+  const defaults = new Set(EDITION_CAPABILITIES[edition]);
+  return Object.fromEntries(CAPABILITIES.map((c) => [c, overrides[c] ?? defaults.has(c)])) as CapabilityMap;
+}
+
+/** A capability's DEFAULT for an edition (no tenant overrides) — used only where no session map exists (tests, defaults). */
+export function editionHasCapability(edition: Edition, capability: Capability): boolean {
   return EDITION_CAPABILITIES[edition].includes(capability);
+}
+
+/** True for an edition (its defaults) or for a tenant's resolved map (the runtime truth). */
+export function capabilityEnabled(source: Edition | CapabilityMap, capability: Capability): boolean {
+  return typeof source === "string" ? editionHasCapability(source, capability) : source[capability] === true;
+}
+
+export type CapabilityChangeResult = { ok: true } | { ok: false; reason: "requires" | "required_by" | "locked"; capabilities: Capability[] };
+
+/** Is this switch allowed given what is on right now? Refuses invalid combinations and says what is in the way. */
+export function validateCapabilityChange(current: CapabilityMap, capability: Capability, enabled: boolean): CapabilityChangeResult {
+  if (!enabled && LOCKED_CAPABILITIES.includes(capability)) return { ok: false, reason: "locked", capabilities: [capability] };
+  if (enabled) {
+    const missing = (CAPABILITY_DEPENDENCIES[capability] ?? []).filter((d) => !current[d]);
+    if (missing.length > 0) return { ok: false, reason: "requires", capabilities: missing };
+  } else {
+    const blocking = CAPABILITIES.filter((c) => current[c] && (CAPABILITY_DEPENDENCIES[c] ?? []).includes(capability));
+    if (blocking.length > 0) return { ok: false, reason: "required_by", capabilities: blocking };
+  }
+  return { ok: true };
 }
 
 /** The Beta V1 UX names for the five stored roles. Doctor stays a role (and a resource) but has no V1 label. */
@@ -52,6 +139,8 @@ export interface SessionUser {
   timezone: string;
   /** The tenant's edition (tenants.edition) — gates growth capabilities server-side. */
   edition: Edition;
+  /** What this tenant can actually do: the edition's defaults with the tenant's own overrides applied. */
+  capabilities: CapabilityMap;
 }
 
 export interface Branch {

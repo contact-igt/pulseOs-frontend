@@ -1,3 +1,4 @@
+import { capabilityRoutes } from "./domain/capability/capability.routes.js";
 import Fastify, { type FastifyError, type FastifyServerOptions } from "fastify";
 import cookie from "@fastify/cookie";
 import { db } from "./db/client.js";
@@ -116,6 +117,7 @@ export async function buildApp() {
     await protectedApp.register(campaignRoutes);
     await protectedApp.register(analyticsRoutes);
     await protectedApp.register(reportRoutes);
+    await protectedApp.register(capabilityRoutes);
   });
 
   app.get("/health", async () => ({ ok: true }));

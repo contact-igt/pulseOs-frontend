@@ -4,6 +4,7 @@ import { markEventFailed, markEventProcessed, recordConnectorEvent } from "./con
 import { getAcquisitionAdapter, getMessagingAdapter, getTelephonyAdapter } from "./registry.js";
 import { processInboundWhatsAppMessage, processWhatsAppStatusUpdate } from "./whatsapp-webhook.service.js";
 import { persistInboundCall } from "./call-webhook.service.js";
+import { tenantCapabilityMap } from "../capability/capability.service.js";
 import { processProviderLead } from "../acquisition/lead-webhook.service.js";
 import { ingestNormalizedLead } from "../acquisition/lead-ingestion.service.js";
 
@@ -66,6 +67,12 @@ export async function webhookRoutes(app: FastifyInstance) {
 
     const parsed = adapter.parseWebhookPayload(request.body);
 
+    // Enabled is a tenant switch, independent of the connector: inbound conversations need the Inbox, delivery
+    // statuses need either WhatsApp capability. A disabled capability is acknowledged and ignored (no retries).
+    const caps = await tenantCapabilityMap(app.db, connector.tenantId);
+    if (!caps.WHATSAPP_INBOX) parsed.messages = [];
+    if (!caps.WHATSAPP_INBOX && !caps.WHATSAPP_NOTIFICATIONS) parsed.statuses = [];
+
     for (const msg of parsed.messages) {
       const { duplicate, eventId } = await recordConnectorEvent(app.db, {
         tenantId: connector.tenantId,
@@ -123,6 +130,8 @@ export async function webhookRoutes(app: FastifyInstance) {
       app.log.warn({ connectorId }, "Runo webhook authentication rejected");
       return reply.status(401).send({ error: "unauthorized" });
     }
+
+    if (!(await tenantCapabilityMap(app.db, connector.tenantId)).RUNO_CALLING) return reply.status(200).send({ ok: true });
 
     const calls = adapter.parseWebhookPayload(request.body);
     for (const call of calls) {

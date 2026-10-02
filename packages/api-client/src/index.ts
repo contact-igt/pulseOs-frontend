@@ -1,4 +1,6 @@
 import type {
+  Capability,
+  Edition,
   AnalyticsCampaigns,
   AnalyticsFilterOptions,
   AnalyticsFlow,
@@ -134,6 +136,19 @@ class ApiError extends Error {
   }
 }
 
+export interface CapabilityState {
+  key: Capability;
+  label: string;
+  description: string;
+  enabled: boolean;
+  editionDefault: boolean;
+  overridden: boolean;
+  dependsOn: Capability[];
+  provider: string | null;
+  growth: boolean;
+  editable: boolean;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   // JSON content-type only when there is a string (JSON) body: Fastify
@@ -209,6 +224,9 @@ export const api = {
     request<{ user: SessionUser }>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   logout: () => request<{ ok: true }>("/auth/logout", { method: "POST" }),
   session: () => request<{ user: SessionUser }>("/auth/session"),
+  capabilities: () => request<{ edition: Edition; capabilities: CapabilityState[] }>("/capabilities"),
+  setCapability: (key: string, enabled: boolean | null) =>
+    request<{ ok: true; capabilities: Record<string, boolean> }>(`/capabilities/${key}`, { method: "PUT", body: JSON.stringify({ enabled }) }),
   /** 404s (thrown as ApiError) whenever Dev Login isn't enabled — the route
    * doesn't exist at all outside local development, see
    * apps/api/src/domain/auth/auth.routes.ts::devLoginEnabled. Callers treat

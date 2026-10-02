@@ -57,7 +57,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // never a security gap, but the result was a broken-looking page of
   // per-panel "Could not load" errors instead of a normal redirect home.
   const role = data?.user.role;
-  const edition = data?.user.edition;
+  const edition = data?.user.capabilities;
   const allowed = role ? pathAllowedForRole(role, pathname, edition) : true;
   useEffect(() => {
     if (role && !allowed) router.replace(ROLE_HOME[role]);

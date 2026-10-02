@@ -21,7 +21,7 @@ const REASON_STATUS: Record<string, number> = {
 };
 
 export async function conversationRoutes(app: FastifyInstance) {
-  app.addHook("preHandler", requireCapability("FULL_INBOX"));
+  app.addHook("preHandler", requireCapability("WHATSAPP_INBOX"));
   app.addHook("preHandler", requirePermission("VIEW_INBOX"));
 
   app.get("/conversations", async (request) => {

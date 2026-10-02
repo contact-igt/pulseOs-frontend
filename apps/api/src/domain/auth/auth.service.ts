@@ -1,3 +1,4 @@
+import { resolveTenantCapabilities } from "../capability/capability.service.js";
 import { hash, verify } from "@node-rs/argon2";
 import { and, eq } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
@@ -31,6 +32,7 @@ async function createSessionFor(db: Db, user: typeof users.$inferSelect) {
 
   const [tenant] = await db.select().from(tenants).where(eq(tenants.id, user.tenantId)).limit(1);
   const branch = user.branchId ? (await db.select().from(branches).where(eq(branches.id, user.branchId)).limit(1))[0] : undefined;
+  const capabilities = await resolveTenantCapabilities(db, user.tenantId, tenant?.edition ?? DEFAULT_EDITION);
 
   return {
     ok: true as const,
@@ -42,6 +44,7 @@ async function createSessionFor(db: Db, user: typeof users.$inferSelect) {
       tenantName: tenant?.name ?? "",
       timezone: tenant?.timezone ?? "Asia/Kolkata",
       edition: tenant?.edition ?? DEFAULT_EDITION,
+      capabilities,
       branchId: user.branchId,
       branchName: branch?.name ?? null,
       name: user.name,
@@ -114,6 +117,8 @@ export async function resolveSession(db: Db, sessionId: string) {
     role: row.user.role,
     timezone: row.timezone,
     edition: row.edition,
+    // Resolved on every request: a Super Admin's switch takes effect immediately, in the API and in the next UI refresh.
+    capabilities: await resolveTenantCapabilities(db, row.user.tenantId, row.edition),
   };
 }
 

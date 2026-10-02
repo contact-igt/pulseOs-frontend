@@ -52,7 +52,7 @@ export async function analyticsRoutes(app: FastifyInstance) {
   const V1_OPEN = new Set(["leads", "source-conversion", "filter-options"]);
 
   function route<T>(path: string, handler: Handler<T>) {
-    const gate = V1_OPEN.has(path) ? [] : [requireCapability("MARKETING_ANALYTICS")];
+    const gate = V1_OPEN.has(path) ? [requireCapability("ANALYTICS_CORE")] : [requireCapability("MARKETING_ANALYTICS")];
     app.get(`/analytics/${path}`, { preHandler: gate }, async (request, reply) => {
       const query = parse(request, reply);
       if (!query) return reply;

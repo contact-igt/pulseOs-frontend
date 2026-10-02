@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, pgEnum, index, uniqueIndex, date, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, pgEnum, index, uniqueIndex, primaryKey, date, type AnyPgColumn } from "drizzle-orm/pg-core";
 
 export const roleEnum = pgEnum("role", ["SUPER_ADMIN", "HOSPITAL_ADMIN", "FRONT_DESK", "PATIENT_COORDINATOR", "DOCTOR"]);
 
@@ -20,6 +20,18 @@ export const tenants = pgTable("tenants", {
   edition: tenantEditionEnum("edition").notNull().default("BETA_V2_GROWTH"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// A tenant's OWN capability switches. A row overrides the edition's default for that capability (on or off); no row
+// means "use the edition default". The runtime authority for what a tenant can do is edition default + these rows.
+export const tenantCapabilities = pgTable("tenant_capabilities", {
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  capability: text("capability").notNull(),
+  enabled: boolean("enabled").notNull(),
+  updatedBy: uuid("updated_by"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.tenantId, t.capability] }),
+}));
 
 export const branches = pgTable("branches", {
   id: uuid("id").primaryKey().defaultRandom(),

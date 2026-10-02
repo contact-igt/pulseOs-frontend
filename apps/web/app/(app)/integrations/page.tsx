@@ -7,7 +7,7 @@ import {
   Badge, Button, EmptyState, ErrorState, SectionHeading, Skeleton, Table, TableBody, TableHead, Td, Th, Tr,
   relativeTime, CONNECTOR_STATUS_LABEL, CONNECTOR_STATUS_TONE, CONNECTOR_EVENT_STATUS_LABEL, CONNECTOR_EVENT_STATUS_TONE,
 } from "@pulseos/ui";
-import { editionHasCapability, hasPermission } from "@pulseos/types";
+import { capabilityEnabled, hasPermission } from "@pulseos/types";
 import type { CommunicationEndpointType, CommunicationEndpointVm, ConnectorMode, ConnectorType } from "@pulseos/types";
 import { Mail, MessageCircle, Phone, Radio, ShieldCheck, Target, Zap } from "lucide-react";
 
@@ -282,7 +282,7 @@ export default function IntegrationsPage() {
   // authorization boundary.
   const canManage = !!session.data && hasPermission(session.data.user.role, "MANAGE_INTEGRATION_CONFIG");
   // Campaign / spend sync belongs to the growth edition; a Beta V1 tenant neither sees nor can call it.
-  const canSync = canManage && editionHasCapability(session.data!.user.edition, "CAMPAIGNS");
+  const canSync = canManage && capabilityEnabled(session.data!.user.capabilities, "CAMPAIGNS");
 
   const connectors = useQuery({ queryKey: ["connectors"], queryFn: api.connectors });
   const effectiveSelectedId = selectedId ?? connectors.data?.[0]?.id ?? null;

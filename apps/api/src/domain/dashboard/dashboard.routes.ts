@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { editionHasCapability } from "@pulseos/types";
+import { capabilityEnabled } from "@pulseos/types";
 import { requireCapability, requirePermission } from "../auth/permission.middleware.js";
 import {
   getAttentionQueue,
@@ -54,7 +54,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
     const tenantId = request.sessionUser!.tenantId;
     const stages = await getConversionFunnel(app.db, tenantId, dashboardFilters(request));
     // Cost per outcome is derived from marketing spend, which a Beta V1 tenant does not see.
-    return editionHasCapability(request.sessionUser!.edition, "SPEND_ATTRIBUTION") ? stages : stages.map((s) => ({ ...s, costPerOutcome: null }));
+    return capabilityEnabled(request.sessionUser!.capabilities, "SPEND_ATTRIBUTION") ? stages : stages.map((s) => ({ ...s, costPerOutcome: null }));
   });
 
   app.get("/dashboard/journey-health", async (request) => {

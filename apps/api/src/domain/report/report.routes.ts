@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import type { ReportExportKind, ReportQuery } from "@pulseos/types";
 import { branches, departments, leadSources, scheduleResources, tenants, users } from "../../db/schema.js";
-import { requirePermission } from "../auth/permission.middleware.js";
+import { requireCapability, requirePermission } from "../auth/permission.middleware.js";
 import { getOperationsReport, getReportFilterOptions } from "./operations-report.service.js";
 import { buildReportWorkbook, ExportTooLargeError } from "./report-export.service.js";
 import { ReportInputError } from "./report-period.js";
@@ -47,6 +47,7 @@ async function filterLabels(app: FastifyInstance, tenantId: string, q: ReportQue
 export async function reportRoutes(app: FastifyInstance) {
   // The operations report is the hospital-management view (Command Centre): admin roles only, every edition.
   app.addHook("preHandler", requirePermission("VIEW_ADMIN_COMMAND_CENTRE"));
+  app.addHook("preHandler", requireCapability("ANALYTICS_CORE"));
 
   app.get("/reports/filter-options", async (request) => getReportFilterOptions(app.db, request.sessionUser!.tenantId));
 

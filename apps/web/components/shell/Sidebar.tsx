@@ -39,11 +39,11 @@ const ICONS: Record<string, LucideIcon> = {
 export function Sidebar({ user, open = false, onClose }: { user: SessionUser; open?: boolean; onClose?: () => void }) {
   const pathname = usePathname();
   // Unbuilt destinations are hidden, not shown greyed out: no dead navigation.
-  const groups = navForRole(user.role, user.edition)
+  const groups = navForRole(user.role, user.capabilities)
     .map((group) => ({ ...group, items: group.items.filter((item) => item.implemented) }))
     .filter((group) => group.items.length > 0);
 
-  const locked = lockedNavItems(user.role, user.edition);
+  const locked = lockedNavItems(user.role, user.capabilities);
 
   return (
     <>
@@ -62,7 +62,7 @@ export function Sidebar({ user, open = false, onClose }: { user: SessionUser; op
         data-testid="sidebar"
       >
         <div className="nav-divider flex h-16 shrink-0 items-center border-b px-4" data-testid="sidebar-brand">
-          <PulseLockup tone="onWhite" size={28} />
+          <PulseLockup tone="onWhite" size={28} betaLabel={user.edition === "BETA_V2_GROWTH" ? "Beta V2" : "Beta V1"} />
         </div>
 
         <div className="flex-1 space-y-5 overflow-y-auto px-3 py-4">

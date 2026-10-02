@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
-import { DEFAULT_EDITION, editionHasCapability, type Edition, type EditionCapability } from "@pulseos/types";
+import { DEFAULT_EDITION, capabilityEnabled, resolveCapabilities, type Edition, type EditionCapability } from "@pulseos/types";
 
 /**
  * The signed-in tenant's edition from the cached ["session"] query (the (app) layout loads it before any page
@@ -14,5 +14,7 @@ export function useEdition(): Edition {
 }
 
 export function useCapability(capability: EditionCapability): boolean {
-  return editionHasCapability(useEdition(), capability);
+  // The tenant's RESOLVED capabilities (edition default + its own switches), never the edition alone.
+  const { data } = useQuery({ queryKey: ["session"], queryFn: api.session, staleTime: 60_000 });
+  return capabilityEnabled(data?.user.capabilities ?? resolveCapabilities(DEFAULT_EDITION, {}), capability);
 }

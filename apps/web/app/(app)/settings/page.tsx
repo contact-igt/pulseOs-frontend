@@ -11,10 +11,11 @@ import { FollowUpTypesSection } from "@/components/settings/FollowUpTypesSection
 import { ResourcesSection } from "@/components/settings/ResourcesSection";
 import { LeadSourcesSection } from "@/components/settings/LeadSourcesSection";
 import { OutcomesSection } from "@/components/outcomes/OutcomesSection";
+import { FeaturesSection } from "@/components/settings/FeaturesSection";
 import { AllocationSection } from "@/components/allocation/AllocationSection";
 import { useUrlFilters } from "@/lib/useUrlFilters";
 
-type Section = "services" | "departments" | "fields" | "sources" | "outcomes" | "followups" | "doctors" | "allocation";
+type Section = "services" | "departments" | "fields" | "sources" | "outcomes" | "followups" | "doctors" | "allocation" | "features";
 const SECTIONS: { key: Section; label: string; manageOnly: boolean }[] = [
   { key: "services", label: "Services", manageOnly: false },
   { key: "departments", label: "Departments", manageOnly: true },
@@ -24,6 +25,7 @@ const SECTIONS: { key: Section; label: string; manageOnly: boolean }[] = [
   { key: "followups", label: "Follow-up Types", manageOnly: true },
   { key: "doctors", label: "Doctors", manageOnly: true },
   { key: "allocation", label: "Allocation Rules", manageOnly: true },
+  { key: "features", label: "Features", manageOnly: true },
 ];
 
 /** A service's name and default Journey type. Its CRM fields live in the CRM Fields section. */
@@ -153,6 +155,12 @@ export default function SettingsPage() {
       {section === "allocation" && canManage && (
         <Panel title="Allocation Rules" subtitle="Who owns a new enquiry">
           {specialties.data ? <AllocationSection services={specialties.data} /> : <Skeleton className="h-24" />}
+        </Panel>
+      )}
+
+      {section === "features" && canManage && (
+        <Panel title="Features" subtitle="What this hospital can use — enabled, configured and healthy are separate">
+          <FeaturesSection />
         </Panel>
       )}
 
