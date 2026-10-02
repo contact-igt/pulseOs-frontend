@@ -5,7 +5,7 @@ import type { FastifyInstance } from "fastify";
 import type { CrmOutcomeVm, OperationsReport, ReportFilterOptions, Role } from "@pulseos/types";
 import { buildApp } from "../app.js";
 import { db, queryClient } from "../db/client.js";
-import { appointments, journeys, revenueEvents, scheduleResources, tasks, treatmentOpportunities } from "../db/schema.js";
+import { appointments, departments, journeys, revenueEvents, scheduleResources, tasks, treatmentOpportunities } from "../db/schema.js";
 import { addDays, dayKeyIn, zonedWallTime } from "../lib/hospital-time.js";
 import { resolveReportRange } from "../domain/report/report-period.js";
 import { buildOperationsReport, type EnquiryFact } from "../domain/report/operations-report.service.js";
@@ -41,7 +41,7 @@ describe("operations report aggregation (unit)", () => {
   const e = (over: Partial<EnquiryFact>): EnquiryFact => ({
     id: Math.random().toString(36), patientId: "p", patientName: "x", phone: "+91", day: "2026-09-01", createdAt: new Date(), stage: "contacted", service: "Cataract",
     sourceId: null, sourceLabel: null, bucket: "google", ownerUserId: null, ownerName: null, branchName: null, contacted: true, lastOutcomeKey: null,
-    lastOutcomeLabel: null, booked: false, attended: false, procedure: false, converted: false, ...over,
+    lastOutcomeLabel: null, booked: false, attended: false, consulted: false, procedure: false, converted: false, ...over,
   });
 
   it("'No response' = latest outcome No answer AND never got past Contacted AND not closed as lost", () => {
@@ -147,11 +147,11 @@ describe.skipIf(!DEMO_PASSWORD)("operations report + Excel export (integration)"
       newEnquiries: 3, uncontacted: 1, noResponse: 0,
       followUpsDue: 1, followUpsOverdue: 1, followUpsCompleted: 1,
       appointmentsBooked: 2, appointmentsScheduled: 2, appointmentsAttended: 1, appointmentsNoShow: 1, appointmentsCancelled: 0,
-      proceduresScheduled: 1, proceduresCompleted: 2, proceduresCompletedUndated: 0, converted: 1, conversionRate: 1 / 3,
+      proceduresScheduled: 1, proceduresCompleted: 2, proceduresCompletedUndated: 0, converted: 1, conversionRate: 1 / 3, consultationsCompleted: 1,
     });
     expect(r.daily).toEqual([
-      { day: D1, enquiries: 1, appointmentsScheduled: 0, attended: 0, noShow: 0, cancelled: 0, followUpsDue: 0, followUpsCompleted: 1 },
-      { day: D2, enquiries: 2, appointmentsScheduled: 2, attended: 1, noShow: 1, cancelled: 0, followUpsDue: 1, followUpsCompleted: 0 },
+      { day: D1, enquiries: 1, appointmentsScheduled: 0, attended: 0, consultationsCompleted: 0, noShow: 0, cancelled: 0, followUpsDue: 0, followUpsCompleted: 1 },
+      { day: D2, enquiries: 2, appointmentsScheduled: 2, attended: 1, consultationsCompleted: 1, noShow: 1, cancelled: 0, followUpsDue: 1, followUpsCompleted: 0 },
     ]);
   });
 
@@ -279,5 +279,54 @@ describe.skipIf(!DEMO_PASSWORD)("operations report + Excel export (integration)"
   it("refuses an unknown export kind and a bad period", async () => {
     expect((await get(t, "HOSPITAL_ADMIN", `/reports/export?kind=patients&${range}`)).statusCode).toBe(400);
     expect((await get(t, "HOSPITAL_ADMIN", "/reports/export?kind=summary&range=custom")).statusCode).toBe(400);
+  });
+
+  it("analytics pipeline: Enquiry → Appointment → Checked in → Consultation completed → Surgery scheduled, never widening", async () => {
+    const r = await report();
+    expect(r.pipeline.map((s) => [s.key, s.count])).toEqual([["enquiry", 3], ["booked", 2], ["checked_in", 1], ["consulted", 1], ["procedure", 1]]);
+    for (let i = 1; i < r.pipeline.length; i++) expect(r.pipeline[i]!.count).toBeLessThanOrEqual(r.pipeline[i - 1]!.count);
+    expect(r.pipeline[0]!.count).toBe(r.kpis.newEnquiries);
+  });
+
+  it("every day-by-day column sums to its KPI (one filter state, one set of rows)", async () => {
+    for (const q of [range, `${range}&service=Cataract`, `range=custom&from=${D2}&to=${D2}`]) {
+      const r = await report(q);
+      const sum = (k: "enquiries" | "appointmentsScheduled" | "attended" | "consultationsCompleted" | "noShow" | "followUpsDue" | "followUpsCompleted") => r.daily.reduce((a, d) => a + d[k], 0);
+      expect(sum("enquiries"), q).toBe(r.kpis.newEnquiries);
+      expect(sum("appointmentsScheduled"), q).toBe(r.kpis.appointmentsScheduled);
+      expect(sum("attended"), q).toBe(r.kpis.appointmentsAttended);
+      expect(sum("consultationsCompleted"), q).toBe(r.kpis.consultationsCompleted);
+      expect(sum("noShow"), q).toBe(r.kpis.appointmentsNoShow);
+      expect(sum("followUpsDue"), q).toBe(r.kpis.followUpsDue);
+      expect(sum("followUpsCompleted"), q).toBe(r.kpis.followUpsCompleted);
+    }
+  });
+
+  it("department filter narrows enquiries, visits, follow-ups and procedures together; options list this hospital's departments only", async () => {
+    const [dept] = await db.insert(departments).values({ tenantId: t.tenantId, key: "eye_test", displayName: "Eye Care" } as never).returning({ id: departments.id });
+    const [foreign] = await db.insert(departments).values({ tenantId: other.tenantId, key: "eye_other", displayName: "Foreign Dept" } as never).returning({ id: departments.id });
+    await db.update(journeys).set({ departmentId: dept!.id }).where(eq(journeys.id, ids.j1!));
+    try {
+      const r = await report(`${range}&departmentId=${dept!.id}`);
+      expect(r.kpis).toMatchObject({ newEnquiries: 1, appointmentsScheduled: 1, consultationsCompleted: 1, proceduresScheduled: 1, followUpsCompleted: 1, appointmentsNoShow: 0, followUpsDue: 0 });
+      expect(r.byService.map((x) => x.service)).toEqual(["Cataract"]);
+      // Another hospital's department id matches nothing here — it never reveals or leaks rows.
+      const leak = await report(`${range}&departmentId=${foreign!.id}`);
+      expect(leak.kpis.newEnquiries).toBe(0);
+      const opts = (await get(t, "HOSPITAL_ADMIN", "/reports/filter-options")).json() as ReportFilterOptions;
+      expect(opts.departments).toEqual([{ id: dept!.id, name: "Eye Care" }]);
+      expect((await get(t, "HOSPITAL_ADMIN", `/reports/operations?${range}&departmentId=not-a-uuid`)).statusCode).toBe(400);
+    } finally {
+      await db.update(journeys).set({ departmentId: null }).where(eq(journeys.id, ids.j1!));
+      await db.delete(departments).where(eq(departments.tenantId, other.tenantId));
+      await db.delete(departments).where(eq(departments.tenantId, t.tenantId));
+    }
+  });
+
+  it("analytics data is for hospital management: Front Desk and Coordinator are refused, edition does not matter", async () => {
+    expect((await get(t, "FRONT_DESK", `/reports/operations?${range}`)).statusCode).toBe(403);
+    expect((await get(t, "PATIENT_COORDINATOR", `/reports/operations?${range}`)).statusCode).toBe(403);
+    expect((await get(t, "DOCTOR", `/reports/filter-options`)).statusCode).toBe(403);
+    expect((await get(t, "HOSPITAL_ADMIN", `/reports/operations?${range}`)).statusCode).toBe(200); // BETA_V1_CORE
   });
 });

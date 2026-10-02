@@ -1,11 +1,12 @@
 import { and, eq, inArray, isNotNull, or, sql, type SQL } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
-import { appointments, branches, crmOutcomes, journeys, leadSources, patients, scheduleResources, tasks, treatmentOpportunities, users } from "../../db/schema.js";
+import { appointments, branches, crmOutcomes, departments, journeys, leadSources, patients, scheduleResources, tasks, treatmentOpportunities, users } from "../../db/schema.js";
 import { inLocalRange, localDay, tzLiteral } from "../../lib/hospital-time.js";
 import type {
   OperationsDay,
   OperationsFunnelStage,
   OperationsOwnerRow,
+  OperationsPipelineStage,
   OperationsReport,
   OperationsServiceRow,
   OperationsSourceRow,
@@ -30,6 +31,14 @@ const FUNNEL: { key: OperationsFunnelStage["key"]; label: string }[] = [
   { key: "attended", label: "Attended" },
   { key: "procedure", label: "Procedure scheduled" },
   { key: "converted", label: "Converted" },
+];
+
+const PIPELINE: { key: OperationsPipelineStage["key"]; label: string }[] = [
+  { key: "enquiry", label: "Enquiries" },
+  { key: "booked", label: "Appointment booked" },
+  { key: "checked_in", label: "Checked in" },
+  { key: "consulted", label: "Consultation completed" },
+  { key: "procedure", label: "Surgery scheduled" },
 ];
 
 const BUCKET_LABEL: Record<SourceChannel, string> = {
@@ -58,6 +67,8 @@ export interface EnquiryFact {
   lastOutcomeLabel: string | null;
   booked: boolean;
   attended: boolean;
+  /** A consultation was completed (a visit reached Completed). */
+  consulted: boolean;
   procedure: boolean;
   converted: boolean;
 }
@@ -135,6 +146,7 @@ function journeyScope(tenantId: string, q: ReportQuery, opts: { owner: boolean }
     eq(journeys.tenantId, tenantId),
     q.branchId ? eq(patients.branchId, q.branchId) : undefined,
     q.service ? eq(journeys.journeyType, q.service) : undefined,
+    q.departmentId ? eq(journeys.departmentId, q.departmentId) : undefined,
     q.sourceId ? eq(journeys.sourceId, q.sourceId) : undefined,
     opts.owner && q.ownerId ? eq(journeys.ownerUserId, q.ownerId) : undefined,
   ];
@@ -169,6 +181,7 @@ export async function loadReportFacts(db: Db, tenantId: string, q: ReportQuery, 
       lastOutcomeLabel: crmOutcomes.label,
       booked: exists(sql`select 1 from appointments a where a.journey_id = ${journeys.id} and a.tenant_id = ${tenantId}`),
       attended: exists(sql`select 1 from appointments a where a.journey_id = ${journeys.id} and a.tenant_id = ${tenantId} and a.status in ('checked_in','waiting','with_doctor','completed')`),
+      consulted: exists(sql`select 1 from appointments a where a.journey_id = ${journeys.id} and a.tenant_id = ${tenantId} and a.status = 'completed'`),
       procedure: exists(sql`select 1 from treatment_opportunities t where t.journey_id = ${journeys.id} and t.tenant_id = ${tenantId} and t.status in ('SCHEDULED','COMPLETED')`),
       converted: exists(sql`select 1 from treatment_opportunities t where t.journey_id = ${journeys.id} and t.tenant_id = ${tenantId} and t.status = 'COMPLETED'`),
     })
@@ -210,6 +223,7 @@ export async function loadReportFacts(db: Db, tenantId: string, q: ReportQuery, 
         eq(appointments.tenantId, tenantId),
         q.branchId ? eq(appointments.branchId, q.branchId) : undefined,
         q.service ? eq(journeys.journeyType, q.service) : undefined,
+        q.departmentId ? eq(journeys.departmentId, q.departmentId) : undefined,
         q.sourceId ? eq(journeys.sourceId, q.sourceId) : undefined,
         q.ownerId ? eq(journeys.ownerUserId, q.ownerId) : undefined,
         q.doctorId ? eq(appointments.resourceId, q.doctorId) : undefined,
@@ -220,7 +234,7 @@ export async function loadReportFacts(db: Db, tenantId: string, q: ReportQuery, 
 
   // Follow-ups: open ones due before the period ends (due in it, or overdue now) and ones completed in it.
   // A task without a Journey has no service/source, so it drops out once one of those filters is set.
-  const journeyFilter = Boolean(q.service || q.sourceId);
+  const journeyFilter = Boolean(q.service || q.sourceId || q.departmentId);
   const taskRows = await db
     .select({
       id: tasks.id,
@@ -253,6 +267,7 @@ export async function loadReportFacts(db: Db, tenantId: string, q: ReportQuery, 
         q.branchId ? eq(patients.branchId, q.branchId) : undefined,
         journeyFilter ? isNotNull(journeys.id) : undefined,
         q.service ? eq(journeys.journeyType, q.service) : undefined,
+        q.departmentId ? eq(journeys.departmentId, q.departmentId) : undefined,
         q.sourceId ? eq(journeys.sourceId, q.sourceId) : undefined,
         q.ownerId ? eq(tasks.assignedTo, q.ownerId) : undefined,
         or(
@@ -275,6 +290,7 @@ export async function loadReportFacts(db: Db, tenantId: string, q: ReportQuery, 
   const procedureCommon = [
     eq(treatmentOpportunities.tenantId, tenantId),
     q.service ? eq(journeys.journeyType, q.service) : undefined,
+    q.departmentId ? eq(journeys.departmentId, q.departmentId) : undefined,
     q.sourceId ? eq(journeys.sourceId, q.sourceId) : undefined,
     q.ownerId ? eq(journeys.ownerUserId, q.ownerId) : undefined,
   ];
@@ -366,6 +382,7 @@ export function buildOperationsReport(f: ReportFacts): OperationsReport {
     appointmentsAttended: scheduled.filter((a) => isAttended(a.status)).length,
     appointmentsNoShow: scheduled.filter((a) => a.status === "no_show").length,
     appointmentsCancelled: scheduled.filter((a) => a.status === "cancelled").length,
+    consultationsCompleted: scheduled.filter((a) => a.status === "completed").length,
     proceduresScheduled: procedures.filter((p) => p.plannedInPeriod).length,
     proceduresCompleted: procedures.filter((p) => p.completedInPeriod).length,
     proceduresCompletedUndated: f.completedUndated,
@@ -380,6 +397,7 @@ export function buildOperationsReport(f: ReportFacts): OperationsReport {
       enquiries: enquiries.filter((e) => e.day === day).length,
       appointmentsScheduled: s.length,
       attended: s.filter((a) => isAttended(a.status)).length,
+      consultationsCompleted: s.filter((a) => a.status === "completed").length,
       noShow: s.filter((a) => a.status === "no_show").length,
       cancelled: s.filter((a) => a.status === "cancelled").length,
       followUpsDue: followUps.filter((t) => t.dueInPeriod && t.dueDay === day).length,
@@ -388,6 +406,9 @@ export function buildOperationsReport(f: ReportFacts): OperationsReport {
   });
 
   const funnel = FUNNEL.map((s, i) => ({ ...s, count: enquiries.filter((e) => reached(e) >= i).length }));
+  // The analytics pipeline: cumulative like the funnel — a later step implies the earlier ones, so it never widens.
+  const pipelineLevel = (e: EnquiryFact) => (e.procedure || e.converted ? 4 : e.consulted ? 3 : e.attended ? 2 : e.booked ? 1 : 0);
+  const pipeline: OperationsPipelineStage[] = PIPELINE.map((s, i) => ({ ...s, count: enquiries.filter((e) => pipelineLevel(e) >= i).length }));
 
   const sourceMap = new Map<string, OperationsSourceRow>();
   for (const e of enquiries) {
@@ -438,7 +459,7 @@ export function buildOperationsReport(f: ReportFacts): OperationsReport {
   }
   const byService = [...serviceMap.values()].sort((a, b) => b.enquiries - a.enquiries || a.service.localeCompare(b.service));
 
-  return { period, kpis, daily, funnel, bySource, byOwner, byService };
+  return { period, kpis, daily, funnel, pipeline, bySource, byOwner, byService };
 }
 
 export async function getOperationsReport(db: Db, tenantId: string, q: ReportQuery, now?: Date): Promise<OperationsReport> {
@@ -446,8 +467,9 @@ export async function getOperationsReport(db: Db, tenantId: string, q: ReportQue
 }
 
 export async function getReportFilterOptions(db: Db, tenantId: string): Promise<ReportFilterOptions> {
-  const [branchRows, serviceRows, sourceRows, ownerRows, doctorRows] = await Promise.all([
+  const [branchRows, departmentRows, serviceRows, sourceRows, ownerRows, doctorRows] = await Promise.all([
     db.select({ id: branches.id, name: branches.name }).from(branches).where(eq(branches.tenantId, tenantId)).orderBy(branches.name),
+    db.select({ id: departments.id, name: departments.displayName }).from(departments).where(and(eq(departments.tenantId, tenantId), eq(departments.archived, false))).orderBy(departments.displayName),
     db.selectDistinct({ service: journeys.journeyType }).from(journeys).where(eq(journeys.tenantId, tenantId)).orderBy(journeys.journeyType),
     db.select({ id: leadSources.id, label: leadSources.label, archived: leadSources.archived }).from(leadSources).where(eq(leadSources.tenantId, tenantId)).orderBy(leadSources.sortOrder, leadSources.label),
     db
@@ -457,5 +479,5 @@ export async function getReportFilterOptions(db: Db, tenantId: string): Promise<
       .orderBy(users.name),
     db.select({ id: scheduleResources.id, name: scheduleResources.name }).from(scheduleResources).where(eq(scheduleResources.tenantId, tenantId)).orderBy(scheduleResources.name),
   ]);
-  return { branches: branchRows, services: serviceRows.map((r) => r.service), sources: sourceRows, owners: ownerRows, doctors: doctorRows };
+  return { branches: branchRows, departments: departmentRows, services: serviceRows.map((r) => r.service), sources: sourceRows, owners: ownerRows, doctors: doctorRows };
 }

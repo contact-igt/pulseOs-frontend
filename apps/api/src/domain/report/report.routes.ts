@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import type { ReportExportKind, ReportQuery } from "@pulseos/types";
-import { branches, leadSources, scheduleResources, tenants, users } from "../../db/schema.js";
+import { branches, departments, leadSources, scheduleResources, tenants, users } from "../../db/schema.js";
 import { requirePermission } from "../auth/permission.middleware.js";
 import { getOperationsReport, getReportFilterOptions } from "./operations-report.service.js";
 import { buildReportWorkbook, ExportTooLargeError } from "./report-export.service.js";
@@ -21,6 +21,7 @@ const querySchema = z.object({
   sourceId: opt(z.string().uuid()),
   ownerId: opt(z.string().uuid()),
   doctorId: opt(z.string().uuid()),
+  departmentId: opt(z.string().uuid()),
 });
 
 const exportSchema = querySchema.extend({ kind: z.enum(["summary", "enquiries", "appointments", "follow-ups", "procedures"]) });
@@ -34,6 +35,7 @@ async function filterLabels(app: FastifyInstance, tenantId: string, q: ReportQue
   const out: [string, string][] = [];
   const one = async <T extends { name: string }>(p: Promise<T[]>) => (await p)[0]?.name ?? "(not found)";
   if (q.branchId) out.push(["Branch", await one(app.db.select({ name: branches.name }).from(branches).where(and(eq(branches.tenantId, tenantId), eq(branches.id, q.branchId))))]);
+  if (q.departmentId) out.push(["Department", await one(app.db.select({ name: departments.displayName }).from(departments).where(and(eq(departments.tenantId, tenantId), eq(departments.id, q.departmentId))))]);
   if (q.service) out.push(["Service", q.service]);
   if (q.sourceId) out.push(["Source", await one(app.db.select({ name: leadSources.label }).from(leadSources).where(and(eq(leadSources.tenantId, tenantId), eq(leadSources.id, q.sourceId))))]);
   if (q.ownerId) out.push(["Owner / assignee", await one(app.db.select({ name: users.name }).from(users).where(and(eq(users.tenantId, tenantId), eq(users.id, q.ownerId))))]);

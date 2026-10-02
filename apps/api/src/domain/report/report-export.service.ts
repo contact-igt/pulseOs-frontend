@@ -79,6 +79,7 @@ function summarySheets(wb: ExcelJS.Workbook, facts: ReportFacts) {
     { m: "Appointments booked", v: k.appointmentsBooked, d: "Appointments created in the period" },
     { m: "Appointments scheduled", v: k.appointmentsScheduled, d: "Visits scheduled in the period" },
     { m: "Appointments attended", v: k.appointmentsAttended, d: "Visits in the period the patient attended" },
+    { m: "Consultations completed", v: k.consultationsCompleted, d: "Visits in the period whose consultation was completed" },
     { m: "No-shows", v: k.appointmentsNoShow, d: "Visits in the period marked no-show" },
     { m: "Cancelled", v: k.appointmentsCancelled, d: "Visits in the period that were cancelled" },
     { m: "Procedures planned", v: k.proceduresScheduled, d: "Procedures with a planned date in the period (scheduled or done)" },
@@ -92,7 +93,7 @@ function summarySheets(wb: ExcelJS.Workbook, facts: ReportFacts) {
     "Day by day",
     [
       { header: "Date", key: "day", width: 14 }, { header: "Enquiries", key: "enquiries", width: 11 }, { header: "Appointments scheduled", key: "appointmentsScheduled", width: 22 },
-      { header: "Attended", key: "attended", width: 10 }, { header: "No-show", key: "noShow", width: 10 }, { header: "Cancelled", key: "cancelled", width: 10 },
+      { header: "Checked in", key: "attended", width: 11 }, { header: "Consultations completed", key: "consultationsCompleted", width: 23 }, { header: "No-show", key: "noShow", width: 10 }, { header: "Cancelled", key: "cancelled", width: 10 },
       { header: "Follow-ups due", key: "followUpsDue", width: 15 }, { header: "Follow-ups completed", key: "followUpsCompleted", width: 20 },
     ],
     r.daily.map((d) => ({ ...d, day: dayLabel(d.day) })),

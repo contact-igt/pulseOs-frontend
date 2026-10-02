@@ -2189,6 +2189,8 @@ export interface ReportQuery {
   ownerId?: string;
   /** Doctor / schedule resource — applies to appointments and procedures only. */
   doctorId?: string;
+  /** The journey's department (the service line's department). */
+  departmentId?: string;
 }
 
 export interface ReportPeriod {
@@ -2228,6 +2230,8 @@ export interface OperationsKpis {
   proceduresCompleted: number;
   /** Completed procedures (all time, same filters) with no completion time recorded — not counted by date, never dated by payment. */
   proceduresCompletedUndated: number;
+  /** Visits scheduled inside the period whose consultation was completed. */
+  consultationsCompleted: number;
   /** Enquiries of the period whose procedure/treatment is completed. */
   converted: number;
   /** converted / newEnquiries, null without enquiries. */
@@ -2239,10 +2243,19 @@ export interface OperationsDay {
   enquiries: number;
   appointmentsScheduled: number;
   attended: number;
+  /** Visits scheduled this day whose consultation was completed. */
+  consultationsCompleted: number;
   noShow: number;
   cancelled: number;
   followUpsDue: number;
   followUpsCompleted: number;
+}
+
+/** The analytics pipeline: how many of the period's enquiries reached each step (cumulative, never widening). */
+export interface OperationsPipelineStage {
+  key: "enquiry" | "booked" | "checked_in" | "consulted" | "procedure";
+  label: string;
+  count: number;
 }
 
 export interface OperationsFunnelStage {
@@ -2286,6 +2299,7 @@ export interface OperationsReport {
   kpis: OperationsKpis;
   daily: OperationsDay[];
   funnel: OperationsFunnelStage[];
+  pipeline: OperationsPipelineStage[];
   bySource: OperationsSourceRow[];
   byOwner: OperationsOwnerRow[];
   byService: OperationsServiceRow[];
@@ -2293,6 +2307,7 @@ export interface OperationsReport {
 
 export interface ReportFilterOptions {
   branches: { id: string; name: string }[];
+  departments: { id: string; name: string }[];
   services: string[];
   sources: { id: string; label: string; archived: boolean }[];
   owners: { id: string; name: string }[];
