@@ -1,7 +1,10 @@
 import { test, expect, type Page } from "@playwright/test";
+import { sql } from "./support/fixtures";
 
 // M6.6 Settings UX: the tab strip never scrolls vertically, scrolls sideways when it must, and keeps every tab reachable.
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD ?? "";
+const API = "http://localhost:4310";
+const RUN = `${Date.now()}`.slice(-6);
 
 async function login(page: Page, email: string) {
   await page.goto("/login");
@@ -73,5 +76,167 @@ test.describe("M6.6 — Settings tab strip", () => {
     await expect(second).toBeFocused();
     await page.keyboard.press("End");
     await expect(strip.getByRole("tab").last()).toHaveAttribute("aria-selected", "true");
+  });
+});
+
+test.describe("M6.6 — Workflow Outcomes: handle-first drag", () => {
+  test.skip(!DEMO_PASSWORD, "DEMO_PASSWORD must be set to run this suite");
+  test.describe.configure({ mode: "serial" });
+  const KEYS = ["a", "b", "c"].map((x) => `e2e_m66_${x}_${RUN}`);
+  const LABEL = (i: number) => `E2E M66 ${"ABC"[i]} ${RUN}`;
+  const dbOrder = () => sql(`SELECT string_agg(key, ',' ORDER BY sort_order) FROM crm_outcomes WHERE key LIKE 'e2e_m66_%_${RUN}'`).split(",");
+  const order = (page: Page) => page.locator('[data-testid="outcome-group-contacted"] [data-testid^="outcome-row-e2e_m66_"]').evaluateAll((rows) => rows.map((r) => r.getAttribute("data-testid")!.replace("outcome-row-", "")));
+
+  /** Where a row sits in the WHOLE Contacted group (the announcement speaks in group positions). */
+  const groupPosition = async (page: Page, key: string) => {
+    const keys = await page.locator('[data-testid="outcome-group-contacted"] [data-testid^="outcome-row-"]').evaluateAll((rows) => rows.map((r) => r.getAttribute("data-testid")!.replace("outcome-row-", "")));
+    return { position: keys.indexOf(key) + 1, total: keys.length };
+  };
+
+  test.beforeAll(async ({ browser }) => {
+    const page = await browser.newPage();
+    await login(page, "eyev1.admin@pulseos.local");
+    for (const [i, key] of KEYS.entries()) {
+      const res = await page.request.post(`${API}/crm/outcomes`, { data: { key, label: LABEL(i), stage: "contacted" } });
+      expect(res.status(), await res.text()).toBe(201);
+    }
+    await page.close();
+    ORIGINAL = Object.fromEntries(sql(`SELECT key || '=' || sort_order FROM crm_outcomes WHERE key LIKE 'e2e_m66_%_${RUN}'`).split("\n").map((l) => l.split("=")));
+  });
+  let ORIGINAL: Record<string, string> = {};
+  const resetOrder = () => sql(KEYS.map((k) => `UPDATE crm_outcomes SET sort_order = ${Number(ORIGINAL[k])} WHERE key = '${k}'`).join(";"));
+  test.afterAll(() => {
+    sql(`UPDATE journeys SET last_outcome_id = NULL WHERE last_outcome_id IN (SELECT id FROM crm_outcomes WHERE key LIKE 'e2e_m66_%'); DELETE FROM crm_outcomes WHERE key LIKE 'e2e_m66_%';`);
+  });
+
+  async function open(page: Page, width = 1440) {
+    resetOrder();
+    await page.setViewportSize({ width, height: 900 });
+    await login(page, "eyev1.admin@pulseos.local");
+    await page.goto("/settings?section=outcomes");
+    await expect.poll(() => order(page)).toEqual(KEYS);
+  }
+
+  async function dragByHandle(page: Page, from: string, onto: string, grabRow = false) {
+    const grip = page.getByTestId(grabRow ? `outcome-row-${from}` : `outcome-drag-${from}`);
+    const target = page.getByTestId(`outcome-row-${onto}`);
+    await grip.scrollIntoViewIfNeeded();
+    const g = (await (grabRow ? page.getByTestId(`outcome-edit-${from}`) : grip).boundingBox())!;
+    const t = (await target.boundingBox())!;
+    await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2 - 12, { steps: 6 });
+    await page.mouse.move(t.x + 40, t.y + 4, { steps: 12 });
+    await page.mouse.up();
+  }
+
+  test("the handle is the primary control: row states, whole-row drag does nothing, arrows are quiet until hover/focus", async ({ page }) => {
+    await open(page);
+    const row = page.getByTestId(`outcome-row-${KEYS[1]}`);
+    const grip = page.getByTestId(`outcome-drag-${KEYS[1]}`);
+    const down = page.getByTestId(`outcome-move-down-${KEYS[1]}`);
+    await expect(grip).toBeVisible();
+    await expect(grip).toHaveCSS("cursor", "grab");
+    // Secondary arrows are present but visually quiet when the row is not hovered or focused.
+    await page.mouse.move(5, 5);
+    await expect(down).toHaveCSS("opacity", "0");
+    await row.hover();
+    await expect(down).toHaveCSS("opacity", "1");
+    expect((await down.boundingBox())!.width).toBeLessThan((await grip.boundingBox())!.width + 1);
+
+    // Dragging the row body (not the handle) never reorders; the body is the Edit target.
+    await dragByHandle(page, KEYS[1], KEYS[0], true);
+    await expect.poll(() => order(page)).toEqual(KEYS);
+    expect(dbOrder()).toEqual(KEYS);
+
+    // Dragging: the row lifts (data-dragging) and the hovered row is marked as the drop target.
+    const g = (await grip.boundingBox())!;
+    const t = (await page.getByTestId(`outcome-row-${KEYS[0]}`).boundingBox())!;
+    await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2 - 12, { steps: 6 });
+    await expect(row).toHaveAttribute("data-dragging");
+    await page.mouse.move(t.x + 40, t.y + 6, { steps: 12 });
+    await expect(page.getByTestId(`outcome-row-${KEYS[0]}`)).toHaveAttribute("data-drop-target");
+    await page.keyboard.press("Escape");
+    await page.mouse.up();
+    await expect.poll(() => order(page)).toEqual(KEYS);
+  });
+
+  test("drag by handle saves, announces the new position, persists across refresh", async ({ page }) => {
+    await open(page);
+    const saved = page.waitForResponse((r) => r.url().includes("/crm/outcomes/reorder") && r.ok());
+    await dragByHandle(page, KEYS[2], KEYS[0]);
+    await saved;
+    await expect.poll(() => order(page)).toEqual([KEYS[2], KEYS[0], KEYS[1]]);
+    const at = await groupPosition(page, KEYS[2]!);
+    await expect(page.getByTestId("reorder-status")).toHaveText(`${LABEL(2)} moved to position ${at.position} of ${at.total}.`);
+    expect(dbOrder()).toEqual([KEYS[2], KEYS[0], KEYS[1]]);
+    await page.reload();
+    await expect.poll(() => order(page)).toEqual([KEYS[2], KEYS[0], KEYS[1]]);
+  });
+
+  test("a failed save puts the order back, says so inline, and shows no error overlay", async ({ page }) => {
+    await open(page);
+    const before = await order(page);
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    await page.route("**/crm/outcomes/reorder", (route) => route.fulfill({ status: 500, contentType: "application/json", body: '{"error":"boom"}' }));
+    await dragByHandle(page, before[2]!.replace("outcome-row-", ""), before[0]!);
+    await expect(page.getByTestId("outcomes-error")).toContainText("put back");
+    await expect.poll(() => order(page)).toEqual(before);
+    await expect(page.getByTestId(`outcome-row-${before[2]}`)).toHaveAttribute("data-status", "failed");
+    expect(errors).toEqual([]);
+    await expect(page.locator("[data-nextjs-dialog]")).toHaveCount(0);
+    await page.unroute("**/crm/outcomes/reorder");
+  });
+
+  test("Move up / down: announced, focus stays on the moved row's control, DOM order matches visual order", async ({ page }) => {
+    await open(page);
+    const start = await order(page);
+    const second = start[1]!;
+    const saved = page.waitForResponse((r) => r.url().includes("/crm/outcomes/reorder") && r.ok());
+    await page.getByTestId(`outcome-move-up-${second}`).focus();
+    await page.keyboard.press("Enter");
+    await saved;
+    await expect.poll(() => order(page)).toEqual([second, start[0]!, start[2]!]);
+    const at = await groupPosition(page, second);
+    await expect(page.getByTestId("reorder-status")).toHaveText(`${LABEL(KEYS.indexOf(second))} moved to position ${at.position} of ${at.total}.`);
+    // Focus stays on the control that was used, on the row that moved — never dropped to <body>.
+    await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute("data-testid"))).toBe(`outcome-move-up-${second}`);
+    // DOM order == visual order (top of each row strictly increases).
+    const tops = await page.locator('[data-testid^="outcome-row-e2e_m66_"]').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().top));
+    expect([...tops].sort((a, b) => a - b)).toEqual(tops);
+    expect(dbOrder()).toEqual([second, start[0]!, start[2]!]);
+  });
+
+  test("keyboard drag: Space picks up, arrows move, Space drops; the handle is a labelled button", async ({ page }) => {
+    await open(page);
+    const start = await order(page);
+    const grip = page.getByTestId(`outcome-drag-${start[0]}`);
+    await expect(grip).toHaveAttribute("aria-label", /Reorder .*position \d+ of \d+.*space to pick up/i);
+    const saved = page.waitForResponse((r) => r.url().includes("/crm/outcomes/reorder") && r.ok());
+    await grip.focus();
+    await page.keyboard.press("Space");
+    await expect(page.locator(`[data-testid="outcome-row-${start[0]}"][data-dragging]`)).toHaveCount(1);
+    const from = await groupPosition(page, start[0]!);
+    const over = page.locator('[id^="DndLiveRegion"]', { hasText: `is over position ${from.position + 1} of ${from.total}` });
+    await expect(async () => {
+      if ((await over.count()) === 0) await page.keyboard.press("ArrowDown");
+      await expect(over).toHaveCount(1, { timeout: 500 });
+    }).toPass({ timeout: 5000 });
+    await page.keyboard.press("Space");
+    await saved;
+    await expect.poll(() => order(page)).toEqual([start[1]!, start[0]!, start[2]!]);
+  });
+
+  test("390px: handle and arrows are 44px targets, no page overflow, drag works by handle", async ({ page }) => {
+    await open(page, 390);
+    for (const id of [`outcome-drag-${KEYS[0]}`, `outcome-move-up-${KEYS[0]}`, `outcome-move-down-${KEYS[0]}`]) {
+      const box = (await page.getByTestId(id).boundingBox())!;
+      expect(box.width, id).toBeGreaterThanOrEqual(44);
+      expect(box.height, id).toBeGreaterThanOrEqual(44);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
   });
 });
