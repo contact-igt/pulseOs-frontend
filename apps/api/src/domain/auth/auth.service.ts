@@ -51,9 +51,16 @@ async function createSessionFor(db: Db, user: typeof users.$inferSelect) {
   };
 }
 
+// An unknown account still costs one password verification, so the response time does not reveal whether an email exists.
+let decoyHash: Promise<string> | null = null;
+
 export async function loginWithPassword(db: Db, email: string, password: string) {
   const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
-  if (!user) return { ok: false as const, reason: "invalid_credentials" as const };
+  if (!user) {
+    decoyHash ??= hashPassword("decoy-password-never-matches");
+    await verifyPassword(await decoyHash, password);
+    return { ok: false as const, reason: "invalid_credentials" as const };
+  }
 
   const valid = await verifyPassword(user.passwordHash, password);
   if (!valid) return { ok: false as const, reason: "invalid_credentials" as const };

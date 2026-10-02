@@ -215,4 +215,55 @@ describe.skipIf(!DEMO_PASSWORD)("CRM outcomes (integration)", () => {
     expect((await call(admin, "GET", "/crm/outcomes?includeArchived=true")).statusCode).toBe(200);
     expect((await log(coordinator, "not-a-uuid", { outcomeKey: "interested" })).statusCode).toBe(404);
   });
+
+  describe("system stages are PulseOS's, outcomes are the hospital's", () => {
+    it("the canonical stage list is exactly the database's stage enum, in lifecycle order", async () => {
+      const { JOURNEY_STAGES } = await import("@pulseos/types");
+      const { journeyStageEnum } = await import("../db/schema.js");
+      expect([...JOURNEY_STAGES]).toEqual([...journeyStageEnum.enumValues]);
+    });
+
+    it("a hospital cannot move an outcome onto a system stage it does not own, or invent stage values", async () => {
+      const o = (await call(admin, "POST", "/crm/outcomes", { key: `${PREFIX}stagecheck`, label: "Stage check", stage: "contacted" })).json() as CrmOutcomeVm;
+      outcomeIds.push(o.id);
+      for (const stage of ["enquiry", "booked", "attended", "consulted", "treatment_advised", "scheduled", "completed", "made_up"]) {
+        expect((await call(admin, "PATCH", `/crm/outcomes/${o.id}`, { stage })).statusCode, stage).toBe(400);
+      }
+      expect((await call(admin, "PATCH", `/crm/outcomes/${o.id}`, { stage: "lost" })).statusCode).toBe(200); // the one other stage an outcome may belong to
+      expect((await outcomes(admin, "?includeArchived=true")).find((x) => x.id === o.id)!.stage).toBe("lost");
+    });
+
+    it("there is no endpoint through which a hospital edits, adds or removes stages", async () => {
+      for (const [method, url] of [["POST", "/journey-stages"], ["PATCH", "/journey-stages/booked"], ["PATCH", "/crm/stages/booked"], ["POST", "/crm/stages"]] as const) {
+        expect((await call(admin, method, url, { label: "Renamed" })).statusCode, `${method} ${url}`).toBe(404);
+      }
+    });
+
+    it("reordering inside one stage leaves the other stage's order alone", async () => {
+      const mk = async (key: string, stage: "contacted" | "lost") => {
+        const r = (await call(admin, "POST", "/crm/outcomes", { key: `${PREFIX}${key}`, label: key.toUpperCase(), stage })).json() as CrmOutcomeVm;
+        outcomeIds.push(r.id);
+        return r;
+      };
+      const [c1, c2, l1, l2] = [await mk("ord_c1", "contacted"), await mk("ord_c2", "contacted"), await mk("ord_l1", "lost"), await mk("ord_l2", "lost")];
+      const orderOf = async (stage: string) => (await outcomes(admin, "?includeArchived=true")).filter((x) => x.stage === stage && x.key.startsWith(`${PREFIX}ord_`)).sort((a, b) => a.sortOrder - b.sortOrder).map((x) => x.key);
+      const lostBefore = await orderOf("lost");
+      expect((await call(admin, "POST", "/crm/outcomes/reorder", { orderedIds: [c2!.id, c1!.id] })).statusCode).toBe(200);
+      expect(await orderOf("contacted")).toEqual([`${PREFIX}ord_c2`, `${PREFIX}ord_c1`]);
+      expect(await orderOf("lost")).toEqual(lostBefore);
+      expect(lostBefore).toEqual([l1!.key, l2!.key]);
+    });
+
+    it("an archived outcome stays readable on the journeys that recorded it, and in the admin list; it only leaves the picker", async () => {
+      const o = (await call(admin, "POST", "/crm/outcomes", { key: `${PREFIX}arch_hist`, label: "Historic wording", stage: "contacted" })).json() as CrmOutcomeVm;
+      outcomeIds.push(o.id);
+      const { journeyId } = await newJourney();
+      expect((await log(coordinator, journeyId, { outcomeKey: o.key })).statusCode).toBe(201);
+      expect((await call(admin, "PATCH", `/crm/outcomes/${o.id}`, { archived: true })).statusCode).toBe(200);
+      expect((await detail(journeyId)).journey.lastOutcome?.label).toBe("Historic wording"); // history keeps its words
+      expect((await outcomes(admin, "?includeArchived=true")).find((x) => x.id === o.id)).toMatchObject({ archived: true, label: "Historic wording" });
+      expect((await outcomes(coordinator)).some((x) => x.id === o.id)).toBe(false); // not offered for new entries
+      expect((await log(coordinator, journeyId, { outcomeKey: o.key })).statusCode).toBeGreaterThanOrEqual(400); // and cannot be logged any more
+    });
+  });
 });

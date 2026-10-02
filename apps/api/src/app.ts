@@ -32,7 +32,8 @@ import { websiteFormRoutes } from "./domain/acquisition/website-form.routes.js";
 import { reportRoutes } from "./domain/report/report.routes.js";
 
 export async function buildApp() {
-  const app = Fastify({ logger: true });
+  // Behind a reverse proxy set TRUST_PROXY=true so request.ip is the client's address (the sign-in throttle keys on it).
+  const app = Fastify({ logger: true, trustProxy: process.env.TRUST_PROXY === "true" });
 
   // Unexpected failures are logged in full server-side but answered with a
   // generic body — a raw error message (e.g. a failed SQL query with table
