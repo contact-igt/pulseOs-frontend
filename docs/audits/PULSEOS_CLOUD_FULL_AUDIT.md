@@ -469,3 +469,17 @@ Every item below was verified by tests and live checks:
 - **Blockers:**
   - M7 cannot be validated against a live WhatsApp account without credentials (fixture mode only).
   - B-07 (booking past-time / overlap) should land before reminders are scheduled from bookings.
+
+---
+
+## Status update — after M6.5 (2026-10-02)
+
+| Bug | Status |
+|---|---|
+| B-07 booking accepts the past; no double-booking guard | **FIXED** (M6.5): server-side past refusal; per-resource locked same-minute collision check |
+| B-08 no login throttling | **FIXED** (M6.5): reserve-on-admit throttle, 429 + Retry-After, per account+address and per address |
+| B-09 seeded surgeries without doctor/branch | **FIXED** (M6.5): seed repaired; completed rows carry a completion time |
+| B-10 dev-login button 46px | **FIXED** (M6.5): the stale maximum-height assertion replaced by a minimum + on-screen rule |
+| "Treatment completion has no timestamp" (P2) | **FIXED** (migration 0026); reports no longer infer it from payments |
+| "Settings: system vs hospital stages" (deferred) | **DONE** (M6.5) |
+| B-11 unused `SESSION_SECRET`, B-12 `appointments.journey_id` index | open (P3) |
