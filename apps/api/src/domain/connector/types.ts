@@ -41,6 +41,13 @@ export interface MessagingProviderAdapter {
     to: string,
     body: string,
   ): Promise<{ providerMessageId: string }>;
+  /** Send a provider-approved template (the only kind of message allowed outside the 24-hour window). */
+  sendTemplate(
+    config: Record<string, unknown>,
+    secrets: Record<string, unknown>,
+    to: string,
+    template: { name: string; language: string; parameters: string[] },
+  ): Promise<{ providerMessageId: string }>;
 }
 
 export interface InboundCallEvent {

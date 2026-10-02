@@ -61,4 +61,31 @@ describe("whatsAppMetaCloudAdapter (unit)", () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network timeout")));
     await expect(whatsAppMetaCloudAdapter.sendMessage({ phoneNumberId: "PNID" }, { accessToken: "tok" }, "919000000000", "hello")).rejects.toThrow(/network timeout/);
   });
+
+  it("sendTemplate in fixture mode never calls the network and returns a deterministic fixture id", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const r = await whatsAppMetaCloudAdapter.sendTemplate({ mode: "fixture", phoneNumberId: "PN1" }, {}, "919000000000", { name: "appointment_reminder", language: "en", parameters: ["Asha"] });
+    expect(r.providerMessageId).toMatch(/^FIXTURE_WAMID_PN1_/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("sendTemplate in live mode posts an approved template with positional body parameters and the bearer token only in the header", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ messages: [{ id: "wamid.TPL1" }] }) });
+    vi.stubGlobal("fetch", fetchMock);
+    const r = await whatsAppMetaCloudAdapter.sendTemplate({ phoneNumberId: "PNID" }, { accessToken: "tok-secret" }, "919000000000", { name: "appointment_reminder", language: "en", parameters: ["Asha", "5 Oct"] });
+    expect(r.providerMessageId).toBe("wamid.TPL1");
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toContain("/PNID/messages");
+    expect(init.headers.Authorization).toBe("Bearer tok-secret");
+    expect(init.body).not.toContain("tok-secret");
+    expect(JSON.parse(init.body)).toMatchObject({ messaging_product: "whatsapp", to: "919000000000", type: "template", template: { name: "appointment_reminder", language: { code: "en" }, components: [{ type: "body", parameters: [{ type: "text", text: "Asha" }, { type: "text", text: "5 Oct" }] }] } });
+  });
+
+  it("sendTemplate failure carries the status only, never the provider's body or the token", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 400, text: async () => '{"error":{"message":"bad","fbtrace_id":"x","token":"tok-secret"}}' }));
+    const err = await whatsAppMetaCloudAdapter.sendTemplate({ phoneNumberId: "PNID" }, { accessToken: "tok-secret" }, "9190", { name: "n", language: "en", parameters: [] }).catch((e: Error) => e);
+    expect((err as Error).message).toBe("WhatsApp template send failed: HTTP 400");
+    expect((err as Error).message).not.toContain("tok-secret");
+  });
 });

@@ -2574,3 +2574,82 @@ export interface OutboundWebhookVm {
   lastDeliveryAt: string | null;
   lastDeliveryStatus: string | null;
 }
+
+// ---------------------------------------------------------------------------
+// Notifications (M7): appointment/surgery confirmations and reminders, and staff follow-up messages.
+// ---------------------------------------------------------------------------
+
+export const NOTIFICATION_STATUSES = ["PENDING", "PROCESSING", "SENT", "DELIVERED", "READ", "FAILED", "BLOCKED", "CANCELLED"] as const;
+export type NotificationStatus = (typeof NOTIFICATION_STATUSES)[number];
+
+export type NotificationSubject = "APPOINTMENT" | "SURGERY";
+export type NotificationRuleKind = "CONFIRMATION" | "REMINDER";
+export type NotificationOffsetUnit = "minutes" | "hours" | "days";
+
+/** Why a notification was not created, or was stopped. Stable codes, never free text. */
+export type NotificationSuppression =
+  | "TRIGGER_ALREADY_PASSED"
+  | "TOO_CLOSE_TO_PREVIOUS_NOTIFICATION"
+  | "APPOINTMENT_CANCELLED"
+  | "RULE_DISABLED";
+
+export interface NotificationRuleVm {
+  id: string;
+  subject: NotificationSubject;
+  kind: NotificationRuleKind;
+  enabled: boolean;
+  /** CONFIRMATION sends on booking (offset 0); REMINDER sends `offset` before the visit/surgery. */
+  offsetValue: number;
+  offsetUnit: NotificationOffsetUnit;
+  channel: "WHATSAPP";
+  templateId: string | null;
+  minGapMinutes: number;
+}
+
+/** Template purposes and the ONLY variables each may use. A body referencing anything else is refused. */
+export const TEMPLATE_PURPOSES = ["APPOINTMENT_CONFIRMATION", "APPOINTMENT_REMINDER", "SURGERY_REMINDER", "FOLLOW_UP_MESSAGE"] as const;
+export type TemplatePurpose = (typeof TEMPLATE_PURPOSES)[number];
+export const TEMPLATE_PURPOSE_LABEL: Record<TemplatePurpose, string> = {
+  APPOINTMENT_CONFIRMATION: "Appointment confirmation",
+  APPOINTMENT_REMINDER: "Appointment reminder",
+  SURGERY_REMINDER: "Surgery reminder",
+  FOLLOW_UP_MESSAGE: "Follow-up message (staff)",
+};
+export const TEMPLATE_VARIABLES: Record<TemplatePurpose, string[]> = {
+  APPOINTMENT_CONFIRMATION: ["patient_name", "doctor_name", "date", "time", "branch_name", "hospital_name"],
+  APPOINTMENT_REMINDER: ["patient_name", "doctor_name", "date", "time", "branch_name", "hospital_name"],
+  SURGERY_REMINDER: ["patient_name", "procedure", "date", "time", "branch_name", "hospital_name"],
+  FOLLOW_UP_MESSAGE: ["patient_name", "staff_name", "hospital_name"],
+};
+
+export interface MessageTemplateVm {
+  id: string;
+  purpose: TemplatePurpose;
+  name: string;
+  /** The template name approved with the provider (Meta). Required before it can be sent live. */
+  providerTemplateName: string;
+  language: string;
+  body: string;
+  variables: string[];
+  enabled: boolean;
+}
+
+export interface NotificationVm {
+  id: string;
+  subject: NotificationSubject | "FOLLOW_UP";
+  subjectId: string;
+  status: NotificationStatus;
+  reason: string | null;
+  scheduledFor: string;
+  sentAt: string | null;
+  templatePurpose: TemplatePurpose | null;
+}
+
+export interface WhatsAppPreview {
+  recipient: string;
+  text: string;
+  templateName: string;
+  missingVariables: string[];
+  canSend: boolean;
+  blockedReason: string | null;
+}

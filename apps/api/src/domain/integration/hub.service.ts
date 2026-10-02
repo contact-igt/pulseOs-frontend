@@ -4,6 +4,7 @@ import { connectorEvents, connectors, connectorSecrets, outboundWebhookDeliverie
 import { decryptSecret, encryptSecret } from "../security/encryption.js";
 import { inLocalRange, isRealDate, tenantTimezone } from "../../lib/hospital-time.js";
 import { hasPermission, type CapabilityMap, type IntegrationCard, type IntegrationDetail, type IntegrationLogRow, type Role } from "@pulseos/types";
+import { redactLogText } from "../security/redact.js";
 import { INTEGRATION_CATALOGUE, catalogueEntry, type CatalogueEntry } from "./hub-catalogue.js";
 import { deriveConfiguration, deriveHealth, deriveMode, type ConnectorFacts } from "./hub-state.js";
 
@@ -149,16 +150,6 @@ export async function configureIntegration(db: Db, tenantId: string, key: string
 }
 
 // -- Logs -------------------------------------------------------------------
-
-/** Strip anything credential-shaped from provider text before it is shown to a person. */
-export function redactLogText(text: string | null | undefined): string | null {
-  if (!text) return null;
-  return text
-    .replace(/(bearer\s+)[A-Za-z0-9._~+/=-]+/gi, "$1[redacted]")
-    .replace(/((?:access[_-]?token|app[_-]?secret|client[_-]?secret|refresh[_-]?token|developer[_-]?token|verify[_-]?token|api[_-]?key|password|secret|token)["']?\s*[:=]\s*["']?)[^\s"'&,}]+/gi, "$1[redacted]")
-    .replace(/\b(EAA[A-Za-z0-9]{20,}|ya29\.[A-Za-z0-9._-]{20,}|whsec_[a-f0-9]{16,}|[A-Fa-f0-9]{32,})\b/g, "[redacted]")
-    .slice(0, 300);
-}
 
 export interface LogFilters {
   provider?: string;

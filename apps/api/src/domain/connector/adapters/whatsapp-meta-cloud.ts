@@ -106,4 +106,39 @@ export const whatsAppMetaCloudAdapter: MessagingProviderAdapter = {
     if (!providerMessageId) throw new Error("WhatsApp send succeeded but returned no message id");
     return { providerMessageId };
   },
+
+  async sendTemplate(config, secrets, to, template) {
+    if (config.mode === "fixture") {
+      // Deterministic stand-in, never a real send. Same id shape as sendMessage's fixture so delivery tests can match it.
+      const phoneNumberId = typeof config.phoneNumberId === "string" ? config.phoneNumberId : "unknown";
+      return { providerMessageId: `FIXTURE_WAMID_${phoneNumberId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` };
+    }
+    const phoneNumberId = config.phoneNumberId;
+    const accessToken = secrets.accessToken;
+    if (typeof phoneNumberId !== "string" || typeof accessToken !== "string") {
+      throw new Error("WhatsApp connector is missing phoneNumberId configuration or accessToken secret");
+    }
+    const res = await fetch(`https://graph.facebook.com/${META_GRAPH_API_VERSION}/${phoneNumberId}/messages`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        to,
+        type: "template",
+        template: {
+          name: template.name,
+          language: { code: template.language },
+          components: template.parameters.length ? [{ type: "body", parameters: template.parameters.map((text) => ({ type: "text", text })) }] : [],
+        },
+      }),
+    });
+    if (!res.ok) {
+      // Status only: the provider's error body can echo request details, and nothing credential-shaped may reach a log.
+      throw new Error(`WhatsApp template send failed: HTTP ${res.status}`);
+    }
+    const data = (await res.json()) as { messages?: { id?: string }[] };
+    const providerMessageId = data.messages?.[0]?.id;
+    if (!providerMessageId) throw new Error("WhatsApp send succeeded but returned no message id");
+    return { providerMessageId };
+  },
 };

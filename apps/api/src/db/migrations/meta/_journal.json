@@ -204,6 +204,13 @@
       "when": 1790941317211,
       "tag": "0028_m7_outbound_webhooks",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1790942408310,
+      "tag": "0029_m7_notifications",
+      "breakpoints": true
     }
   ]
 }

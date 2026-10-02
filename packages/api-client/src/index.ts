@@ -1,4 +1,7 @@
 import type {
+  MessageTemplateVm,
+  NotificationRuleVm,
+  WhatsAppPreview,
   Capability,
   Edition,
   IntegrationCard,
@@ -357,6 +360,15 @@ export const api = {
   updateWebhook: (id: string, body: Partial<{ name: string; url: string; events: WebhookEventType[]; conditions: WebhookCondition[]; enabled: boolean }>) =>
     request<OutboundWebhookVm>(`/integrations/webhooks/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteWebhook: (id: string) => request<void>(`/integrations/webhooks/${id}`, { method: "DELETE" }),
+  notificationRules: () => request<NotificationRuleVm[]>("/notifications/rules"),
+  updateNotificationRule: (id: string, body: Partial<Pick<NotificationRuleVm, "enabled" | "offsetValue" | "offsetUnit" | "templateId" | "minGapMinutes">>) =>
+    request<NotificationRuleVm>(`/notifications/rules/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  messageTemplates: () => request<MessageTemplateVm[]>("/notifications/templates"),
+  updateMessageTemplate: (id: string, body: Partial<Pick<MessageTemplateVm, "name" | "providerTemplateName" | "language" | "body" | "enabled">>) =>
+    request<MessageTemplateVm>(`/notifications/templates/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  whatsappPreview: (journeyId: string) => request<WhatsAppPreview>(`/journeys/${journeyId}/whatsapp/preview`),
+  sendWhatsApp: (journeyId: string, idempotencyKey: string) =>
+    request<{ notificationId: string; status: string; duplicate: boolean }>(`/journeys/${journeyId}/whatsapp`, { method: "POST", body: JSON.stringify({ idempotencyKey }) }),
   connectors: () => request<ConnectorRow[]>("/connectors"),
   connector: (id: string) => request<ConnectorDetail>(`/connectors/${id}`),
   updateConnector: (id: string, input: { displayName?: string; configuration?: Record<string, unknown>; secrets?: Record<string, unknown> }) =>

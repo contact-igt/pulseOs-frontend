@@ -1,4 +1,6 @@
+import { notificationRoutes } from "./domain/notification/notification.routes.js";
 import { integrationHubRoutes } from "./domain/integration/hub.routes.js";
+import { registerNotificationConsumers } from "./domain/notification/consumers.js";
 import { registerIntegrationConsumers } from "./domain/integration/consumers.js";
 import { capabilityRoutes } from "./domain/capability/capability.routes.js";
 import Fastify, { type FastifyError, type FastifyServerOptions } from "fastify";
@@ -121,9 +123,11 @@ export async function buildApp() {
     await protectedApp.register(reportRoutes);
     await protectedApp.register(capabilityRoutes);
     await protectedApp.register(integrationHubRoutes);
+    await protectedApp.register(notificationRoutes);
   });
 
   registerIntegrationConsumers(app.db);
+  registerNotificationConsumers(app.db);
 
   app.get("/health", async () => ({ ok: true }));
 

@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { CalendarClock, Plus } from "lucide-react";
+import { CalendarClock, MessageCircle, Plus } from "lucide-react";
 import { api, ApiError } from "@pulseos/api-client";
 import { Badge, Button, Card, fmtSmartDateTime } from "@pulseos/ui";
 import { FOLLOW_UP_KEYS, type JourneyDetailVm, type TaskRow } from "@pulseos/types";
 import { invalidateFollowUpQueries } from "./AddFollowUpSheet";
 import { ReassignSheet, RescheduleSheet } from "./TaskActionSheets";
+import { SendWhatsAppSheet } from "./SendWhatsAppSheet";
+import { useCapability } from "@/lib/useEdition";
 
 const BUCKET: Record<NonNullable<JourneyDetailVm["journey"]["nextTaskBucket"]>, { label: string; tone: "danger" | "primary" | "neutral" }> = {
   overdue: { label: "Overdue", tone: "danger" },
@@ -23,7 +25,8 @@ const BUCKET: Record<NonNullable<JourneyDetailVm["journey"]["nextTaskBucket"]>, 
 export function NextActionCard({ journey, canManage, onAdd }: { journey: JourneyDetailVm["journey"]; canManage: boolean; onAdd: () => void }) {
   const queryClient = useQueryClient();
   const task: TaskRow | null = journey.nextTask;
-  const [sheet, setSheet] = useState<"reschedule" | "reassign" | null>(null);
+  const [sheet, setSheet] = useState<"reschedule" | "reassign" | "whatsapp" | null>(null);
+  const canWhatsApp = useCapability("WHATSAPP_NOTIFICATIONS");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -116,11 +119,17 @@ export function NextActionCard({ journey, canManage, onAdd }: { journey: Journey
           <Button variant="secondary" size="sm" className="min-h-11 sm:min-h-0" onClick={() => setSheet("reassign")} disabled={busy} data-testid="next-action-reassign">
             Reassign
           </Button>
+          {canWhatsApp && (
+            <Button variant="secondary" size="sm" className="min-h-11 sm:min-h-0" onClick={() => setSheet("whatsapp")} disabled={busy} data-testid="next-action-whatsapp">
+              <MessageCircle size={14} aria-hidden="true" /> Send WhatsApp
+            </Button>
+          )}
         </div>
       )}
 
       {sheet === "reschedule" && <RescheduleSheet task={task} onClose={() => setSheet(null)} />}
       {sheet === "reassign" && <ReassignSheet task={task} onClose={() => setSheet(null)} />}
+      {sheet === "whatsapp" && <SendWhatsAppSheet journeyId={journey.id} onClose={() => setSheet(null)} />}
     </Card>
   );
 }

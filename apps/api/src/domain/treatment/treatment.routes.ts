@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requirePermission } from "../auth/permission.middleware.js";
+import { emitAppointmentEvent } from "../appointment/appointment-events.js";
 import { listTreatments, rescheduleSurgery, scheduleSurgery, updateTreatmentStatus } from "./treatment.service.js";
 
 const REASON_STATUS: Record<string, number> = {
@@ -67,6 +68,8 @@ export async function treatmentRoutes(app: FastifyInstance) {
     if (!id.success || !parsed.success) return reply.status(400).send({ error: "invalid_request" });
     const result = await scheduleSurgery(app.db, user.tenantId, user.id, id.data, parsed.data, user.timezone);
     if (!result.ok) return reply.status(REASON_STATUS[result.reason] ?? 400).send({ error: result.reason });
+    // Published once the surgery is committed (the appointment-completion path publishes its own, after ITS commit).
+    emitAppointmentEvent({ type: "surgery.scheduled", tenantId: user.tenantId, treatmentId: result.treatmentId, plannedDate: result.plannedDate });
     return reply.status(201).send({ ok: true, treatmentId: result.treatmentId });
   });
 

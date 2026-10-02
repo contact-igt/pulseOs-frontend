@@ -30,6 +30,7 @@ function purgePatientsWhere(predicate: string) {
   const cs = `SELECT id FROM conversations WHERE patient_id IN (${ps})`;
   sql(`
     BEGIN;
+    DELETE FROM notifications WHERE patient_id IN (${ps});
     DELETE FROM revenue_events WHERE patient_id IN (${ps});
     DELETE FROM conversion_feedback_events WHERE patient_id IN (${ps});
     DELETE FROM treatment_opportunities WHERE patient_id IN (${ps});

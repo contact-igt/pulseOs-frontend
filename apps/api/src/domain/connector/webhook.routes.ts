@@ -4,6 +4,7 @@ import { markEventFailed, markEventProcessed, recordConnectorEvent } from "./con
 import { getAcquisitionAdapter, getMessagingAdapter, getTelephonyAdapter } from "./registry.js";
 import { processInboundWhatsAppMessage, processWhatsAppStatusUpdate } from "./whatsapp-webhook.service.js";
 import { persistInboundCall } from "./call-webhook.service.js";
+import { applyDeliveryStatus } from "../notification/notification.service.js";
 import { tenantCapabilityMap } from "../capability/capability.service.js";
 import { processProviderLead } from "../acquisition/lead-webhook.service.js";
 import { ingestNormalizedLead } from "../acquisition/lead-ingestion.service.js";
@@ -105,6 +106,8 @@ export async function webhookRoutes(app: FastifyInstance) {
 
       try {
         await processWhatsAppStatusUpdate(app.db, connectorId, status);
+        // The same provider status also moves a reminder/follow-up message along (sent → delivered → read, or failed).
+        await applyDeliveryStatus(app.db, status.providerMessageId, status.status, status.occurredAt);
         await markEventProcessed(app.db, eventId);
         await touchConnectorSuccess(app.db, connectorId);
       } catch (err) {

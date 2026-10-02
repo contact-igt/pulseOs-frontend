@@ -25,6 +25,7 @@ export async function purgePatientData(db: Db, patientIds: string[]): Promise<vo
     sql`delete from custom_field_values where journey_id in (select id from journeys where patient_id in (${ids}))`,
     sql`delete from timeline_events where patient_id in (${ids})`,
     sql`delete from tasks where patient_id in (${ids})`,
+    sql`delete from notifications where patient_id in (${ids})`,
     sql`delete from appointments where patient_id in (${ids})`,
     sql`delete from journeys where patient_id in (${ids})`,
     sql`delete from patients where id in (${ids})`,

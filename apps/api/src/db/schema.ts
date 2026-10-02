@@ -1103,3 +1103,77 @@ export const outboundWebhookDeliveries = pgTable("outbound_webhook_deliveries", 
   dueIdx: index("outbound_webhook_deliveries_due_idx").on(t.status, t.nextAttemptAt),
   tenantIdx: index("outbound_webhook_deliveries_tenant_idx").on(t.tenantId, t.createdAt),
 }));
+
+// ---------------------------------------------------------------------------
+// Notifications (M7). Appointment/surgery domain events → a rule decides what to send and when → one durable row per
+// message (`notifications`) → a worker re-checks the visit and sends through the MessagingProvider adapter → provider
+// delivery webhooks move the status forward. The unique idempotency key is the guard against sending anything twice.
+// ---------------------------------------------------------------------------
+
+export const messageTemplates = pgTable("message_templates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  purpose: text("purpose").notNull(),
+  name: text("name").notNull(),
+  // The template name approved with the provider; outside the 24-hour window only approved templates may be sent.
+  providerTemplateName: text("provider_template_name").notNull(),
+  language: text("language").notNull().default("en"),
+  body: text("body").notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  tenantPurposeUnique: uniqueIndex("message_templates_tenant_purpose_unique").on(t.tenantId, t.purpose),
+}));
+
+export const notificationRules = pgTable("notification_rules", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  subject: text("subject").notNull(), // APPOINTMENT | SURGERY
+  kind: text("kind").notNull(), // CONFIRMATION | REMINDER
+  enabled: boolean("enabled").notNull().default(true),
+  offsetValue: integer("offset_value").notNull(),
+  offsetUnit: text("offset_unit").notNull(), // minutes | hours | days
+  channel: text("channel").notNull().default("WHATSAPP"),
+  templateId: uuid("template_id").references(() => messageTemplates.id, { onDelete: "set null" }),
+  minGapMinutes: integer("min_gap_minutes").notNull().default(60),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  tenantIdx: index("notification_rules_tenant_idx").on(t.tenantId, t.subject),
+}));
+
+export const notifications = pgTable("notifications", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  ruleId: uuid("rule_id").references(() => notificationRules.id, { onDelete: "set null" }),
+  templateId: uuid("template_id").references(() => messageTemplates.id, { onDelete: "set null" }),
+  // APPOINTMENT | SURGERY | FOLLOW_UP (a message a staff member chose to send).
+  subjectType: text("subject_type").notNull(),
+  subjectId: uuid("subject_id").notNull(),
+  patientId: uuid("patient_id").notNull().references(() => patients.id),
+  journeyId: uuid("journey_id").references(() => journeys.id),
+  channel: text("channel").notNull().default("WHATSAPP"),
+  // The visit/surgery time this notification was planned against; if the visit has moved since, the worker cancels it.
+  subjectAt: timestamp("subject_at", { withTimezone: true }),
+  scheduledFor: timestamp("scheduled_for", { withTimezone: true }).notNull(),
+  status: text("status").notNull().default("PENDING"),
+  // BLOCKED / CANCELLED / FAILED reason: a stable code (e.g. RESCHEDULED, CAPABILITY_DISABLED, PROVIDER_NOT_CONFIGURED).
+  reason: text("reason"),
+  attempts: integer("attempts").notNull().default(0),
+  providerMessageId: text("provider_message_id"),
+  // The exact text that was (or would be) sent, kept so the message can be audited as the patient saw it.
+  renderedText: text("rendered_text"),
+  idempotencyKey: text("idempotency_key").notNull(),
+  createdBy: uuid("created_by").references(() => users.id),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+  deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+  readAt: timestamp("read_at", { withTimezone: true }),
+  processingStartedAt: timestamp("processing_started_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  idempotencyUnique: uniqueIndex("notifications_tenant_idempotency_unique").on(t.tenantId, t.idempotencyKey),
+  dueIdx: index("notifications_due_idx").on(t.status, t.scheduledFor),
+  subjectIdx: index("notifications_subject_idx").on(t.tenantId, t.subjectType, t.subjectId),
+  providerMessageIdx: index("notifications_provider_message_idx").on(t.providerMessageId),
+}));
