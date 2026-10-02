@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@pulseos/api-client";
 import { Button, ErrorState, SideSheet, Skeleton } from "@pulseos/ui";
@@ -20,7 +20,7 @@ export function SendWhatsAppSheet({ journeyId, onClose }: { journeyId: string; o
   const queryClient = useQueryClient();
   const preview = useQuery({ queryKey: ["whatsapp-preview", journeyId], queryFn: () => api.whatsappPreview(journeyId), retry: false });
   // One key per sheet: a double-click or a retry after a timeout can never send the message twice.
-  const key = useRef(`ui-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`);
+  const [key] = useState(() => `ui-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`);
   const [state, setState] = useState<"idle" | "sending" | "sent">("idle");
   const [error, setError] = useState<string | null>(null);
 
@@ -28,7 +28,7 @@ export function SendWhatsAppSheet({ journeyId, onClose }: { journeyId: string; o
     setState("sending");
     setError(null);
     try {
-      const r = await api.sendWhatsApp(journeyId, key.current);
+      const r = await api.sendWhatsApp(journeyId, key);
       setState(r.status === "SENT" || r.status === "DELIVERED" || r.status === "READ" ? "sent" : "idle");
       if (r.status === "FAILED" || r.status === "BLOCKED") setError("The message could not be sent. It has been recorded; try again later.");
       queryClient.invalidateQueries({ queryKey: ["journey", journeyId] });
