@@ -1,6 +1,12 @@
 import type {
   Capability,
   Edition,
+  IntegrationCard,
+  IntegrationDetail,
+  IntegrationLogRow,
+  OutboundWebhookVm,
+  WebhookCondition,
+  WebhookEventType,
   AnalyticsCampaigns,
   AnalyticsFilterOptions,
   AnalyticsFlow,
@@ -337,6 +343,20 @@ export const api = {
   retryCallIntelligence: (callId: string) => request<{ queued: boolean }>(`/calls/${callId}/intelligence/retry`, { method: "POST", body: JSON.stringify({}) }),
   /** URL of the authenticated recording stream (play in an <audio> tag, or download). The provider URL is never exposed. */
   callRecordingUrl: (callId: string, opts: { download?: boolean } = {}) => `${API_BASE}/calls/${callId}/recording${opts.download ? "?download=1" : ""}`,
+  integrationHub: () => request<IntegrationCard[]>("/integrations/hub"),
+  integrationDetail: (key: string) => request<IntegrationDetail>(`/integrations/hub/${key}`),
+  configureIntegration: (key: string, body: { configuration?: Record<string, string>; secrets?: Record<string, string>; mode?: "FIXTURE" | "SANDBOX" | "LIVE" }) =>
+    request<IntegrationDetail>(`/integrations/hub/${key}/configuration`, { method: "PUT", body: JSON.stringify(body) }),
+  integrationLogs: (filters: { provider?: string; status?: string; from?: string; to?: string }) => {
+    const qs = new URLSearchParams(Object.entries(filters).filter(([, v]) => !!v) as [string, string][]).toString();
+    return request<IntegrationLogRow[]>(`/integrations/logs${qs ? `?${qs}` : ""}`);
+  },
+  webhooks: () => request<OutboundWebhookVm[]>("/integrations/webhooks"),
+  createWebhook: (body: { name: string; url: string; events: WebhookEventType[]; conditions?: WebhookCondition[]; enabled?: boolean }) =>
+    request<{ webhook: OutboundWebhookVm; signingSecret: string }>("/integrations/webhooks", { method: "POST", body: JSON.stringify(body) }),
+  updateWebhook: (id: string, body: Partial<{ name: string; url: string; events: WebhookEventType[]; conditions: WebhookCondition[]; enabled: boolean }>) =>
+    request<OutboundWebhookVm>(`/integrations/webhooks/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteWebhook: (id: string) => request<void>(`/integrations/webhooks/${id}`, { method: "DELETE" }),
   connectors: () => request<ConnectorRow[]>("/connectors"),
   connector: (id: string) => request<ConnectorDetail>(`/connectors/${id}`),
   updateConnector: (id: string, input: { displayName?: string; configuration?: Record<string, unknown>; secrets?: Record<string, unknown> }) =>

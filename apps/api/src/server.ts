@@ -5,6 +5,7 @@ import { startJobRunner, type DueJob } from "./jobs/runner.js";
 import { processDueConversationSummaries } from "./domain/conversation/summary/conversation-session.service.js";
 import { processDueCallIntelligence } from "./domain/call/call-intelligence.service.js";
 import { getTranscriber } from "./domain/call/transcriber.js";
+import { deliverDueWebhooks } from "./domain/integration/outbound-webhook.service.js";
 import { getSummarizer } from "./domain/conversation/summary/index.js";
 
 const port = Number(process.env.PORT ?? 4000);
@@ -17,6 +18,7 @@ const app = await buildApp();
 const jobs: DueJob[] = [
   { name: "conversation-summaries", run: (now) => processDueConversationSummaries(db, now, getSummarizer()) },
   { name: "call-intelligence", run: (now) => processDueCallIntelligence(db, now, { transcriberFor: (mode) => getTranscriber(mode), summarizer: getSummarizer() }) },
+  { name: "outbound-webhooks", run: (now) => deliverDueWebhooks(db, now) },
 ];
 const stopJobs = process.env.JOBS_DISABLED === "true" ? null : startJobRunner(jobs, { log: (msg, detail) => app.log.error({ detail }, msg) });
 app.addHook("onClose", async () => stopJobs?.());

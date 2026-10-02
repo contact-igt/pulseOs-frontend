@@ -1,3 +1,5 @@
+import { integrationHubRoutes } from "./domain/integration/hub.routes.js";
+import { registerIntegrationConsumers } from "./domain/integration/consumers.js";
 import { capabilityRoutes } from "./domain/capability/capability.routes.js";
 import Fastify, { type FastifyError, type FastifyServerOptions } from "fastify";
 import cookie from "@fastify/cookie";
@@ -72,7 +74,7 @@ export async function buildApp() {
     reply.header("Access-Control-Allow-Origin", process.env.WEB_ORIGIN ?? "http://localhost:3000");
     reply.header("Access-Control-Allow-Credentials", "true");
     reply.header("Access-Control-Allow-Headers", "content-type");
-    reply.header("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS");
+    reply.header("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
     if (request.method === "OPTIONS") {
       reply.status(204).send();
     }
@@ -118,7 +120,10 @@ export async function buildApp() {
     await protectedApp.register(analyticsRoutes);
     await protectedApp.register(reportRoutes);
     await protectedApp.register(capabilityRoutes);
+    await protectedApp.register(integrationHubRoutes);
   });
+
+  registerIntegrationConsumers(app.db);
 
   app.get("/health", async () => ({ ok: true }));
 

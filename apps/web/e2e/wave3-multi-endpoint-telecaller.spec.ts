@@ -52,7 +52,7 @@ test.describe("Wave 3 — multi-endpoint attribution + telecaller reason filters
     // ---- Configure a second hospital line via the real Integrations UI, not the API directly ----
     const providerRef = `E2E_PNI_${Date.now()}`;
     const label = LINE_LABEL;
-    await page.goto("/integrations");
+    await page.goto("/integrations?view=connectors");
     await expect(page.getByTestId("integrations-page")).toBeVisible();
     await page.getByTestId(`connector-row-${whatsapp.provider}`).click();
     await page.getByTestId("add-endpoint-button").click();

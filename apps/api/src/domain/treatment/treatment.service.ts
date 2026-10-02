@@ -1,3 +1,4 @@
+import { emitIntegrationEvent } from "../integration/domain-events.js";
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { patientNameSql } from "../../lib/patient-name.js";
 import type { Db, DbOrTx } from "../../db/client.js";
@@ -274,6 +275,7 @@ export async function updateTreatmentStatus(
   if (existing.status === "SCHEDULED" && nextStatus === "CANCELLED") emitAppointmentEvent({ type: "surgery.cancelled", tenantId, treatmentId, plannedDate: existing.plannedDate });
 
   if (nextStatus === "COMPLETED") {
+    emitIntegrationEvent({ type: "surgery.completed", tenantId, eventId: `surgery.completed:${treatmentId}`, occurredAt: new Date(), data: { treatmentId, journeyId: existing.journeyId } });
     // A completed treatment is the checkpoint-specified trigger point for
     // conversion feedback — this only ever builds a candidate record
     // (consent-gated, idempotent), never sends anything to a real provider.

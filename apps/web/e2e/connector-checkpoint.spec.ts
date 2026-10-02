@@ -31,7 +31,7 @@ test.describe("Communication connectors checkpoint (Group Y)", () => {
     await expect(page.getByTestId("command-centre")).toBeVisible();
 
     // ---- Integrations UI ----
-    await page.goto("/integrations");
+    await page.goto("/integrations?view=connectors");
     await expect(page.getByTestId("integrations-page")).toBeVisible();
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "01-integrations.png"), fullPage: true });
 
@@ -132,7 +132,7 @@ test.describe("Communication connectors checkpoint (Group Y)", () => {
     // page renders). Re-login as admin for this one screenshot rather than
     // pretend a role that can't reach the page took it.
     await login(page, "gyn.admin@pulseos.local");
-    await page.goto("/integrations");
+    await page.goto("/integrations?view=connectors");
     await expect(page.getByTestId("integrations-page")).toBeVisible();
     await page.screenshot({ path: path.join(ARTIFACTS_DIR, "07-integrations-tablet.png"), fullPage: true });
 

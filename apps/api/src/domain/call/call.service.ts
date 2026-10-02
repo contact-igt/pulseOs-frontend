@@ -1,3 +1,4 @@
+import { emitIntegrationEvent } from "../integration/domain-events.js";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { Db } from "../../db/client.js";
@@ -276,6 +277,9 @@ export async function logManualCall(db: Db, tenantId: string, actor: Actor, jour
     }
     return { callId: call.id, callbackTaskId, duplicate: false };
   });
+  if (!out.duplicate && (status === "completed" || status === "missed")) {
+    emitIntegrationEvent({ type: status === "completed" ? "call.completed" : "call.missed", tenantId, eventId: `call.${status}:${out.callId}`, occurredAt: occurredAt, data: { callId: out.callId, journeyId, direction: input.direction, origin: "MANUAL" } });
+  }
   return { ok: true, ...out };
 }
 

@@ -1,3 +1,4 @@
+import { emitIntegrationEvent } from "../integration/domain-events.js";
 import { eq } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { calls, connectors, journeys, tasks, timelineEvents } from "../../db/schema.js";
@@ -109,6 +110,7 @@ export async function persistInboundCall(db: Db, tenantId: string, connectorId: 
   const phoneSource = openNew ? await resolveLeadSource(db, tenantId, "phone", { allowArchived: true }) : null;
   const allocated = openNew ? await pickOwnerForNewJourney(db, tenantId, { source: "phone", journeyType: PHONE_ENQUIRY, branchId: endpoint?.branchId ?? null }) : null;
 
+  let stored: { id: string; journeyId: string | null } | null = null;
   await db.transaction(async (tx) => {
     const [insertedCall] = await tx
       .insert(calls)
@@ -134,6 +136,7 @@ export async function persistInboundCall(db: Db, tenantId: string, connectorId: 
       .onConflictDoNothing({ target: [calls.connectorId, calls.externalCallId] })
       .returning();
     if (!insertedCall) return; // already stored: nothing else may run again
+    stored = { id: insertedCall.id, journeyId: existingJourney?.id ?? null };
 
     let journey = existingJourney;
     if (openNew) {
@@ -182,6 +185,10 @@ export async function persistInboundCall(db: Db, tenantId: string, connectorId: 
       await applyDispositionMapping(tx, tenantId, patient.id, journey?.id ?? null, event.disposition, mapping);
     }
   });
+  const call = stored as { id: string; journeyId: string | null } | null;
+  if (call && (event.status === "completed" || event.status === "missed")) {
+    emitIntegrationEvent({ type: event.status === "completed" ? "call.completed" : "call.missed", tenantId, eventId: `call.${event.status}:${call.id}`, occurredAt: event.endedAt ?? event.startedAt ?? new Date(), data: { callId: call.id, journeyId: call.journeyId, direction: event.direction, origin: "IVR" } });
+  }
 }
 
 const PHONE_ENQUIRY = "Phone enquiry";

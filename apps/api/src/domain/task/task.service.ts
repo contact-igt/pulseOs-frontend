@@ -1,3 +1,4 @@
+import { emitIntegrationEvent } from "../integration/domain-events.js";
 import { and, eq, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { patientNameSql } from "../../lib/patient-name.js";
@@ -310,6 +311,10 @@ export async function createFollowUp(dbOrTx: DbOrTx, tenantId: string, actor: { 
     await tx.insert(timelineEvents).values({ tenantId, patientId: journey.patientId, journeyId, actorType: "user", actorId: actor.id, eventType: "task_created", relatedEntityType: "task", relatedEntityId: task!.id, ...line });
     return task!;
   });
+  // Only when this call owns the transaction: inside a caller's transaction the follow-up may still be rolled back.
+  if (!("rollback" in (dbOrTx as object))) {
+    emitIntegrationEvent({ type: "followup.created", tenantId, eventId: `followup.created:${row.id}`, occurredAt: now, data: { taskId: row.id, journeyId, followUpTypeId: type.id, dueAt: dueAt.toISOString() } });
+  }
   return { ok: true, task: (await getTaskById(db, tenantId, row.id))! };
 }
 

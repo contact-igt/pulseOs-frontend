@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { connectorEvents, connectors, connectorSecrets } from "../../db/schema.js";
 import { decryptSecret, encryptSecret } from "../security/encryption.js";
@@ -120,7 +120,7 @@ export async function getConnectorById(db: Db, connectorId: string) {
 export async function touchConnectorSuccess(db: Db, connectorId: string): Promise<void> {
   await db
     .update(connectors)
-    .set({ lastEventAt: new Date(), lastSyncAt: new Date(), lastError: null, updatedAt: new Date() })
+    .set({ lastEventAt: new Date(), lastSyncAt: new Date(), lastError: null, status: sql`case when ${connectors.status} = 'DISABLED' then ${connectors.status} else 'CONNECTED'::connector_status end`, updatedAt: new Date() })
     .where(eq(connectors.id, connectorId));
 }
 

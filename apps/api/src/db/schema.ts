@@ -1059,3 +1059,47 @@ export const customFieldValues = pgTable("custom_field_values", {
   journeyIdx: index("custom_field_values_journey_idx").on(t.journeyId),
   journeyFieldUnique: uniqueIndex("custom_field_values_journey_field_unique").on(t.journeyId, t.fieldDefinitionId),
 }));
+
+// ---------------------------------------------------------------------------
+// Outbound webhooks (M7, Super Admin only): send selected real domain events to a hospital's own systems.
+// The signing secret is encrypted like connector secrets and shown once at creation. One delivery row per
+// (webhook, event): the unique index is the idempotency guard, so a repeated event never posts twice.
+// ---------------------------------------------------------------------------
+
+export const outboundWebhooks = pgTable("outbound_webhooks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  name: text("name").notNull(),
+  url: text("url").notNull(),
+  events: text("events").array().notNull(),
+  // [{ field, op: "eq" | "neq" | "in", value }] — all must hold. Structured data, never an expression.
+  conditions: jsonb("conditions").notNull().default([]),
+  enabled: boolean("enabled").notNull().default(true),
+  encryptedSecret: text("encrypted_secret").notNull(),
+  createdBy: uuid("created_by").references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  tenantIdx: index("outbound_webhooks_tenant_idx").on(t.tenantId),
+}));
+
+export const outboundWebhookDeliveries = pgTable("outbound_webhook_deliveries", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  webhookId: uuid("webhook_id").notNull().references(() => outboundWebhooks.id, { onDelete: "cascade" }),
+  eventType: text("event_type").notNull(),
+  eventId: text("event_id").notNull(),
+  // The exact JSON body that is (re)sent; no secrets, no patient free text beyond what the event carries.
+  payload: jsonb("payload").notNull(),
+  status: text("status").notNull().default("PENDING"), // PENDING | SENT | FAILED
+  attempts: integer("attempts").notNull().default(0),
+  nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
+  responseStatus: integer("response_status"),
+  error: text("error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+}, (t) => ({
+  idempotencyUnique: uniqueIndex("outbound_webhook_deliveries_webhook_event_unique").on(t.webhookId, t.eventId),
+  dueIdx: index("outbound_webhook_deliveries_due_idx").on(t.status, t.nextAttemptAt),
+  tenantIdx: index("outbound_webhook_deliveries_tenant_idx").on(t.tenantId, t.createdAt),
+}));

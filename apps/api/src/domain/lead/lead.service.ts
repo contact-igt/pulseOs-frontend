@@ -1,3 +1,4 @@
+import { emitIntegrationEvent } from "../integration/domain-events.js";
 import { and, eq, ne, or } from "drizzle-orm";
 import { patientNameSql } from "../../lib/patient-name.js";
 import { dayKeyIn, diffDays, isRealDate, localToday, parseInstant } from "../../lib/hospital-time.js";
@@ -79,6 +80,9 @@ export async function createLead(db: Db, tenantId: string, actorId: string, inpu
   try {
     const out = await db.transaction((tx) => createLeadIn(tx as unknown as Db, tenantId, actorId, input, actorRole, timezone, now, (publish) => afterCommit.push(publish)));
     if (!("validationError" in out)) for (const publish of afterCommit) publish();
+    if (!("validationError" in out) && !("stepError" in out)) {
+      emitIntegrationEvent({ type: "lead.created", tenantId, eventId: `lead.created:${out.journeyId}`, occurredAt: now, data: { patientId: out.patientId, journeyId: out.journeyId, isNewPatient: out.isNewPatient, sourceKey: input.sourceKey ?? input.source ?? null } });
+    }
     return out;
   } catch (err) {
     if (err instanceof LeadStepError) return { stepError: { step: err.step, reason: err.reason } };

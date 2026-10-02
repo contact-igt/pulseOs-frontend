@@ -2466,3 +2466,111 @@ export interface LeadsWorkspace {
   /** What the Service and Source filters can offer: the values that actually occur across this hospital's leads. */
   options: { services: string[]; sources: { key: string; label: string }[] };
 }
+
+// ---------------------------------------------------------------------------
+// Integration Hub (M7). One catalogue of what a hospital can connect, with the facts kept SEPARATE:
+// Enabled (the tenant's capability switch) ≠ Configuration (credentials + settings present) ≠ Health (what the
+// provider last told us). Secrets are never part of any of these shapes: only `hasSecret`.
+// ---------------------------------------------------------------------------
+
+export const INTEGRATION_KEYS = ["google_ads", "meta_ads", "runo", "ccs_ivr", "whatsapp_meta_cloud", "sms", "webhooks"] as const;
+export type IntegrationKey = (typeof INTEGRATION_KEYS)[number];
+export type IntegrationCategory = "ADS" | "CALLING" | "MESSAGING" | "ADVANCED";
+export const INTEGRATION_CATEGORY_LABEL: Record<IntegrationCategory, string> = {
+  ADS: "Ads & Attribution",
+  CALLING: "Calling & IVR",
+  MESSAGING: "Messaging",
+  ADVANCED: "Advanced",
+};
+
+/** What the card honestly says about how real this connection is. Never inferred from "enabled". */
+export type IntegrationMode = "LIVE_CONFIGURED" | "LIVE_CAPABLE" | "SANDBOX" | "FIXTURE" | "BLOCKED" | "NOT_CONFIGURED" | "DISABLED";
+export type IntegrationConfigurationState = "CONFIGURED" | "PARTIAL" | "NOT_CONFIGURED" | "BLOCKED";
+export type IntegrationHealth = "HEALTHY" | "DEGRADED" | "UNHEALTHY" | "UNKNOWN" | "NOT_APPLICABLE";
+
+export interface IntegrationFieldSpec {
+  key: string;
+  label: string;
+  help?: string;
+}
+
+export interface IntegrationCard {
+  key: IntegrationKey;
+  category: IntegrationCategory;
+  name: string;
+  provider: string;
+  purpose: string;
+  /** The tenant switch that turns this on (Settings → Features); null for tools that have none (Webhooks). */
+  capability: Capability | null;
+  enabled: boolean;
+  configuration: IntegrationConfigurationState;
+  health: IntegrationHealth;
+  mode: IntegrationMode;
+  blockedReason: string | null;
+  lastSyncAt: string | null;
+  lastEventAt: string | null;
+  lastError: string | null;
+  /** Who may change non-secret settings / credentials, as the caller sees it. */
+  canConfigure: boolean;
+  canManageSecrets: boolean;
+}
+
+export interface IntegrationDetail extends IntegrationCard {
+  configurationFields: IntegrationFieldSpec[];
+  /** Non-secret values currently set. */
+  configurationValues: Record<string, string>;
+  /** One entry per secret field; the value itself is never sent. */
+  secretFields: (IntegrationFieldSpec & { hasSecret: boolean })[];
+  /** Provider dispositions / actions mapped to PulseOS next actions (calling), or other mapping notes. */
+  mappingNotes: string | null;
+  webhookUrl: string | null;
+  connectorMode: "FIXTURE" | "SANDBOX" | "LIVE" | null;
+}
+
+export interface IntegrationLogRow {
+  id: string;
+  provider: string;
+  direction: "inbound" | "outbound";
+  status: "received" | "processed" | "failed" | "duplicate" | "sent" | "pending";
+  summary: string;
+  error: string | null;
+  at: string;
+}
+
+// Outbound webhooks (Super Admin only). Real domain events only; conditions are simple structured comparisons —
+// never an expression or script.
+export const WEBHOOK_EVENT_TYPES = [
+  "lead.created",
+  "call.completed",
+  "call.missed",
+  "interaction.logged",
+  "followup.created",
+  "appointment.booked",
+  "appointment.rescheduled",
+  "appointment.cancelled",
+  "appointment.completed",
+  "surgery.scheduled",
+  "surgery.completed",
+] as const;
+export type WebhookEventType = (typeof WEBHOOK_EVENT_TYPES)[number];
+export const WEBHOOK_CONDITION_OPS = ["eq", "neq", "in"] as const;
+export type WebhookConditionOp = (typeof WEBHOOK_CONDITION_OPS)[number];
+export interface WebhookCondition {
+  /** A top-level field of the event payload (e.g. "sourceKey", "departmentId"). */
+  field: string;
+  op: WebhookConditionOp;
+  value: string | string[];
+}
+
+export interface OutboundWebhookVm {
+  id: string;
+  name: string;
+  url: string;
+  events: WebhookEventType[];
+  conditions: WebhookCondition[];
+  enabled: boolean;
+  hasSecret: true;
+  createdAt: string;
+  lastDeliveryAt: string | null;
+  lastDeliveryStatus: string | null;
+}

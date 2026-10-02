@@ -1,3 +1,4 @@
+import { emitIntegrationEvent } from "../integration/domain-events.js";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { crmOutcomes, customFieldValues, journeys, tasks, timelineEvents } from "../../db/schema.js";
@@ -252,5 +253,6 @@ export async function logInteraction(
   });
   if (!result) return { ok: false, reason: "task_closed" };
 
+  emitIntegrationEvent({ type: "interaction.logged", tenantId, eventId: `interaction.logged:${journeyId}:${now.getTime()}:${outcome.key}`, occurredAt: now, data: { journeyId, outcomeKey: outcome.key, stageChanged, stage } });
   return { ok: true, result: { journeyId, stage, stageChanged, outcome, followUpTaskId: result.followUpTaskId, completedTaskId: result.completedTaskId } };
 }

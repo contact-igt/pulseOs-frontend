@@ -21,9 +21,19 @@ export function FeaturesSection() {
   const queryClient = useQueryClient();
   const q = useQuery({ queryKey: ["capabilities"], queryFn: api.capabilities });
   const [error, setError] = useState<string | null>(null);
+  // What the person just chose, shown until the server answers (React state flushes inside the click; query-cache updates do not).
+  const [chosen, setChosen] = useState<Record<string, boolean>>({});
 
   const toggle = useMutation({
     mutationFn: ({ key, enabled }: { key: string; enabled: boolean }) => api.setCapability(key, enabled),
+    // The switch moves at once; a refusal (dependency, permission) puts it back and says why.
+    onSettled: async (_d, _e, v) => {
+      await queryClient.invalidateQueries({ queryKey: ["capabilities"] });
+      setChosen((cur) => {
+        const { [v.key]: _gone, ...rest } = cur;
+        return rest;
+      });
+    },
     onSuccess: () => {
       setError(null);
       queryClient.invalidateQueries({ queryKey: ["capabilities"] });
@@ -31,6 +41,12 @@ export function FeaturesSection() {
     },
     onError: (e: Error) => setError(REASON_TEXT[e.message] ?? "Could not change that feature."),
   });
+
+  // Applied synchronously in the change handler (a controlled switch would otherwise snap back for a frame).
+  function flip(key: string, enabled: boolean) {
+    setChosen((cur) => ({ ...cur, [key]: enabled }));
+    toggle.mutate({ key, enabled });
+  }
 
   if (q.isLoading) return <Skeleton className="h-32" />;
   if (q.isError || !q.data) return <ErrorState message="Could not load features." />;
@@ -60,19 +76,19 @@ export function FeaturesSection() {
             </div>
             <div className="flex items-center gap-3 text-xs">
               {c.provider && (
-                <Link href={`/integrations?provider=${c.provider}`} className="text-primary-700 underline-offset-2 hover:underline" data-testid={`feature-setup-${c.key}`}>
+                <Link href={`/integrations?open=${c.provider}`} className="text-primary-700 underline-offset-2 hover:underline" data-testid={`feature-setup-${c.key}`}>
                   Set up in Integration Hub
                 </Link>
               )}
               <label className="flex items-center gap-2">
-                <span className="text-ink-2">{c.enabled ? "On" : "Off"}</span>
+                <span className="text-ink-2">{(chosen[c.key] ?? c.enabled) ? "On" : "Off"}</span>
                 <input
                   type="checkbox"
                   role="switch"
-                  checked={c.enabled}
-                  disabled={!c.editable || toggle.isPending}
+                  checked={chosen[c.key] ?? c.enabled}
+                  disabled={!c.editable}
                   aria-label={`${c.label} enabled`}
-                  onChange={(e) => toggle.mutate({ key: c.key, enabled: e.target.checked })}
+                  onChange={(e) => flip(c.key, e.target.checked)}
                   className="h-5 w-9 cursor-pointer accent-primary-600 disabled:cursor-not-allowed"
                   data-testid={`feature-toggle-${c.key}`}
                 />
