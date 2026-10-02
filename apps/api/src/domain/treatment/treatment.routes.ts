@@ -1,6 +1,5 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import type { TreatmentStatus } from "@pulseos/types";
 import { requirePermission } from "../auth/permission.middleware.js";
 import { listTreatments, rescheduleSurgery, scheduleSurgery, updateTreatmentStatus } from "./treatment.service.js";
 

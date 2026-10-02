@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Lock, Plus } from "lucide-react";
 import { api } from "@pulseos/api-client";
@@ -69,7 +69,7 @@ export function OutcomesSection() {
   const outcomes = useQuery({ queryKey: ["crm-outcomes", "all"], queryFn: () => api.crmOutcomes({ includeArchived: true }) });
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["crm-outcomes"] });
 
-  const all = outcomes.data ?? [];
+  const all = useMemo(() => outcomes.data ?? [], [outcomes.data]);
   const archivedCount = all.filter((o) => o.archived).length;
 
   async function run(action: () => Promise<unknown>, fallback: string) {

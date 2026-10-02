@@ -1,4 +1,4 @@
-import { and, eq, inArray, ne, or } from "drizzle-orm";
+import { and, eq, ne, or } from "drizzle-orm";
 import { patientNameSql } from "../../lib/patient-name.js";
 import { dayKeyIn, diffDays, isRealDate, localToday, parseInstant } from "../../lib/hospital-time.js";
 import { resolveReportRange, ReportInputError } from "../report/report-period.js";
