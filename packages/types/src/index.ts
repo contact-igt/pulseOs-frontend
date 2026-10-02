@@ -1678,6 +1678,14 @@ export interface LeadRow {
   lastInteractionAt: string | null;
   nextActionDueAt: string | null;
   createdAt: string;
+  /** The enquiry itself: the journey type ("Cataract"), distinct from the service line. */
+  journeyType: string;
+  /** The latest configured outcome logged on the journey ("Needs callback"), if any. */
+  outcomeLabel: string | null;
+  /** The earliest open follow-up (from Tasks): what happens next, and when. */
+  nextAction: { label: string; dueAt: string; overdue: boolean } | null;
+  /** The earliest appointment that has not happened yet (booked / confirmed, or today's), if any. */
+  nextAppointment: { id: string; at: string; status: string } | null;
 }
 
 export interface LeadsSummary {
@@ -2269,3 +2277,62 @@ export interface ReportFilterOptions {
 
 /** Row-level exports offered next to the report. */
 export type ReportExportKind = "summary" | "enquiries" | "appointments" | "follow-ups" | "procedures";
+
+
+// ---------------------------------------------------------------------------
+// Leads workspace (M6.6): operational quick views. These are FILTERS over real journeys, tasks and appointments,
+// never stored statuses. Every count shown next to a view is produced by the same predicate that selects its rows.
+// ---------------------------------------------------------------------------
+
+export type LeadView = "all" | "today" | "new_today" | "uncontacted" | "follow_up_due" | "appointments_today" | "appointment_booked" | "no_response" | "converted" | "lost";
+
+export const LEAD_VIEWS: { key: LeadView; label: string; hint: string }[] = [
+  { key: "all", label: "All", hint: "Every lead" },
+  { key: "today", label: "Today", hint: "New today, follow-ups due or overdue, appointments today" },
+  { key: "new_today", label: "New Today", hint: "Enquiries created today" },
+  { key: "uncontacted", label: "Uncontacted", hint: "Nobody has reached them yet" },
+  { key: "follow_up_due", label: "Follow-up Due", hint: "An open follow-up due today or overdue" },
+  { key: "appointments_today", label: "Appointments Today", hint: "A visit scheduled today" },
+  { key: "appointment_booked", label: "Appointment Booked", hint: "A visit booked that has not happened yet" },
+  { key: "no_response", label: "No Response", hint: "Contacted, no reply, nothing scheduled" },
+  { key: "converted", label: "Converted", hint: "Treatment accepted or completed" },
+  { key: "lost", label: "Lost", hint: "Closed as lost" },
+];
+
+/** The date a Leads range is measured against. It is always stated on screen — dates are never mixed silently. */
+export type LeadDateContext =
+  | { kind: "created"; label: string }
+  | { kind: "today"; label: string }
+  | { kind: "follow_up_due"; label: string };
+
+export interface LeadsWorkspaceQuery {
+  view?: LeadView;
+  range?: ReportRange;
+  from?: string;
+  to?: string;
+  owner?: string;
+  source?: string;
+  service?: string;
+  status?: LeadStatus;
+  /** Only with view = follow_up_due: restrict to follow-ups already past due. */
+  due?: "overdue";
+}
+
+export interface LeadsTodaySummary {
+  appointmentsToday: number;
+  followUpsDue: number;
+  overdue: number;
+  newToday: number;
+}
+
+export interface LeadsWorkspace {
+  view: LeadView;
+  period: { range: ReportRange | null; from: string | null; to: string | null; today: string; timezone: string };
+  dateContext: LeadDateContext;
+  rows: LeadRow[];
+  /** Count per view under the active owner / source / service filters (and the range, for views it applies to). */
+  counts: Record<LeadView, number>;
+  today: LeadsTodaySummary;
+  /** Per-owner counts under every active filter except the owner filter itself. */
+  ownerCounts: { all: number; unassigned: number; byOwner: { userId: string; name: string; count: number }[] };
+}

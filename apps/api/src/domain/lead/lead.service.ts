@@ -1,11 +1,15 @@
-import { and, eq, ne, or } from "drizzle-orm";
+import { and, eq, inArray, ne, or } from "drizzle-orm";
 import { patientNameSql } from "../../lib/patient-name.js";
-import { dayKeyIn } from "../../lib/hospital-time.js";
+import { dayKeyIn, diffDays, isRealDate, localToday } from "../../lib/hospital-time.js";
+import { resolveReportRange, ReportInputError } from "../report/report-period.js";
+import { computeLeadsWorkspace, type LeadFact } from "./lead-views.js";
 import type { Db } from "../../db/client.js";
 import {
   appointments,
   campaignTouchpoints,
+  crmOutcomes,
   customFieldValues,
+  followUpTypes,
   journeys,
   leadSources,
   marketingCampaigns,
@@ -25,7 +29,7 @@ import { createTask, eligibleAssignee } from "../task/task.service.js";
 import { listFieldsForEntry, resolveSubmittedValues } from "../crm/crm-field.service.js";
 import { pickOwnerForNewJourney } from "../crm/crm-allocation.service.js";
 import type { OwnerFilter } from "../journey/journey.service.js";
-import { MANUAL_INTERACTION_CHANNELS, type CreateLeadInput, CreateLeadResult, LeadPhoneLookupResult, LeadRow, LeadStatus, LeadsSummary, Role } from "@pulseos/types";
+import { MANUAL_INTERACTION_CHANNELS, type CreateLeadInput, CreateLeadResult, LeadPhoneLookupResult, LeadRow, LeadStatus, LeadsSummary, LeadsWorkspace, LeadsWorkspaceQuery, Role, TASK_TYPE_LABEL } from "@pulseos/types";
 
 export async function lookupPatientByPhone(db: Db, tenantId: string, rawPhone: string): Promise<LeadPhoneLookupResult> {
   const defaultRegion = await resolveDefaultPhoneRegion(db, tenantId);
@@ -198,8 +202,8 @@ export interface LeadFilters {
   owner?: OwnerFilter;
 }
 
-async function buildLeadRows(db: Db, tenantId: string, timezone: string): Promise<LeadRow[]> {
-  const today = dayKeyIn(new Date(), timezone);
+async function buildLeadFacts(db: Db, tenantId: string, timezone: string, now: Date = new Date()): Promise<LeadFact[]> {
+  const today = dayKeyIn(now, timezone);
   const rows = await db
     .select({
       id: journeys.id,
@@ -209,17 +213,21 @@ async function buildLeadRows(db: Db, tenantId: string, timezone: string): Promis
       specialtyKey: journeys.specialtyKey,
       source: journeys.source,
       sourceLabel: leadSources.label,
+      sourceKey: leadSources.key,
       stage: journeys.stage,
       priority: journeys.priority,
       contactedAt: journeys.contactedAt,
       ownerId: journeys.ownerUserId,
       createdAt: journeys.createdAt,
       ownerName: users.name,
+      journeyType: journeys.journeyType,
+      outcomeLabel: crmOutcomes.label,
     })
     .from(journeys)
     .innerJoin(patients, eq(journeys.patientId, patients.id))
     .leftJoin(users, eq(journeys.ownerUserId, users.id))
     .leftJoin(leadSources, eq(journeys.sourceId, leadSources.id))
+    .leftJoin(crmOutcomes, eq(journeys.lastOutcomeId, crmOutcomes.id))
     .where(eq(journeys.tenantId, tenantId));
 
   const specialties = await db.select({ key: specialtyTemplates.key, displayName: specialtyTemplates.displayName }).from(specialtyTemplates).where(eq(specialtyTemplates.tenantId, tenantId));
@@ -235,10 +243,25 @@ async function buildLeadRows(db: Db, tenantId: string, timezone: string): Promis
   const campaignNameById = new Map(campaignRows.map((c) => [c.id, c.name]));
 
   const apptRows = await db
-    .select({ journeyId: appointments.journeyId, status: appointments.status })
+    .select({ id: appointments.id, journeyId: appointments.journeyId, status: appointments.status, scheduledAt: appointments.scheduledAt })
     .from(appointments)
     .where(and(eq(appointments.tenantId, tenantId), ne(appointments.status, "cancelled"), ne(appointments.status, "no_show")));
   const journeysWithAppointment = new Set(apptRows.map((a) => a.journeyId));
+  const PENDING_VISIT = ["requested", "scheduled", "confirmed"];
+  const IN_CLINIC_OR_PENDING = [...PENDING_VISIT, "checked_in", "waiting", "with_doctor"];
+  const appointmentDaysByJourney = new Map<string, string[]>();
+  const bookedPending = new Set<string>();
+  const nextApptByJourney = new Map<string, { id: string; at: Date; status: string }>();
+  for (const a of apptRows) {
+    if (!a.journeyId) continue;
+    const day = dayKeyIn(a.scheduledAt, timezone);
+    appointmentDaysByJourney.set(a.journeyId, [...(appointmentDaysByJourney.get(a.journeyId) ?? []), day]);
+    if (PENDING_VISIT.includes(a.status)) bookedPending.add(a.journeyId);
+    if (IN_CLINIC_OR_PENDING.includes(a.status) && day >= today) {
+      const cur = nextApptByJourney.get(a.journeyId);
+      if (!cur || a.scheduledAt < cur.at) nextApptByJourney.set(a.journeyId, { id: a.id, at: a.scheduledAt, status: a.status });
+    }
+  }
 
   const treatmentRows = await db
     .select({ journeyId: treatmentOpportunities.journeyId, status: treatmentOpportunities.status })
@@ -247,14 +270,23 @@ async function buildLeadRows(db: Db, tenantId: string, timezone: string): Promis
   const journeysConverted = new Set(treatmentRows.map((t) => t.journeyId));
 
   const pendingTaskRows = await db
-    .select({ journeyId: tasks.journeyId, dueAt: tasks.dueAt })
+    .select({ journeyId: tasks.journeyId, dueAt: tasks.dueAt, type: tasks.type, followUpLabel: followUpTypes.label })
     .from(tasks)
+    .leftJoin(followUpTypes, eq(tasks.followUpTypeId, followUpTypes.id))
     .where(and(eq(tasks.tenantId, tenantId), or(eq(tasks.status, "pending"), eq(tasks.status, "in_progress"))));
   const nextTaskByJourney = new Map<string, Date>();
+  const nextTaskLabel = new Map<string, string>();
+  const taskInstants = new Map<string, number[]>();
+  const taskDays = new Map<string, string[]>();
   for (const t of pendingTaskRows) {
     if (!t.journeyId) continue;
     const existing = nextTaskByJourney.get(t.journeyId);
-    if (!existing || t.dueAt < existing) nextTaskByJourney.set(t.journeyId, t.dueAt);
+    if (!existing || t.dueAt < existing) {
+      nextTaskByJourney.set(t.journeyId, t.dueAt);
+      nextTaskLabel.set(t.journeyId, t.followUpLabel ?? TASK_TYPE_LABEL[t.type] ?? "Follow-up");
+    }
+    taskInstants.set(t.journeyId, [...(taskInstants.get(t.journeyId) ?? []), t.dueAt.getTime()]);
+    taskDays.set(t.journeyId, [...(taskDays.get(t.journeyId) ?? []), dayKeyIn(t.dueAt, timezone)]);
   }
 
   const lastEventRows = await db.select({ journeyId: timelineEvents.journeyId, occurredAt: timelineEvents.occurredAt }).from(timelineEvents).where(eq(timelineEvents.tenantId, tenantId));
@@ -265,7 +297,7 @@ async function buildLeadRows(db: Db, tenantId: string, timezone: string): Promis
     if (!existing || e.occurredAt > existing) lastInteractionByJourney.set(e.journeyId, e.occurredAt);
   }
 
-  return rows.map((r) => {
+  return rows.map((r): LeadFact => {
     let leadStatus: LeadStatus;
     if (r.stage === "lost") {
       leadStatus = "lost";
@@ -301,9 +333,25 @@ async function buildLeadRows(db: Db, tenantId: string, timezone: string): Promis
       lastInteractionAt: (lastInteractionByJourney.get(r.id) ?? r.createdAt).toISOString(),
       nextActionDueAt: nextTaskByJourney.get(r.id)?.toISOString() ?? null,
       createdAt: r.createdAt.toISOString(),
+      journeyType: r.journeyType,
+      outcomeLabel: r.outcomeLabel ?? null,
+      nextAction: nextTaskByJourney.has(r.id) ? { label: nextTaskLabel.get(r.id)!, dueAt: nextTaskByJourney.get(r.id)!.toISOString(), overdue: nextTaskByJourney.get(r.id)!.getTime() < now.getTime() } : null,
+      nextAppointment: nextApptByJourney.has(r.id) ? { id: nextApptByJourney.get(r.id)!.id, at: nextApptByJourney.get(r.id)!.at.toISOString(), status: nextApptByJourney.get(r.id)!.status } : null,
     };
-    return row;
+    return {
+      row,
+      createdDay: dayKeyIn(r.createdAt, timezone),
+      openTaskDueAts: taskInstants.get(r.id) ?? [],
+      openTaskDays: taskDays.get(r.id) ?? [],
+      appointmentDays: appointmentDaysByJourney.get(r.id) ?? [],
+      bookedPending: bookedPending.has(r.id),
+      sourceKey: r.sourceKey ?? null,
+    };
   });
+}
+
+async function buildLeadRows(db: Db, tenantId: string, timezone: string): Promise<LeadRow[]> {
+  return (await buildLeadFacts(db, tenantId, timezone)).map((f) => f.row);
 }
 
 export async function listLeads(db: Db, tenantId: string, filters: LeadFilters, timezone: string): Promise<LeadRow[]> {
@@ -327,3 +375,42 @@ export async function getLeadsSummary(db: Db, tenantId: string, timezone: string
     converted: count("converted"),
   };
 }
+
+
+/**
+ * Presets are the report's (hospital calendar days). A custom range may reach into the future — tomorrow's callbacks
+ * are exactly what Follow-up Due is for — but must be a real, ordered pair no longer than a year.
+ */
+function resolveLeadRange(range: NonNullable<LeadsWorkspaceQuery["range"]>, today: string, from?: string, to?: string): { from: string; to: string } {
+  if (range !== "custom") return resolveReportRange(range, today);
+  if (!from || !to || !isRealDate(from) || !isRealDate(to)) throw new ReportInputError("A custom range needs valid from and to dates (YYYY-MM-DD)");
+  if (diffDays(from, to) < 0) throw new ReportInputError("'from' must not be after 'to'");
+  if (diffDays(from, to) + 1 > 366) throw new ReportInputError("A range can cover at most 366 days");
+  return { from, to };
+}
+
+/**
+ * The Leads workspace in one round trip: the rows of the chosen quick view, the count of every view under the same
+ * filters, the compact "today" strip and per-owner counts. All days are hospital-local (tenants.timezone).
+ * `owner` accepts mine | unassigned | <userId>, "mine" being the SESSION user (resolved by the route).
+ */
+export async function getLeadsWorkspace(db: Db, tenantId: string, query: Omit<LeadsWorkspaceQuery, "owner"> & { owner?: OwnerFilter }, timezone: string, now: Date = new Date()): Promise<LeadsWorkspace> {
+  const today = await localToday(db, timezone, now);
+  const hasRange = !!query.range && !(query.range === "custom" && !query.from);
+  const range = query.range ? resolveLeadRange(query.range, today, query.from, query.to) : undefined;
+  const facts = await buildLeadFacts(db, tenantId, timezone, now);
+  const result = computeLeadsWorkspace(facts, {
+    view: query.view,
+    today,
+    now,
+    range: hasRange ? range : undefined,
+    owner: query.owner,
+    source: query.source,
+    service: query.service,
+    status: query.status,
+    due: query.due,
+  });
+  return { ...result, period: { range: query.range ?? null, from: range?.from ?? null, to: range?.to ?? null, today, timezone } };
+}
+
+export { ReportInputError as LeadRangeError };

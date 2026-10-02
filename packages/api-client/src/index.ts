@@ -90,6 +90,8 @@ import type {
   LeadRow,
   LeadStatus,
   LeadsSummary,
+  LeadsWorkspace,
+  LeadsWorkspaceQuery,
   Lookups,
   MarketingEfficiencySummary,
   MarketingSourceRow,
@@ -340,6 +342,7 @@ export const api = {
   // Leads (CRM-2/3/4)
   leads: (filters: { status?: LeadStatus; specialtyKey?: string; source?: string; owner?: "mine" | "unassigned" | (string & {}) } = {}) => request<LeadRow[]>(`/leads${toQuery({ ...filters })}`),
   leadsSummary: () => request<LeadsSummary>("/leads/summary"),
+  leadsWorkspace: (q: LeadsWorkspaceQuery = {}) => request<LeadsWorkspace>(`/leads/workspace${toQuery({ ...q })}`),
   leadPhoneLookup: (phone: string) => request<LeadPhoneLookupResult>("/leads/lookup", { method: "POST", body: JSON.stringify({ phone }) }),
   createLead: (input: CreateLeadInput) => request<CreateLeadResult>("/leads", { method: "POST", body: JSON.stringify(input) }),
 

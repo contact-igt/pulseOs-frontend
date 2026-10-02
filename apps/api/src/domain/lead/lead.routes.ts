@@ -2,8 +2,25 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requirePermission } from "../auth/permission.middleware.js";
 import { parseOwnerFilter } from "../journey/journey.service.js";
-import { createLead, getLeadsSummary, listLeads, lookupPatientByPhone } from "./lead.service.js";
-import type { LeadStatus } from "@pulseos/types";
+import { createLead, getLeadsSummary, getLeadsWorkspace, LeadRangeError, listLeads, lookupPatientByPhone } from "./lead.service.js";
+import { LEAD_VIEWS, type LeadStatus } from "@pulseos/types";
+
+const emptyToUndefined = (v: unknown) => (v === "" ? undefined : v);
+const opt = <T extends z.ZodTypeAny>(schema: T) => z.preprocess(emptyToUndefined, schema.optional());
+const ymd = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
+// Unknown keys (a smuggled tenantId...) are stripped: the tenant always comes from the session.
+const workspaceQuery = z.object({
+  view: opt(z.enum(LEAD_VIEWS.map((v) => v.key) as [string, ...string[]])),
+  range: opt(z.enum(["today", "yesterday", "7d", "30d", "this_month", "last_month", "custom"])),
+  from: opt(ymd),
+  to: opt(ymd),
+  owner: opt(z.string().max(60)),
+  source: opt(z.string().max(60)),
+  service: opt(z.string().max(120)),
+  status: opt(z.enum(["new", "uncontacted", "follow_up_due", "appointment_booked", "no_response", "converted", "lost"])),
+  due: opt(z.literal("overdue")),
+});
 
 const createLeadBody = z.object({
   patientId: z.string().uuid().optional(),
@@ -45,6 +62,21 @@ export async function leadRoutes(app: FastifyInstance) {
     const owner = parseOwnerFilter(query.owner, request.sessionUser!.id);
     if (owner === "invalid") return reply.status(400).send({ error: "invalid_owner_filter" });
     return listLeads(app.db, tenantId, { status: query.status, specialtyKey: query.specialtyKey, source: query.source, owner }, request.sessionUser!.timezone);
+  });
+
+  // The Leads workspace: one request for the rows of a quick view, every view's count, the today strip and owner counts.
+  app.get("/leads/workspace", async (request, reply) => {
+    const parsed = workspaceQuery.safeParse(request.query);
+    if (!parsed.success) return reply.status(400).send({ error: "invalid_query", issues: parsed.error.issues.map((i) => ({ path: i.path.join("."), message: i.message })) });
+    const q = parsed.data;
+    const owner = parseOwnerFilter(q.owner, request.sessionUser!.id);
+    if (owner === "invalid") return reply.status(400).send({ error: "invalid_owner_filter" });
+    try {
+      return await getLeadsWorkspace(app.db, request.sessionUser!.tenantId, { ...q, owner } as Parameters<typeof getLeadsWorkspace>[2], request.sessionUser!.timezone);
+    } catch (err) {
+      if (err instanceof LeadRangeError) return reply.status(400).send({ error: "invalid_query", message: err.message });
+      throw err;
+    }
   });
 
   app.get("/leads/summary", async (request) => {
