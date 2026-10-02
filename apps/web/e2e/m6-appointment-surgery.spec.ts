@@ -35,15 +35,25 @@ async function createLead(page: Page, name: string): Promise<{ journeyId: string
   return res.body;
 }
 
-/** Books a visit via the API, at `minutesFromNow` (so it falls on the hospital's today). */
+/**
+ * Books a visit via the API, soon enough to fall on the hospital's today. The server refuses a
+ * doctor's already-taken minute (409), so try each doctor and later minutes until a slot is free.
+ */
 async function book(page: Page, lead: { journeyId: string; patientId: string }, minutesFromNow = 10): Promise<string> {
   const lookups = (await api<{ branches: { id: string }[]; doctors: { id: string; name: string }[] }>(page, "GET", "/lookups")).body;
-  const res = await api<{ id: string }>(page, "POST", "/appointments", {
-    patientId: lead.patientId, journeyId: lead.journeyId, branchId: lookups.branches[0]!.id, doctorId: lookups.doctors[0]!.id,
-    scheduledAt: new Date(Date.now() + minutesFromNow * 60_000).toISOString(), reason: "Consultation",
-  });
-  expect(res.status).toBe(201);
-  return res.body.id;
+  let last = 0;
+  for (let step = 0; step < 30; step++) {
+    for (const doctor of lookups.doctors) {
+      const res = await api<{ id: string }>(page, "POST", "/appointments", {
+        patientId: lead.patientId, journeyId: lead.journeyId, branchId: lookups.branches[0]!.id, doctorId: doctor.id,
+        scheduledAt: new Date(Date.now() + (minutesFromNow + step) * 60_000).toISOString(), reason: "Consultation",
+      });
+      last = res.status;
+      if (res.status === 201) return res.body.id;
+      expect(res.status).toBe(409);
+    }
+  }
+  throw new Error(`no free appointment slot found (last status ${last})`);
 }
 
 const dayInHospital = (offsetDays: number) => new Date(Date.now() + offsetDays * 86_400_000).toLocaleDateString("en-CA", { timeZone: TZ });

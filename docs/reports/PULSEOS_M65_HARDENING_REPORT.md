@@ -133,7 +133,20 @@ plain ("This doctor already has another appointment…", "Choose a future appoin
 
 ## TEST RESULTS
 
-PLACEHOLDER_RESULTS
+| Check | Result |
+|---|---|
+| Lint | 2/2 packages pass |
+| Typecheck | 7/7 packages pass |
+| API (vitest, fresh DB) | 921 / 921 pass (86 files) |
+| Web unit | 122 pass |
+| UI unit | 108 pass |
+| api-client / design-tokens | 9 / 6 pass |
+| Build | OK |
+| Fresh migration | 27 migrations apply cleanly on an empty DB |
+| Fresh seed | OK (after migrations) |
+| Playwright (full, 246 tests) | First run: 239 passed, 1 skipped, 5 failed. The 5 were stale E2E fixtures, not product defects: they booked appointments the M6.5 rules now correctly refuse (a fixed doctor at now+10 min collided with another test's same-minute booking, 409; a booking at 00:15 IST today was in the past, 422). Fixtures now pick a free doctor/minute, and the doctor-home spec books tomorrow and moves the row to this morning in the DB. Re-run of both affected specs: 18 / 18 pass. |
+
+Net: 0 unexplained failures; the product rules (no past booking, no same-minute double booking) are unchanged.
 
 ## FILES / MIGRATIONS CHANGED
 

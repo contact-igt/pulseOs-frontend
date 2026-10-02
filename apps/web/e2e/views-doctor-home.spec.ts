@@ -1,5 +1,5 @@
 import { test, expect, type APIRequestContext, type Browser, type Page } from "@playwright/test";
-import { purgePatients } from "./support/fixtures";
+import { purgePatients, sql } from "./support/fixtures";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -35,7 +35,11 @@ async function parkCreated(request: APIRequestContext) {
   }
 }
 
-/** Books an appointment for `doctorId` today at an IST wall time, as Front Desk (doctors cannot book). */
+/**
+ * Books an appointment for `doctorId` today at an IST wall time, as Front Desk (doctors cannot book).
+ * The server refuses a time that has already passed, so a wall time earlier than now is booked for
+ * tomorrow and then moved to today in the database — the doctor's own view of "this morning".
+ */
 async function bookForDoctor(browser: Browser, doctorId: string, name: string, hhmm: string): Promise<string> {
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
@@ -47,11 +51,15 @@ async function bookForDoctor(browser: Browser, doctorId: string, name: string, h
   });
   expect(lead.ok(), await lead.text()).toBeTruthy();
   const { patientId, journeyId } = (await lead.json()) as { patientId: string; journeyId: string };
+  const todayAt = new Date(`${today}T${hhmm}:00+05:30`);
+  const inPast = todayAt.getTime() < Date.now();
+  const bookedAt = inPast ? new Date(todayAt.getTime() + 86_400_000) : todayAt;
   const res = await page.request.post(`${API}/appointments`, {
-    data: { patientId, journeyId, branchId: lookups.branches[0].id, doctorId, scheduledAt: new Date(`${today}T${hhmm}:00+05:30`).toISOString() },
+    data: { patientId, journeyId, branchId: lookups.branches[0].id, doctorId, scheduledAt: bookedAt.toISOString() },
   });
   expect(res.status(), await res.text()).toBe(201);
   const id = ((await res.json()) as { id: string }).id;
+  if (inPast) sql(`UPDATE appointments SET scheduled_at = '${todayAt.toISOString()}' WHERE id = '${id}'`);
   created.push(id);
   await ctx.close();
   return id;
