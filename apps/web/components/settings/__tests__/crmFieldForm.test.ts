@@ -4,7 +4,7 @@ import type { CrmFieldVm } from "@pulseos/types";
 
 const existing: CrmFieldVm = {
   id: "f1", specialtyKey: "CATARACT", key: "budget", label: "Budget", fieldType: "NUMBER", options: null, required: true, sortOrder: 3, archived: false, origin: "CUSTOM",
-  groupKey: "qualification", placements: ["add_lead", "followup_outcome"], defaultValue: 50000, visibleTo: "front_office",
+  groupKey: "qualification", placements: ["add_lead", "followup_outcome"], defaultValue: 50000, visibleTo: "front_office", readOnly: false, filterable: false, carryForward: false, rules: [],
 };
 
 describe("slugifyKey", () => {

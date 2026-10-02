@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "@pulseos/api-client";
-import { Badge, Button, CustomFieldInputs, ErrorState, SideSheet, Skeleton, defaultsFor } from "@pulseos/ui";
+import { Badge, Button, CustomFieldInputs, ErrorState, SideSheet, Skeleton, applyFieldRules, defaultsFor } from "@pulseos/ui";
 import type { CrmOutcomeVm, LogInteractionResult } from "@pulseos/types";
 import { useQuickCreate } from "@/components/shell/QuickCreateProvider";
 import { CheckRow, CONTROL, FormError, FormField, TextInput } from "@/components/settings/FormBits";
@@ -42,6 +42,8 @@ export function LogOutcomeSheet({
   const timeZone = useHospitalTimeZone();
   const outcomes = useQuery({ queryKey: ["crm-outcomes", "active"], queryFn: () => api.crmOutcomes() });
   const fields = useQuery({ queryKey: ["crm-fields-for-journey", "followup_outcome", journeyId], queryFn: () => api.crmFieldsForJourney("followup_outcome", journeyId) });
+  // "Carry this value into the next interaction": only fields marked so arrive filled in (never the outcome, dates or status).
+  const carried = useQuery({ queryKey: ["field-prefill", "followup_outcome", journeyId], queryFn: () => api.fieldPrefill(journeyId, "followup_outcome") });
 
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [state, setState] = useState<LogState>({ note: "", reason: "", scheduleFollowUp: false, followUpLocal: "", fieldValues: {} });
@@ -51,11 +53,12 @@ export function LogOutcomeSheet({
   const [defaultsApplied, setDefaultsApplied] = useState(false);
 
   const selected: CrmOutcomeVm | null = outcomes.data?.find((o) => o.key === selectedKey) ?? null;
-  const fieldList = fields.data ?? [];
+  // Shown/required by the hospital's rules for the chosen outcome and the answers so far.
+  const fieldList = applyFieldRules(fields.data ?? [], state.fieldValues, selectedKey);
   // Pre-fill configured defaults once the fields have loaded.
-  if (fields.data && !defaultsApplied) {
+  if (fields.data && (carried.data || carried.isError) && !defaultsApplied) {
     setDefaultsApplied(true);
-    const defaults = defaultsFor(fields.data);
+    const defaults = { ...defaultsFor(fields.data), ...(carried.data ?? {}) };
     if (Object.keys(defaults).length > 0) setState((s) => ({ ...s, fieldValues: { ...defaults, ...s.fieldValues } }));
   }
 

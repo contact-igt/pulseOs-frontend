@@ -11,13 +11,14 @@ import { FollowUpTypesSection } from "@/components/settings/FollowUpTypesSection
 import { ResourcesSection } from "@/components/settings/ResourcesSection";
 import { LeadSourcesSection } from "@/components/settings/LeadSourcesSection";
 import { OutcomesSection } from "@/components/outcomes/OutcomesSection";
+import { ActivitySection } from "@/components/settings/ActivitySection";
 import { RemindersSection } from "@/components/settings/RemindersSection";
 import { FeaturesSection } from "@/components/settings/FeaturesSection";
 import { AllocationSection } from "@/components/allocation/AllocationSection";
 import { useUrlFilters } from "@/lib/useUrlFilters";
 import { useCapability } from "@/lib/useEdition";
 
-type Section = "services" | "departments" | "fields" | "sources" | "outcomes" | "followups" | "doctors" | "allocation" | "features" | "reminders";
+type Section = "services" | "departments" | "fields" | "sources" | "outcomes" | "followups" | "doctors" | "allocation" | "features" | "reminders" | "activity";
 const SECTIONS: { key: Section; label: string; manageOnly: boolean }[] = [
   { key: "services", label: "Services", manageOnly: false },
   { key: "departments", label: "Departments", manageOnly: true },
@@ -29,6 +30,7 @@ const SECTIONS: { key: Section; label: string; manageOnly: boolean }[] = [
   { key: "allocation", label: "Allocation Rules", manageOnly: true },
   { key: "features", label: "Features", manageOnly: true },
   { key: "reminders", label: "Reminders", manageOnly: true },
+  { key: "activity", label: "Activity", manageOnly: true },
 ];
 
 /** A service's name and default Journey type. Its CRM fields live in the CRM Fields section. */
@@ -168,6 +170,11 @@ export default function SettingsPage() {
         </Panel>
       )}
 
+      {section === "activity" && canManage && (
+        <Panel title="Activity" subtitle="Who changed which setting, and when">
+          <ActivitySection />
+        </Panel>
+      )}
       {section === "reminders" && canManage && (
         <Panel title="Reminders" subtitle="When appointment and surgery messages go out, and what they say">
           <RemindersSection />

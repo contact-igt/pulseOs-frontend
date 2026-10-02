@@ -16,7 +16,7 @@ import {
 } from "@pulseos/types";
 import { X } from "lucide-react";
 import { useDialogFocus } from "./useDialogFocus";
-import { CustomFieldInputs, defaultsFor, normalizeFieldValues } from "./CustomFieldInputs";
+import { CustomFieldInputs, applyFieldRules, defaultsFor, normalizeFieldValues } from "./CustomFieldInputs";
 import { hospitalLocalInput } from "./format";
 import { LEAD_CHANNEL_OPTIONS, LEAD_ERROR_COPY, nextStepAvailability, reconcileNextStep, saveReadiness, toCreateLeadInput, type LeadFormValues, type NextStepKind } from "./addLeadModel";
 
@@ -100,8 +100,10 @@ export function AddLeadDrawer({
 
   const outcome = outcomes.find((o) => o.key === form.outcomeKey);
   const avail = nextStepAvailability(outcome);
-  const requiredFields = fields.filter((f) => f.required);
-  const optionalFields = fields.filter((f) => !f.required);
+  // The hospital's show/require rules, evaluated for the current answers and chosen outcome (same rules as the server).
+  const ruledFields = applyFieldRules(fields, form.customFieldValues, form.outcomeKey || null);
+  const requiredFields = ruledFields.filter((f) => f.required);
+  const optionalFields = ruledFields.filter((f) => !f.required);
   const nowLocal = hospitalLocalInput();
   const apptAt = form.apptDate && form.apptTime ? `${form.apptDate}T${form.apptTime}` : "";
   const apptPast = form.nextStep === "appointment" && !!apptAt && apptAt < nowLocal;
@@ -174,7 +176,7 @@ export function AddLeadDrawer({
     setSubmitting(true);
     setError(null);
     try {
-      const result = await onSubmit(toCreateLeadInput(form, { normalizeFields: (v) => normalizeFieldValues(fields, v) }));
+      const result = await onSubmit(toCreateLeadInput(form, { normalizeFields: (v) => normalizeFieldValues(ruledFields, v) }));
       onCreated?.(result);
       onClose();
     } catch (err) {

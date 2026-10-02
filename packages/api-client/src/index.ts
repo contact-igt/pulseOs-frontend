@@ -1,4 +1,5 @@
 import type {
+  ActivityEntry,
   AdsAnalytics,
   AdsSyncRunVm,
   MessageTemplateVm,
@@ -362,6 +363,7 @@ export const api = {
   updateWebhook: (id: string, body: Partial<{ name: string; url: string; events: WebhookEventType[]; conditions: WebhookCondition[]; enabled: boolean }>) =>
     request<OutboundWebhookVm>(`/integrations/webhooks/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteWebhook: (id: string) => request<void>(`/integrations/webhooks/${id}`, { method: "DELETE" }),
+  activityLog: (f: { action?: string; entityType?: string; from?: string; to?: string } = {}) => request<ActivityEntry[]>(`/activity-log${toQuery({ ...f })}`),
   notificationRules: () => request<NotificationRuleVm[]>("/notifications/rules"),
   updateNotificationRule: (id: string, body: Partial<Pick<NotificationRuleVm, "enabled" | "offsetValue" | "offsetUnit" | "templateId" | "minGapMinutes">>) =>
     request<NotificationRuleVm>(`/notifications/rules/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
@@ -407,6 +409,7 @@ export const api = {
   // CRM field configuration (Settings → CRM Fields) and the fields an entry form should show.
   crmFields: (opts: { specialtyKey?: string; includeArchived?: boolean } = {}) => request<CrmFieldVm[]>(`/crm/fields${toQuery({ specialtyKey: opts.specialtyKey, includeArchived: opts.includeArchived ? "true" : undefined })}`),
   crmFieldsFor: (placement: FieldPlacement, specialtyKey: string) => request<CrmFieldVm[]>(`/crm/fields/for${toQuery({ placement, specialtyKey })}`),
+  fieldPrefill: (journeyId: string, placement: FieldPlacement) => request<Record<string, unknown>>(`/journeys/${journeyId}/field-prefill${toQuery({ placement })}`),
   crmFieldsForJourney: (placement: FieldPlacement, journeyId: string) => request<CrmFieldVm[]>(`/crm/fields/for${toQuery({ placement, journeyId })}`),
   // Configurable outcomes (Settings → Workflow Outcomes) and logging one on a Journey.
   crmOutcomes: (opts: { includeArchived?: boolean } = {}) => request<CrmOutcomeVm[]>(`/crm/outcomes${toQuery({ includeArchived: opts.includeArchived ? "true" : undefined })}`),

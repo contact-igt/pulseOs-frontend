@@ -5,6 +5,7 @@ import type { ReportExportKind, ReportQuery } from "@pulseos/types";
 import { branches, departments, leadSources, scheduleResources, tenants, users } from "../../db/schema.js";
 import { requireCapability, requirePermission } from "../auth/permission.middleware.js";
 import { getOperationsReport, getReportFilterOptions } from "./operations-report.service.js";
+import { recordActivity } from "../activity/activity.service.js";
 import { buildReportWorkbook, ExportTooLargeError } from "./report-export.service.js";
 import { ReportInputError } from "./report-period.js";
 
@@ -76,6 +77,7 @@ export async function reportRoutes(app: FastifyInstance) {
       });
       // Who exported what, how much — never the rows themselves.
       request.log.info({ export: { kind, rows, userId: user.id, tenantId: user.tenantId, range: q.range ?? "30d" } }, "report exported");
+      await recordActivity(app.db, { tenantId: user.tenantId, actorId: user.id, action: "report.exported", entityType: "report", entityKey: kind, metadata: { rows, range: q.range ?? "30d" } });
       return reply
         .header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         .header("Content-Disposition", `attachment; filename="${filename}"`)

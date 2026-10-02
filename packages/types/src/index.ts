@@ -2583,6 +2583,17 @@ export interface LeadsWorkspace {
 // provider last told us). Secrets are never part of any of these shapes: only `hasSecret`.
 // ---------------------------------------------------------------------------
 
+/** One line of the Settings Activity log: who changed which setting, when. Never carries a secret value. */
+export interface ActivityEntry {
+  id: string;
+  at: string;
+  actorName: string | null;
+  action: string;
+  entityType: string;
+  entityKey: string | null;
+  metadata: Record<string, unknown>;
+}
+
 export const INTEGRATION_KEYS = ["google_ads", "meta_ads", "runo", "ccs_ivr", "whatsapp_meta_cloud", "sms", "webhooks"] as const;
 export type IntegrationKey = (typeof INTEGRATION_KEYS)[number];
 export type IntegrationCategory = "ADS" | "CALLING" | "MESSAGING" | "ADVANCED";

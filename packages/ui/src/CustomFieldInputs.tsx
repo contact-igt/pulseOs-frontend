@@ -1,6 +1,6 @@
 "use client";
 
-import { FIELD_GROUPS, type CustomFieldDefinitionVm, type FieldGroupKey } from "@pulseos/types";
+import { FIELD_GROUPS, evaluateFieldRules, type CustomFieldDefinitionVm, type FieldGroupKey, type FieldRule } from "@pulseos/types";
 
 // One renderer for every place a configured CRM field is captured (Add Lead, follow-up outcome,
 // appointment...). The definition says what to draw; the caller owns the values.
@@ -17,6 +17,17 @@ export function defaultsFor(fields: CustomFieldDefinitionVm[]): Record<string, u
   const out: Record<string, unknown> = {};
   for (const f of fields) if (!isEmpty(f.defaultValue)) out[f.key] = f.defaultValue;
   return out;
+}
+
+type RuledField = CustomFieldDefinitionVm & { rules?: FieldRule[]; readOnly?: boolean };
+
+/**
+ * The fields a form should show RIGHT NOW, with their effective "required": the same rules the server applies, so what the
+ * person sees is exactly what will be accepted. A hidden field is left out (its answer is not sent).
+ */
+export function applyFieldRules<T extends CustomFieldDefinitionVm>(fields: T[], values: Record<string, unknown>, outcomeKey?: string | null): T[] {
+  const state = evaluateFieldRules(fields as RuledField[], { outcomeKey, values });
+  return fields.filter((f) => state[f.key]?.visible !== false).map((f) => (state[f.key]!.required === f.required ? f : { ...f, required: state[f.key]!.required }));
 }
 
 /** What to submit: empty values dropped, date-times turned into instants. `undefined` when nothing is filled in. */

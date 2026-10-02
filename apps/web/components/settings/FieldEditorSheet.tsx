@@ -6,6 +6,7 @@ import { api, ApiError } from "@pulseos/api-client";
 import { Button, SideSheet } from "@pulseos/ui";
 import { ALL_SERVICES_KEY, CUSTOM_FIELD_TYPES, FIELD_GROUPS, FIELD_PLACEMENTS, FIELD_VISIBILITY, type CrmFieldVm, type CustomFieldType, type FieldPlacement, type SpecialtyTemplateVm } from "@pulseos/types";
 import { CheckRow, CONTROL, FormError, FormField, SelectInput, TextInput } from "./FormBits";
+import { BehaviourSettings, FieldPreview, RulesEditor, useFieldContext } from "./FieldBehaviour";
 import { formToCreateInput, formToUpdateInput, isChoiceType, slugifyKey, validateFieldForm, type FieldForm } from "./crmFieldForm";
 
 const SAVE_ERRORS: Record<string, string> = {
@@ -14,6 +15,14 @@ const SAVE_ERRORS: Record<string, string> = {
   options_invalid: "Options can't be empty or repeated.",
   default_invalid: "The default value doesn't fit this type of field.",
   specialty_not_found: "That service no longer exists.",
+  rule_unknown_outcome: "A rule names an outcome that doesn't exist.",
+  rule_unknown_field: "A rule names a field that doesn't exist for this service.",
+  rule_unknown_option: "A rule names an answer that isn't one of that field's options.",
+  rule_cycle: "These rules depend on each other in a loop. Remove one.",
+  rule_invalid: "A rule needs at least one answer chosen.",
+  too_many_rules: "A field can have at most 5 rules.",
+  field_has_dependants: "Other fields show or require themselves based on this one. Remove those rules first.",
+  carry_forward_needs_entry_form: "Carrying a value forward needs the field on Add Lead or Follow-up outcome.",
 };
 
 /** Default value input that matches the field type. The value is kept as text until it is saved. */
@@ -163,6 +172,12 @@ export function FieldEditorSheet({
   }
 
   const keyPreview = editing ? form.key : slugifyKey(form.label);
+  const { siblings, outcomes } = useFieldContext(form.specialtyKey);
+  const draft: CrmFieldVm = {
+    id: "preview", specialtyKey: form.specialtyKey, key: form.key ?? (slugifyKey(form.label) || "preview_field"), label: form.label || "This field", fieldType: form.fieldType, options: form.options.filter(Boolean),
+    required: form.required, sortOrder: 999, archived: false, origin: "CUSTOM", groupKey: form.groupKey, placements: form.placements, defaultValue: null, visibleTo: form.visibleTo,
+    readOnly: form.readOnly, filterable: form.filterable, carryForward: form.carryForward, rules: form.rules,
+  };
 
   return (
     <SideSheet
@@ -235,6 +250,10 @@ export function FieldEditorSheet({
         </SelectInput>
 
         <DefaultValueInput form={form} onChange={(text) => set("defaultText", text)} />
+
+        <BehaviourSettings form={form} set={set} />
+        <RulesEditor form={form} set={set} siblings={siblings} outcomes={outcomes} />
+        <FieldPreview key={JSON.stringify([form.rules, form.required, form.fieldType, form.options, form.placements])} draft={draft} siblings={siblings} outcomes={outcomes} />
       </div>
     </SideSheet>
   );
