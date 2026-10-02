@@ -15,6 +15,7 @@ import { Async } from "@/components/analytics/common";
 import { AnalyticsKpiStrip, FunnelBars, SourceMix } from "@/components/analytics/overview";
 import { CampaignTable, LeadTrend, SourceConversion } from "@/components/analytics/acquisition";
 import { JourneyOutcomes, ServiceLines } from "@/components/analytics/journey";
+import { AdsCampaignTable, AdsKpis, AdsSpendChart, AdsUnavailable, ProviderStrip } from "@/components/analytics/ads";
 import { RevenueByService, RevenueEvents, RevenueTrend, RoasBySource, TeamAnalytics } from "@/components/analytics/revenue";
 
 const CHART_H = 250;
@@ -60,6 +61,7 @@ function MarketingAnalytics() {
   const conversion = useQuery({ queryKey: ["analytics", "source-conversion", query], queryFn: () => api.analyticsSourceConversion(query), enabled: tab === "acquisition", ...opts });
   const flow = useQuery({ queryKey: ["analytics", "flow", query], queryFn: () => api.analyticsFlow(query), enabled: tab === "journey", ...opts });
   const services = useQuery({ queryKey: ["analytics", "services", query], queryFn: () => api.analyticsServices(query), enabled: tab === "journey", ...opts });
+  const adsData = useQuery({ queryKey: ["analytics", "ads", query], queryFn: () => api.analyticsAds(query), enabled: tab === "ads", ...opts });
   const team = useQuery({ queryKey: ["analytics", "team", query], queryFn: () => api.analyticsTeam(query), enabled: tab === "team", ...opts });
 
   // Clicking a mark that is already the filter clears it.
@@ -186,6 +188,31 @@ function MarketingAnalytics() {
             </Async>
           </AnalyticsPanel>
         </>
+      )}
+
+      {tab === "ads" && (
+        <div className="space-y-4" data-testid="ads-tab">
+          <Async query={adsData} height={90} error="Could not load ad accounts.">
+            {(d) => (
+              <div className="space-y-4">
+                <ProviderStrip data={d} />
+                {d.unavailable ? (
+                  <AdsUnavailable reason={d.unavailable} />
+                ) : (
+                  <>
+                    <AdsKpis data={d} />
+                    <AnalyticsPanel title="Ad spend" question="How much did the ad accounts spend each day?" testId="panel-ads-spend">
+                      <AdsSpendChart data={d} />
+                    </AnalyticsPanel>
+                    <AnalyticsPanel title="Ad campaigns" question="Which ad campaigns cost what, and which ones can PulseOS tie to real patients?" testId="panel-ads-campaigns">
+                      <AdsCampaignTable data={d} />
+                    </AnalyticsPanel>
+                  </>
+                )}
+              </div>
+            )}
+          </Async>
+        </div>
       )}
 
       {tab === "team" && (

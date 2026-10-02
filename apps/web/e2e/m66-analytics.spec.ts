@@ -91,7 +91,7 @@ test.describe("M6.6 — Analytics (operations)", () => {
     await login(page, "eyev1.admin@pulseos.local");
     await page.goto("/analytics");
     await expect(page.getByTestId("report-range")).toBeVisible();
-    expect(await page.getByTestId("report-range").locator("option").allTextContents()).toEqual(["Today", "Yesterday", "Last 7 days", "Last 30 days", "This month", "Previous month", "Custom range"]);
+    expect(await page.getByTestId("report-range").locator("option").allTextContents()).toEqual(["Today", "Yesterday", "Last 7 days", "Last 9 days", "Last 30 days", "Last 90 days", "This month", "Previous month", "Custom range"]);
     await page.getByTestId("report-range").selectOption("custom");
     await expect(page.getByTestId("report-custom-dates")).toBeVisible();
     await expect(page).toHaveURL(/aRange=custom&.*aFrom=\d{4}-\d\d-\d\d/);

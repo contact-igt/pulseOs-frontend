@@ -1,22 +1,18 @@
-import type { AnalyticsQuery, AnalyticsRangePreset, SourceChannel } from "@pulseos/types";
+import { DATE_PRESETS, type AnalyticsQuery, type AnalyticsRangePreset, type SourceChannel } from "@pulseos/types";
 import { addDays } from "@pulseos/ui";
 
-export type AnalyticsTab = "overview" | "acquisition" | "journey" | "revenue" | "team";
+export type AnalyticsTab = "overview" | "acquisition" | "journey" | "revenue" | "ads" | "team";
 
 export const ANALYTICS_TABS: { key: AnalyticsTab; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "acquisition", label: "Acquisition" },
   { key: "journey", label: "Journey" },
   { key: "revenue", label: "Revenue" },
+  { key: "ads", label: "Ad accounts" },
   { key: "team", label: "Team" },
 ];
 
-export const RANGE_OPTIONS: { key: Exclude<AnalyticsRangePreset, "custom">; label: string }[] = [
-  { key: "7d", label: "7D" },
-  { key: "14d", label: "14D" },
-  { key: "30d", label: "30D" },
-  { key: "90d", label: "90D" },
-];
+
 
 export interface AnalyticsFilters {
   tab: AnalyticsTab;
@@ -32,7 +28,8 @@ export interface AnalyticsFilters {
 export const DEFAULT_FILTERS: AnalyticsFilters = { tab: "overview", range: "30d" };
 
 const SOURCES: SourceChannel[] = ["meta", "google", "website", "whatsapp", "phone", "walk_in", "referral", "organic", "other"];
-const RANGES: AnalyticsRangePreset[] = ["7d", "14d", "30d", "90d", "custom"];
+// The shared presets plus the legacy 14-day link.
+const RANGES: AnalyticsRangePreset[] = [...DATE_PRESETS.map((p) => p.key), "14d", "last_month"];
 
 const isRealDate = (s: string | null): s is string => {
   if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;

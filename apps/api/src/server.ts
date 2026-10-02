@@ -7,6 +7,7 @@ import { processDueCallIntelligence } from "./domain/call/call-intelligence.serv
 import { getTranscriber } from "./domain/call/transcriber.js";
 import { deliverDueWebhooks } from "./domain/integration/outbound-webhook.service.js";
 import { processDueNotifications } from "./domain/notification/notification.service.js";
+import { syncDueAds } from "./domain/ads/ads-sync.service.js";
 import { getSummarizer } from "./domain/conversation/summary/index.js";
 
 const port = Number(process.env.PORT ?? 4000);
@@ -20,6 +21,7 @@ const jobs: DueJob[] = [
   { name: "conversation-summaries", run: (now) => processDueConversationSummaries(db, now, getSummarizer()) },
   { name: "call-intelligence", run: (now) => processDueCallIntelligence(db, now, { transcriberFor: (mode) => getTranscriber(mode), summarizer: getSummarizer() }) },
   { name: "notifications", run: (now) => processDueNotifications(db, now) },
+  { name: "ads-sync", run: (now) => syncDueAds(db, now) },
   { name: "outbound-webhooks", run: (now) => deliverDueWebhooks(db, now) },
 ];
 const stopJobs = process.env.JOBS_DISABLED === "true" ? null : startJobRunner(jobs, { log: (msg, detail) => app.log.error({ detail }, msg) });

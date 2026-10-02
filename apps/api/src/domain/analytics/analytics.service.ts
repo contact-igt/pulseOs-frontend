@@ -52,7 +52,7 @@ export const SOURCE_ORDER: SourceChannel[] = ["meta", "google", "website", "what
 // not credited past Enquiry (the stage it was lost from is not stored).
 const STAGE_LADDER: ConversionStageKey[] = ["enquiry", "contacted", "booked", "attended", "consulted", "treatment_advised", "scheduled", "completed"];
 const stageRank = (stage: JourneyStage) => STAGE_LADDER.indexOf(stage as ConversionStageKey);
-const reached = (stage: JourneyStage, at: ConversionStageKey) => stageRank(stage) >= STAGE_LADDER.indexOf(at);
+export const reached = (stage: JourneyStage, at: ConversionStageKey) => stageRank(stage) >= STAGE_LADDER.indexOf(at);
 
 const FUNNEL_STAGES: { key: ConversionStageKey; label: string }[] = [
   { key: "enquiry", label: "Enquiry" },
@@ -101,7 +101,7 @@ interface JourneyFact {
 }
 
 /** `before` (ISO instant) additionally cuts the window short — used for the previous period's elapsed point. */
-async function fetchJourneys(db: Db, tenantId: string, timezone: string, from: string, to: string, f: ScopeFilters, before?: string | null): Promise<JourneyFact[]> {
+export async function fetchJourneys(db: Db, tenantId: string, timezone: string, from: string, to: string, f: ScopeFilters, before?: string | null): Promise<JourneyFact[]> {
   return db
     .select({
       id: journeys.id,
@@ -129,7 +129,7 @@ interface RevenueFact {
   campaignId: string | null;
 }
 
-async function fetchRevenue(db: Db, tenantId: string, timezone: string, from: string, to: string, f: ScopeFilters, before?: string | null): Promise<RevenueFact[]> {
+export async function fetchRevenue(db: Db, tenantId: string, timezone: string, from: string, to: string, f: ScopeFilters, before?: string | null): Promise<RevenueFact[]> {
   return db
     .select({
       id: revenueEvents.id,
@@ -248,7 +248,7 @@ async function loadScope(db: Db, tenantId: string, query: AnalyticsQuery, now: D
   return { period, scope, journeys: journeyFacts, revenue, campaigns };
 }
 
-const sumBy = <T>(rows: T[], pick: (r: T) => number) => rows.reduce((s, r) => s + pick(r), 0);
+export const sumBy = <T>(rows: T[], pick: (r: T) => number) => rows.reduce((s, r) => s + pick(r), 0);
 
 function spendAndRoas(s: Scoped) {
   const spend = sumBy(s.campaigns, (c) => c.spend);

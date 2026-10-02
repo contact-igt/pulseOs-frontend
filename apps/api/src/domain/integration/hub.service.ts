@@ -5,6 +5,8 @@ import { decryptSecret, encryptSecret } from "../security/encryption.js";
 import { inLocalRange, isRealDate, tenantTimezone } from "../../lib/hospital-time.js";
 import { hasPermission, type CapabilityMap, type IntegrationCard, type IntegrationDetail, type IntegrationLogRow, type Role } from "@pulseos/types";
 import { redactLogText } from "../security/redact.js";
+import { listSyncRuns } from "../ads/ads-sync.service.js";
+import { ADS_PROVIDERS, type AdsProvider } from "@pulseos/types";
 import { INTEGRATION_CATALOGUE, catalogueEntry, type CatalogueEntry } from "./hub-catalogue.js";
 import { deriveConfiguration, deriveHealth, deriveMode, type ConnectorFacts } from "./hub-state.js";
 
@@ -79,6 +81,7 @@ export async function getHubDetail(db: Db, tenantId: string, role: Role, caps: C
     configurationValues: Object.fromEntries(entry.configurationFields.map((f) => [f.key, config[f.key] == null ? "" : String(config[f.key])])),
     secretFields: entry.secretFields.map((f) => ({ ...f, hasSecret: !!found?.facts.secretKeys.includes(f.key) })),
     mappingNotes: entry.mappingNotes,
+    syncRuns: (ADS_PROVIDERS as readonly string[]).includes(entry.key) ? await listSyncRuns(db, tenantId, entry.key as AdsProvider) : undefined,
     webhookUrl: webhookPath ? `${base_}${webhookPath}` : null,
     connectorMode: found?.row.mode ?? null,
   };

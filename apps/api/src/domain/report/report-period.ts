@@ -1,14 +1,11 @@
 import type { Db } from "../../db/client.js";
 import { addDays, diffDays, isRealDate, localToday, tenantTimezone } from "../../lib/hospital-time.js";
-import type { ReportPeriod, ReportRange } from "@pulseos/types";
+import { resolveDatePreset, type ReportPeriod, type ReportRange } from "@pulseos/types";
 
 /** A malformed period (bad preset, inverted or future dates...) — routes map this to HTTP 400. */
 export class ReportInputError extends Error {}
 
 export const REPORT_MAX_RANGE_DAYS = 366;
-
-/** First day of the month a YYYY-MM-DD falls in. */
-const monthStart = (ymd: string) => `${ymd.slice(0, 7)}-01`;
 
 /**
  * Resolves a report period to inclusive hospital-local calendar days. "Today" is the hospital's today (tenants.timezone),
@@ -17,22 +14,6 @@ const monthStart = (ymd: string) => `${ymd.slice(0, 7)}-01`;
  */
 export function resolveReportRange(range: ReportRange, today: string, from?: string, to?: string): { from: string; to: string } {
   switch (range) {
-    case "today":
-      return { from: today, to: today };
-    case "yesterday": {
-      const y = addDays(today, -1);
-      return { from: y, to: y };
-    }
-    case "7d":
-      return { from: addDays(today, -6), to: today };
-    case "30d":
-      return { from: addDays(today, -29), to: today };
-    case "this_month":
-      return { from: monthStart(today), to: today };
-    case "last_month": {
-      const lastOfPrevious = addDays(monthStart(today), -1);
-      return { from: monthStart(lastOfPrevious), to: lastOfPrevious };
-    }
     case "custom": {
       if (!from || !to || !isRealDate(from) || !isRealDate(to)) throw new ReportInputError("A custom range needs valid from and to dates (YYYY-MM-DD)");
       if (diffDays(from, to) < 0) throw new ReportInputError("'from' must not be after 'to'");
@@ -40,6 +21,8 @@ export function resolveReportRange(range: ReportRange, today: string, from?: str
       if (diffDays(today, to) > 0) throw new ReportInputError("'to' cannot be after today");
       return { from, to };
     }
+    default:
+      return resolveDatePreset(range, today);
   }
 }
 

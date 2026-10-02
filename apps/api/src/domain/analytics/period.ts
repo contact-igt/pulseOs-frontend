@@ -1,12 +1,11 @@
 import type { Db } from "../../db/client.js";
 import { addDays, diffDays, isRealDate, localToday, tenantTimezone } from "../../lib/hospital-time.js";
-import type { AnalyticsBucket, AnalyticsGranularity, AnalyticsPeriod, AnalyticsQuery } from "@pulseos/types";
+import { resolveDatePreset, type AnalyticsBucket, AnalyticsGranularity, AnalyticsPeriod, AnalyticsQuery } from "@pulseos/types";
 
 /** A malformed filter (bad range, inverted dates...) — the route maps this to HTTP 400. */
 export class AnalyticsInputError extends Error {}
 
 const MAX_RANGE_DAYS = 366;
-const PRESET_DAYS = { "7d": 7, "14d": 14, "30d": 30, "90d": 90 } as const;
 const DAY_MS = 86_400_000;
 
 export { addDays, diffDays, inLocalRange, isRealDate, localDay, localToday, tenantTimezone, tzLiteral } from "../../lib/hospital-time.js";
@@ -28,8 +27,7 @@ export async function resolvePeriod(db: Db, tenantId: string, query: Pick<Analyt
     if (diffDays(from, to) + 1 > MAX_RANGE_DAYS) throw new AnalyticsInputError(`Invalid range: at most ${MAX_RANGE_DAYS} days`);
     if (diffDays(today, to) > 0) throw new AnalyticsInputError("Invalid range: 'to' cannot be in the future");
   } else {
-    to = today;
-    from = addDays(to, -(PRESET_DAYS[preset] - 1));
+    ({ from, to } = resolveDatePreset(preset, today));
   }
 
   const days = diffDays(from, to) + 1;

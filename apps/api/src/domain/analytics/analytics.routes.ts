@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { AnalyticsQuery } from "@pulseos/types";
+import { getAdsAnalytics } from "../ads/ads-analytics.service.js";
 import { requireCapability, requirePermission } from "../auth/permission.middleware.js";
 import {
   AnalyticsInputError,
@@ -21,7 +22,7 @@ const opt = <T extends z.ZodTypeAny>(schema: T) => z.preprocess(emptyToUndefined
 
 // Unknown keys (e.g. a smuggled tenantId) are stripped — tenant always comes from the session.
 const querySchema = z.object({
-  range: opt(z.enum(["7d", "14d", "30d", "90d", "custom"])),
+  range: opt(z.enum(["today", "yesterday", "7d", "9d", "14d", "30d", "90d", "this_month", "prev_month", "last_month", "custom"])),
   from: opt(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)),
   to: opt(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)),
   branchId: opt(z.string().uuid()),
@@ -74,5 +75,6 @@ export async function analyticsRoutes(app: FastifyInstance) {
   route("services", (q, t) => getAnalyticsServices(app.db, t, q));
   route("flow", (q, t) => getAnalyticsFlow(app.db, t, q));
   route("team", (q, t) => getAnalyticsTeam(app.db, t, q));
+  route("ads", (q, t) => getAdsAnalytics(app.db, t, q));
   route("filter-options", (_q, t) => getAnalyticsFilterOptions(app.db, t));
 }

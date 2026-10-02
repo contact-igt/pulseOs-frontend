@@ -2,12 +2,11 @@
 
 import { useState } from "react";
 import { SlidersHorizontal, X } from "lucide-react";
-import type { AnalyticsFilterOptions, Branch } from "@pulseos/types";
-import { Button, FilterSelect, SOURCE_LABELS, Tabs, localDayKey, useDialogFocus } from "@pulseos/ui";
+import { DATE_PRESETS, type AnalyticsFilterOptions, type Branch } from "@pulseos/types";
+import { Button, FilterSelect, SOURCE_LABELS, localDayKey, useDialogFocus } from "@pulseos/ui";
 import { useHospitalTimeZone } from "@/lib/useHospitalTimeZone";
-import { RANGE_OPTIONS, activeFilters, customRangeDefaults, earliestFrom, type AnalyticsFilters } from "./filters";
-
-const DATE_INPUT = "glass-control h-8 min-w-0 flex-1 rounded-control px-2 text-xs text-ink outline-none focus-visible:border-primary-500 sm:flex-none";
+import { activeFilters, type AnalyticsFilters } from "./filters";
+import { PeriodControls } from "@/components/filters/PeriodControls";
 
 interface BarProps {
   filters: AnalyticsFilters;
@@ -17,34 +16,18 @@ interface BarProps {
   onReset: () => void;
 }
 
-function RangeTabs({ filters, onChange }: Pick<BarProps, "filters" | "onChange">) {
+function Period({ filters, onChange }: Pick<BarProps, "filters" | "onChange">) {
   const today = localDayKey(new Date(), useHospitalTimeZone());
+  // An older shared link may still say "14 days": keep it selectable instead of showing a blank control.
+  const presets: { key: string; label: string }[] = filters.range === "14d" ? [...DATE_PRESETS, { key: "14d", label: "Last 14 days" }] : filters.range === "last_month" ? [...DATE_PRESETS, { key: "last_month", label: "Previous month" }] : [...DATE_PRESETS];
   return (
-    <Tabs
-      ariaLabel="Date range"
-      value={filters.range}
-      items={[...RANGE_OPTIONS.map((r) => ({ key: r.key, label: r.label, testId: `range-${r.key}` })), { key: "custom", label: "Custom", testId: "range-custom" }]}
-      onChange={(key) => {
-        if (key === "custom") onChange({ range: "custom", ...(filters.from && filters.to ? {} : customRangeDefaults(today)) });
-        else onChange({ range: key as AnalyticsFilters["range"], from: undefined, to: undefined });
-      }}
+    <PeriodControls
+      presets={presets}
+      value={{ range: filters.range, from: filters.from, to: filters.to }}
+      today={today}
+      onChange={(p) => onChange({ range: p.range as AnalyticsFilters["range"], from: p.from, to: p.to })}
+      testIdPrefix="analytics"
     />
-  );
-}
-
-function CustomDates({ filters, onChange }: Pick<BarProps, "filters" | "onChange">) {
-  // A range cannot end after the hospital's today (the API rejects it: a future day
-  // would be compared with a full previous period).
-  const today = localDayKey(new Date(), useHospitalTimeZone());
-  if (filters.range !== "custom") return null;
-  return (
-    <div className="flex items-center gap-1.5" data-testid="custom-dates">
-      <input type="date" aria-label="From date" className={DATE_INPUT} value={filters.from ?? ""} min={earliestFrom(filters.to ?? today)} max={filters.to ?? today} onChange={(e) => e.target.value && onChange({ from: e.target.value })} />
-      <span className="text-xs text-ink-2" aria-hidden="true">
-        –
-      </span>
-      <input type="date" aria-label="To date" className={DATE_INPUT} value={filters.to ?? ""} min={filters.from} max={today} onChange={(e) => e.target.value && onChange({ to: e.target.value })} />
-    </div>
   );
 }
 
@@ -133,8 +116,7 @@ export function AnalyticsFilterBar(props: BarProps) {
   return (
     <div className="space-y-2" data-testid="analytics-filters">
       <div className="glass flex flex-wrap items-center gap-x-2 gap-y-2 rounded-panel px-2.5 py-2">
-        <RangeTabs filters={filters} onChange={onChange} />
-        <CustomDates filters={filters} onChange={onChange} />
+        <Period filters={filters} onChange={onChange} />
 
         <div className="hidden flex-wrap items-center gap-2 md:flex" data-testid="filter-selects-desktop">
           <span className="mx-0.5 h-5 w-px bg-line-strong" aria-hidden="true" />
@@ -176,7 +158,6 @@ export function AnalyticsFilterBar(props: BarProps) {
               </button>
             </div>
             <div className="flex flex-col gap-2 [&_span]:w-full [&_select]:h-10 [&_select]:text-sm">
-              <CustomDates filters={filters} onChange={onChange} />
               <Selects {...props} />
             </div>
             <div className="mt-4 flex items-center justify-between gap-2">

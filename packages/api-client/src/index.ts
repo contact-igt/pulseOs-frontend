@@ -1,4 +1,6 @@
 import type {
+  AdsAnalytics,
+  AdsSyncRunVm,
   MessageTemplateVm,
   NotificationRuleVm,
   WhatsAppPreview,
@@ -442,6 +444,8 @@ export const api = {
   analyticsFunnel: (q: AnalyticsQuery = {}) => request<AnalyticsFunnel>(`/analytics/funnel${toQuery({ ...q })}`),
   analyticsSourceConversion: (q: AnalyticsQuery = {}) => request<SourceConversionResponse>(`/analytics/source-conversion${toQuery({ ...q })}`),
   analyticsRevenue: (q: AnalyticsQuery = {}) => request<AnalyticsRevenue>(`/analytics/revenue${toQuery({ ...q })}`),
+  analyticsAds: (q: AnalyticsQuery = {}) => request<AdsAnalytics>(`/analytics/ads${toQuery({ ...q })}`),
+  syncAds: (key: "google_ads" | "meta_ads") => request<AdsSyncRunVm>(`/integrations/hub/${key}/sync`, { method: "POST" }),
   analyticsCampaigns: (q: AnalyticsQuery = {}) => request<AnalyticsCampaigns>(`/analytics/campaigns${toQuery({ ...q })}`),
   analyticsServices: (q: AnalyticsQuery = {}) => request<AnalyticsServices>(`/analytics/services${toQuery({ ...q })}`),
   analyticsFlow: (q: AnalyticsQuery = {}) => request<AnalyticsFlow>(`/analytics/flow${toQuery({ ...q })}`),

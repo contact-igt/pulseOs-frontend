@@ -12,7 +12,7 @@ const ymd = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 // Unknown keys (a smuggled tenantId...) are stripped: the tenant always comes from the session.
 const workspaceQuery = z.object({
   view: opt(z.enum(LEAD_VIEWS.map((v) => v.key) as [string, ...string[]])),
-  range: opt(z.enum(["today", "yesterday", "7d", "30d", "this_month", "last_month", "custom"])),
+  range: opt(z.enum(["today", "yesterday", "7d", "9d", "14d", "30d", "90d", "this_month", "prev_month", "last_month", "custom"])),
   from: opt(ymd),
   to: opt(ymd),
   owner: opt(z.string().max(60)),

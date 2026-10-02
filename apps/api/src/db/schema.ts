@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, pgEnum, index, uniqueIndex, primaryKey, date, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, pgEnum, index, uniqueIndex, primaryKey, date, numeric, type AnyPgColumn } from "drizzle-orm/pg-core";
 
 export const roleEnum = pgEnum("role", ["SUPER_ADMIN", "HOSPITAL_ADMIN", "FRONT_DESK", "PATIENT_COORDINATOR", "DOCTOR"]);
 
@@ -1151,8 +1151,10 @@ export const notifications = pgTable("notifications", {
   // APPOINTMENT | SURGERY | FOLLOW_UP (a message a staff member chose to send).
   subjectType: text("subject_type").notNull(),
   subjectId: uuid("subject_id").notNull(),
-  patientId: uuid("patient_id").notNull().references(() => patients.id),
-  journeyId: uuid("journey_id").references(() => journeys.id),
+  // A notification is derived from a patient's journey and means nothing without it: when the journey/patient is deleted
+  // (only data tools and tests ever do), its notifications go with it instead of blocking the delete.
+  patientId: uuid("patient_id").notNull().references(() => patients.id, { onDelete: "cascade" }),
+  journeyId: uuid("journey_id").references(() => journeys.id, { onDelete: "cascade" }),
   channel: text("channel").notNull().default("WHATSAPP"),
   // The visit/surgery time this notification was planned against; if the visit has moved since, the worker cancels it.
   subjectAt: timestamp("subject_at", { withTimezone: true }),
@@ -1176,4 +1178,50 @@ export const notifications = pgTable("notifications", {
   dueIdx: index("notifications_due_idx").on(t.status, t.scheduledFor),
   subjectIdx: index("notifications_subject_idx").on(t.tenantId, t.subjectType, t.subjectId),
   providerMessageIdx: index("notifications_provider_message_idx").on(t.providerMessageId),
+}));
+
+// ---------------------------------------------------------------------------
+// Ads reporting (M7): read-only, normalized, idempotent. One row per (provider, account, campaign, day); a re-sync of the same
+// day overwrites it (providers restate recent days), so repeating a sync can never double-count spend.
+// ---------------------------------------------------------------------------
+
+export const adsDailyFacts = pgTable("ads_daily_facts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  connectorId: uuid("connector_id").notNull().references(() => connectors.id),
+  provider: text("provider").notNull(),
+  accountId: text("account_id").notNull(),
+  entityType: text("entity_type").notNull().default("CAMPAIGN"),
+  entityId: text("entity_id").notNull(),
+  entityName: text("entity_name").notNull(),
+  factDate: date("fact_date", { mode: "string" }).notNull(),
+  currency: text("currency").notNull().default("INR"),
+  spend: numeric("spend", { precision: 14, scale: 2 }).notNull().default("0"),
+  impressions: integer("impressions").notNull().default(0),
+  clicks: integer("clicks").notNull().default(0),
+  providerConversions: numeric("provider_conversions", { precision: 14, scale: 2 }),
+  // Meta: raw action_type -> count. Which of them counts as a lead is the hospital's mapping, applied when reading.
+  actions: jsonb("actions"),
+  syncedAt: timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  naturalKey: uniqueIndex("ads_daily_facts_natural_unique").on(t.tenantId, t.provider, t.accountId, t.entityType, t.entityId, t.factDate),
+  rangeIdx: index("ads_daily_facts_range_idx").on(t.tenantId, t.provider, t.factDate),
+}));
+
+export const adsSyncRuns = pgTable("ads_sync_runs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: uuid("tenant_id").notNull().references(() => tenants.id),
+  connectorId: uuid("connector_id").notNull().references(() => connectors.id),
+  provider: text("provider").notNull(),
+  trigger: text("trigger").notNull(), // MANUAL | SCHEDULED
+  status: text("status").notNull().default("RUNNING"), // RUNNING | SUCCEEDED | FAILED
+  rangeFrom: date("range_from", { mode: "string" }).notNull(),
+  rangeTo: date("range_to", { mode: "string" }).notNull(),
+  rowsUpserted: integer("rows_upserted").notNull().default(0),
+  attempts: integer("attempts").notNull().default(0),
+  error: text("error"),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+}, (t) => ({
+  tenantProviderIdx: index("ads_sync_runs_tenant_provider_idx").on(t.tenantId, t.provider, t.startedAt),
 }));

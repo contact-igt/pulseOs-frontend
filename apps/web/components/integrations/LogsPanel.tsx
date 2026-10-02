@@ -3,7 +3,10 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
-import { Badge, EmptyState, ErrorState, Skeleton, relativeTime } from "@pulseos/ui";
+import { Badge, EmptyState, ErrorState, Skeleton, localDayKey, relativeTime } from "@pulseos/ui";
+import { DATE_PRESETS, resolveDatePreset } from "@pulseos/types";
+import { PeriodControls, type PeriodValue } from "@/components/filters/PeriodControls";
+import { useHospitalTimeZone } from "@/lib/useHospitalTimeZone";
 
 const PROVIDERS = [
   { key: "", label: "All providers" },
@@ -20,10 +23,12 @@ const input = "h-11 rounded-control border border-line-strong bg-surface px-2 te
 export function LogsPanel({ provider: fixedProvider }: { provider?: string }) {
   const [provider, setProvider] = useState(fixedProvider ?? "");
   const [status, setStatus] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
-  const range = from && to ? { from, to } : {};
-  const q = useQuery({ queryKey: ["integration-logs", provider, status, from, to], queryFn: () => api.integrationLogs({ provider, status, ...range }) });
+  const tz = useHospitalTimeZone();
+  const today = localDayKey(new Date(), tz);
+  const [period, setPeriod] = useState<PeriodValue>({ range: undefined, from: undefined, to: undefined });
+  // The shared presets resolve to hospital-local days; the API takes the resolved day span.
+  const span = period.range === "custom" ? { from: period.from, to: period.to } : period.range ? resolveDatePreset(period.range as never, today) : {};
+  const q = useQuery({ queryKey: ["integration-logs", provider, status, span.from, span.to], queryFn: () => api.integrationLogs({ provider, status, ...(span.from && span.to ? { from: span.from, to: span.to } : {}) }) });
 
   return (
     <div className="space-y-3" data-testid="integration-logs">
@@ -42,14 +47,7 @@ export function LogsPanel({ provider: fixedProvider }: { provider?: string }) {
             {STATUSES.map((s) => <option key={s} value={s}>{s || "Any status"}</option>)}
           </select>
         </label>
-        <label className="flex flex-col gap-1 text-[11px] text-ink-2">
-          From
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={input} data-testid="logs-from" />
-        </label>
-        <label className="flex flex-col gap-1 text-[11px] text-ink-2">
-          To
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={input} data-testid="logs-to" />
-        </label>
+        <PeriodControls presets={DATE_PRESETS} value={period} today={today} onChange={setPeriod} noneLabel="Any date" testIdPrefix="logs" />
       </div>
       {q.isLoading && <Skeleton className="h-24" />}
       {q.isError && <ErrorState message="Could not load activity." />}

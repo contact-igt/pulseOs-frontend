@@ -1992,7 +1992,48 @@ export interface CampaignViewRow extends CampaignPerformanceRow {
 // One AnalyticsQuery scopes every endpoint so every panel agrees.
 // ---------------------------------------------------------------------------
 
-export type AnalyticsRangePreset = "7d" | "14d" | "30d" | "90d" | "custom";
+/**
+ * The ONE set of date presets every date filter in PulseOS offers (Analytics, Operations report, Leads, Integration logs, Ads).
+ * Days are hospital-local calendar days; `today` is passed in, so each boundary is a pure function with no clock.
+ */
+export const DATE_PRESETS = [
+  { key: "today", label: "Today" },
+  { key: "yesterday", label: "Yesterday" },
+  { key: "7d", label: "Last 7 days" },
+  { key: "9d", label: "Last 9 days" },
+  { key: "30d", label: "Last 30 days" },
+  { key: "90d", label: "Last 90 days" },
+  { key: "this_month", label: "This month" },
+  { key: "prev_month", label: "Previous month" },
+  { key: "custom", label: "Custom range" },
+] as const;
+export type DatePreset = (typeof DATE_PRESETS)[number]["key"];
+/** Older links/clients may still send these; every API still resolves them. */
+export type LegacyDatePreset = "14d" | "last_month";
+
+const dpAdd = (ymd: string, n: number) => new Date(new Date(`${ymd}T00:00:00Z`).getTime() + n * 86_400_000).toISOString().slice(0, 10);
+const dpMonthStart = (ymd: string) => `${ymd.slice(0, 7)}-01`;
+
+/** [from, to] for a non-custom preset, as inclusive hospital-local days ending on (or before) `today`. */
+export function resolveDatePreset(preset: Exclude<DatePreset | LegacyDatePreset, "custom">, today: string): { from: string; to: string } {
+  switch (preset) {
+    case "today": return { from: today, to: today };
+    case "yesterday": return { from: dpAdd(today, -1), to: dpAdd(today, -1) };
+    case "7d": return { from: dpAdd(today, -6), to: today };
+    case "9d": return { from: dpAdd(today, -8), to: today };
+    case "14d": return { from: dpAdd(today, -13), to: today };
+    case "30d": return { from: dpAdd(today, -29), to: today };
+    case "90d": return { from: dpAdd(today, -89), to: today };
+    case "this_month": return { from: dpMonthStart(today), to: today };
+    case "prev_month":
+    case "last_month": {
+      const lastOfPrevious = dpAdd(dpMonthStart(today), -1);
+      return { from: dpMonthStart(lastOfPrevious), to: lastOfPrevious };
+    }
+  }
+}
+
+export type AnalyticsRangePreset = DatePreset | LegacyDatePreset;
 
 export interface AnalyticsQuery {
   range?: AnalyticsRangePreset;
@@ -2251,17 +2292,9 @@ export interface AnalyticsFilterOptions {
 // procedures, conversion. No spend/ROAS here, so every edition gets it.
 // ---------------------------------------------------------------------------
 
-export type ReportRange = "today" | "yesterday" | "7d" | "30d" | "this_month" | "last_month" | "custom";
+export type ReportRange = DatePreset | LegacyDatePreset;
 
-export const REPORT_RANGES: { key: ReportRange; label: string }[] = [
-  { key: "today", label: "Today" },
-  { key: "yesterday", label: "Yesterday" },
-  { key: "7d", label: "Last 7 days" },
-  { key: "30d", label: "Last 30 days" },
-  { key: "this_month", label: "This month" },
-  { key: "last_month", label: "Previous month" },
-  { key: "custom", label: "Custom range" },
-];
+export const REPORT_RANGES: { key: ReportRange; label: string }[] = DATE_PRESETS.map((p) => ({ key: p.key, label: p.label }));
 
 export interface ReportQuery {
   range?: ReportRange;
@@ -2523,6 +2556,8 @@ export interface IntegrationDetail extends IntegrationCard {
   secretFields: (IntegrationFieldSpec & { hasSecret: boolean })[];
   /** Provider dispositions / actions mapped to PulseOS next actions (calling), or other mapping notes. */
   mappingNotes: string | null;
+  /** Ads providers only: the latest sync runs (what was pulled, when, and any failure). */
+  syncRuns?: AdsSyncRunVm[];
   webhookUrl: string | null;
   connectorMode: "FIXTURE" | "SANDBOX" | "LIVE" | null;
 }
@@ -2652,4 +2687,86 @@ export interface WhatsAppPreview {
   missingVariables: string[];
   canSend: boolean;
   blockedReason: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Ads reporting (M7): read-only Google Ads / Meta Ads facts, normalized and idempotent per
+// (provider, account, entity, date). Provider-reported conversions are NEVER PulseOS outcomes.
+// ---------------------------------------------------------------------------
+
+export const ADS_PROVIDERS = ["google_ads", "meta_ads"] as const;
+export type AdsProvider = (typeof ADS_PROVIDERS)[number];
+export const ADS_PROVIDER_LABEL: Record<AdsProvider, string> = { google_ads: "Google Ads", meta_ads: "Meta Ads" };
+
+export type AdsSyncStatus = "RUNNING" | "SUCCEEDED" | "FAILED";
+export interface AdsSyncRunVm {
+  id: string;
+  status: AdsSyncStatus;
+  trigger: "MANUAL" | "SCHEDULED";
+  rangeFrom: string;
+  rangeTo: string;
+  rowsUpserted: number;
+  attempts: number;
+  error: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+}
+
+export type AdsSetupState = "NOT_ENABLED" | "NOT_CONFIGURED" | "NEVER_SYNCED" | "READY";
+
+export interface AdsProviderStatus {
+  provider: AdsProvider;
+  name: string;
+  setup: AdsSetupState;
+  mode: IntegrationMode;
+  lastSyncedAt: string | null;
+  lastSyncStatus: AdsSyncStatus | null;
+  lastSyncError: string | null;
+}
+
+/** What PulseOS itself recorded for a campaign it could match to the provider's campaign id. */
+export interface AdsCampaignOutcomes {
+  campaignId: string;
+  leads: number;
+  appointments: number;
+  consultations: number;
+  treatments: number;
+  revenue: number;
+}
+
+export interface AdsCampaignRow {
+  provider: AdsProvider;
+  entityId: string;
+  name: string;
+  currency: string;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  ctr: number | null;
+  cpc: number | null;
+  /** As the provider reports them (Google "conversions", Meta mapped results). Never called leads or outcomes. */
+  providerConversions: number | null;
+  /** Meta results counted under the action types the hospital mapped as leads; null when none are mapped. */
+  providerMappedLeads: number | null;
+  /** null = PulseOS cannot tie this campaign to its own journeys (never shown as zero). */
+  pulseos: AdsCampaignOutcomes | null;
+  costPerLead: number | null;
+  costPerAppointment: number | null;
+  costPerConsultation: number | null;
+  costPerTreatment: number | null;
+  roas: number | null;
+}
+
+export interface AdsAnalytics {
+  period: { from: string; to: string; timezone: string };
+  providers: AdsProviderStatus[];
+  /** Why there is nothing to show (setup, capability, or a slice the ad accounts cannot be split by). */
+  unavailable: "NO_PROVIDER_ENABLED" | "NO_DATA_YET" | "NOT_SLICEABLE" | "MIXED_CURRENCY" | null;
+  currency: string | null;
+  totals: { spend: number; impressions: number; clicks: number; providerConversions: number | null } | null;
+  /** Derived over the campaigns PulseOS could match only, so a cost is never divided by outcomes of a different set. */
+  matched: { spend: number; leads: number; appointments: number; consultations: number; treatments: number; revenue: number; costPerLead: number | null; costPerAppointment: number | null; costPerConsultation: number | null; costPerTreatment: number | null; roas: number | null } | null;
+  coverage: { matchedCampaigns: number; totalCampaigns: number; matchedSpend: number; totalSpend: number };
+  campaigns: AdsCampaignRow[];
+  daily: { date: string; spend: number; clicks: number; impressions: number }[];
 }

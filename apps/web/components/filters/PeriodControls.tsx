@@ -28,7 +28,7 @@ export function PeriodControls({
   testIdPrefix,
   label = "Date range",
 }: {
-  presets: { key: string; label: string }[];
+  presets: readonly { key: string; label: string }[];
   value: PeriodValue;
   today: string;
   onChange: (next: PeriodValue) => void;

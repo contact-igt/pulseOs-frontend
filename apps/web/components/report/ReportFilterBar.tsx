@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Download, SlidersHorizontal, X } from "lucide-react";
 import { api, ApiError } from "@pulseos/api-client";
+import { PeriodControls } from "@/components/filters/PeriodControls";
 import { REPORT_RANGES, type ReportExportKind, type ReportFilterOptions, type ReportQuery, type ReportRange } from "@pulseos/types";
 import { Button, FilterSelect, SideSheet } from "@pulseos/ui";
-import { activeReportChips, customDefaults } from "./reportFilters";
+import { activeReportChips } from "./reportFilters";
 
-const DATE_INPUT = "glass-control h-8 min-w-0 flex-1 rounded-control px-2 text-xs text-ink outline-none focus-visible:border-primary-500 sm:flex-none max-md:h-11";
 
 const EXPORTS: { kind: ReportExportKind; label: string; hint: string }[] = [
   { kind: "summary", label: "Report summary", hint: "KPIs, day by day, funnel, sources, services, team" },
@@ -53,31 +53,6 @@ function FilterSelects({ q, options, onChange }: { q: ReportQuery; options?: Rep
   );
 }
 
-function PeriodControls({ q, today, onChange }: { q: ReportQuery & { range: ReportRange }; today: string; onChange: (p: Partial<ReportQuery>) => void }) {
-  return (
-    <>
-      <FilterSelect
-        aria-label="Period"
-        value={q.range}
-        onChange={(e) => {
-          const range = e.target.value as ReportRange;
-          onChange(range === "custom" ? { range, ...customDefaults(today) } : { range });
-        }}
-        data-testid="report-range"
-        className="max-md:[&_select]:h-11"
-      >
-        {REPORT_RANGES.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
-      </FilterSelect>
-      {q.range === "custom" && (
-        <div className="flex items-center gap-1.5" data-testid="report-custom-dates">
-          <input type="date" aria-label="From date" className={DATE_INPUT} value={q.from ?? ""} max={q.to ?? today} onChange={(e) => e.target.value && onChange({ range: "custom", from: e.target.value, to: q.to && q.to >= e.target.value ? q.to : e.target.value })} data-testid="report-from" />
-          <span className="text-xs text-ink-2" aria-hidden="true">–</span>
-          <input type="date" aria-label="To date" className={DATE_INPUT} value={q.to ?? ""} min={q.from} max={today} onChange={(e) => e.target.value && onChange({ range: "custom", from: q.from && q.from <= e.target.value ? q.from : e.target.value, to: e.target.value })} data-testid="report-to" />
-        </div>
-      )}
-    </>
-  );
-}
 
 function ExportMenu({ q }: { q: ReportQuery }) {
   const [open, setOpen] = useState(false);
@@ -163,7 +138,7 @@ export function ReportFilterBar({ q, today, options, canExport, defaultRange, on
   return (
     <div className="space-y-2" data-testid="report-filters">
       <div className="glass flex flex-wrap items-center gap-x-2 gap-y-2 rounded-panel px-2.5 py-2">
-        <PeriodControls q={q} today={today} onChange={onChange} />
+        <PeriodControls presets={REPORT_RANGES} value={{ range: q.range, from: q.from, to: q.to }} today={today} onChange={(p) => onChange(p.range === "custom" ? { range: "custom", from: p.from, to: p.to } : { range: p.range as ReportRange })} testIdPrefix="report" label="Period" />
         <div className="hidden flex-wrap items-center gap-2 lg:flex [&_select]:max-w-[9.5rem] xl:[&_select]:max-w-[11rem]">
           <span className="mx-0.5 h-5 w-px bg-line-strong" aria-hidden="true" />
           <FilterSelects q={q} options={options} onChange={onChange} />

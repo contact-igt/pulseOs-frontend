@@ -21,7 +21,8 @@ export interface ReportFilterConfig {
 export const REPORT_CONFIG: ReportFilterConfig = { keys: REPORT_KEYS, defaultRange: DEFAULT_REPORT_RANGE };
 export const ANALYTICS_CONFIG: ReportFilterConfig = { keys: ANALYTICS_KEYS, defaultRange: "30d" };
 
-const RANGES = new Set<string>(REPORT_RANGES.map((r) => r.key));
+// The shared presets, plus the two keys older shared links may still carry (the API still resolves them).
+const RANGES = new Set<string>([...REPORT_RANGES.map((r) => r.key), "14d", "last_month"]);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function isRealDate(s: string | undefined): s is string {

@@ -1,4 +1,4 @@
-import { LEAD_VIEWS, type LeadStatus, type LeadView, type LeadsWorkspaceQuery, type ReportRange } from "@pulseos/types";
+import { LEAD_VIEWS, REPORT_RANGES, type LeadStatus, type LeadView, type LeadsWorkspaceQuery, type ReportRange } from "@pulseos/types";
 import { isRealDate } from "@/components/report/reportFilters";
 
 // The Leads workspace's filters live in the URL (?view=&range=&from=&to=&owner=&source=&service=&status=&due=), so
@@ -8,14 +8,7 @@ import { isRealDate } from "@/components/report/reportFilters";
 export const DEFAULT_LEAD_VIEW: LeadView = "all";
 
 /** Presets offered on Leads. A range is measured against the date context the active view states. */
-export const LEAD_RANGES: { key: Exclude<ReportRange, "last_month">; label: string }[] = [
-  { key: "today", label: "Today" },
-  { key: "yesterday", label: "Yesterday" },
-  { key: "7d", label: "Last 7 days" },
-  { key: "30d", label: "Last 30 days" },
-  { key: "this_month", label: "This month" },
-  { key: "custom", label: "Custom" },
-];
+export const LEAD_RANGES: { key: ReportRange; label: string }[] = REPORT_RANGES;
 const RANGES = new Set<string>(LEAD_RANGES.map((r) => r.key));
 const VIEWS = new Set<string>(LEAD_VIEWS.map((v) => v.key));
 const STATUSES = new Set<string>(["new", "uncontacted", "follow_up_due", "appointment_booked", "no_response", "converted", "lost"]);

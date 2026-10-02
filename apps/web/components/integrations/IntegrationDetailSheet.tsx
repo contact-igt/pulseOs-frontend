@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "@pulseos/api-client";
+import { api, ApiError } from "@pulseos/api-client";
 import { Badge, Button, ErrorState, SideSheet, Skeleton, Tabs, relativeTime } from "@pulseos/ui";
 import type { IntegrationDetail } from "@pulseos/types";
 import { CONFIG_LABEL, CONFIG_TONE, HEALTH_LABEL, HEALTH_TONE, MODE_LABEL, MODE_TONE } from "./hubLabels";
@@ -11,7 +11,7 @@ import { LogsPanel } from "./LogsPanel";
 
 const field = "h-11 w-full rounded-control border border-line-strong bg-surface px-2 text-sm text-ink outline-none focus:border-primary-500 sm:h-9";
 
-type SectionKey = "overview" | "configuration" | "credentials" | "mappings" | "webhooks" | "activity" | "health";
+type SectionKey = "overview" | "configuration" | "credentials" | "mappings" | "webhooks" | "sync" | "activity" | "health";
 
 function Overview({ d }: { d: IntegrationDetail }) {
   return (
@@ -103,6 +103,52 @@ function ConfigurationForm({ d, secrets }: { d: IntegrationDetail; secrets: bool
   );
 }
 
+const SYNC_ERR: Record<string, string> = {
+  feature_not_available: "This integration is switched off. Turn it on in Settings → Features.",
+  not_configured: "Finish the configuration first.",
+  sync_in_progress: "A sync is already running.",
+  too_soon: "A sync just finished — wait a minute before syncing again.",
+};
+
+/** Read-only pull of reporting numbers. Nothing here changes anything at the ad platform. */
+function SyncSection({ d }: { d: IntegrationDetail }) {
+  const queryClient = useQueryClient();
+  const [message, setMessage] = useState<string | null>(null);
+  const key = d.key as "google_ads" | "meta_ads";
+  const sync = useMutation({
+    mutationFn: () => api.syncAds(key),
+    onSuccess: (run) => {
+      setMessage(run.status === "SUCCEEDED" ? `Synced ${run.rowsUpserted} daily rows.` : "The sync failed. Your previous numbers are unchanged.");
+      queryClient.invalidateQueries({ queryKey: ["integration-detail", d.key] });
+      queryClient.invalidateQueries({ queryKey: ["integration-hub"] });
+      queryClient.invalidateQueries({ queryKey: ["analytics", "ads"] });
+    },
+    onError: (e) => setMessage(SYNC_ERR[(e as ApiError).message] ?? "Could not start the sync."),
+  });
+  const can = d.canConfigure && d.enabled && d.configuration === "CONFIGURED";
+  return (
+    <div className="space-y-3 text-sm" data-testid="ads-sync-section">
+      <p className="text-xs text-ink-2">Last synced: <span className="font-medium text-ink" data-testid="ads-last-synced">{d.lastSyncAt ? relativeTime(d.lastSyncAt) : "never"}</span>. Reporting only — PulseOS never creates, edits or pauses anything in the ad account.</p>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button size="sm" variant="primary" disabled={!can || sync.isPending} onClick={() => { setMessage(null); sync.mutate(); }} data-testid="ads-sync-now">{sync.isPending ? "Syncing…" : "Sync now"}</Button>
+        {!can && <span className="text-xs text-ink-2">{!d.enabled ? "Switched off." : d.configuration !== "CONFIGURED" ? "Not configured yet." : "Only an Admin can sync."}</span>}
+        {message && <span role="status" className="text-xs text-ink-2" data-testid="ads-sync-message">{message}</span>}
+      </div>
+      <ul className="divide-y divide-line rounded-card border border-line bg-surface text-xs">
+        {(d.syncRuns ?? []).length === 0 && <li className="px-3 py-2 text-ink-2">No syncs yet.</li>}
+        {(d.syncRuns ?? []).map((r) => (
+          <li key={r.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2" data-testid="ads-sync-run">
+            <Badge tone={r.status === "SUCCEEDED" ? "success" : r.status === "FAILED" ? "danger" : "neutral"}>{r.status.toLowerCase()}</Badge>
+            <span className="text-ink-2">{r.rangeFrom} → {r.rangeTo} · {r.rowsUpserted} rows · {r.trigger.toLowerCase()}</span>
+            <span className="ml-auto text-ink-3">{relativeTime(r.startedAt)}</span>
+            {r.error && <span className="basis-full text-danger-700">{r.error}</span>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function Health({ d }: { d: IntegrationDetail }) {
   return (
     <div className="space-y-2 text-sm">
@@ -130,6 +176,7 @@ export function IntegrationDetailSheet({ integrationKey, onClose }: { integratio
         ...(d.secretFields.length ? [{ key: "credentials" as const, label: "Credentials" }] : []),
         ...(d.mappingNotes ? [{ key: "mappings" as const, label: "Mappings" }] : []),
         ...(d.webhookUrl ? [{ key: "webhooks" as const, label: "Webhooks" }] : []),
+        ...(d.syncRuns ? [{ key: "sync" as const, label: "Sync" }] : []),
         ...(d.key !== "webhooks" && !d.blockedReason ? [{ key: "activity" as const, label: "Activity" }, { key: "health" as const, label: "Health" }] : []),
       ]
     : [];
@@ -151,6 +198,7 @@ export function IntegrationDetailSheet({ integrationKey, onClose }: { integratio
               <p className="text-[11px] text-ink-3">Every request is verified with the provider&apos;s own signature or shared secret before anything is read.</p>
             </div>
           )}
+          {section === "sync" && <SyncSection d={d} />}
           {section === "activity" && <LogsPanel provider={d.key} />}
           {section === "health" && <Health d={d} />}
         </div>

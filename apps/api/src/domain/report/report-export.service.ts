@@ -26,7 +26,7 @@ const TASK_TYPE_LABEL: Record<string, string> = {
   CALLBACK: "Callback", FOLLOW_UP: "Follow-up", APPOINTMENT_CONFIRMATION: "Appointment confirmation", NO_SHOW_RECOVERY: "No-show recovery",
   TREATMENT_DECISION: "Treatment decision", POST_CARE: "Post-care", RECALL: "Recall", OTHER: "Other",
 };
-const RANGE_LABEL: Record<string, string> = { today: "Today", yesterday: "Yesterday", "7d": "Last 7 days", "30d": "Last 30 days", this_month: "This month", last_month: "Previous month", custom: "Custom range" };
+const RANGE_LABEL: Record<string, string> = { today: "Today", yesterday: "Yesterday", "7d": "Last 7 days", "30d": "Last 30 days", this_month: "This month", last_month: "Previous month", prev_month: "Previous month", "9d": "Last 9 days", "14d": "Last 14 days", "90d": "Last 90 days", custom: "Custom range" };
 
 function dateTime(d: Date | null, timezone: string): string {
   if (!d) return "";

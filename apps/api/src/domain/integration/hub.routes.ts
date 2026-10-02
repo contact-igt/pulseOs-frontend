@@ -2,6 +2,8 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { hasPermission } from "@pulseos/types";
 import { requirePermission } from "../auth/permission.middleware.js";
+import { ADS_PROVIDERS, type AdsProvider } from "@pulseos/types";
+import { syncAds } from "../ads/ads-sync.service.js";
 import { configureIntegration, getHubDetail, listHub, listIntegrationLogs } from "./hub.service.js";
 import { createWebhook, deleteWebhook, listWebhooks, updateWebhook } from "./outbound-webhook.service.js";
 import { webhookInputSchema } from "./webhook-rules.js";
@@ -59,6 +61,17 @@ export async function integrationHubRoutes(app: FastifyInstance) {
     if (!result.ok) return reply.status(REASON_STATUS[result.reason] ?? 400).send({ error: result.reason });
     request.log.info({ integration: { key: (request.params as { key: string }).key, userId: u.id, tenantId: u.tenantId, changed: Object.keys(parsed.data) } }, "integration configured");
     return getHubDetail(app.db, u.tenantId, u.role, u.capabilities, (request.params as { key: string }).key);
+  });
+
+  // "Sync now": a read-only pull of reporting numbers. Never contacts the provider unless it is configured and switched on;
+  // one at a time, and not more than once a minute.
+  app.post("/integrations/hub/:key/sync", { preHandler: requirePermission("MANAGE_INTEGRATION_CONFIG") }, async (request, reply) => {
+    const u = request.sessionUser!;
+    const key = (request.params as { key: string }).key;
+    if (!(ADS_PROVIDERS as readonly string[]).includes(key)) return reply.status(404).send({ error: "unknown_integration" });
+    const r = await syncAds(app.db, u.tenantId, key as AdsProvider, { trigger: "MANUAL" });
+    if (!r.ok) return reply.status(({ feature_not_available: 403, not_configured: 409, sync_in_progress: 409, too_soon: 429, invalid_range: 422 } as Record<string, number>)[r.reason] ?? 400).send({ error: r.reason });
+    return r.run;
   });
 
   app.get("/integrations/logs", async (request, reply) => {
