@@ -112,7 +112,8 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [remember, setRemember] = useState(true);
+  // Off by default: a shared front-desk computer must not stay signed in unless the person chooses it.
+  const [remember, setRemember] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -122,7 +123,7 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      const { user } = await api.login(email, password);
+      const { user } = await api.login(email, password, remember);
       router.push(ROLE_HOME[user.role] ?? "/command-centre");
     } catch (err) {
       // The email stays as typed; focus goes where the user needs to act.
@@ -230,14 +231,18 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <label className="flex items-center gap-2 text-xs text-neutral-500">
+            <label className="flex items-start gap-2 text-xs text-neutral-500">
               <input
                 type="checkbox"
+                data-testid="remember-me"
                 checked={remember}
                 onChange={(e) => setRemember(e.target.checked)}
-                className="h-3.5 w-3.5 rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
+                className="mt-0.5 h-3.5 w-3.5 rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
               />
-              Remember me
+              <span>
+                Remember me
+                <span className="block text-[11px] text-neutral-400">Stay signed in on this device for 7 days. Leave off on a shared computer.</span>
+              </span>
             </label>
 
             {error && (

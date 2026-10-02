@@ -19,6 +19,7 @@ import {
 import { PulseLockup } from "@pulseos/ui";
 import type { SessionUser } from "@pulseos/types";
 import { initials, lockedNavItems, navForRole } from "./nav";
+import { TruncatedText } from "./TruncatedText";
 import { roleGroupLabel } from "@pulseos/types";
 
 const ICONS: Record<string, LucideIcon> = {
@@ -83,7 +84,7 @@ export function Sidebar({ user, open = false, onClose }: { user: SessionUser; op
                         data-testid={`nav-${item.href}`}
                       >
                         <Icon size={17} strokeWidth={active ? 2.25 : 2} className="nav-icon shrink-0" />
-                        {item.label}
+                        <TruncatedText className="min-w-0">{item.label}</TruncatedText>
                       </Link>
                     </li>
                   );
@@ -93,15 +94,15 @@ export function Sidebar({ user, open = false, onClose }: { user: SessionUser; op
           ))}
           {locked.length > 0 && (
             <div data-testid="nav-locked">
-              <p className="nav-group-label px-2.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em]">Not in your edition</p>
+              <p className="nav-group-label px-2.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em]">Not switched on</p>
               <ul className="space-y-0.5">
                 {locked.map((item) => {
                   const Icon = ICONS[item.icon] ?? LayoutDashboard;
                   return (
                     <li key={item.href}>
-                      <span aria-disabled="true" title="Included in Beta V2" className="nav-secondary flex cursor-not-allowed items-center gap-2.5 rounded-control px-2.5 py-3 text-[13px] font-medium opacity-60 lg:py-1.5" data-testid={`nav-locked-${item.href}`}>
+                      <span aria-disabled="true" title="Not switched on for this hospital. A Super Admin can turn it on in Settings → Features." className="nav-secondary flex cursor-not-allowed items-center gap-2.5 rounded-control px-2.5 py-3 text-[13px] font-medium opacity-60 lg:py-1.5" data-testid={`nav-locked-${item.href}`}>
                         <Icon size={17} strokeWidth={2} className="shrink-0" />
-                        <span className="flex-1">{item.label}</span>
+                        <TruncatedText className="min-w-0 flex-1">{item.label}</TruncatedText>
                         <span className="rounded-chip border border-line px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide">Beta V2</span>
                       </span>
                     </li>
@@ -115,11 +116,11 @@ export function Sidebar({ user, open = false, onClose }: { user: SessionUser; op
         <div className="nav-divider flex shrink-0 items-center gap-2.5 border-t px-3 py-3">
           <span className="nav-avatar flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold">{initials(user.name)}</span>
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[13px] font-medium">{user.name}</span>
-            <span className="nav-secondary block truncate text-xs">
+            <TruncatedText className="block text-[13px] font-medium">{user.name}</TruncatedText>
+            <TruncatedText className="nav-secondary block text-xs">
               {roleGroupLabel(user.role)}
               {user.branchName ? ` · ${user.branchName}` : ""}
-            </span>
+            </TruncatedText>
           </span>
         </div>
       </nav>
