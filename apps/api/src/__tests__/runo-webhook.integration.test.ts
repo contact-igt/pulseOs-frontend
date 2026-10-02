@@ -138,7 +138,7 @@ describe.skipIf(!DEMO_PASSWORD)("Runo webhook (integration, fixture mode)", () =
 
     const taskRes = await app.inject({ method: "GET", url: `/tasks?patientId=${patient.id}`, cookies: { pulseos_session: adminCookie } });
     const taskRows = taskRes.json() as { type: string; status: string; notes: string | null }[];
-    const callbackTask = taskRows.find((t) => t.type === "CALLBACK");
+    const callbackTask = taskRows.find((t) => t.type === "CALLBACK" && /missed call/i.test(t.notes ?? ""));
     expect(callbackTask).toBeDefined();
     expect(callbackTask!.status).toBe("pending");
     expect(callbackTask!.notes).toMatch(/missed call/i);
