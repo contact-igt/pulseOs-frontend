@@ -66,3 +66,27 @@ export async function listActivity(db: Db, tenantId: string, f: { action?: strin
   return rows.map(({ a, actor }) => ({ id: a.id, at: a.createdAt.toISOString(), actorName: actor ?? null, action: a.action, entityType: a.entityType, entityKey: a.entityKey, metadata: (a.metadata as Record<string, unknown>) ?? {} }));
 }
 
+
+import type { FastifyReply, FastifyRequest } from "fastify";
+
+/**
+ * onResponse hook for a settings plugin: every SUCCESSFUL change (POST/PATCH/PUT/DELETE under `pathPrefix`) is recorded as
+ * who + which setting + which field NAMES changed. Request values are never copied, so nothing sensitive can end up here.
+ */
+export function auditSettingsChanges(app: { db: Db }, entityType: string, pathPrefix: string) {
+  return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    if (request.method === "GET" || reply.statusCode >= 300 || !request.sessionUser || !request.url.startsWith(pathPrefix)) return;
+    const params = request.params as { id?: string } | undefined;
+    const path = request.url.split("?")[0]!.slice(pathPrefix.length).replace(/^\//, "");
+    const verb = path === "reorder" ? "reordered" : request.method === "POST" ? "created" : request.method === "DELETE" ? "deleted" : (request.body as { archived?: boolean } | null)?.archived === true ? "archived" : "updated";
+    const body = (request.body ?? {}) as Record<string, unknown>;
+    await recordActivity(app.db, {
+      tenantId: request.sessionUser.tenantId,
+      actorId: request.sessionUser.id,
+      action: `${entityType}.${verb}`,
+      entityType,
+      entityKey: params?.id ?? null,
+      metadata: { changedFields: Object.keys(body).slice(0, 20) },
+    });
+  };
+}

@@ -39,6 +39,8 @@ function ConfigurationForm({ d, secrets }: { d: IntegrationDetail; secrets: bool
   const [values, setValues] = useState<Record<string, string>>(() => (secrets ? {} : { ...d.configurationValues }));
   const [mode, setMode] = useState(d.connectorMode ?? "FIXTURE");
   const [message, setMessage] = useState<string | null>(null);
+  const [ackLive, setAckLive] = useState(false);
+  const goingLive = secrets && mode === "LIVE" && (d.connectorMode ?? "FIXTURE") !== "LIVE";
   const save = useMutation({
     mutationFn: () => api.configureIntegration(d.key, secrets ? { secrets: values, ...(mode !== (d.connectorMode ?? "FIXTURE") ? { mode } : {}) } : { configuration: values }),
     onSuccess: () => {
@@ -93,8 +95,14 @@ function ConfigurationForm({ d, secrets }: { d: IntegrationDetail; secrets: bool
           </select>
         </label>
       )}
+      {goingLive && (
+        <label className="flex items-start gap-2 rounded-control border border-warning-100 bg-warning-100/50 px-3 py-2 text-xs text-ink" data-testid="live-ack">
+          <input type="checkbox" checked={ackLive} onChange={(e) => setAckLive(e.target.checked)} className="mt-0.5" />
+          <span>I understand Live mode contacts the real provider: real patients receive messages and real accounts are read. Saving credentials does not by itself prove the connection works.</span>
+        </label>
+      )}
       <div className="flex items-center gap-3">
-        <Button type="submit" size="sm" variant="primary" disabled={!allowed || save.isPending} data-testid={`save-${secrets ? "credentials" : "configuration"}`}>
+        <Button type="submit" size="sm" variant="primary" disabled={!allowed || save.isPending || (goingLive && !ackLive)} data-testid={`save-${secrets ? "credentials" : "configuration"}`}>
           {save.isPending ? "Saving…" : "Save"}
         </Button>
         {message && <span role="status" className="text-xs text-ink-2">{message}</span>}

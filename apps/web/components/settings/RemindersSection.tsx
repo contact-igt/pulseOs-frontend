@@ -33,20 +33,20 @@ function RuleRow({ rule, templates }: { rule: NotificationRuleVm; templates: Mes
     <li className="flex flex-wrap items-end gap-3 p-3 text-xs" data-testid={`rule-${rule.id}`}>
       <div className="min-w-0 flex-1 basis-48">
         <p className="text-sm font-medium text-ink">{kind}</p>
-        <label className="mt-1 flex items-center gap-2 text-ink-2">
+        <label className="mt-1 flex min-h-11 items-center gap-2 text-ink-2 sm:min-h-0">
           <input type="checkbox" checked={rule.enabled} onChange={(e) => save.mutate({ enabled: e.target.checked })} aria-label={`${kind} enabled`} data-testid={`rule-enabled-${rule.id}`} />
           {rule.enabled ? "On" : "Off"}
         </label>
       </div>
       {rule.kind === "REMINDER" && (
         <div className="flex items-end gap-1">
-          <label className="flex flex-col gap-1 text-ink-2">Before<input inputMode="numeric" value={value} onChange={(e) => setValue(e.target.value)} onBlur={() => Number(value) !== rule.offsetValue && save.mutate({ offsetValue: Number(value) })} className={`${field} w-20`} data-testid={`rule-offset-${rule.id}`} /></label>
+          <label className="flex flex-col gap-1 text-ink-2">Before<input inputMode="numeric" value={value} onChange={(e) => setValue(e.target.value)} onBlur={() => { const n = Number(value); if (!/^\d+$/.test(value.trim()) || n < 1) { setMsg(ERR.invalid_offset!); setValue(String(rule.offsetValue)); } else if (n !== rule.offsetValue) save.mutate({ offsetValue: n }); }} className={`${field} w-20`} data-testid={`rule-offset-${rule.id}`} /></label>
           <select aria-label="Unit" value={unit} onChange={(e) => { setUnit(e.target.value as typeof unit); save.mutate({ offsetUnit: e.target.value as typeof unit }); }} className={field}>
             <option value="minutes">minutes</option><option value="hours">hours</option><option value="days">days</option>
           </select>
         </div>
       )}
-      <label className="flex flex-col gap-1 text-ink-2">Min gap (min)<input inputMode="numeric" value={gap} onChange={(e) => setGap(e.target.value)} onBlur={() => Number(gap) !== rule.minGapMinutes && save.mutate({ minGapMinutes: Number(gap) })} className={`${field} w-24`} /></label>
+      <label className="flex flex-col gap-1 text-ink-2">Min gap (min)<input inputMode="numeric" value={gap} onChange={(e) => setGap(e.target.value)} onBlur={() => { const n = Number(gap); if (!/^\d+$/.test(gap.trim())) { setMsg(ERR.invalid_gap!); setGap(String(rule.minGapMinutes)); } else if (n !== rule.minGapMinutes) save.mutate({ minGapMinutes: n }); }} className={`${field} w-24`} /></label>
       <label className="flex flex-col gap-1 text-ink-2">Template
         <select value={rule.templateId ?? ""} onChange={(e) => save.mutate({ templateId: e.target.value || null })} className={field}>
           <option value="">None</option>
@@ -83,7 +83,7 @@ function TemplateEditor({ template }: { template: MessageTemplateVm }) {
       </label>
       <div className="flex flex-wrap items-center gap-3">
         <Button size="sm" variant="primary" onClick={() => save.mutate({ body, providerTemplateName: providerName })} disabled={save.isPending} data-testid={`template-save-${template.purpose}`}>Save</Button>
-        <label className="flex items-center gap-2 text-ink-2"><input type="checkbox" checked={template.enabled} onChange={(e) => save.mutate({ enabled: e.target.checked })} />Enabled</label>
+        <label className="flex min-h-11 items-center gap-2 text-ink-2 sm:min-h-0"><input type="checkbox" checked={template.enabled} onChange={(e) => save.mutate({ enabled: e.target.checked })} />Enabled</label>
         {msg && <span role="status" className="text-ink-2">{msg}</span>}
       </div>
     </li>
@@ -95,7 +95,12 @@ export function RemindersSection() {
   const rules = useQuery({ queryKey: ["notification-rules"], queryFn: api.notificationRules, retry: false });
   const templates = useQuery({ queryKey: ["message-templates"], queryFn: api.messageTemplates, retry: false });
   if (rules.isLoading || templates.isLoading) return <Skeleton className="h-32" />;
-  if (rules.isError || templates.isError || !rules.data || !templates.data) return <ErrorState message="Reminders are not available. Turn on WhatsApp Notifications in Settings → Features." />;
+  const status = (rules.error ?? templates.error) instanceof ApiError ? ((rules.error ?? templates.error) as ApiError) : null;
+  if (rules.isError || templates.isError || !rules.data || !templates.data) {
+    if (status?.message === "feature_not_available") return <ErrorState message="WhatsApp Notifications is switched off for this hospital. Ask your Super Admin to turn it on in Settings → Features." />;
+    if (status?.status === 403) return <ErrorState message="Only a Hospital Admin can change reminders." />;
+    return <ErrorState message="Could not load reminders. Try again in a moment." />;
+  }
   const group = (subject: "APPOINTMENT" | "SURGERY") => rules.data.filter((r) => r.subject === subject);
   return (
     <div className="space-y-5" data-testid="reminders-section">

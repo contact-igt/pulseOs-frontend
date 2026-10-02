@@ -40,6 +40,7 @@ export function readReportFilters(get: (key: string) => string, today: string, c
   const { keys: K, defaultRange } = config;
   const raw = get(K.range);
   let range: ReportRange = RANGES.has(raw) ? (raw as ReportRange) : defaultRange;
+  if (range === "last_month") range = "prev_month"; // an older link: same days, the one name
   const from = get(K.from);
   const to = get(K.to);
   // The server refuses a span over a year (400); mirror that here so a hand-made link falls back instead of erroring.

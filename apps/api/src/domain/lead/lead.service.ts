@@ -1,5 +1,5 @@
 import { emitIntegrationEvent } from "../integration/domain-events.js";
-import { and, eq, ne, or } from "drizzle-orm";
+import { and, eq, ne, or, sql } from "drizzle-orm";
 import { patientNameSql } from "../../lib/patient-name.js";
 import { dayKeyIn, diffDays, isRealDate, localToday, parseInstant } from "../../lib/hospital-time.js";
 import { resolveReportRange, ReportInputError } from "../report/report-period.js";
@@ -21,6 +21,7 @@ import {
   timelineEvents,
   treatmentOpportunities,
   users,
+  customFieldDefinitions,
 } from "../../db/schema.js";
 import { normalizePhone, resolveDefaultPhoneRegion } from "../patient/phone.js";
 import { resolveOrCreatePatient } from "../patient/identity.service.js";
@@ -153,7 +154,7 @@ async function createLeadIn(db: Db, tenantId: string, actorId: string, input: Cr
   // The fields on this form are the ones configured for Add Lead in this service scope, not
   // archived, and visible to the person submitting. Values are validated by field type.
   const entryFields = await listFieldsForEntry(db, tenantId, actorRole, { placement: "add_lead", specialtyKey: input.specialtyKey });
-  const submitted = resolveSubmittedValues(entryFields, input.customFieldValues);
+  const submitted = resolveSubmittedValues(entryFields, input.customFieldValues, { outcomeKey: input.outcomeKey ?? null });
   if (!submitted.ok) {
     return { validationError: true, missingRequiredFields: submitted.missing, invalidFields: submitted.invalid };
   }
@@ -520,7 +521,10 @@ export async function getLeadsWorkspace(db: Db, tenantId: string, query: Omit<Le
   const today = await localToday(db, timezone, now);
   const hasRange = !!query.range && !(query.range === "custom" && !query.from);
   const range = query.range ? resolveLeadRange(query.range, today, query.from, query.to) : undefined;
-  const facts = await buildLeadFacts(db, tenantId, timezone, now);
+  let facts = await buildLeadFacts(db, tenantId, timezone, now);
+  // A "filterable" CRM field narrows the list to journeys whose recorded answer matches (only fields the hospital marked so).
+  const { options: fieldOptions, matchingJourneyIds } = await filterableFieldSupport(db, tenantId, query.fieldKey, query.fieldValue);
+  if (matchingJourneyIds) facts = facts.filter((f) => matchingJourneyIds.has(f.row.id));
   const result = computeLeadsWorkspace(facts, {
     view: query.view,
     today,
@@ -532,7 +536,25 @@ export async function getLeadsWorkspace(db: Db, tenantId: string, query: Omit<Le
     status: query.status,
     due: query.due,
   });
-  return { ...result, period: { range: query.range ?? null, from: range?.from ?? null, to: range?.to ?? null, today, timezone } };
+  return { ...result, options: { ...result.options, filterableFields: fieldOptions }, period: { range: query.range ?? null, from: range?.from ?? null, to: range?.to ?? null, today, timezone } };
+}
+
+/** The filterable CRM fields (deduped by key, choice / Yes-No only) and, when one is applied, the journeys that match it. */
+async function filterableFieldSupport(db: Db, tenantId: string, fieldKey?: string, fieldValue?: string): Promise<{ options: LeadsWorkspace["options"]["filterableFields"]; matchingJourneyIds: Set<string> | null }> {
+  const defs = await db.select().from(customFieldDefinitions).where(and(eq(customFieldDefinitions.tenantId, tenantId), eq(customFieldDefinitions.filterable, true), eq(customFieldDefinitions.archived, false)));
+  const byKey = new Map<string, { key: string; label: string; options: string[] }>();
+  for (const d of defs) {
+    if (byKey.has(d.key)) continue;
+    const opts = d.fieldType === "BOOLEAN" ? ["true", "false"] : d.fieldType === "SELECT" || d.fieldType === "MULTI_SELECT" ? ((d.options as string[] | null) ?? []) : null;
+    if (opts) byKey.set(d.key, { key: d.key, label: d.label, options: opts });
+  }
+  const options = [...byKey.values()];
+  if (!fieldKey || fieldValue === undefined || !byKey.has(fieldKey)) return { options, matchingJourneyIds: null };
+  const rows = await db.execute<{ journey_id: string }>(sql`
+    select v.journey_id from custom_field_values v join custom_field_definitions d on d.id = v.field_definition_id
+    where d.tenant_id = ${tenantId} and d.key = ${fieldKey} and d.filterable = true
+      and ((jsonb_typeof(v.value) = 'array' and v.value ? ${fieldValue}) or (jsonb_typeof(v.value) <> 'array' and (v.value #>> '{}') = ${fieldValue}))`);
+  return { options, matchingJourneyIds: new Set([...rows].map((r) => r.journey_id)) };
 }
 
 export { ReportInputError as LeadRangeError };

@@ -44,7 +44,7 @@ describe("report filters in the URL", () => {
   it("the Analytics workspace has its own keys and a 30-day default, so it never collides with Marketing analytics' range / branch / source", () => {
     expect(readReportFilters(from({}), "2026-10-02", ANALYTICS_CONFIG)).toEqual({ range: "30d" });
     expect(readReportFilters(from({ range: "7d", branch: UUID }), "2026-10-02", ANALYTICS_CONFIG)).toEqual({ range: "30d" }); // Marketing's keys are not ours
-    expect(readReportFilters(from({ aRange: "last_month", aDept: UUID, aSource: UUID, aDoctor: UUID }), "2026-10-02", ANALYTICS_CONFIG)).toEqual({ range: "last_month", departmentId: UUID, sourceId: UUID, doctorId: UUID });
+    expect(readReportFilters(from({ aRange: "last_month", aDept: UUID, aSource: UUID, aDoctor: UUID }), "2026-10-02", ANALYTICS_CONFIG)).toEqual({ range: "prev_month", departmentId: UUID, sourceId: UUID, doctorId: UUID });
     expect(reportFilterPatch({ range: "30d" }, ANALYTICS_CONFIG)).toEqual({ aRange: undefined, aFrom: undefined, aTo: undefined });
     expect(reportFilterPatch({ range: "custom", from: "2026-09-01", to: "2026-09-02", departmentId: UUID }, ANALYTICS_CONFIG)).toEqual({ aRange: "custom", aFrom: "2026-09-01", aTo: "2026-09-02", aDept: UUID });
     expect(Object.keys(resetReportPatch(ANALYTICS_CONFIG)).every((k) => k.startsWith("a"))).toBe(true);

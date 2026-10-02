@@ -80,7 +80,7 @@ export function FeaturesSection() {
                   Set up in Integration Hub
                 </Link>
               )}
-              <label className="flex items-center gap-2">
+              <label className="flex min-h-11 items-center gap-2 sm:min-h-0">
                 <span className="text-ink-2">{(chosen[c.key] ?? c.enabled) ? "On" : "Off"}</span>
                 <input
                   type="checkbox"

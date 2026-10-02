@@ -1019,6 +1019,11 @@ export const customFieldDefinitions = pgTable("custom_field_definitions", {
   placements: jsonb("placements").notNull().default(["add_lead", "journey_detail", "patient_360"]),
   defaultValue: jsonb("default_value"),
   visibleTo: text("visible_to").notNull().default("everyone"),
+  // Behaviour (M7): see FieldRule / CrmFieldVm in @pulseos/types.
+  readOnly: boolean("read_only").notNull().default(false),
+  filterable: boolean("filterable").notNull().default(false),
+  carryForward: boolean("carry_forward").notNull().default(false),
+  rules: jsonb("rules").notNull().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   tenantIdx: index("custom_field_definitions_tenant_idx").on(t.tenantId),

@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, or } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
-import { customFieldDefinitions, customFieldValues, specialtyTemplates } from "../../db/schema.js";
+import { crmOutcomes, customFieldDefinitions, customFieldValues, specialtyTemplates } from "../../db/schema.js";
 import {
   ALL_SERVICES_KEY,
   CUSTOM_FIELD_TYPES,
@@ -8,8 +8,11 @@ import {
   FIELD_GROUPS,
   FIELD_PLACEMENTS,
   FIELD_VISIBILITY,
+  MAX_FIELD_RULES,
   canRoleSeeField,
+  evaluateFieldRules,
   type CreateCrmFieldInput,
+  type FieldRule,
   type CrmFieldVm,
   type CustomFieldType,
   type FieldGroupKey,
@@ -39,6 +42,20 @@ export const isVisibility = (v: unknown): v is FieldVisibility => typeof v === "
 
 type Row = typeof customFieldDefinitions.$inferSelect;
 
+/** Stored rules are re-checked on read: anything malformed is dropped rather than trusted. */
+function parseRules(raw: unknown): FieldRule[] {
+  if (!Array.isArray(raw)) return [];
+  const out: FieldRule[] = [];
+  for (const r of raw) {
+    const w = (r as { when?: Record<string, unknown> })?.when;
+    const then = (r as { then?: unknown })?.then;
+    if (then !== "show" && then !== "require") continue;
+    if (w && Array.isArray(w.outcome) && w.outcome.every((x) => typeof x === "string")) out.push({ when: { outcome: w.outcome as string[] }, then });
+    else if (w && typeof w.field === "string" && Array.isArray(w.equals) && w.equals.every((x) => typeof x === "string")) out.push({ when: { field: w.field, equals: w.equals as string[] }, then });
+  }
+  return out;
+}
+
 function toVm(r: Row): CrmFieldVm {
   return {
     id: r.id,
@@ -55,6 +72,10 @@ function toVm(r: Row): CrmFieldVm {
     placements: ((r.placements as unknown[]) ?? []).filter(isPlacement),
     defaultValue: r.defaultValue ?? null,
     visibleTo: (isVisibility(r.visibleTo) ? r.visibleTo : "everyone") as FieldVisibility,
+    readOnly: r.readOnly,
+    filterable: r.filterable,
+    carryForward: r.carryForward,
+    rules: parseRules(r.rules),
   };
 }
 
@@ -192,6 +213,42 @@ function validateConfig(input: { fieldType: CustomFieldType; options?: string[] 
   return null;
 }
 
+/**
+ * Rules must point at real things and never loop: an outcome rule names outcomes this hospital has; a field rule names ANOTHER
+ * field in the same scope (and, for a choice field, only its own options). A field cannot depend, directly or through
+ * others, on itself. Declarative only — there is nothing else a rule can say.
+ */
+export async function validateRules(db: Db, tenantId: string, specialtyKey: string, selfKey: string, rules: FieldRule[] | undefined): Promise<string | null> {
+  if (!rules || rules.length === 0) return null;
+  if (rules.length > MAX_FIELD_RULES) return "too_many_rules";
+  const siblings = (await listCrmFields(db, tenantId, { specialtyKey })).filter((f) => !f.archived && f.key !== selfKey);
+  const byKey = new Map(siblings.map((f) => [f.key, f]));
+  // (Lazy import: the outcome service already depends on this one.)
+  await (await import("./crm-outcome.service.js")).ensureDefaultOutcomes(db, tenantId);
+  const outcomeKeys = new Set((await db.select({ key: crmOutcomes.key }).from(crmOutcomes).where(eq(crmOutcomes.tenantId, tenantId))).map((o) => o.key));
+  for (const r of rules) {
+    if ("outcome" in r.when) {
+      if (r.when.outcome.length === 0 || !r.when.outcome.every((k) => outcomeKeys.has(k))) return "rule_unknown_outcome";
+      continue;
+    }
+    const parent = byKey.get(r.when.field);
+    if (!parent) return "rule_unknown_field";
+    if (r.when.equals.length === 0) return "rule_invalid";
+    const allowed = parent.fieldType === "BOOLEAN" ? ["true", "false"] : parent.options;
+    if (!allowed || !r.when.equals.every((v) => allowed.includes(v))) return "rule_unknown_option";
+  }
+  // No cycles: walk field-to-field dependencies from this field.
+  const deps = (key: string): string[] => (key === selfKey ? rules : byKey.get(key)?.rules ?? []).flatMap((r) => ("field" in r.when ? [r.when.field] : []));
+  const seen = new Set<string>();
+  const visit = (key: string): boolean => {
+    if (key === selfKey && seen.size > 0) return true;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return deps(key).some(visit);
+  };
+  return visit(selfKey) ? "rule_cycle" : null;
+}
+
 export async function createCrmField(db: Db, tenantId: string, input: CreateCrmFieldInput): Promise<Result<{ field: CrmFieldVm }>> {
   if (!FIELD_KEY_PATTERN.test(input.key)) return { ok: false, reason: "invalid_key" };
   if (!isFieldType(input.fieldType)) return { ok: false, reason: "invalid_type" };
@@ -201,6 +258,7 @@ export async function createCrmField(db: Db, tenantId: string, input: CreateCrmF
   if (!isGroupKey(groupKey) || !placements.every(isPlacement) || placements.length === 0 || !isVisibility(visibleTo)) return { ok: false, reason: "invalid_request" };
   const configError = validateConfig({ ...input, label: input.label });
   if (configError) return { ok: false, reason: configError };
+  if (input.carryForward && placements.every((p) => p !== "followup_outcome" && p !== "add_lead")) return { ok: false, reason: "carry_forward_needs_entry_form" };
 
   if (input.specialtyKey !== ALL_SERVICES_KEY) {
     const [template] = await db.select({ id: specialtyTemplates.id }).from(specialtyTemplates).where(and(eq(specialtyTemplates.tenantId, tenantId), eq(specialtyTemplates.key, input.specialtyKey))).limit(1);
@@ -208,6 +266,8 @@ export async function createCrmField(db: Db, tenantId: string, input: CreateCrmF
   }
   const siblings = await db.select({ key: customFieldDefinitions.key, sortOrder: customFieldDefinitions.sortOrder }).from(customFieldDefinitions).where(and(eq(customFieldDefinitions.tenantId, tenantId), eq(customFieldDefinitions.specialtyKey, input.specialtyKey)));
   if (siblings.some((s) => s.key === input.key)) return { ok: false, reason: "key_exists" };
+  const ruleError = await validateRules(db, tenantId, input.specialtyKey, input.key, input.rules);
+  if (ruleError) return { ok: false, reason: ruleError };
 
   const [row] = await db
     .insert(customFieldDefinitions)
@@ -226,6 +286,10 @@ export async function createCrmField(db: Db, tenantId: string, input: CreateCrmF
       placements,
       defaultValue: isEmpty(input.defaultValue) ? null : input.defaultValue,
       visibleTo,
+      readOnly: input.readOnly ?? false,
+      filterable: input.filterable ?? false,
+      carryForward: input.carryForward ?? false,
+      rules: input.rules ?? [],
     })
     .returning();
   return { ok: true, field: toVm(row) };
@@ -256,9 +320,23 @@ export async function updateCrmField(db: Db, tenantId: string, fieldId: string, 
   const configError = validateConfig({ fieldType: nextType, options: nextOptions, defaultValue: nextDefault, label: input.label ?? existing.label });
   if (configError) return { ok: false, reason: configError };
 
+  if (input.rules !== undefined) {
+    const ruleError = await validateRules(db, tenantId, existing.specialtyKey, existing.key, input.rules);
+    if (ruleError) return { ok: false, reason: ruleError };
+  }
+  // Archiving a field other fields depend on would leave their rules pointing at nothing visible: refuse and say so.
+  if (input.archived === true && !existing.archived) {
+    const dependants = (await listCrmFields(db, tenantId, { specialtyKey: existing.specialtyKey })).filter((f) => !f.archived && f.rules.some((r) => "field" in r.when && r.when.field === existing.key));
+    if (dependants.length > 0) return { ok: false, reason: "field_has_dependants" };
+  }
+
   const [row] = await db
     .update(customFieldDefinitions)
     .set({
+      ...(input.readOnly !== undefined ? { readOnly: input.readOnly } : {}),
+      ...(input.filterable !== undefined ? { filterable: input.filterable } : {}),
+      ...(input.carryForward !== undefined ? { carryForward: input.carryForward } : {}),
+      ...(input.rules !== undefined ? { rules: input.rules } : {}),
       ...(input.label !== undefined ? { label: input.label.trim() } : {}),
       ...(input.fieldType !== undefined ? { fieldType: input.fieldType } : {}),
       ...(input.options !== undefined || input.fieldType !== undefined ? { options: CHOICE_TYPES.has(nextType) ? nextOptions : null } : {}),
@@ -295,25 +373,57 @@ export async function reorderCrmFields(db: Db, tenantId: string, input: { specia
 
 /**
  * Validate and normalise submitted values against the fields active in a placement.
- * Required fields in that placement must be present; unknown / archived / not-visible keys are ignored.
+ * A field the rules hide for these answers is ignored (whatever was sent); one they require must be present. Required
+ * fields in that placement must be present; unknown / archived / not-visible keys are ignored.
+ * `existing` = what the Journey already holds: a read-only field that already has a value cannot be changed.
  */
 export function resolveSubmittedValues(
   fields: CrmFieldVm[],
   submitted: Record<string, unknown> | undefined,
-): { ok: true; values: { field: CrmFieldVm; value: unknown }[] } | { ok: false; missing: string[]; invalid: string[] } {
+  ctx: { outcomeKey?: string | null; existing?: Record<string, unknown> } = {},
+): { ok: true; values: { field: CrmFieldVm; value: unknown }[] } | { ok: false; missing: string[]; invalid: string[]; readOnly?: string[] } {
   const provided = submitted ?? {};
+  const state = evaluateFieldRules(fields, { outcomeKey: ctx.outcomeKey, values: provided });
   const missing: string[] = [];
   const invalid: string[] = [];
+  const readOnly: string[] = [];
   const values: { field: CrmFieldVm; value: unknown }[] = [];
   for (const field of fields) {
+    if (!state[field.key]!.visible) continue;
     const raw = provided[field.key];
     if (isEmpty(raw)) {
-      if (field.required) missing.push(field.key);
+      if (state[field.key]!.required) missing.push(field.key);
       continue;
     }
     const check = checkFieldValue(field, raw);
-    if (!check.ok) invalid.push(field.key);
-    else values.push({ field, value: check.value });
+    if (!check.ok) {
+      invalid.push(field.key);
+      continue;
+    }
+    const current = ctx.existing?.[field.key];
+    if (field.readOnly && !isEmpty(current) && JSON.stringify(current) !== JSON.stringify(check.value)) {
+      readOnly.push(field.key);
+      continue;
+    }
+    values.push({ field, value: check.value });
   }
-  return missing.length || invalid.length ? { ok: false, missing, invalid } : { ok: true, values };
+  return missing.length || invalid.length || readOnly.length ? { ok: false, missing, invalid, ...(readOnly.length ? { readOnly } : {}) } : { ok: true, values };
+}
+
+/** Current values on a Journey, by field key (for read-only checks and carry-forward). */
+export async function loadJourneyValuesByKey(db: Db, tenantId: string, journeyId: string): Promise<Record<string, unknown>> {
+  const rows = await db
+    .select({ key: customFieldDefinitions.key, value: customFieldValues.value })
+    .from(customFieldValues)
+    .innerJoin(customFieldDefinitions, eq(customFieldValues.fieldDefinitionId, customFieldDefinitions.id))
+    .where(and(eq(customFieldValues.tenantId, tenantId), eq(customFieldValues.journeyId, journeyId)));
+  return Object.fromEntries(rows.map((r) => [r.key, r.value]));
+}
+
+/** What the next interaction starts with: only fields the hospital marked "carry forward", at their current value. */
+export async function carryForwardValues(db: Db, tenantId: string, role: Role, journeyId: string, specialtyKey: string, placement: FieldPlacement): Promise<Record<string, unknown>> {
+  const fields = (await listFieldsForEntry(db, tenantId, role, { placement, specialtyKey })).filter((f) => f.carryForward);
+  if (fields.length === 0) return {};
+  const current = await loadJourneyValuesByKey(db, tenantId, journeyId);
+  return Object.fromEntries(fields.filter((f) => !isEmpty(current[f.key])).map((f) => [f.key, current[f.key]]));
 }

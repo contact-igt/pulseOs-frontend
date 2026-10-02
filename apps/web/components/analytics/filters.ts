@@ -41,6 +41,7 @@ export function parseFilters(params: URLSearchParams): AnalyticsFilters {
   const tabParam = params.get("tab");
   const tab = ANALYTICS_TABS.some((t) => t.key === tabParam) ? (tabParam as AnalyticsTab) : "overview";
   let range = RANGES.includes(params.get("range") as AnalyticsRangePreset) ? (params.get("range") as AnalyticsRangePreset) : "30d";
+  if (range === "last_month") range = "prev_month"; // an older link: same days, the one name
   const from = params.get("from");
   const to = params.get("to");
   let custom: Pick<AnalyticsFilters, "from" | "to"> = {};

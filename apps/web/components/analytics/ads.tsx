@@ -12,7 +12,8 @@ const inr = (n: number | null) => (n === null ? dash : formatInr(n));
 const UNAVAILABLE: Record<NonNullable<AdsAnalytics["unavailable"]>, { title: string; body: string; cta?: { href: string; label: string } }> = {
   NO_PROVIDER_ENABLED: { title: "Ad accounts are not switched on", body: "Turn on Google Ads or Meta Ads to see spend and campaign results next to what PulseOS recorded.", cta: { href: "/settings?section=features", label: "Open Settings → Features" } },
   NO_DATA_YET: { title: "No ad data for this period yet", body: "Connect the ad account and run a sync, or widen the date range. Numbers appear only once the provider has reported them.", cta: { href: "/integrations?section=ads", label: "Open the Integration Hub" } },
-  NOT_SLICEABLE: { title: "Ad accounts cannot be split by branch or service", body: "Ad spend is reported per account, so it is hidden while a branch or service filter is on. Clear that filter to see it." },
+  NO_PROVIDER_FOR_SOURCE: { title: "No ad account for this source", body: "The source filter excludes every switched-on ad account. Choose Google, Meta or all sources." },
+  NOT_SLICEABLE: { title: "Ad accounts cannot be split by branch, service or campaign", body: "Ad spend is reported per account and campaign ids differ from PulseOS campaigns, so it is hidden while one of these filters is on. Clear it to see ad data." },
   MIXED_CURRENCY: { title: "These accounts report in different currencies", body: "Totals and costs are not shown because they would add unlike amounts. Filter to one source." },
 };
 
@@ -77,7 +78,7 @@ export function AdsSpendChart({ data, height = 240 }: { data: AdsAnalytics; heig
   const axis = niceMoneyAxis(Math.max(...rows.map((r) => r.spend), 0));
   return (
     <div data-testid="ads-spend-chart">
-      <div role="img" aria-label={`Ad spend per day, ${formatInr(data.totals?.spend ?? 0)} in total`} style={{ height }} className="w-full min-w-0">
+      <div style={{ height }} className="w-full min-w-0">
         <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 600, height }}>
           <AreaChart data={rows} margin={{ top: 4, right: 4, bottom: 0, left: 0 }} accessibilityLayer>
             <CartesianGrid vertical={false} stroke={CHART_INK.grid} />
@@ -95,6 +96,12 @@ export function AdsSpendChart({ data, height = 240 }: { data: AdsAnalytics; heig
           </AreaChart>
         </ResponsiveContainer>
       </div>
+      {/* The same numbers as text: the chart itself is a pointer aid; assistive tech and keyboard users read this. */}
+      <table className="sr-only" data-testid="ads-spend-table">
+        <caption>Ad spend and clicks per day</caption>
+        <thead><tr><th scope="col">Day</th><th scope="col">Ad spend</th><th scope="col">Clicks</th></tr></thead>
+        <tbody>{data.daily.map((d) => <tr key={d.date}><th scope="row">{fmtDayShort(d.date)}</th><td>{formatInr(d.spend)}</td><td>{fmtCountNum(d.clicks)}</td></tr>)}</tbody>
+      </table>
     </div>
   );
 }

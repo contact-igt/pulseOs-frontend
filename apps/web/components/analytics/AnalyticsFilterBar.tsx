@@ -18,11 +18,10 @@ interface BarProps {
 
 function Period({ filters, onChange }: Pick<BarProps, "filters" | "onChange">) {
   const today = localDayKey(new Date(), useHospitalTimeZone());
-  // An older shared link may still say "14 days": keep it selectable instead of showing a blank control.
-  const presets: { key: string; label: string }[] = filters.range === "14d" ? [...DATE_PRESETS, { key: "14d", label: "Last 14 days" }] : filters.range === "last_month" ? [...DATE_PRESETS, { key: "last_month", label: "Previous month" }] : [...DATE_PRESETS];
   return (
     <PeriodControls
-      presets={presets}
+      presets={DATE_PRESETS}
+      maxSpanDays={366}
       value={{ range: filters.range, from: filters.from, to: filters.to }}
       today={today}
       onChange={(p) => onChange({ range: p.range as AnalyticsFilters["range"], from: p.from, to: p.to })}

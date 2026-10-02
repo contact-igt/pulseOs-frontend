@@ -4,7 +4,7 @@ import type { Db } from "../../db/client.js";
 import { crmOutcomes, customFieldValues, journeys, tasks, timelineEvents } from "../../db/schema.js";
 import type { CreateCrmOutcomeInput, CrmOutcomeVm, JourneyStage, LogInteractionInput, LogInteractionResult, OutcomeStage, Role, TaskType, UpdateCrmOutcomeInput } from "@pulseos/types";
 import { scheduledEvent } from "../task/task.service.js";
-import { listFieldsForEntry, resolveSubmittedValues, type Result } from "./crm-field.service.js";
+import { listFieldsForEntry, loadJourneyValuesByKey, resolveSubmittedValues, type Result } from "./crm-field.service.js";
 
 // Configurable outcomes. Canonical stages are fixed (enquiry → contacted → booked → ...); an outcome only
 // maps to CONTACTED or LOST, and logging one never moves a Journey backwards. Three booleans are the only
@@ -182,8 +182,12 @@ export async function logInteraction(
   // Fields configured for "follow-up outcome": validated by type, required ones enforced.
   const specialtyKey = journey.specialtyKey ?? "";
   const fieldDefs = specialtyKey ? await listFieldsForEntry(db, tenantId, actor.role, { placement: "followup_outcome", specialtyKey }) : [];
-  const submitted = resolveSubmittedValues(fieldDefs, input.fieldValues);
-  if (!submitted.ok) return { ok: false, reason: submitted.missing.length > 0 ? "missing_required_fields" : "invalid_field_values", fields: submitted.missing.length > 0 ? submitted.missing : submitted.invalid };
+  const submitted = resolveSubmittedValues(fieldDefs, input.fieldValues, { outcomeKey: outcome.key, existing: await loadJourneyValuesByKey(db, tenantId, journeyId) });
+  if (!submitted.ok) {
+    if (submitted.missing.length > 0) return { ok: false, reason: "missing_required_fields", fields: submitted.missing };
+    if (submitted.readOnly?.length) return { ok: false, reason: "field_read_only", fields: submitted.readOnly };
+    return { ok: false, reason: "invalid_field_values", fields: submitted.invalid };
+  }
 
   const stage = nextStage(journey.stage, outcome.stage);
   const stageChanged = stage !== journey.stage;
@@ -223,6 +227,8 @@ export async function logInteraction(
       channel: input.channel ?? null,
       title: `Outcome: ${outcome.label}`,
       description,
+      // What was recorded THIS time: the Journey keeps only the latest value of a field, the Timeline keeps each one as it was.
+      ...(submitted.values.length > 0 ? { metadata: { fields: submitted.values.map(({ field, value }) => ({ key: field.key, label: field.label, value })) } } : {}),
     });
 
     let followUpTaskId: string | null = null;

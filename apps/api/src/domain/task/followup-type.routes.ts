@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { hasPermission } from "@pulseos/types";
+import { auditSettingsChanges } from "../activity/activity.service.js";
 import { requirePermission } from "../auth/permission.middleware.js";
 import { createFollowUpType, listFollowUpTypes, reorderFollowUpTypes, updateFollowUpType } from "./followup-type.service.js";
 import { journeys } from "../../db/schema.js";
@@ -23,6 +24,7 @@ const reorderBody = z.object({ orderedIds: z.array(uuid).min(1).max(100) });
 const REASON_STATUS: Record<string, number> = { type_not_found: 404, department_not_found: 404, type_exists: 409, last_active_type: 409, invalid_request: 400 };
 
 export async function followUpTypeRoutes(app: FastifyInstance) {
+  app.addHook("onResponse", auditSettingsChanges(app, "followup_type", "/followup-types"));
   // Anyone who works tasks reads the types they may choose from (a journey sees the all-department types plus its
   // own department's). Archived ones are only for whoever configures them.
   app.get("/followup-types", { preHandler: requirePermission("VIEW_TASKS") }, async (request, reply) => {

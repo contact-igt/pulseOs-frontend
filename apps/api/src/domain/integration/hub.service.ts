@@ -32,12 +32,22 @@ async function loadFacts(db: Db, tenantId: string): Promise<Map<string, { row: C
   return out;
 }
 
-function card(entry: CatalogueEntry, caps: CapabilityMap, role: Role, found: { row: ConnectorRowT; facts: ConnectorFacts } | undefined, webhookCount: number): IntegrationCard {
+interface WebhookFacts { total: number; enabled: number; lastDelivery: "SENT" | "FAILED" | "PENDING" | null }
+
+async function webhookFacts(db: Db, tenantId: string): Promise<WebhookFacts> {
+  const [c] = await db.select({ total: sql<number>`count(*)::int`, enabled: sql<number>`count(*) filter (where ${outboundWebhooks.enabled})::int` }).from(outboundWebhooks).where(eq(outboundWebhooks.tenantId, tenantId));
+  const [last] = await db.select({ status: outboundWebhookDeliveries.status }).from(outboundWebhookDeliveries).where(eq(outboundWebhookDeliveries.tenantId, tenantId)).orderBy(desc(outboundWebhookDeliveries.createdAt)).limit(1);
+  return { total: c?.total ?? 0, enabled: c?.enabled ?? 0, lastDelivery: (last?.status as WebhookFacts["lastDelivery"]) ?? null };
+}
+
+function card(entry: CatalogueEntry, caps: CapabilityMap, role: Role, found: { row: ConnectorRowT; facts: ConnectorFacts } | undefined, wh: WebhookFacts): IntegrationCard {
   const facts = found?.facts ?? null;
   const enabled = entry.capability ? caps[entry.capability] : true;
   let configuration = deriveConfiguration(entry, facts);
-  if (entry.key === "webhooks") configuration = webhookCount > 0 ? "CONFIGURED" : "NOT_CONFIGURED";
-  const mode = entry.key === "webhooks" ? (webhookCount > 0 ? "LIVE_CONFIGURED" : "NOT_CONFIGURED") : deriveMode(entry, enabled, configuration, facts);
+  if (entry.key === "webhooks") configuration = wh.total > 0 ? "CONFIGURED" : "NOT_CONFIGURED";
+  // Webhooks: "live" is earned by a delivery that actually succeeded, not by a webhook merely existing.
+  const mode = entry.key === "webhooks" ? (wh.total === 0 ? "NOT_CONFIGURED" : wh.enabled === 0 ? "DISABLED" : wh.lastDelivery === "SENT" ? "LIVE_CONFIGURED" : "LIVE_CAPABLE") : deriveMode(entry, enabled, configuration, facts);
+  const health = entry.key === "webhooks" ? (wh.lastDelivery === "SENT" ? "HEALTHY" : wh.lastDelivery === "FAILED" ? "UNHEALTHY" : wh.total > 0 ? "UNKNOWN" : "NOT_APPLICABLE") : deriveHealth(entry, facts);
   return {
     key: entry.key,
     category: entry.category,
@@ -47,7 +57,7 @@ function card(entry: CatalogueEntry, caps: CapabilityMap, role: Role, found: { r
     capability: entry.capability,
     enabled,
     configuration,
-    health: deriveHealth(entry, facts),
+    health,
     mode,
     blockedReason: entry.blockedReason,
     lastSyncAt: found?.row.lastSyncAt?.toISOString() ?? null,
@@ -61,8 +71,8 @@ function card(entry: CatalogueEntry, caps: CapabilityMap, role: Role, found: { r
 
 export async function listHub(db: Db, tenantId: string, role: Role, caps: CapabilityMap): Promise<IntegrationCard[]> {
   const facts = await loadFacts(db, tenantId);
-  const [{ n }] = (await db.select({ n: sql<number>`count(*)::int` }).from(outboundWebhooks).where(eq(outboundWebhooks.tenantId, tenantId))) as [{ n: number }];
-  return INTEGRATION_CATALOGUE.map((e) => card(e, caps, role, e.connectorProvider ? facts.get(e.connectorProvider) : undefined, n));
+  const wh = await webhookFacts(db, tenantId);
+  return INTEGRATION_CATALOGUE.map((e) => card(e, caps, role, e.connectorProvider ? facts.get(e.connectorProvider) : undefined, wh));
 }
 
 export async function getHubDetail(db: Db, tenantId: string, role: Role, caps: CapabilityMap, key: string): Promise<IntegrationDetail | null> {
@@ -70,8 +80,7 @@ export async function getHubDetail(db: Db, tenantId: string, role: Role, caps: C
   if (!entry) return null;
   const facts = await loadFacts(db, tenantId);
   const found = entry.connectorProvider ? facts.get(entry.connectorProvider) : undefined;
-  const [{ n }] = (await db.select({ n: sql<number>`count(*)::int` }).from(outboundWebhooks).where(eq(outboundWebhooks.tenantId, tenantId))) as [{ n: number }];
-  const base = card(entry, caps, role, found, n);
+  const base = card(entry, caps, role, found, await webhookFacts(db, tenantId));
   const config = found?.facts.configuration ?? {};
   const base_ = process.env.PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "";
   const webhookPath = found && entry.key === "whatsapp_meta_cloud" ? `/webhooks/whatsapp/${found.row.id}` : found && entry.key === "runo" ? `/webhooks/runo/${found.row.id}` : null;

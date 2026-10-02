@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { auditSettingsChanges } from "../activity/activity.service.js";
 import { requirePermission } from "../auth/permission.middleware.js";
 import { createOutcome, listOutcomes, logInteraction, reorderOutcomes, updateOutcome } from "./crm-outcome.service.js";
 
@@ -47,9 +48,11 @@ const REASON_STATUS: Record<string, number> = {
   task_closed: 409,
   missing_required_fields: 422,
   invalid_field_values: 422,
+  field_read_only: 422,
 };
 
 export async function crmOutcomeRoutes(app: FastifyInstance) {
+  app.addHook("onResponse", auditSettingsChanges(app, "workflow_outcome", "/crm/outcomes"));
   // The picker for "Log outcome": anyone who manages tasks (front desk, coordinator, admin). Doctors do not.
   app.get("/crm/outcomes", { preHandler: requirePermission("MANAGE_TASKS") }, async (request, reply) => {
     const q = z.object({ includeArchived: z.enum(["true", "false"]).optional() }).safeParse(request.query);

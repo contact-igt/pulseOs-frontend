@@ -7,7 +7,7 @@ import { Button, ErrorState, SideSheet, Skeleton } from "@pulseos/ui";
 
 const BLOCKED: Record<string, string> = {
   NO_VALID_PHONE: "This patient has no valid WhatsApp number on file.",
-  PROVIDER_NOT_CONFIGURED: "WhatsApp is not connected yet. A Hospital Admin can set it up in the Integration Hub.",
+  PROVIDER_NOT_CONFIGURED: "WhatsApp is not connected yet. Ask your Super Admin to finish setting it up in the Integration Hub.",
   TEMPLATE_UNAVAILABLE: "The follow-up message template is switched off.",
   MISSING_VARIABLES: "The message has details that are not filled in.",
 };

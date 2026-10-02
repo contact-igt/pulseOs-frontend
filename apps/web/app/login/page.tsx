@@ -231,7 +231,7 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <label className="flex items-start gap-2 text-xs text-neutral-500">
+            <label className="flex min-h-11 items-start gap-2 text-xs text-neutral-600 lg:min-h-8">
               <input
                 type="checkbox"
                 data-testid="remember-me"
@@ -241,7 +241,7 @@ export default function LoginPage() {
               />
               <span>
                 Remember me
-                <span className="block text-[11px] text-neutral-400">Stay signed in on this device for 7 days. Leave off on a shared computer.</span>
+                <span className="block text-[11px] text-neutral-600">Stay signed in on this device for 7 days. Leave off on a shared computer.</span>
               </span>
             </label>
 

@@ -161,6 +161,7 @@ export function computeLeadsWorkspace(facts: LeadFact[], input: LeadsWorkspaceIn
     options: {
       services: [...new Set(facts.map((f) => f.row.journeyType))].sort((a, b) => a.localeCompare(b)),
       sources: [...sources.entries()].map(([key, label]) => ({ key, label })).sort((a, b) => a.label.localeCompare(b.label)),
+      filterableFields: [], // filled in by the service, which can read CRM field definitions
     },
     dateContext: dateContextFor(view),
     rows,

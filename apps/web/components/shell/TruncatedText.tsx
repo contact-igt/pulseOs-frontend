@@ -1,16 +1,27 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 /**
- * Text that is cut off with an ellipsis, and says so: the full text appears as a tooltip ONLY when it really is truncated
- * (measured on hover/focus), so a label that fits never grows a redundant tooltip.
+ * Text that is cut off with an ellipsis, and says so: the full text becomes the tooltip ONLY when it really is truncated.
+ * Measured on mount and whenever the box resizes (not on hover), so keyboard and touch users get it too: the label sits
+ * inside a link, and the link — not this span — takes focus.
  */
 export function TruncatedText({ children, className = "", as: Tag = "span" }: { children: ReactNode; className?: string; as?: "span" | "p" }) {
+  const ref = useRef<HTMLElement>(null);
   const [title, setTitle] = useState<string | undefined>(undefined);
-  const check = (el: HTMLElement) => setTitle(el.scrollWidth > el.clientWidth ? el.textContent ?? undefined : undefined);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => setTitle(el.scrollWidth > el.clientWidth ? el.textContent ?? undefined : undefined);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [children]);
   return (
-    <Tag className={`truncate ${className}`} title={title} onMouseEnter={(e) => check(e.currentTarget)} onFocus={(e) => check(e.currentTarget)}>
+    <Tag ref={ref as never} className={`truncate ${className}`} title={title}>
       {children}
     </Tag>
   );

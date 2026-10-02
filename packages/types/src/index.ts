@@ -1701,12 +1701,75 @@ export type UpdateAllocationRuleInput = Partial<CreateAllocationRuleInput>;
 export type FieldOrigin = "SYSTEM" | "TEMPLATE" | "CUSTOM";
 export const FIELD_ORIGIN_LABEL: Record<FieldOrigin, string> = { SYSTEM: "System", TEMPLATE: "Template", CUSTOM: "Custom" };
 
+/**
+ * A declarative rule on a field: WHEN a condition holds, SHOW it or REQUIRE it. Conditions are only "the outcome is one of
+ * these" or "another field's answer is one of these" — no expressions, no scripts. Used for outcome-driven fields
+ * ("Appointment required" → date, time, doctor) and for child fields ("Cataract" → laterality).
+ */
+export type FieldRuleCondition = { outcome: string[] } | { field: string; equals: string[] };
+export interface FieldRule {
+  when: FieldRuleCondition;
+  then: "show" | "require";
+}
+export const MAX_FIELD_RULES = 5;
+
 export interface CrmFieldVm extends CustomFieldDefinitionVm {
   origin: FieldOrigin;
   groupKey: FieldGroupKey;
   placements: FieldPlacement[];
   defaultValue: unknown;
   visibleTo: FieldVisibility;
+  /** Shown but not editable once it has a value (a value can still be set when the enquiry is created). */
+  readOnly: boolean;
+  /** Offered as a filter on the Leads list. */
+  filterable: boolean;
+  /** The next interaction starts with this field's current value filled in (history stays as it was). */
+  carryForward: boolean;
+  rules: FieldRule[];
+}
+
+export interface FieldEvalContext {
+  /** The outcome being logged / chosen, when the form has one. */
+  outcomeKey?: string | null;
+  /** Current answers, by field key. */
+  values: Record<string, unknown>;
+}
+
+const asList = (v: unknown): string[] => (Array.isArray(v) ? v.map(String) : v === undefined || v === null || v === "" ? [] : [String(v)]);
+
+function ruleMatches(rule: FieldRule, ctx: FieldEvalContext, answers: Record<string, unknown>): boolean {
+  if ("outcome" in rule.when) return !!ctx.outcomeKey && rule.when.outcome.includes(ctx.outcomeKey);
+  const given = asList(answers[rule.when.field]);
+  return given.some((g) => (rule.when as { equals: string[] }).equals.includes(g));
+}
+
+/**
+ * Which fields are visible and required for these answers. Pure, shared by the server (what it will accept) and the form
+ * (what it shows), so they cannot disagree. A field with any `show` rule is visible only while one of them matches; a
+ * `require` rule makes it required while it matches. A hidden field's answer counts as empty for the fields that depend
+ * on it (a hidden parent hides its children), so a stale answer cannot keep a child alive.
+ */
+export function evaluateFieldRules(fields: { key: string; required: boolean; rules?: FieldRule[] }[], ctx: FieldEvalContext): Record<string, { visible: boolean; required: boolean }> {
+  const state: Record<string, { visible: boolean; required: boolean }> = {};
+  for (const f of fields) state[f.key] = { visible: true, required: f.required };
+  // Parents before children: repeat until stable (rules cannot form a cycle, so this ends within fields.length passes).
+  for (let pass = 0; pass <= fields.length; pass++) {
+    let changed = false;
+    const answers: Record<string, unknown> = {};
+    for (const f of fields) if (state[f.key]!.visible) answers[f.key] = ctx.values[f.key];
+    for (const f of fields) {
+      const rules = f.rules ?? [];
+      const show = rules.filter((r) => r.then === "show");
+      const visible = show.length === 0 || show.some((r) => ruleMatches(r, ctx, answers));
+      const required = visible && (f.required || rules.some((r) => r.then === "require" && ruleMatches(r, ctx, answers)));
+      if (visible !== state[f.key]!.visible || required !== state[f.key]!.required) {
+        state[f.key] = { visible, required };
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
+  return state;
 }
 
 export interface CreateCrmFieldInput {
@@ -1721,6 +1784,10 @@ export interface CreateCrmFieldInput {
   placements?: FieldPlacement[];
   defaultValue?: unknown;
   visibleTo?: FieldVisibility;
+  readOnly?: boolean;
+  filterable?: boolean;
+  carryForward?: boolean;
+  rules?: FieldRule[];
 }
 
 export interface UpdateCrmFieldInput {
@@ -1733,6 +1800,10 @@ export interface UpdateCrmFieldInput {
   placements?: FieldPlacement[];
   defaultValue?: unknown;
   visibleTo?: FieldVisibility;
+  readOnly?: boolean;
+  filterable?: boolean;
+  carryForward?: boolean;
+  rules?: FieldRule[];
 }
 
 export interface UpdateCustomFieldInput {
@@ -2480,6 +2551,9 @@ export interface LeadsWorkspaceQuery {
   status?: LeadStatus;
   /** Only with view = follow_up_due: restrict to follow-ups already past due. */
   due?: "overdue";
+  /** A CRM field the hospital marked "filterable", and the answer to match (e.g. diabetes = Yes). */
+  fieldKey?: string;
+  fieldValue?: string;
 }
 
 export interface LeadsTodaySummary {
@@ -2500,7 +2574,7 @@ export interface LeadsWorkspace {
   /** Per-owner counts under every active filter except the owner filter itself. */
   ownerCounts: { all: number; unassigned: number; byOwner: { userId: string; name: string; count: number }[] };
   /** What the Service and Source filters can offer: the values that actually occur across this hospital's leads. */
-  options: { services: string[]; sources: { key: string; label: string }[] };
+  options: { services: string[]; sources: { key: string; label: string }[]; /** CRM fields marked filterable (choice and Yes/No fields), with the answers to pick from. */ filterableFields: { key: string; label: string; options: string[] }[] };
 }
 
 // ---------------------------------------------------------------------------

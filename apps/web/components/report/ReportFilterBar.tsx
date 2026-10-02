@@ -138,7 +138,7 @@ export function ReportFilterBar({ q, today, options, canExport, defaultRange, on
   return (
     <div className="space-y-2" data-testid="report-filters">
       <div className="glass flex flex-wrap items-center gap-x-2 gap-y-2 rounded-panel px-2.5 py-2">
-        <PeriodControls presets={REPORT_RANGES} value={{ range: q.range, from: q.from, to: q.to }} today={today} onChange={(p) => onChange(p.range === "custom" ? { range: "custom", from: p.from, to: p.to } : { range: p.range as ReportRange })} testIdPrefix="report" label="Period" />
+        <PeriodControls presets={REPORT_RANGES} value={{ range: q.range, from: q.from, to: q.to }} today={today} onChange={(p) => onChange(p.range === "custom" ? { range: "custom", from: p.from, to: p.to } : { range: p.range as ReportRange })} testIdPrefix="report" label="Period" maxSpanDays={366} />
         <div className="hidden flex-wrap items-center gap-2 lg:flex [&_select]:max-w-[9.5rem] xl:[&_select]:max-w-[11rem]">
           <span className="mx-0.5 h-5 w-px bg-line-strong" aria-hidden="true" />
           <FilterSelects q={q} options={options} onChange={onChange} />

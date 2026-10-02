@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { hasPermission } from "@pulseos/types";
+import { auditSettingsChanges } from "../activity/activity.service.js";
 import { requirePermission } from "../auth/permission.middleware.js";
 import { createLeadSource, listLeadSources, reorderLeadSources, updateLeadSource } from "./lead-source.service.js";
 
@@ -11,6 +12,7 @@ const reorderBody = z.object({ orderedIds: z.array(z.string().uuid()).min(1).max
 const REASON_STATUS: Record<string, number> = { source_exists: 409, source_not_found: 404, invalid_request: 400 };
 
 export async function leadSourceRoutes(app: FastifyInstance) {
+  app.addHook("onResponse", auditSettingsChanges(app, "lead_source", "/lead-sources"));
   // Every role reads the sources it may pick for a new lead; archived ones are only shown to whoever configures them.
   app.get("/lead-sources", async (request) => {
     const { includeArchived } = request.query as { includeArchived?: string };

@@ -20,6 +20,8 @@ const workspaceQuery = z.object({
   service: opt(z.string().max(120)),
   status: opt(z.enum(["new", "uncontacted", "follow_up_due", "appointment_booked", "no_response", "converted", "lost"])),
   due: opt(z.literal("overdue")),
+  fieldKey: opt(z.string().regex(/^[a-z][a-z0-9_]{1,47}$/)),
+  fieldValue: opt(z.string().max(80)),
 });
 
 // A refused step keeps the HTTP meaning the same refusal has elsewhere (booking: 422 past / 409 taken).

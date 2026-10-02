@@ -40,8 +40,9 @@ export function WebhooksPanel({ canManage }: { canManage: boolean }) {
     },
     onError: (e) => setError(ERRORS[(e as ApiError).message] ?? "Could not create the webhook."),
   });
-  const toggle = useMutation({ mutationFn: (v: { id: string; enabled: boolean }) => api.updateWebhook(v.id, { enabled: v.enabled }), onSuccess: refresh });
-  const remove = useMutation({ mutationFn: (id: string) => api.deleteWebhook(id), onSuccess: () => { setConfirmDelete(null); refresh(); } });
+  const [rowError, setRowError] = useState<string | null>(null);
+  const toggle = useMutation({ mutationFn: (v: { id: string; enabled: boolean }) => api.updateWebhook(v.id, { enabled: v.enabled }), onSuccess: () => { setRowError(null); refresh(); }, onError: () => setRowError("Could not change that webhook — nothing was changed. Try again.") });
+  const remove = useMutation({ mutationFn: (id: string) => api.deleteWebhook(id), onSuccess: () => { setConfirmDelete(null); setRowError(null); refresh(); }, onError: () => { setConfirmDelete(null); setRowError("Could not delete that webhook — it is still there. Try again."); } });
 
   if (!canManage) return <p className="text-sm text-ink-2" data-testid="webhooks-restricted">Outbound webhooks can only be managed by a Super Admin.</p>;
 
@@ -54,6 +55,7 @@ export function WebhooksPanel({ canManage }: { canManage: boolean }) {
           <button type="button" className="mt-1 text-primary-700 underline-offset-2 hover:underline" onClick={() => setSecret(null)}>Done</button>
         </div>
       )}
+      {rowError && <p role="alert" className="rounded-control border border-danger-100 bg-danger-100/60 px-3 py-2 text-xs text-danger-700" data-testid="webhook-row-error">{rowError}</p>}
       {list.isLoading && <Skeleton className="h-16" />}
       {list.isError && <ErrorState message="Could not load webhooks." />}
       {list.data && list.data.length === 0 && <EmptyState message="No outbound webhooks yet." />}
@@ -65,9 +67,12 @@ export function WebhooksPanel({ canManage }: { canManage: boolean }) {
             <p className="text-ink-3">{w.events.join(", ")}</p>
             <p className="text-ink-3">Last delivery: {w.lastDeliveryAt ? `${w.lastDeliveryStatus?.toLowerCase()} · ${relativeTime(w.lastDeliveryAt)}` : "none yet"}</p>
           </div>
-          <Button size="sm" variant="secondary" onClick={() => toggle.mutate({ id: w.id, enabled: !w.enabled })}>{w.enabled ? "Turn off" : "Turn on"}</Button>
+          <Button size="sm" variant="secondary" disabled={toggle.isPending} onClick={() => toggle.mutate({ id: w.id, enabled: !w.enabled })}>{w.enabled ? "Turn off" : "Turn on"}</Button>
           {confirmDelete === w.id ? (
-            <Button size="sm" variant="primary" onClick={() => remove.mutate(w.id)} data-testid="confirm-delete-webhook">Confirm delete</Button>
+            <>
+              <Button size="sm" variant="primary" disabled={remove.isPending} onClick={() => remove.mutate(w.id)} data-testid="confirm-delete-webhook">Confirm delete</Button>
+              <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(null)}>Cancel</Button>
+            </>
           ) : (
             <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(w.id)}>Delete</Button>
           )}
