@@ -269,12 +269,17 @@ export async function loadReportFacts(db: Db, tenantId: string, q: ReportQuery, 
   //   revenue_events.occurred_at = Payment date (revenue; shown for reference, never used to date a completion)
   // A COMPLETED procedure with no completed_at (completed before it was recorded) is not guessed from a payment: it is
   // excluded from date-specific completed counts and surfaced as "completed, date not recorded".
-  const procedureScope = [
+  // Filters every procedure row honours (service / source / owner are the journey's). Branch and doctor are recorded only
+  // on a SCHEDULED procedure, so they narrow the dated rows but cannot narrow "date not recorded" ones — which would
+  // otherwise vanish the moment someone picks a branch, hiding the very warning they exist to raise.
+  const procedureCommon = [
     eq(treatmentOpportunities.tenantId, tenantId),
-    q.branchId ? eq(treatmentOpportunities.scheduledBranchId, q.branchId) : undefined,
     q.service ? eq(journeys.journeyType, q.service) : undefined,
     q.sourceId ? eq(journeys.sourceId, q.sourceId) : undefined,
     q.ownerId ? eq(journeys.ownerUserId, q.ownerId) : undefined,
+  ];
+  const procedurePlace = [
+    q.branchId ? eq(treatmentOpportunities.scheduledBranchId, q.branchId) : undefined,
     q.doctorId ? eq(treatmentOpportunities.scheduledResourceId, q.doctorId) : undefined,
   ];
   const procedureRows = await db
@@ -301,11 +306,11 @@ export async function loadReportFacts(db: Db, tenantId: string, q: ReportQuery, 
     .leftJoin(branches, and(eq(branches.id, treatmentOpportunities.scheduledBranchId), eq(branches.tenantId, tenantId)))
     .where(
       and(
-        ...procedureScope,
+        ...procedureCommon,
         inArray(treatmentOpportunities.status, [...PROCEDURE_PLANNED]),
         or(
-          and(isNotNull(treatmentOpportunities.plannedDate), inLocalRange(treatmentOpportunities.plannedDate, timezone, from, to)),
-          and(eq(treatmentOpportunities.status, "COMPLETED"), isNotNull(treatmentOpportunities.completedAt), inLocalRange(treatmentOpportunities.completedAt, timezone, from, to)),
+          and(...procedurePlace, isNotNull(treatmentOpportunities.plannedDate), inLocalRange(treatmentOpportunities.plannedDate, timezone, from, to)),
+          and(...procedurePlace, eq(treatmentOpportunities.status, "COMPLETED"), isNotNull(treatmentOpportunities.completedAt), inLocalRange(treatmentOpportunities.completedAt, timezone, from, to)),
           // Completed with no recorded time: carried along (flagged "date not recorded" in the workbook) so they can be found; counted nowhere by date.
           and(eq(treatmentOpportunities.status, "COMPLETED"), sql`${treatmentOpportunities.completedAt} is null`),
         ),
@@ -318,7 +323,7 @@ export async function loadReportFacts(db: Db, tenantId: string, q: ReportQuery, 
     .select({ undated: sql<number>`count(*)::int` })
     .from(treatmentOpportunities)
     .innerJoin(journeys, and(eq(journeys.id, treatmentOpportunities.journeyId), eq(journeys.tenantId, tenantId)))
-    .where(and(...procedureScope, eq(treatmentOpportunities.status, "COMPLETED"), sql`${treatmentOpportunities.completedAt} is null`));
+    .where(and(...procedureCommon, eq(treatmentOpportunities.status, "COMPLETED"), sql`${treatmentOpportunities.completedAt} is null`));
 
   return {
     period,

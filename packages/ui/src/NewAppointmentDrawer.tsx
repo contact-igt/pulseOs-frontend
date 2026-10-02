@@ -70,14 +70,18 @@ export function NewAppointmentDrawer({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [slotBusy, setSlotBusy] = useState(false);
+  // The advisory "doctor is busy then" warning is its own state, so it can never outlive the doctor/time it was about.
+  const [conflict, setConflict] = useState(false);
 
   const instant = (local: string) => (toInstant ? toInstant(local) : new Date(local).toISOString());
   const nowLocal = hospitalLocalInput();
   // The picked time has already passed (compared as hospital wall time strings; the server decides for real).
   const pastPicked = !!scheduledAt && scheduledAt < nowLocal;
 
-  // Doctor + time picked: ask whether the slot is free (debounced). Failure to ask is silent — booking still checks.
+  // Doctor + time picked: ask whether the slot is free (debounced). Any change drops the old answer at once; failing to
+  // ask is silent — the booking itself still checks.
   useEffect(() => {
+    setConflict(false);
     if (!onCheckSlot || !doctorId || !scheduledAt || pastPicked) {
       setSlotBusy(false);
       return;
@@ -86,7 +90,7 @@ export function NewAppointmentDrawer({
     let live = true;
     const t = setTimeout(() => {
       onCheckSlot(doctorId, instant(scheduledAt))
-        .then((r) => live && setError((cur) => (!r.available && !r.inPast ? BOOKING_ERROR.resource_unavailable! : cur === BOOKING_ERROR.resource_unavailable ? null : cur)))
+        .then((r) => live && setConflict(!r.available && !r.inPast))
         .catch(() => undefined)
         .finally(() => live && setSlotBusy(false));
     }, 350);
@@ -267,7 +271,7 @@ export function NewAppointmentDrawer({
               <label className={labelClass} htmlFor="appt-doctor">
                 Doctor <span className="text-danger-500">*</span>
               </label>
-              <select id="appt-doctor" required value={doctorId} onChange={(e) => setDoctorId(e.target.value)} className={inputClass}>
+              <select id="appt-doctor" required value={doctorId} onChange={(e) => { setDoctorId(e.target.value); setError(null); }} className={inputClass}>
                 <option value="">Select…</option>
                 {doctors.map((d) => (
                   <option key={d.id} value={d.id}>
@@ -297,12 +301,14 @@ export function NewAppointmentDrawer({
             <input id="appt-reason" type="text" value={reason} onChange={(e) => setReason(e.target.value)} className={inputClass} />
           </div>
 
-          {error && (
+          {(error ?? (conflict ? BOOKING_ERROR.resource_unavailable : null)) && (
             <p role="alert" className="rounded-lg bg-danger-100 px-3 py-2 text-xs text-danger-700" data-testid="new-appointment-error">
-              {error}
+              {error ?? BOOKING_ERROR.resource_unavailable}
             </p>
           )}
-          {slotBusy && !error && <p className="text-[11px] text-ink-2">Checking the doctor's availability…</p>}
+          <p className="text-[11px] text-ink-2" role="status" aria-live="polite">
+            {slotBusy && !error && !conflict ? "Checking the doctor's availability…" : ""}
+          </p>
         </div>
 
         <div className="sticky bottom-0 flex gap-2 border-t border-line bg-white/90 p-4">

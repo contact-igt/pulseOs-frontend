@@ -19,6 +19,11 @@ describe("instants from clients (unit)", () => {
     expect(parseInstant("2026-10-02T09:00", "UTC")?.toISOString()).toBe("2026-10-02T09:00:00.000Z");
     expect(parseInstant("2026-10-02T03:30:00.000Z", IST)?.toISOString()).toBe("2026-10-02T03:30:00.000Z");
     expect(parseInstant("2026-10-02T09:00:00+05:30", "UTC")?.toISOString()).toBe("2026-10-02T03:30:00.000Z");
+    // A wall time inside a DST gap does not exist and is refused, not quietly moved to another hour.
+    expect(parseInstant("2026-03-08T02:30", "America/New_York")).toBeNull();
+    expect(parseInstant("2026-03-08T03:30", "America/New_York")?.toISOString()).toBe("2026-03-08T07:30:00.000Z");
+    expect(parseInstant("2026-11-01T01:30", "America/New_York")).not.toBeNull(); // an ambiguous hour still resolves to one real instant
+    expect(parseInstant("2026-02-30T10:00", IST)).toBeNull();
     expect(parseInstant("not a date", IST)).toBeNull();
     expect(parseInstant("", IST)).toBeNull();
     expect(parseInstant(undefined, IST)).toBeNull();

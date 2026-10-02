@@ -9,6 +9,13 @@ describe("demo treatments carry the operational fields the model requires", () =
     await queryClient.end();
   });
 
+  it("the demo tenants are seeded with scheduled and completed procedures (so the checks below are not vacuous)", async () => {
+    const rows = await db.execute<{ s: string; c: number }>(sql`select t.status as s, count(*)::int as c from treatment_opportunities t join tenants n on n.id = t.tenant_id where n.name like 'PulseOS%' and t.status in ('SCHEDULED','COMPLETED') group by 1`);
+    const by = Object.fromEntries([...rows].map((r) => [r.s, r.c]));
+    expect(by.SCHEDULED ?? 0).toBeGreaterThan(0);
+    expect(by.COMPLETED ?? 0).toBeGreaterThan(0);
+  });
+
   it("every SCHEDULED demo procedure has a planned date, a doctor and a branch", async () => {
     const rows = await db.execute<{ n: string; label: string }>(sql`
       select n.name as n, t.treatment_label as label

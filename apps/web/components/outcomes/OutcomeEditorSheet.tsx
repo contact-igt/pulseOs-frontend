@@ -60,7 +60,7 @@ export function OutcomeEditorSheet({ mode, initial, outcomeId, onClose, onSaved 
       <div className="space-y-5">
         <FormError message={error} testId="outcome-editor-error" />
         <TextInput label="Label" value={form.label} onChange={(e) => set("label", e.target.value)} placeholder="e.g. Waiting for reports" autoFocus data-testid="outcome-label" hint={key ? `Stored as “${key}”. This name can't change later.` : undefined} />
-        <SelectInput label="Recorded under" value={form.stage} onChange={(e) => set("stage", e.target.value as OutcomeForm["stage"])} data-testid="outcome-stage" hint="The journey stages are fixed by PulseOS. An outcome only chooses which of these two it belongs to; journeys never move backwards.">
+        <SelectInput label="Recorded under" value={form.stage} disabled={editing} onChange={(e) => set("stage", e.target.value as OutcomeForm["stage"])} data-testid="outcome-stage" hint={editing ? "Fixed once created, so past journeys keep reading the same way. To change it, archive this outcome and add a new one." : "The journey stages are fixed by PulseOS. An outcome only chooses which of these two it belongs to; journeys never move backwards."}>
           <option value="contacted">Contacted</option>
           <option value="lost">Lost</option>
         </SelectInput>

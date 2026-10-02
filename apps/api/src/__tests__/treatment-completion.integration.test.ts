@@ -124,6 +124,29 @@ describe.skipIf(!DEMO_PASSWORD)("treatment completion date and reporting (integr
       await expect(db.update(treatmentOpportunities).set({ completedAt: new Date() }).where(eq(treatmentOpportunities.id, treatmentId))).rejects.toThrow();
     });
 
+    it("the Journey page's treatments carry completedAt next to the planned date (not 'date not recorded')", async () => {
+      const { treatmentId, journeyId } = await scheduled();
+      await complete(treatmentId);
+      const detail = (await call(t, "HOSPITAL_ADMIN", "GET", `/journeys/${journeyId}`)).json() as { treatments: TreatmentRow[] };
+      const row = detail.treatments.find((x) => x.id === treatmentId)!;
+      expect(row.completedAt).toBe((await rowOf(treatmentId)).completedAt!.toISOString());
+      expect(row.plannedDate).not.toBeNull();
+      expect(row.plannedDate).not.toBe(row.completedAt);
+    });
+
+    it("the status endpoint cannot rewrite 'Scheduled for' while completing, and refuses a malformed date instead of failing with a 500", async () => {
+      const { treatmentId } = await scheduled();
+      const planned = (await rowOf(treatmentId)).plannedDate!.getTime();
+      expect((await call(t, "PATIENT_COORDINATOR", "PATCH", `/treatments/${treatmentId}/status`, { status: "COMPLETED", plannedDate: "2020-01-05T10:00:00Z" })).statusCode).toBe(200);
+      const row = await rowOf(treatmentId);
+      expect(row.plannedDate!.getTime()).toBe(planned); // still the date it was scheduled for
+      const { treatmentId: other2 } = await scheduled();
+      const bad = await call(t, "PATIENT_COORDINATOR", "PATCH", `/treatments/${other2}/status`, { status: "COMPLETED", plannedDate: "not-a-date" });
+      expect(bad.statusCode).toBe(400);
+      expect((await rowOf(other2)).status).toBe("SCHEDULED");
+      expect((await call(t, "PATIENT_COORDINATOR", "PATCH", `/treatments/${other2}/status`, { status: "NOPE" })).statusCode).toBe(400);
+    });
+
     it("another hospital cannot complete this hospital's procedure", async () => {
       const { treatmentId } = await scheduled();
       const res = await call(other, "PATIENT_COORDINATOR", "PATCH", `/treatments/${treatmentId}/status`, { status: "COMPLETED" });
@@ -143,9 +166,8 @@ describe.skipIf(!DEMO_PASSWORD)("treatment completion date and reporting (integr
       // B: a historical completed row whose completion time was never recorded, but which has a payment inside the period.
       const b = await scheduled("B");
       await complete(b.treatmentId);
-      await db.execute(sql`alter table treatment_opportunities disable trigger all`); // keep the fixture honest: the legacy shape
+      // The legacy shape: completed, but neither a planned date nor a completion time was ever recorded.
       await db.update(treatmentOpportunities).set({ plannedDate: null, completedAt: null }).where(eq(treatmentOpportunities.id, b.treatmentId));
-      await db.execute(sql`alter table treatment_opportunities enable trigger all`);
       await db.update(revenueEvents).set({ occurredAt: at(D2, 11) }).where(eq(revenueEvents.treatmentOpportunityId, b.treatmentId));
       Object.assign(ids, { a: a.treatmentId, b: b.treatmentId, aJourney: a.journeyId, bJourney: b.journeyId });
     });
@@ -170,6 +192,13 @@ describe.skipIf(!DEMO_PASSWORD)("treatment completion date and reporting (integr
       expect(row.completedAt).toBeNull(); // readable, honestly undated
     });
 
+    it("'completed, date not recorded' stays visible when a branch or doctor filter is chosen (legacy rows have neither recorded)", async () => {
+      const unfiltered = (await report(range(D1, D3))).kpis.proceduresCompletedUndated;
+      expect(unfiltered).toBeGreaterThanOrEqual(1);
+      expect((await report(`${range(D1, D3)}&branchId=${t.branchId}`)).kpis.proceduresCompletedUndated).toBe(unfiltered);
+      expect((await report(`${range(D1, D3)}&doctorId=${doctorId}`)).kpis.proceduresCompletedUndated).toBe(unfiltered);
+    });
+
     it("hospital days: a completion at 00:20 IST belongs to that IST day although UTC is still the day before", async () => {
       await db.update(treatmentOpportunities).set({ completedAt: at(D2, 0, 20) }).where(eq(treatmentOpportunities.id, ids.a!));
       expect(at(D2, 0, 20).toISOString().slice(0, 10)).toBe(addDays(D2, -1));
@@ -181,7 +210,7 @@ describe.skipIf(!DEMO_PASSWORD)("treatment completion date and reporting (integr
     it("the Excel 'Procedures' workbook shows Scheduled for, Completed on and Payment date as three separate columns", async () => {
       const rows = await sheet("procedures", range(D1, D3), "Procedures");
       const [header, ...body] = rows;
-      expect(header).toEqual(["Procedure", "Patient", "Phone", "Service", "Status", "Scheduled for", "Completed on", "Payment date", "Doctor", "Branch", "Estimated value (₹)"]);
+      expect(header).toEqual(["Procedure", "Patient", "Phone", "Service", "Status", "Scheduled for", "Completed on", "Payment date", "Doctor", "Branch", "Estimated value (₹)", "In this report"]);
       const a = body.find((r) => r[1] === "Completion A")!;
       expect(a[5]).toMatch(/10:00/); // planned D1
       expect(a[6]).toMatch(/12:00/); // completed D2
@@ -191,6 +220,9 @@ describe.skipIf(!DEMO_PASSWORD)("treatment completion date and reporting (integr
       expect(b[6]).toBe("Date not recorded"); // never the payment date
       expect(b[5]).toBe("Date not recorded");
       expect(b[7]).toMatch(/11:00/);
+      // Every row says whether it is part of the screen's counts, so the sheet reconciles with the KPIs.
+      expect(a[11]).toBe("Planned in period · Completed in period"); // scheduled D1 and completed D2, both inside D1–D3
+      expect(b[11]).toBe("Not counted — completion date not recorded");
     });
 
     it("the summary workbook counts completed procedures by completion date and states the undated ones", async () => {

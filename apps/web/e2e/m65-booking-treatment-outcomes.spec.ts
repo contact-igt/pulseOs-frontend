@@ -47,6 +47,8 @@ async function openBooking(page: Page, journeyId: string) {
 
 test.describe("M6.5 — booking integrity", () => {
   test.skip(!DEMO_PASSWORD, "DEMO_PASSWORD must be set");
+  // The browser is NOT on hospital time: any browser-local date arithmetic in the booking path would surface here.
+  test.use({ timezoneId: "America/Los_Angeles" });
   test.describe.configure({ mode: "serial" });
   test.afterAll(() => purgePatients("E2E M65 "));
 
@@ -97,22 +99,38 @@ test.describe("M6.5 — booking integrity", () => {
     await drawer.getByTestId("appt-time").fill(`${SLOT_DAY}T${SLOT_TIME}`);
     await drawer.getByTestId("new-appointment-submit").click();
     await expect(drawer).not.toBeVisible();
+    // Stored as the hospital's wall time although the browser is in Los Angeles.
+    expect(sql(`SELECT to_char(scheduled_at AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD HH24:MI') FROM appointments WHERE journey_id = '${first.journeyId}'`)).toBe(`${SLOT_DAY} ${SLOT_TIME}`);
 
+    const msg = "This doctor already has another appointment at this time. Choose a different time or doctor.";
+    // Phase 1 — the advisory check warns as soon as doctor and time are picked, before anything is submitted.
+    drawer = await openBooking(page, second.journeyId);
+    await drawer.locator("#appt-doctor").selectOption({ index: 1 });
+    await drawer.getByTestId("appt-time").fill(`${SLOT_DAY}T${SLOT_TIME}`);
+    await expect(drawer.getByTestId("new-appointment-error")).toHaveText(msg);
+    // Switching doctor drops the warning immediately; switching back brings the check's answer back.
+    await drawer.locator("#appt-doctor").selectOption({ index: 2 });
+    await expect(drawer.getByTestId("new-appointment-error")).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(drawer).not.toBeVisible();
+
+    // Phase 2 — the SERVER refuses on its own: the advisory check is forced to say "free", so only the booking can object.
+    await page.route("**/appointments/slot-check*", (route) => route.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "http://localhost:3310", "access-control-allow-credentials": "true" }, body: JSON.stringify({ available: true, inPast: false }) }));
     drawer = await openBooking(page, second.journeyId);
     await drawer.locator("#appt-doctor").selectOption({ index: 1 });
     await drawer.locator("#appt-reason").fill("Second patient, same slot");
     await drawer.getByTestId("appt-time").fill(`${SLOT_DAY}T${SLOT_TIME}`);
-    // Advisory pre-check shows it before submitting…
-    const msg = "This doctor already has another appointment at this time. Choose a different time or doctor.";
-    await expect(drawer.getByTestId("new-appointment-error")).toHaveText(msg);
-    // …and the booking itself is refused with the same words; everything typed stays; the other patient is never named.
+    await expect(drawer.getByTestId("new-appointment-error")).toHaveCount(0); // nothing warned: the server must be the one to refuse
+    const refused = page.waitForResponse((r) => r.url().endsWith("/appointments") && r.request().method() === "POST");
     await drawer.getByTestId("new-appointment-submit").click();
+    expect((await refused).status()).toBe(409);
     await expect(drawer.getByTestId("new-appointment-error")).toHaveText(msg);
+    expect(sql(`SELECT count(*) FROM appointments WHERE journey_id = '${second.journeyId}'`)).toBe("0"); // after the response, not before
     await expect(drawer).toBeVisible();
-    await expect(drawer.locator("#appt-reason")).toHaveValue("Second patient, same slot");
-    await expect(drawer).not.toContainText(NAME("First"));
+    await expect(drawer.locator("#appt-reason")).toHaveValue("Second patient, same slot"); // everything typed stays
+    await expect(drawer).not.toContainText(NAME("First")); // the other patient is never named
     await expect(drawer).not.toContainText("409");
-    expect(sql(`SELECT count(*) FROM appointments WHERE journey_id = '${second.journeyId}'`)).toBe("0");
+    await page.unroute("**/appointments/slot-check*");
 
     // Another doctor, same time: free.
     await drawer.locator("#appt-doctor").selectOption({ index: 2 });
@@ -154,7 +172,7 @@ test.describe("M6.5 — completed procedures follow the completion date", () => 
     // Three different dates for one procedure: scheduled for (+9 days), completed on (now), payment (now, a separate fact).
     expect(sql(`SELECT (completed_at IS NOT NULL)::text || '|' || (planned_date > now() + interval '8 days')::text FROM treatment_opportunities WHERE id = '${treatmentId}'`)).toBe("true|true");
 
-    await page.goto("/treatments?status=COMPLETED");
+    await page.goto("/treatments?state=COMPLETED");
     const line = page.getByTestId(`treatment-date-${treatmentId}`);
     await expect(line).toBeVisible();
     await expect(line).toContainText("Completed on");
@@ -162,7 +180,7 @@ test.describe("M6.5 — completed procedures follow the completion date", () => 
 
     expect((await reportNow()).kpis.proceduresCompleted).toBe(before + 1);
     await page.goto("/command-centre?cc=report&rRange=today");
-    await expect(page.getByTestId("report-kpi-procedures-done")).toContainText(String(before + 1));
+    await expect(page.getByTestId("report-kpi-procedures-done")).toContainText(new RegExp(`(^|\\D)${before + 1}(\\D|$)`));
   });
 });
 
@@ -238,6 +256,12 @@ test.describe("M6.5 — system stages and configurable outcomes", () => {
     await expect(page.getByTestId("stage-locked-booked")).toBeVisible();
     await expect(page.locator('[data-testid^="outcome-drag-"]').first()).toBeHidden(); // touch uses the arrows
     await expect(page.locator('[data-testid^="outcome-move-down-"]').first()).toBeVisible();
+    // The arrows are the only reorder control on touch: each is a real 44px target.
+    for (const id of await page.locator('[data-testid^="outcome-move-down-"]').evaluateAll((els) => els.slice(0, 3).map((e) => e.getAttribute("data-testid")!))) {
+      const box = (await page.getByTestId(id).boundingBox())!;
+      expect(box.width, `${id} width`).toBeGreaterThanOrEqual(44);
+      expect(box.height, `${id} height`).toBeGreaterThanOrEqual(44);
+    }
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
   });
 });

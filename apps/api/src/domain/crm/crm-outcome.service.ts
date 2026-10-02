@@ -82,9 +82,16 @@ export async function createOutcome(db: Db, tenantId: string, input: CreateCrmOu
 }
 
 export async function updateOutcome(db: Db, tenantId: string, id: string, input: UpdateCrmOutcomeInput): Promise<Result<{ outcome: CrmOutcomeVm }>> {
-  const [existing] = await db.select({ id: crmOutcomes.id }).from(crmOutcomes).where(and(eq(crmOutcomes.tenantId, tenantId), eq(crmOutcomes.id, id))).limit(1);
+  const [existing] = await db.select({ id: crmOutcomes.id, stage: crmOutcomes.stage }).from(crmOutcomes).where(and(eq(crmOutcomes.tenantId, tenantId), eq(crmOutcomes.id, id))).limit(1);
   if (!existing) return { ok: false, reason: "outcome_not_found" };
   if ((input.stage !== undefined && !isStage(input.stage)) || (input.followUpType !== undefined && !isTaskType(input.followUpType)) || (input.label !== undefined && !input.label.trim())) return { ok: false, reason: "invalid_request" };
+  // An outcome that has been recorded on journeys keeps its stage: moving "Interested" from Contacted to Lost would
+  // re-read every past journey's history (and the next time it is logged, close journeys as lost). Archive it and add
+  // a new outcome instead.
+  if (input.stage !== undefined && input.stage !== existing.stage) {
+    const [used] = await db.select({ id: journeys.id }).from(journeys).where(and(eq(journeys.tenantId, tenantId), eq(journeys.lastOutcomeId, id))).limit(1);
+    if (used) return { ok: false, reason: "outcome_in_use" };
+  }
   const [row] = await db
     .update(crmOutcomes)
     .set({
@@ -105,6 +112,8 @@ export async function reorderOutcomes(db: Db, tenantId: string, orderedIds: stri
   if (orderedIds.length === 0 || new Set(orderedIds).size !== orderedIds.length) return { ok: false, reason: "invalid_request" };
   const rows = await db.select().from(crmOutcomes).where(and(eq(crmOutcomes.tenantId, tenantId), inArray(crmOutcomes.id, orderedIds)));
   if (rows.length !== orderedIds.length) return { ok: false, reason: "invalid_request" };
+  // One stage at a time: a mixed list would swap sort slots across stages.
+  if (new Set(rows.map((r) => r.stage)).size > 1) return { ok: false, reason: "invalid_request" };
   let slots = rows.map((r) => r.sortOrder).sort((a, b) => a - b);
   if (new Set(slots).size !== slots.length) slots = slots.map((_, i) => slots[0]! + i);
   await db.transaction(async (tx) => {

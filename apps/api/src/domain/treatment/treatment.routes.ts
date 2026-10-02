@@ -34,6 +34,11 @@ const listQuery = z.object({
   service: z.string().min(1).optional(),
 });
 
+const statusBody = z.object({
+  status: z.enum(["ADVISED", "DECISION_PENDING", "ACCEPTED", "SCHEDULED", "COMPLETED", "DECLINED", "CANCELLED", "LOST"]),
+  plannedDate: z.string().min(1).max(40).optional(),
+});
+
 export async function treatmentRoutes(app: FastifyInstance) {
   app.addHook("preHandler", requirePermission("VIEW_TREATMENT"));
 
@@ -48,8 +53,9 @@ export async function treatmentRoutes(app: FastifyInstance) {
     const tenantId = request.sessionUser!.tenantId;
     const actorId = request.sessionUser!.id;
     const { id } = request.params as { id: string };
-    const { status, plannedDate } = request.body as { status: TreatmentStatus; plannedDate?: string };
-    const result = await updateTreatmentStatus(app.db, tenantId, id, actorId, status, plannedDate);
+    const body = statusBody.safeParse(request.body);
+    if (!body.success || !z.string().uuid().safeParse(id).success) return reply.status(400).send({ error: "invalid_request" });
+    const result = await updateTreatmentStatus(app.db, tenantId, id, actorId, body.data.status, body.data.plannedDate);
     if (!result.ok) return reply.status(REASON_STATUS[result.reason] ?? 400).send({ error: result.reason });
     return result;
   });

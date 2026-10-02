@@ -114,7 +114,11 @@ export function parseInstant(value: unknown, timezone: string): Date | null {
   if (local) {
     const [, ymd, hh, mm, ss] = local;
     if (!isRealDate(ymd!) || Number(hh) > 23 || Number(mm) > 59 || Number(ss ?? 0) > 59) return null;
-    return new Date(zonedWallTime(ymd!, Number(hh), Number(mm), timezone).getTime() + Number(ss ?? 0) * 1000);
+    const at = zonedWallTime(ymd!, Number(hh), Number(mm), timezone);
+    // A wall time inside a DST gap does not exist (02:30 on spring-forward day): it must not quietly become another hour.
+    const back = dayKeyIn(at, timezone) === ymd && minutesOfDayIn(at, timezone) === Number(hh) * 60 + Number(mm);
+    if (!back) return null;
+    return new Date(at.getTime() + Number(ss ?? 0) * 1000);
   }
   if (!/(Z|[+-]\d{2}:?\d{2})$/i.test(v)) return null; // a bare date or anything else ambiguous is refused
   const d = new Date(v);

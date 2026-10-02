@@ -41,6 +41,7 @@ const interactionBody = z.object({
 const REASON_STATUS: Record<string, number> = {
   outcome_not_found: 404,
   key_exists: 409,
+  outcome_in_use: 409,
   journey_not_found: 404,
   task_not_found: 404,
   task_closed: 409,

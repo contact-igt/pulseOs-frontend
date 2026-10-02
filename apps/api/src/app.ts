@@ -1,6 +1,7 @@
-import Fastify, { type FastifyError } from "fastify";
+import Fastify, { type FastifyError, type FastifyServerOptions } from "fastify";
 import cookie from "@fastify/cookie";
 import { db } from "./db/client.js";
+import { parseTrustProxy } from "./lib/trust-proxy.js";
 import { resolveSession } from "./domain/auth/auth.service.js";
 import { authRoutes, SESSION_COOKIE } from "./domain/auth/auth.routes.js";
 import { dashboardRoutes } from "./domain/dashboard/dashboard.routes.js";
@@ -32,8 +33,14 @@ import { websiteFormRoutes } from "./domain/acquisition/website-form.routes.js";
 import { reportRoutes } from "./domain/report/report.routes.js";
 
 export async function buildApp() {
-  // Behind a reverse proxy set TRUST_PROXY=true so request.ip is the client's address (the sign-in throttle keys on it).
-  const app = Fastify({ logger: true, trustProxy: process.env.TRUST_PROXY === "true" });
+  // Behind a reverse proxy set TRUST_PROXY=<number of proxy hops> (usually 1) so request.ip is the client's address — the
+  // sign-in throttle keys on it. Unset trusts no proxy: all clients then share the proxy's address.
+  const options: FastifyServerOptions = {
+    logger: true,
+    // Fastify accepts a hop count at runtime (proxy-addr); its type declaration omits `number`.
+    trustProxy: parseTrustProxy(process.env.TRUST_PROXY) as FastifyServerOptions["trustProxy"],
+  };
+  const app = Fastify(options);
 
   // Unexpected failures are logged in full server-side but answered with a
   // generic body — a raw error message (e.g. a failed SQL query with table

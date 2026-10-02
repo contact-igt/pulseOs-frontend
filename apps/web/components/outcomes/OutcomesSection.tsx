@@ -12,7 +12,7 @@ import { OutcomeEditorSheet } from "./OutcomeEditorSheet";
 import { blankOutcome, outcomeHint, outcomeToForm, type OutcomeForm } from "./outcomeForm";
 import { SYSTEM_STAGES, outcomesForStage } from "./stageModel";
 
-const BTN = "inline-flex h-11 w-9 items-center justify-center rounded-control text-ink-2 hover:bg-primary-50 hover:text-ink disabled:opacity-30 sm:h-8 sm:w-7";
+const BTN = "inline-flex h-11 w-11 items-center justify-center rounded-control text-ink-2 hover:bg-primary-50 hover:text-ink disabled:opacity-30 sm:h-8 sm:w-7";
 
 function OutcomeRow({ o, position, isFirst, isLast, locked, onMove, onEdit, onArchive, onRestore }: { o: CrmOutcomeVm; position: number; isFirst: boolean; isLast: boolean; locked: boolean; onMove: (d: -1 | 1) => void; onEdit: () => void; onArchive: () => void; onRestore: () => void }) {
   const { isDragging, rowProps, gripProps } = useSortableRow(o.id, o.archived || locked);
@@ -95,7 +95,10 @@ export function OutcomesSection() {
   const listFor = (stage: JourneyStage) => {
     const list = outcomesForStage(all, stage, showArchived);
     const order = pending[stage];
-    return order ? [...list].sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id)) : list;
+    if (!order) return list;
+    // While a save is in flight show the new order; anything not in it (just restored / newly shown) keeps its saved place after.
+    const at = (id: string) => (order.indexOf(id) === -1 ? Number.MAX_SAFE_INTEGER : order.indexOf(id));
+    return [...list].sort((a, b) => at(a.id) - at(b.id) || a.sortOrder - b.sortOrder);
   };
   const add = (stage: "contacted" | "lost") => setEditing({ mode: "create", form: { ...blankOutcome(), stage } });
 
@@ -144,16 +147,20 @@ export function OutcomesSection() {
                     ) : (
                       <SortableGroup items={list.map((o) => ({ id: o.id, label: o.label }))} onReorder={(ids) => void reorder(stage.key, ids)}>
                         <ul className="divide-y divide-line rounded-card border border-line bg-white" aria-label={`${stage.label} outcomes`} aria-busy={busy} data-testid={`outcome-group-${stage.key}`}>
-                          {list.map((o, i) => (
+                          {list.map((o) => {
+                            // Only active outcomes are ordered: an archived neighbour is never a swap partner.
+                            const active = list.filter((x) => !x.archived);
+                            const i = active.findIndex((x) => x.id === o.id);
+                            return (
                             <OutcomeRow
                               key={o.id}
                               o={o}
                               position={i + 1}
-                              isFirst={i === 0}
-                              isLast={i === list.length - 1}
+                              isFirst={i <= 0}
+                              isLast={i === active.length - 1}
                               locked={busy}
                               onMove={(d) => {
-                                const ids = list.map((x) => x.id);
+                                const ids = active.map((x) => x.id);
                                 const j = i + d;
                                 if (j < 0 || j >= ids.length) return;
                                 [ids[i], ids[j]] = [ids[j]!, ids[i]!];
@@ -163,7 +170,8 @@ export function OutcomesSection() {
                               onArchive={() => run(() => api.updateCrmOutcome(o.id, { archived: true }), "Couldn't archive that outcome — try again.")}
                               onRestore={() => run(() => api.updateCrmOutcome(o.id, { archived: false }), "Couldn't restore that outcome — try again.")}
                             />
-                          ))}
+                            );
+                          })}
                         </ul>
                       </SortableGroup>
                     )}

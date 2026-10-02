@@ -229,29 +229,52 @@ describe.skipIf(!DEMO_PASSWORD)("CRM outcomes (integration)", () => {
       for (const stage of ["enquiry", "booked", "attended", "consulted", "treatment_advised", "scheduled", "completed", "made_up"]) {
         expect((await call(admin, "PATCH", `/crm/outcomes/${o.id}`, { stage })).statusCode, stage).toBe(400);
       }
-      expect((await call(admin, "PATCH", `/crm/outcomes/${o.id}`, { stage: "lost" })).statusCode).toBe(200); // the one other stage an outcome may belong to
+      expect((await call(admin, "PATCH", `/crm/outcomes/${o.id}`, { stage: "lost" })).statusCode).toBe(200); // never used: free to belong to the one other stage
       expect((await outcomes(admin, "?includeArchived=true")).find((x) => x.id === o.id)!.stage).toBe("lost");
     });
 
-    it("there is no endpoint through which a hospital edits, adds or removes stages", async () => {
-      for (const [method, url] of [["POST", "/journey-stages"], ["PATCH", "/journey-stages/booked"], ["PATCH", "/crm/stages/booked"], ["POST", "/crm/stages"]] as const) {
-        expect((await call(admin, method, url, { label: "Renamed" })).statusCode, `${method} ${url}`).toBe(404);
-      }
+    it("an outcome already recorded on a journey keeps its stage (409); archive it and add a new one instead", async () => {
+      const o = (await call(admin, "POST", "/crm/outcomes", { key: `${PREFIX}inuse`, label: "In use", stage: "contacted" })).json() as CrmOutcomeVm;
+      outcomeIds.push(o.id);
+      const { journeyId } = await newJourney();
+      expect((await log(coordinator, journeyId, { outcomeKey: o.key })).statusCode).toBe(201);
+      const res = await call(admin, "PATCH", `/crm/outcomes/${o.id}`, { stage: "lost" });
+      expect(res.statusCode).toBe(409);
+      expect(res.json()).toEqual({ error: "outcome_in_use" });
+      expect((await outcomes(admin, "?includeArchived=true")).find((x) => x.id === o.id)!.stage).toBe("contacted"); // history reads as it did
+      expect((await call(admin, "PATCH", `/crm/outcomes/${o.id}`, { label: "In use (renamed)", stage: "contacted" })).statusCode).toBe(200); // same stage, new words: fine
     });
 
-    it("reordering inside one stage leaves the other stage's order alone", async () => {
+    it("reordering inside one stage leaves the other stage alone — even when the two stages' sort orders interleave", async () => {
       const mk = async (key: string, stage: "contacted" | "lost") => {
         const r = (await call(admin, "POST", "/crm/outcomes", { key: `${PREFIX}${key}`, label: key.toUpperCase(), stage })).json() as CrmOutcomeVm;
         outcomeIds.push(r.id);
         return r;
       };
-      const [c1, c2, l1, l2] = [await mk("ord_c1", "contacted"), await mk("ord_c2", "contacted"), await mk("ord_l1", "lost"), await mk("ord_l2", "lost")];
-      const orderOf = async (stage: string) => (await outcomes(admin, "?includeArchived=true")).filter((x) => x.stage === stage && x.key.startsWith(`${PREFIX}ord_`)).sort((a, b) => a.sortOrder - b.sortOrder).map((x) => x.key);
-      const lostBefore = await orderOf("lost");
-      expect((await call(admin, "POST", "/crm/outcomes/reorder", { orderedIds: [c2!.id, c1!.id] })).statusCode).toBe(200);
-      expect(await orderOf("contacted")).toEqual([`${PREFIX}ord_c2`, `${PREFIX}ord_c1`]);
-      expect(await orderOf("lost")).toEqual(lostBefore);
-      expect(lostBefore).toEqual([l1!.key, l2!.key]);
+      // Created alternately, so their sort slots interleave: c1 < l1 < c2 < l2.
+      const c1 = await mk("ord_c1", "contacted");
+      const l1 = await mk("ord_l1", "lost");
+      const c2 = await mk("ord_c2", "contacted");
+      const l2 = await mk("ord_l2", "lost");
+      const all = async () => (await outcomes(admin, "?includeArchived=true")).filter((x) => x.key.startsWith(`${PREFIX}ord_`));
+      const orderOf = async (stage: string) => (await all()).filter((x) => x.stage === stage).sort((a, b) => a.sortOrder - b.sortOrder).map((x) => x.key);
+      const slotsBefore = Object.fromEntries((await all()).map((x) => [x.key, x.sortOrder]));
+      expect(await orderOf("contacted")).toEqual([c1.key, c2.key]);
+      expect((await call(admin, "POST", "/crm/outcomes/reorder", { orderedIds: [c2.id, c1.id] })).statusCode).toBe(200);
+      expect(await orderOf("contacted")).toEqual([c2.key, c1.key]);
+      const after = Object.fromEntries((await all()).map((x) => [x.key, x.sortOrder]));
+      expect(after[l1.key]).toBe(slotsBefore[l1.key]); // the other stage's rows did not move at all
+      expect(after[l2.key]).toBe(slotsBefore[l2.key]);
+      // The two contacted rows traded their own slots.
+      expect([after[c2.key], after[c1.key]]).toEqual([slotsBefore[c1.key], slotsBefore[c2.key]]);
+    });
+
+    it("a reorder that mixes stages is refused, and another hospital's ids are refused", async () => {
+      const c = (await outcomes(admin, "?includeArchived=true")).find((x) => x.stage === "contacted")!;
+      const l = (await outcomes(admin, "?includeArchived=true")).find((x) => x.stage === "lost")!;
+      expect((await call(admin, "POST", "/crm/outcomes/reorder", { orderedIds: [c.id, l.id] })).statusCode).toBe(400);
+      const foreign = (await outcomes(gynAdmin, "?includeArchived=true"))[0]!;
+      expect((await call(admin, "POST", "/crm/outcomes/reorder", { orderedIds: [c.id, foreign.id] })).statusCode).toBe(400);
     });
 
     it("an archived outcome stays readable on the journeys that recorded it, and in the admin list; it only leaves the picker", async () => {

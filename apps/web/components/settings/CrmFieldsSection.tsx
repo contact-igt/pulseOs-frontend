@@ -30,7 +30,7 @@ function usePrefersReducedMotion(): boolean {
 }
 
 function FieldRow({ field, position, isFirst, isLast, canMove, reducedMotion, onMove, onEdit, onArchive, onRestore }: { field: CrmFieldVm; position: number; isFirst: boolean; isLast: boolean; canMove: boolean; reducedMotion: boolean; onMove: (d: -1 | 1) => void; onEdit: () => void; onArchive: () => void; onRestore: () => void }) {
-  const btn = "inline-flex h-11 w-9 items-center justify-center rounded-control text-ink-2 hover:bg-primary-50 hover:text-ink disabled:opacity-30 sm:h-8 sm:w-7";
+  const btn = "inline-flex h-11 w-11 items-center justify-center rounded-control text-ink-2 hover:bg-primary-50 hover:text-ink disabled:opacity-30 sm:h-8 sm:w-7";
   // Only the grip starts a drag — the rest of the row keeps its normal click targets (Edit, Archive).
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: field.id, disabled: !canMove, transition: { duration: 150, easing: "ease-out" } });
   const style: CSSProperties = { transform: CSS.Translate.toString(transform), transition: reducedMotion ? undefined : transition, position: "relative", zIndex: isDragging ? 10 : undefined };

@@ -54,4 +54,18 @@ describe.skipIf(!DEMO_PASSWORD)("sign-in throttle (integration)", () => {
     for (let i = 0; i < 8; i++) expect((await app.inject({ method: "POST", url: "/auth/login", payload: { email: "not-an-email" }, remoteAddress: ip })).statusCode).toBe(400);
     expect((await login("eye.admin@pulseos.local", DEMO_PASSWORD!, ip)).statusCode).toBe(200);
   });
+
+  it("a burst of parallel guesses is counted exactly: at most five reach the password check, the rest are refused", async () => {
+    const ip = "198.51.100.20";
+    const results = await Promise.all(Array.from({ length: 25 }, () => login("eye.admin@pulseos.local", "guess", ip)));
+    const codes = results.map((r) => r.statusCode);
+    expect(codes.filter((c) => c === 401)).toHaveLength(5);
+    expect(codes.filter((c) => c === 429)).toHaveLength(20);
+  });
+
+  it("an IPv6 client rotating its low bits is still one client", async () => {
+    const results: number[] = [];
+    for (let i = 1; i <= 7; i++) results.push((await login("eye.doctor@pulseos.local", "guess", `2001:db8:77:aa::${i}`)).statusCode);
+    expect(results).toEqual([401, 401, 401, 401, 401, 429, 429]);
+  });
 });

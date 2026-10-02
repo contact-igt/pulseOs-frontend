@@ -38,12 +38,20 @@ afterEach(() => {
 });
 
 describe("NewAppointmentDrawer — time and doctor rules", () => {
-  it("defaults to tomorrow on the hour in the HOSPITAL's zone and does not let the picker go earlier than now", () => {
+  it("defaults to tomorrow on the hour and bounds the picker at 'now' — as the HOSPITAL reads the clock, not the browser", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-02T04:00:00Z")); // 09:30 IST on 2 Oct = 21:00 PDT on 1 Oct
+    setDisplayTimeZone("America/Los_Angeles");
     setup();
     const input = screen.getByTestId("appt-time") as HTMLInputElement;
-    expect(input.min).toBe(hospitalLocalInput());
-    expect(input.value.endsWith(":00")).toBe(true);
-    expect(input.value > hospitalLocalInput()).toBe(true);
+    expect(input.min).toBe("2026-10-01T21:00");
+    expect(input.value).toBe("2026-10-02T21:00"); // tomorrow on the hour in that hospital's zone
+    cleanup();
+    setDisplayTimeZone("Asia/Kolkata");
+    setup();
+    const ist = screen.getByTestId("appt-time") as HTMLInputElement;
+    expect(ist.min).toBe("2026-10-02T09:30");
+    expect(ist.value).toBe("2026-10-03T09:00");
   });
 
   it("a time that has already passed is refused in the form, in plain words, and nothing is sent", async () => {
@@ -87,12 +95,32 @@ describe("NewAppointmentDrawer — time and doctor rules", () => {
     expect(onCheckSlot).toHaveBeenCalledTimes(1);
     expect(onCheckSlot.mock.calls[0]![0]).toBe("d1");
     expect((await screen.findByTestId("new-appointment-error")).textContent).toContain("This doctor already has another appointment");
-    // Choosing another doctor who is free clears the warning.
-    onCheckSlot.mockResolvedValue({ available: true, inPast: false });
+    // Switching doctor drops the old warning AT ONCE (before the new answer arrives)…
+    let release: (v: { available: boolean; inPast: boolean }) => void = () => undefined;
+    onCheckSlot.mockImplementation(() => new Promise((r) => (release = r)));
+    fireEvent.change(screen.getByLabelText(/Doctor/), { target: { value: "d2" } });
+    expect(screen.queryByTestId("new-appointment-error")).toBeNull();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    // …and a free doctor shows nothing.
+    await act(async () => release({ available: true, inPast: false }));
+    expect(screen.queryByTestId("new-appointment-error")).toBeNull();
+  });
+
+  it("if the availability check itself fails, no stale warning is left behind (the booking will still check)", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const onCheckSlot = vi.fn().mockResolvedValueOnce({ available: false, inPast: false }).mockRejectedValue(new Error("offline"));
+    setup({ onCheckSlot });
+    await fillRequired();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    expect((await screen.findByTestId("new-appointment-error")).textContent).toContain("already has another appointment");
     fireEvent.change(screen.getByLabelText(/Doctor/), { target: { value: "d2" } });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(500);
     });
-    await waitFor(() => expect(screen.queryByTestId("new-appointment-error")).toBeNull());
+    expect(screen.queryByTestId("new-appointment-error")).toBeNull();
   });
 });

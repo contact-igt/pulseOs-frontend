@@ -153,6 +153,8 @@ export async function updateTreatmentStatus(
   const [existing] = await db.select().from(treatmentOpportunities).where(and(eq(treatmentOpportunities.tenantId, tenantId), eq(treatmentOpportunities.id, treatmentId))).limit(1);
   if (!existing) return { ok: false, reason: "treatment_not_found" };
   if (!VALID_TRANSITIONS[existing.status].includes(nextStatus)) return { ok: false, reason: "invalid_transition" };
+  const plannedAt = plannedDate ? new Date(plannedDate) : null;
+  if (plannedAt && Number.isNaN(plannedAt.getTime())) return { ok: false, reason: "invalid_request" };
 
   // The read above and the write below are two separate round-trips, so two
   // concurrent requests can both read the pre-transition status and both pass
@@ -174,7 +176,9 @@ export async function updateTreatmentStatus(
         // lets only one of two racing completions through. Nothing else writes this column.
         ...(nextStatus === "COMPLETED" ? { completedAt: at } : {}),
         decisionDate: nextStatus === "ACCEPTED" || nextStatus === "DECLINED" ? new Date() : existing.decisionDate,
-        plannedDate: plannedDate ? new Date(plannedDate) : existing.plannedDate,
+        // "Scheduled for" belongs to scheduling: this status endpoint may only set it on the way to SCHEDULED
+        // (scheduleSurgery / rescheduleSurgery own it otherwise). A completion never rewrites when it was planned.
+        plannedDate: nextStatus === "SCHEDULED" && plannedAt ? plannedAt : existing.plannedDate,
       })
       .where(and(
         eq(treatmentOpportunities.id, treatmentId),

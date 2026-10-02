@@ -61,7 +61,10 @@ export async function seedAppointmentDemo(tenantId: string, a: Actors) {
 
   // 1 — Booked today, patient not yet arrived.
   const booked = take((j) => !used.has(j.id), "today's booked visit");
-  const b = await createAppointment(db, tenantId, a.frontDesk.id, { patientId: booked.patientId, journeyId: booked.id, branchId: a.branchId, doctorId: linked.id, scheduledAt: (await freeSlot(todaySlot("scheduled", 4), 15)).toISOString(), reason: "Consultation" }, TZ);
+  // The demo clock keeps this slot "upcoming" at any hour (capped at 19:00); when the seed runs after that, the real
+  // clock would call it past, so the booking is made as of an hour before the slot (a normal earlier booking).
+  const bookedSlot = await freeSlot(todaySlot("scheduled", 4), 15);
+  const b = await createAppointment(db, tenantId, a.frontDesk.id, { patientId: booked.patientId, journeyId: booked.id, branchId: a.branchId, doctorId: linked.id, scheduledAt: bookedSlot.toISOString(), reason: "Consultation" }, TZ, new Date(Math.min(Date.now(), bookedSlot.getTime() - 3_600_000)));
   if (!b.ok) throw new Error(`seed: booked visit failed (${b.reason})`);
 
   // 2 — A no-show today: marked through the lifecycle, so its Appointment Risk task exists exactly once.
@@ -80,7 +83,7 @@ export async function seedAppointmentDemo(tenantId: string, a: Actors) {
     .orderBy(asc(appointments.scheduledAt))
     .limit(1);
   if (upcoming) {
-    const r = await rescheduleAppointment(db, tenantId, upcoming.id, a.coordinator.id, { scheduledAt: new Date(upcoming.at.getTime() + 24 * 3_600_000).toISOString(), reasonCode: "doctor_unavailable", note: "Doctor is at a conference" }, TZ);
+    const r = await rescheduleAppointment(db, tenantId, upcoming.id, a.coordinator.id, { scheduledAt: (await freeSlot(new Date(upcoming.at.getTime() + 24 * 3_600_000), 15)).toISOString(), reasonCode: "doctor_unavailable", note: "Doctor is at a conference" }, TZ);
     if (!r.ok) throw new Error(`seed: hospital reschedule failed (${r.reason})`);
   }
 

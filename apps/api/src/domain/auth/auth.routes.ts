@@ -46,18 +46,18 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: "invalid_request" });
     }
 
-    // Checked before the password is, and answered identically whether or not the account exists.
-    const gate = throttle.check(request.ip, parsed.data.email);
-    if (gate.blocked) {
+    // The attempt is admitted and counted BEFORE the slow password check (so parallel guesses cannot all slip through),
+    // and a lock is answered identically whether or not the account exists.
+    const gate = throttle.begin(request.ip, parsed.data.email);
+    if (!gate.allowed) {
       return reply.header("Retry-After", String(gate.retryAfterSeconds)).status(429).send({ error: "too_many_attempts", message: "Too many sign-in attempts. Please wait a few minutes and try again." });
     }
 
     const result = await loginWithPassword(app.db, parsed.data.email, parsed.data.password);
     if (!result.ok) {
-      throttle.recordFailure(request.ip, parsed.data.email);
       return reply.status(401).send({ error: result.reason });
     }
-    throttle.recordSuccess(request.ip, parsed.data.email);
+    throttle.succeed(request.ip, parsed.data.email);
 
     setSessionCookie(reply, result.sessionId, result.expiresAt);
     return reply.send({ user: result.user });

@@ -199,6 +199,7 @@ function proceduresSheet(wb: ExcelJS.Workbook, facts: ReportFacts) {
       { header: "Service", key: "service", width: 20 }, { header: "Status", key: "status", width: 14 }, { header: "Scheduled for", key: "planned", width: 20 },
       { header: "Completed on", key: "completed", width: 20 }, { header: "Payment date", key: "paid", width: 20 }, { header: "Doctor", key: "doctor", width: 22 },
       { header: "Branch", key: "branch", width: 18 }, { header: "Estimated value (₹)", key: "value", width: 18 },
+      { header: "In this report", key: "counted", width: 40 },
     ],
     facts.procedures.map((p) => ({
       label: p.label, patient: p.patientName ?? UNKNOWN_PATIENT, phone: p.phone, service: p.service, status: p.status === "COMPLETED" ? "Completed" : "Scheduled",
@@ -206,6 +207,8 @@ function proceduresSheet(wb: ExcelJS.Workbook, facts: ReportFacts) {
       completed: p.status !== "COMPLETED" ? "" : p.completedAt ? dateTime(p.completedAt, tz) : NOT_RECORDED,
       paid: p.paymentAt ? dateTime(new Date(p.paymentAt), tz) : "",
       doctor: p.doctorName ?? "Doctor not recorded", branch: p.branchName ?? "", value: p.estimatedValue,
+      // Reconciles every row with the screen's counts: which KPI (if any) this row is part of for the chosen period.
+      counted: [p.plannedInPeriod && "Planned in period", p.completedInPeriod && "Completed in period"].filter(Boolean).join(" · ") || "Not counted — completion date not recorded",
     })),
   );
 }
