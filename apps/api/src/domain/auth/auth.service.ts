@@ -7,6 +7,8 @@ import { DEFAULT_EDITION, type Role } from "@pulseos/types";
 import { DEFAULT_DEMO_ENVIRONMENT, DEMO_ENVIRONMENTS, demoEmailForRole, type DemoEnvironmentKey } from "./demo-environments.js";
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 12;
+/** "Remember me": stay signed in on this device for a week. Without it the session ends after 12 hours or when the browser closes. */
+export const REMEMBER_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 // Session ids are uuids. Anything else in the cookie (tampered, truncated, set by a
 // sibling domain) is simply "no session" — never a database error that would
 // 500 every request, including the login and logout that would clear it.
@@ -24,10 +26,10 @@ export async function verifyPassword(hashValue: string, plain: string): Promise<
 // is how the target user is found (email+password vs. role lookup); once a
 // `users` row is settled on, session creation is identical, so both go
 // through one path rather than a parallel/weaker one for Dev Login.
-async function createSessionFor(db: Db, user: typeof users.$inferSelect) {
+async function createSessionFor(db: Db, user: typeof users.$inferSelect, remember = false) {
   const [session] = await db
     .insert(sessions)
-    .values({ userId: user.id, expiresAt: new Date(Date.now() + SESSION_TTL_MS) })
+    .values({ userId: user.id, expiresAt: new Date(Date.now() + (remember ? REMEMBER_TTL_MS : SESSION_TTL_MS)) })
     .returning();
 
   const [tenant] = await db.select().from(tenants).where(eq(tenants.id, user.tenantId)).limit(1);
@@ -36,6 +38,7 @@ async function createSessionFor(db: Db, user: typeof users.$inferSelect) {
 
   return {
     ok: true as const,
+    remember,
     sessionId: session.id,
     expiresAt: session.expiresAt,
     user: {
@@ -57,7 +60,7 @@ async function createSessionFor(db: Db, user: typeof users.$inferSelect) {
 // An unknown account still costs one password verification, so the response time does not reveal whether an email exists.
 let decoyHash: Promise<string> | null = null;
 
-export async function loginWithPassword(db: Db, email: string, password: string) {
+export async function loginWithPassword(db: Db, email: string, password: string, remember = false) {
   const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
   if (!user) {
     decoyHash ??= hashPassword("decoy-password-never-matches");
@@ -68,7 +71,7 @@ export async function loginWithPassword(db: Db, email: string, password: string)
   const valid = await verifyPassword(user.passwordHash, password);
   if (!valid) return { ok: false as const, reason: "invalid_credentials" as const };
 
-  return createSessionFor(db, user);
+  return createSessionFor(db, user, remember);
 }
 
 // Development convenience only — see auth.routes.ts for the env guard that

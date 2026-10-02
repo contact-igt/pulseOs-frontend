@@ -37,6 +37,14 @@ import {
   leadSources,
   specialtyTemplates,
   tenants,
+  tenantCapabilities,
+  notifications,
+  notificationRules,
+  messageTemplates,
+  outboundWebhooks,
+  outboundWebhookDeliveries,
+  adsDailyFacts,
+  adsSyncRuns,
 } from "../db/schema.js";
 import { assertSafeToWipe } from "./safety.js";
 import { hashPassword } from "../domain/auth/auth.service.js";
@@ -64,6 +72,14 @@ async function main() {
 
   console.log("Clearing existing demo data...");
   await db.delete(sessions);
+  await db.delete(notifications);
+  await db.delete(notificationRules);
+  await db.delete(messageTemplates);
+  await db.delete(outboundWebhookDeliveries);
+  await db.delete(outboundWebhooks);
+  await db.delete(adsDailyFacts);
+  await db.delete(adsSyncRuns);
+  await db.delete(tenantCapabilities);
   await db.delete(callIntelligence);
   await db.delete(calls);
   await db.delete(connectorEvents);

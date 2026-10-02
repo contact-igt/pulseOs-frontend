@@ -7,6 +7,7 @@ import { DEFAULT_DEMO_ENVIRONMENT, DEMO_ENVIRONMENTS, DEMO_LOGIN_ROLES, type Dem
 const loginBody = z.object({
   email: z.string().email(),
   password: z.string().min(1),
+  remember: z.boolean().optional(),
 });
 
 const SESSION_COOKIE = "pulseos_session";
@@ -25,13 +26,14 @@ const devLoginBody = z.object({
   environment: z.enum(DEMO_ENVIRONMENTS.map((e) => e.key) as [DemoEnvironmentKey, ...DemoEnvironmentKey[]]).optional(),
 });
 
-function setSessionCookie(reply: import("fastify").FastifyReply, sessionId: string, expiresAt: Date) {
+function setSessionCookie(reply: import("fastify").FastifyReply, sessionId: string, expiresAt: Date, persistent = true) {
   reply.setCookie(SESSION_COOKIE, sessionId, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    expires: expiresAt,
+    // A session cookie (no expiry) unless the person asked to be remembered; the server-side session expires either way.
+    ...(persistent ? { expires: expiresAt } : {}),
   });
 }
 
@@ -53,13 +55,13 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.header("Retry-After", String(gate.retryAfterSeconds)).status(429).send({ error: "too_many_attempts", message: "Too many sign-in attempts. Please wait a few minutes and try again." });
     }
 
-    const result = await loginWithPassword(app.db, parsed.data.email, parsed.data.password);
+    const result = await loginWithPassword(app.db, parsed.data.email, parsed.data.password, parsed.data.remember === true);
     if (!result.ok) {
       return reply.status(401).send({ error: result.reason });
     }
     throttle.succeed(request.ip, parsed.data.email);
 
-    setSessionCookie(reply, result.sessionId, result.expiresAt);
+    setSessionCookie(reply, result.sessionId, result.expiresAt, result.remember);
     return reply.send({ user: result.user });
   });
 
@@ -88,7 +90,7 @@ export async function authRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: result.reason });
       }
 
-      setSessionCookie(reply, result.sessionId, result.expiresAt);
+      setSessionCookie(reply, result.sessionId, result.expiresAt, false);
       return reply.send({ user: result.user });
     });
   }
