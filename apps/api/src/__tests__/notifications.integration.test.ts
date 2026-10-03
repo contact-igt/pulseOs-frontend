@@ -203,6 +203,23 @@ describe.skipIf(!DEMO_PASSWORD)("notifications: reminders and staff WhatsApp (in
     expect((await rows(a.id)).some((r) => r.status === "SENT")).toBe(false);
   });
 
+  it("a reminder rule switched off stops what it already queued: cancelled with the reason, never sent", async () => {
+    const rules = (await call(t, "HOSPITAL_ADMIN", "GET", "/notifications/rules")).json() as NotificationRuleVm[];
+    const confirmation = rules.find((r) => r.subject === "APPOINTMENT" && r.kind === "CONFIRMATION")!;
+    const a = await book(72);
+    await planned(a.id, 3);
+    try {
+      expect((await call(t, "HOSPITAL_ADMIN", "PATCH", `/notifications/rules/${confirmation.id}`, { enabled: false })).statusCode).toBe(200);
+      await processDueNotifications(db, new Date(), fixtureOnly);
+      const after = sorted(await rows(a.id));
+      expect(after[0]).toMatchObject({ status: "CANCELLED", reason: "RULE_DISABLED" }); // the confirmation was due now
+      expect(after.some((r) => r.status === "SENT")).toBe(false);
+      expect(after.slice(1).every((r) => r.status === "PENDING")).toBe(true); // the other rules still apply
+    } finally {
+      await call(t, "HOSPITAL_ADMIN", "PATCH", `/notifications/rules/${confirmation.id}`, { enabled: true });
+    }
+  });
+
   it("provider failures retry with backoff, then fail; the stored error never carries a credential", async () => {
     const a = await book(72);
     await planned(a.id, 3);

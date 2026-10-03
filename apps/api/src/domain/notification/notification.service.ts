@@ -135,6 +135,13 @@ export async function updateRule(db: Db, tenantId: string, id: string, input: Up
     })
     .where(eq(notificationRules.id, id))
     .returning();
+  // Switching a rule off also withdraws what it has already queued (the worker re-checks too, for the race window).
+  if (existing.enabled && input.enabled === false) {
+    await db
+      .update(notifications)
+      .set({ status: "CANCELLED", reason: "RULE_DISABLED" })
+      .where(and(eq(notifications.tenantId, tenantId), eq(notifications.ruleId, id), eq(notifications.status, "PENDING")));
+  }
   return { ok: true, rule: ruleVm(row!) };
 }
 
@@ -293,6 +300,13 @@ async function sendClaimed(db: Db, n: Row, now: Date, deps: SendDeps): Promise<"
   const tenantId = n.tenantId;
   const caps = await tenantCapabilityMap(db, tenantId);
   if (!caps.WHATSAPP_NOTIFICATIONS) return (await finish(db, n.id, { status: "BLOCKED", reason: "CAPABILITY_DISABLED" }), "blocked");
+
+  // A reminder follows its rule: one switched off (or removed) after this was queued is not sent. Staff-sent messages
+  // (FOLLOW_UP) belong to no rule.
+  if (n.ruleId && n.subjectType !== "FOLLOW_UP") {
+    const [rule] = await db.select({ enabled: notificationRules.enabled }).from(notificationRules).where(eq(notificationRules.id, n.ruleId)).limit(1);
+    if (!rule?.enabled) return (await finish(db, n.id, { status: "CANCELLED", reason: "RULE_DISABLED" }), "cancelled");
+  }
 
   // Re-check the world as it is now: a visit that moved, was cancelled or has already happened is never reminded about.
   let patientPhone: string | null;
