@@ -3,7 +3,9 @@
 import { FilterSelect } from "@pulseos/ui";
 import { addDays } from "@/components/report/reportFilters";
 
-const DATE_INPUT = "glass-control h-8 min-w-0 flex-1 rounded-control px-2 text-xs text-ink outline-none focus-visible:border-primary-500 disabled:opacity-50 sm:flex-none max-md:h-11";
+// On a phone the pair takes its own full-width row and each date shares it (a native date field has a wide intrinsic
+// size and would otherwise push the second date off-screen); from sm up they sit inline beside the preset.
+const DATE_INPUT = "glass-control h-8 w-0 min-w-0 flex-1 rounded-control px-2 text-xs text-ink outline-none focus-visible:border-primary-500 disabled:opacity-50 sm:w-auto sm:flex-none max-md:h-11";
 
 export interface PeriodValue {
   range: string | undefined;
@@ -68,7 +70,7 @@ export function PeriodControls({
         ))}
       </FilterSelect>
       {value.range === "custom" && !disabled && (
-        <div className="flex items-center gap-1.5" data-testid={`${testIdPrefix}-custom-dates`}>
+        <div className="flex w-full basis-full items-center gap-1.5 sm:w-auto sm:basis-auto" data-testid={`${testIdPrefix}-custom-dates`}>
           <input type="date" aria-label="From date" className={DATE_INPUT} value={value.from ?? ""} min={minFrom} max={value.to ?? max} onChange={(e) => e.target.value && onChange({ range: "custom", from: e.target.value, to: value.to ?? e.target.value })} data-testid={`${testIdPrefix}-from`} />
           <span className="text-xs text-ink-2" aria-hidden="true">–</span>
           <input type="date" aria-label="To date" className={DATE_INPUT} value={value.to ?? ""} min={value.from} max={max} onChange={(e) => e.target.value && onChange({ range: "custom", from: value.from ?? e.target.value, to: e.target.value })} data-testid={`${testIdPrefix}-to`} />

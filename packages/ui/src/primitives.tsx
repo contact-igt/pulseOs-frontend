@@ -225,7 +225,7 @@ export function Toolbar({ children, actions, className = "", ...rest }: { childr
   return (
     <div className={`flex flex-wrap items-center gap-x-3 gap-y-2 ${className}`} {...rest}>
       {children && <div className="min-w-0 flex-1 basis-full sm:basis-auto">{children}</div>}
-      {actions && <div className="ml-auto flex shrink-0 items-center gap-2">{actions}</div>}
+      {actions && <div className="ml-auto flex max-w-full shrink-0 items-center gap-2">{actions}</div>}
     </div>
   );
 }
