@@ -31,7 +31,7 @@ test.describe("Admin Command Centre", () => {
     await expect(page.getByTestId("executive-strip")).toBeVisible();
     await expect(page.getByTestId("exec-attributedRevenue")).toBeVisible();
     await expect(page.getByTestId("service-lines")).toBeVisible();
-    await expect(page.getByText("Service Lines")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Service Lines" })).toBeVisible();
 
     // Drill-down affordance: clicking a KPI cell navigates to a filtered sub-page.
     // That sub-page (Patients) is out of scope for this checkpoint and not yet built,

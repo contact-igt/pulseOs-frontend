@@ -7,6 +7,8 @@ async function login(page: import("@playwright/test").Page, email: string) {
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password", { exact: true }).fill(DEMO_PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
+  // Wait for the sign-in to land: navigating away while the login request is in flight leaves the page signed out.
+  await page.waitForURL(/command-centre|doctor-home|front-desk|my-work/);
 }
 
 test.describe("Marketing → Patient Journey critical path", () => {

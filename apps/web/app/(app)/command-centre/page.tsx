@@ -93,6 +93,10 @@ function CommandCentreOverview() {
   const resolved = f.range === "custom" && f.from && f.to ? { from: f.from, to: f.to } : resolveDatePreset(f.range === "custom" ? "30d" : f.range, todayKey);
   const presetLabel = DATE_PRESETS.find((p) => p.key === f.range)?.label ?? "Last 14 days";
   const day = (k: string) => formatKey(k, { day: "numeric", month: "short" });
+  // Say only what this edition shows: a Beta V1 tenant has no spend, ROAS or campaign panels to mention.
+  const scopeNote = growth
+    ? "The period drives hospital performance, the funnel, enquiries by source, service lines, campaigns and doctor load; Today, flow, spend at risk, attention and team are live. Branch and service narrow everything except hospital performance and campaigns."
+    : "The period drives the funnel, enquiries by source, service lines and doctor load; Today, flow, attention and team are live. Branch and service narrow everything.";
   const periodLabel = resolved.from === resolved.to ? `${presetLabel} · ${day(resolved.from)}` : `${presetLabel} · ${day(resolved.from)} – ${day(resolved.to)}`;
 
   const branches = useQuery({ queryKey: ["branches"], queryFn: api.branches });
@@ -153,7 +157,7 @@ function CommandCentreOverview() {
           <h2 className="text-sm font-semibold tracking-tight text-ink">Hospital performance</h2>
           <p className="text-xs text-ink-2" data-testid="cc-period-caption">
             {periodLabel} · whole hospital
-            <span className="hidden lg:inline">. The period drives hospital performance, the funnel, enquiries by source, service lines, campaigns and doctor load; Today, flow, spend at risk, attention and team are live. Branch and service narrow everything except hospital performance and campaigns.</span>
+            <span className="hidden lg:inline">. {scopeNote}</span>
           </p>
         </div>
       </Toolbar>

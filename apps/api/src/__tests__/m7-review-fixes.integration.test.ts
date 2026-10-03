@@ -15,6 +15,7 @@ import { scrubMetadata } from "../domain/activity/activity.service.js";
 import { metaAdsProvider } from "../domain/ads/meta-ads.js";
 import { TransientAdsError, type AdsReportingProvider, type NormalizedAdFact } from "../domain/ads/types.js";
 import { createTestTenant, destroyTestTenant, type TestTenant } from "./helpers/edition-tenant.js";
+import { dueNow } from "./helpers/due-now.js";
 
 const PW = process.env.DEMO_PASSWORD;
 
@@ -95,7 +96,7 @@ describe.skipIf(!PW)("review fixes (integration)", () => {
     expect(await enqueueWebhookDeliveries(db, ev)).toBe(1);
     let seenRedirect: string | undefined;
     const f: WebhookFetch = async (_u, init) => { seenRedirect = init.redirect; return { status: 302 }; };
-    await deliverDueWebhooks(db, new Date(), f);
+    await deliverDueWebhooks(db, dueNow(), f);
     expect(seenRedirect).toBe("manual");
     const [d] = await db.select().from(outboundWebhookDeliveries).where(eq(outboundWebhookDeliveries.eventId, ev.eventId));
     expect(d!.error).toBe("redirect_refused");

@@ -9,6 +9,7 @@ import { deliverDueWebhooks, enqueueWebhookDeliveries, type WebhookFetch } from 
 import { emitIntegrationEvent } from "../domain/integration/domain-events.js";
 import { verifyWebhookSignature } from "../domain/integration/webhook-rules.js";
 import { createTestTenant, destroyTestTenant, type TestTenant } from "./helpers/edition-tenant.js";
+import { dueNow } from "./helpers/due-now.js";
 
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD;
 
@@ -131,7 +132,7 @@ describe.skipIf(!DEMO_PASSWORD)("integration hub (integration)", () => {
     // Repeating the same event never queues twice (idempotent).
     expect(await enqueueWebhookDeliveries(db, { ...base, type: "lead.created", eventId: "lead.created:j-1", data: { journeyId: "j-1", sourceKey: "google" } })).toBe(0);
 
-    const first = await deliverDueWebhooks(db, new Date(), ok);
+    const first = await deliverDueWebhooks(db, dueNow(), ok);
     expect(first.sent).toBeGreaterThanOrEqual(1); // the dev DB may hold other hospitals' due deliveries; ours is the one asserted below
     expect(sent.filter((x) => x.url === "https://hooks.example.org/pulse")).toHaveLength(1);
     const ours = sent.filter((x) => x.url === "https://hooks.example.org/pulse");
@@ -141,7 +142,7 @@ describe.skipIf(!DEMO_PASSWORD)("integration hub (integration)", () => {
     expect(ours[0]!.body).not.toContain(v1.tenantId); // no tenant id on the wire
     expect(ours[0]!.headers["x-pulseos-signature"]).toMatch(/^sha256=/);
     expect(verifyWebhookSignature("wrong", ours[0]!.headers["x-pulseos-timestamp"]!, ours[0]!.body, ours[0]!.headers["x-pulseos-signature"]!)).toBe(false);
-    expect((await deliverDueWebhooks(db, new Date(), ok)).sent).toBe(0); // already sent: never again
+    expect((await deliverDueWebhooks(db, dueNow(), ok)).sent).toBe(0); // already sent: never again
 
     // A failing receiver is retried a bounded number of times, then marked failed.
     emitIntegrationEvent({ ...base, type: "lead.created", eventId: "lead.created:j-3", data: { journeyId: "j-3", sourceKey: "google" } });
