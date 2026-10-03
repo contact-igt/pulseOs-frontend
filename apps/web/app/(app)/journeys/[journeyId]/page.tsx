@@ -147,17 +147,17 @@ export default function JourneyDetailPage() {
           // The three things Staff do most, in one place: log a call, schedule a follow-up, book a visit.
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center" data-testid="journey-actions">
             {canLogCall && (
-              <Button variant="primary" className="min-h-11 sm:min-h-0" onClick={() => setLoggingCall(true)} data-testid="journey-log-call">
+              <Button variant="primary" className="min-h-11 lg:min-h-0" onClick={() => setLoggingCall(true)} data-testid="journey-log-call">
                 <Phone size={14} aria-hidden="true" /> Log call
               </Button>
             )}
             {canAddFollowUp && (
-              <Button variant="secondary" className="min-h-11 sm:min-h-0" onClick={() => setAddingFollowUp(true)} data-testid="journey-add-followup">
+              <Button variant="secondary" className="min-h-11 lg:min-h-0" onClick={() => setAddingFollowUp(true)} data-testid="journey-add-followup">
                 <ListPlus size={14} aria-hidden="true" /> Add follow-up
               </Button>
             )}
             {canBook && (
-              <Button variant="secondary" className="min-h-11 sm:min-h-0" onClick={() => quickCreate.openNewAppointment({ patient: { id: patient.id, name: patient.name, phone: patient.phone }, journeyId: journey.id })} data-testid="journey-book-appointment">
+              <Button variant="secondary" className="min-h-11 lg:min-h-0" onClick={() => quickCreate.openNewAppointment({ patient: { id: patient.id, name: patient.name, phone: patient.phone }, journeyId: journey.id })} data-testid="journey-book-appointment">
                 <CalendarPlus size={14} aria-hidden="true" /> Book appointment
               </Button>
             )}
