@@ -246,6 +246,7 @@ export interface FixtureIdentifiers {
   gbpAccessToken: string;
   googleKey: string;
   metaPageAccessToken: string;
+  intakeToken: string;
 }
 
 /** Fixture identifiers unique to one tenant, so two demo tenants never share a secret, token or page id. */
@@ -261,6 +262,7 @@ export function fixtureIdentifiers(tag: string): FixtureIdentifiers {
     gbpAccessToken: `FIXTURE_${tag}_GBP_ACCESS_TOKEN`,
     googleKey: `pulseos-fixture-${lower}-google-key`,
     metaPageAccessToken: `FIXTURE_${tag}_PAGE_ACCESS_TOKEN`,
+    intakeToken: `pulseos-fixture-${lower}-intake-token`,
   };
 }
 
@@ -274,6 +276,8 @@ interface ConnectorRefs {
   /** Runo phone lines. `key` is how a seeded call refers to it. */
   phoneLines: { key: string; number: string; providerRef: string; label: string; isActive: boolean; branch?: "a" | "b" | null }[];
   whatsappLabel: string;
+  /** A hospital whose website "I am interested" form is protected: its token (stored encrypted), required service and allowed origins. */
+  websiteIntake?: { requireService: boolean; fixedSource: "website"; allowedOrigins: string[] };
 }
 
 // Connectors: WhatsApp and Runo are seeded CONNECTED against this local
@@ -312,10 +316,17 @@ export async function createDemoConnectors(tenantId: string, branchByKey: { a: B
     encryptedPayload: encryptSecret({ webhookSharedSecret: refs.identifiers.runoSecret }),
   });
 
-  await db.insert(connectors).values({
-    tenantId, type: "ACQUISITION", provider: "website_form", status: "CONNECTED", mode: "FIXTURE",
-    displayName: "Website Contact Form", capabilities: ["RECEIVE_FORM"], configuration: { formIds: refs.formIds },
-  });
+  const [websiteConnector] = await db
+    .insert(connectors)
+    .values({
+      tenantId, type: "ACQUISITION", provider: "website_form", status: "CONNECTED", mode: "FIXTURE",
+      displayName: "Website Contact Form", capabilities: ["RECEIVE_FORM"], configuration: { formIds: refs.formIds, ...(refs.websiteIntake ?? {}) },
+    })
+    .returning();
+  if (refs.websiteIntake) {
+    // Closed door: the website's own server sends this token in a header; it is never in page JavaScript.
+    await db.insert(connectorSecrets).values({ connectorId: websiteConnector.id, encryptedPayload: encryptSecret({ intakeToken: refs.identifiers.intakeToken }) });
+  }
 
   // GBP is aggregate location analytics only — SYNC_PERFORMANCE, never
   // RECEIVE_LEAD/RECEIVE_FORM, since it must never create a Patient.

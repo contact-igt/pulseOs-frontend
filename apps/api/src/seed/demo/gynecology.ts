@@ -261,6 +261,7 @@ export async function seedGynecologyTenant(passwordHash: string) {
       wabaId: "FIXTURE_WABA_ID", whatsappAccessToken: "FIXTURE_TEST_ACCESS_TOKEN", appSecret: "FIXTURE_TEST_APP_SECRET",
       verifyToken: "pulseos-fixture-verify-token", runoSecret: "pulseos-fixture-runo-secret", gbpLocationId: "locations/FIXTURE_LOCATION_ID",
       gbpAccessToken: "FIXTURE_GBP_ACCESS_TOKEN", googleKey: "pulseos-fixture-google-key", metaPageAccessToken: "FIXTURE_PAGE_ACCESS_TOKEN",
+      intakeToken: "pulseos-fixture-intake-token",
     },
     phoneNumberId: "FIXTURE_PHONE_NUMBER_ID",
     whatsappNumber: "+91 98450 12345",

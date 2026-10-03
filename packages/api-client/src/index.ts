@@ -47,6 +47,7 @@ import type {
   Branch,
   BranchDoctorRow,
   ServiceMixRow,
+  PerformanceDashboard,
   CampaignFilters,
   CampaignPerformanceRow,
   FrontDeskDashboard,
@@ -280,6 +281,8 @@ export const api = {
   team: (f: DashboardQuery = {}) => request<TeamWorkloadRow[]>(`/dashboard/team${qs(f)}`),
   branchDoctor: (f: DashboardQuery = {}) => request<BranchDoctorRow[]>(`/dashboard/branch-doctor${qs(f)}`),
   serviceMix: (f: DashboardQuery = {}) => request<ServiceMixRow[]>(`/dashboard/service-mix${qs(f)}`),
+  /** The owner's Performance view: funnel, rule-based findings, source / service / team breakdowns (no revenue). */
+  performance: (f: DashboardQuery = {}) => request<PerformanceDashboard>(`/dashboard/performance${qs(f)}`),
   doctorDashboard: (date?: string) => request<DoctorDashboard>(`/dashboard/doctor${toQuery({ date })}`),
   patients: (filters: PatientListFilters = {}) => request<PatientListRow[]>(`/patients${toQuery({ ...filters })}`),
   searchPatients: (q: string) => request<PatientSearchRow[]>(`/patients/search${toQuery({ q })}`),

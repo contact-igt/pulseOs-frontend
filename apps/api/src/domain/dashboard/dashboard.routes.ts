@@ -22,6 +22,7 @@ import {
   type DashboardFilters,
 } from "./dashboard.service.js";
 import { AnalyticsInputError, resolvePeriod } from "../analytics/period.js";
+import { getPerformanceDashboard } from "./performance.service.js";
 
 const emptyToUndefined = (v: unknown) => (v === "" ? undefined : v);
 const opt = <T extends z.ZodTypeAny>(schema: T) => z.preprocess(emptyToUndefined, schema.optional());
@@ -86,6 +87,13 @@ export async function dashboardRoutes(app: FastifyInstance) {
     const filters = await dashboardFilters(request, reply);
     if (!filters) return reply;
     return getTodayStrip(app.db, tenantId, filters, request.sessionUser!.timezone, capabilityEnabled(request.sessionUser!.capabilities, "REVENUE_TRACKING"));
+  });
+
+  // The owner's Performance view: funnel, rule-based findings, source / service / team breakdowns. No revenue, so every hospital has it.
+  app.get("/dashboard/performance", async (request, reply) => {
+    const filters = await dashboardFilters(request, reply);
+    if (!filters) return reply;
+    return getPerformanceDashboard(app.db, request.sessionUser!.tenantId, filters);
   });
 
   app.get("/dashboard/executive", { preHandler: requireCapability("SPEND_ATTRIBUTION") }, async (request, reply) => {

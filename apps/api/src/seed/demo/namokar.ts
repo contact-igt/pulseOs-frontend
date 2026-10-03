@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "../../db/client.js";
-import { followUpTypes, tenantCapabilities, timelineEvents } from "../../db/schema.js";
+import { appointments, followUpTypes, notifications, tenantCapabilities, timelineEvents, treatmentOpportunities } from "../../db/schema.js";
 import { installDepartmentTemplate } from "../../domain/specialty/department.service.js";
 import { OPHTHALMOLOGY_TREATMENTS } from "../../domain/specialty/ophthalmology.templates.js";
 import { ensureFollowUpTypes } from "../../domain/task/followup-type.service.js";
@@ -37,7 +37,11 @@ export const NAMOKAR_PATIENT_NAMES = [
   "Pradeep Joshi", "Farida Shaikh", "Rohit Agarwal", "Lata Pawar", "Deepak Mehta", "Imran Qureshi", "Pooja Naik", "Gauri Kulkarni",
   "Vivek Sharma", "Nikhil Bhosale", "Shilpa Joshi", "Zainab Khan", "Harish Menon", "Rekha Dixit", "Sanjay Rathod", "Madhuri Apte",
   "Prakash Jadhav", "Seema Thakur",
+  "Bhaskar Nene", "Lalita Sawant", "Kiran Deshpande",
 ];
+
+/** The flagship story: a Google enquiry that follows the WHOLE pilot path, with every step on its timeline. */
+export const NAMOKAR_FLAGSHIP_PATIENT_IDX = 1;
 
 const call = (c: Omit<Extract<DemoInteraction, { kind: "call" }>, "kind" | "endpoint">): DemoInteraction => ({ kind: "call", endpoint: "main", ...c });
 
@@ -53,13 +57,16 @@ export const NAMOKAR_JOURNEYS: DemoJourneyConfig[] = [
     treatment: { definitionKey: "CATARACT_SURGERY", label: "Cataract Surgery — Right Eye", status: "ADVISED", estimatedValue: 42_000 },
     interactions: [call({ direction: "inbound", status: "completed", durationSeconds: 238, daysAgo: 0, hour: 8, minute: 0, agent: "Rohan Desai", summary: "Caller asked about cataract surgery and whether a consultation is needed first.", outcome: "Consultation booked for today." })],
   },
-  // Cataract - consultation done earlier, surgery now scheduled.
+  // FLAGSHIP - Cataract. Google enquiry -> phoned and contacted -> consultation booked -> WhatsApp confirmation (fixture) -> arrived,
+  // checked in, waited, seen by the doctor -> consultation completed -> cataract surgery advised -> procedure scheduled -> a
+  // pre-operative follow-up is due. Every step is on the timeline (the extra lines are written below, from the visit's own stamps).
   {
     patientIdx: 1, journeyType: "Cataract", specialtyKey: "CATARACT", source: "google", campaignKey: null, stage: "scheduled",
-    contactedOffsetDays: -6, createdOffsetDays: -6,
+    contactedOffsetDays: -9, createdOffsetDays: -9, createdHour: 10,
     appt: { status: "completed", offsetDays: -3, hour: 11, doctor: "meera", reason: "Cataract consultation" },
-    outcome: { value: "TREATMENT_ADVISED", notes: "Surgery advised for the left eye; patient agreed." },
-    treatment: { definitionKey: "CATARACT_SURGERY", label: "Cataract Surgery — Left Eye", status: "SCHEDULED", estimatedValue: 42_000, decisionOffsetDays: -2, plannedOffsetDays: 5 },
+    outcome: { value: "TREATMENT_ADVISED", notes: "Cataract surgery advised for the left eye; the patient agreed and a date was fixed." },
+    treatment: { definitionKey: "CATARACT_SURGERY", label: "Cataract Surgery — Left Eye", status: "SCHEDULED", estimatedValue: 42_000, decisionOffsetDays: -3, plannedOffsetDays: 5 },
+    interactions: [call({ direction: "outbound", status: "completed", durationSeconds: 215, daysAgo: 9, hour: 10, minute: 40, agent: "Rohan Desai", summary: "Replied to the Google enquiry by phone; the patient has blurred vision in the left eye and wants it checked.", outcome: "Consultation booked." })],
   },
   // B - LASIK. Instagram enquiry -> outgoing follow-up -> booked -> currently Waiting.
   {
@@ -188,7 +195,8 @@ export const NAMOKAR_JOURNEYS: DemoJourneyConfig[] = [
   {
     patientIdx: 21, journeyType: "Laser Vision Correction", specialtyKey: "LASER_VISION_CORRECTION", source: "phone", campaignKey: null, stage: "booked",
     contactedOffsetDays: -2, createdOffsetDays: -3,
-    appt: { status: "confirmed", offsetDays: 2, hour: 12, doctor: "meera", reason: "LASIK screening" },
+    // Booked but not yet confirmed (the others are confirmed), so both "Appointment booked" and "confirmed" are on screen.
+    appt: { status: "scheduled", offsetDays: 2, hour: 12, doctor: "meera", reason: "LASIK screening" },
   },
   // Seen yesterday; no treatment needed.
   {
@@ -212,7 +220,69 @@ export const NAMOKAR_JOURNEYS: DemoJourneyConfig[] = [
     patientIdx: 25, journeyType: "Laser Vision Correction", specialtyKey: "LASER_VISION_CORRECTION", source: "meta", campaignKey: null, stage: "contacted",
     contactedOffsetDays: -1, createdOffsetDays: -1,
   },
+  // A website "I am interested" enquiry from yesterday evening that nobody has contacted yet (uncontacted, not new today).
+  {
+    patientIdx: 26, journeyType: "Cataract", specialtyKey: "CATARACT", source: "website", campaignKey: null, stage: "enquiry",
+    contactedOffsetDays: null, createdOffsetDays: -1, createdHour: 18,
+  },
+  // Consultation completed today; the doctor has not recorded an outcome yet (shows under "awaiting outcome").
+  {
+    patientIdx: 27, journeyType: "General Eye Consultation", specialtyKey: "GENERAL_EYE_CONSULTATION", source: "phone", campaignKey: null, stage: "consulted",
+    contactedOffsetDays: -1, createdOffsetDays: -1,
+    appt: { status: "completed", offsetDays: 0, doctor: "meera", reason: "General eye check-up" },
+  },
+  // Consultation completed today with a review / follow-up outcome and its follow-up task.
+  {
+    patientIdx: 28, journeyType: "Oculoplasty", specialtyKey: "OCULOPLASTY", source: "referral", campaignKey: null, stage: "consulted",
+    contactedOffsetDays: -2, createdOffsetDays: -2,
+    appt: { status: "completed", offsetDays: 0, doctor: "anand", reason: "Oculoplasty consultation" },
+    outcome: { value: "FOLLOW_UP_REQUIRED", notes: "Review in a week to check the eyelid swelling." },
+    task: { reason: "missed_follow_up", dueOffsetDays: 6, type: "FOLLOW_UP", notes: "Review after the consultation" },
+  },
 ];
+
+const clockIn = (d: Date) => d.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
+const dayLabel = (d: Date) => d.toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" });
+
+/**
+ * The flagship journey's full trail, from the visit's OWN stamps (so the timeline can never disagree with the appointment):
+ * booked -> WhatsApp confirmation (a FIXTURE: nothing is sent) -> confirmed -> checked in -> waiting -> with doctor -> completed
+ * -> surgery scheduled. Everything is fictional.
+ */
+async function seedFlagshipTrail(i: { tenantId: string; journeyId: string; patientId: string; patientFirstName: string; frontDeskId: string; doctorName: string }) {
+  const [visit] = await db.select().from(appointments).where(eq(appointments.journeyId, i.journeyId)).limit(1);
+  if (!visit?.checkedInAt || !visit.waitingStartedAt || !visit.consultationStartedAt || !visit.completedAt) throw new Error("seed: the flagship visit must carry its full lifecycle stamps");
+  const bookedAt = daysFromNow(-9, 10, 50);
+  const sentAt = new Date(bookedAt.getTime() + 2 * 60_000);
+  const text = `Hello ${i.patientFirstName}, your consultation at ${NAMOKAR_TENANT_NAME} is booked for ${dayLabel(visit.scheduledAt)} at ${clockIn(visit.scheduledAt)} with ${i.doctorName}. Reply YES to confirm.`;
+  const [sent] = await db
+    .insert(notifications)
+    .values({
+      tenantId: i.tenantId, subjectType: "APPOINTMENT", subjectId: visit.id, patientId: i.patientId, journeyId: i.journeyId, channel: "WHATSAPP",
+      subjectAt: visit.scheduledAt, scheduledFor: sentAt, status: "READ", attempts: 1, providerMessageId: "wamid.fixture-namokar-flagship",
+      renderedText: text, idempotencyKey: `seed-flagship-confirmation-${visit.id}`, createdBy: i.frontDeskId,
+      sentAt, deliveredAt: new Date(sentAt.getTime() + 60_000), readAt: new Date(sentAt.getTime() + 9 * 60_000),
+    })
+    .returning();
+  const base = { tenantId: i.tenantId, patientId: i.patientId, journeyId: i.journeyId };
+  const step = (eventType: string, title: string, occurredAt: Date, extra: Partial<typeof timelineEvents.$inferInsert> = {}): typeof timelineEvents.$inferInsert => ({
+    ...base, actorType: "user", eventType, title, occurredAt, relatedEntityType: "appointment", relatedEntityId: visit.id, ...extra,
+  });
+  const [treatment] = await db.select().from(treatmentOpportunities).where(eq(treatmentOpportunities.journeyId, i.journeyId)).limit(1);
+  if (!treatment?.plannedDate) throw new Error("seed: the flagship procedure must be scheduled");
+  await db.insert(timelineEvents).values([
+    step("appointment_created", `Appointment booked · ${dayLabel(visit.scheduledAt)}, ${clockIn(visit.scheduledAt)}`, bookedAt, { actorId: i.frontDeskId, description: "Booked by Rohan Desai" }),
+    step("whatsapp_sent", "WhatsApp confirmation sent (fixture)", sentAt, { actorType: "system", channel: "WHATSAPP", description: text, relatedEntityType: "notification", relatedEntityId: sent!.id }),
+    step("appointment_confirmed", "Appointment confirmed", new Date(sentAt.getTime() + 9 * 60_000), { actorType: "system", description: "The patient replied YES on WhatsApp" }),
+    step("appointment_checked_in", `Checked in · ${clockIn(visit.checkedInAt)}`, visit.checkedInAt, { actorId: i.frontDeskId }),
+    step("appointment_waiting", `Waiting · ${clockIn(visit.waitingStartedAt)}`, visit.waitingStartedAt, { actorId: i.frontDeskId }),
+    step("appointment_with_doctor", `Consultation started · ${clockIn(visit.consultationStartedAt)}`, visit.consultationStartedAt, { actorId: i.frontDeskId }),
+    step("appointment_completed", `Consultation completed · ${clockIn(visit.completedAt)}`, visit.completedAt, { actorId: i.frontDeskId }),
+    step("surgery_scheduled", `Surgery scheduled · ${treatment.treatmentLabel}`, new Date(visit.completedAt.getTime() + 12 * 60_000), {
+      actorId: i.frontDeskId, description: `Planned for ${dayLabel(treatment.plannedDate)} with ${i.doctorName}`, relatedEntityType: "treatment_opportunity", relatedEntityId: treatment.id,
+    }),
+  ]);
+}
 
 export async function seedNamokarTenant(passwordHash: string) {
   assertJourneyConfigsConsistent("namokar", NAMOKAR_JOURNEYS, NAMOKAR_PATIENT_NAMES, new Set(OPHTHALMOLOGY_TREATMENTS.map((t) => t.key)));
@@ -233,7 +303,9 @@ export async function seedNamokarTenant(passwordHash: string) {
     phoneNumberId: "FIXTURE_NAMOKAR_PHONE_NUMBER_ID",
     whatsappNumber: "+91 98100 55200",
     whatsappLabel: "WhatsApp Line",
-    formIds: ["namokar-enquiry-v1"],
+    formIds: ["namokar-enquiry-v1", "namokar-interested"],
+    // The website "I am interested" form is a closed door (fixture token, hospital-specific): see docs/namokar/NAMOKAR_WEBSITE_INTAKE.md.
+    websiteIntake: { requireService: true, fixedSource: "website", allowedOrigins: ["https://www.namokar-eye.example"] },
     metaPageId: "FIXTURE_NAMOKAR_PAGE_ID",
     phoneLines: [
       { key: "main", number: "+91 20 4155 0200", providerRef: "NAMOKAR-TELECALLING", label: "Telecalling Desk", isActive: true, branch: "a" },
@@ -260,7 +332,10 @@ export async function seedNamokarTenant(passwordHash: string) {
   };
 
   const { journeyIds, timelineRows } = await seedJourneys(ctx, NAMOKAR_JOURNEYS);
-  if (timelineRows.length > 0) await db.insert(timelineEvents).values(timelineRows);
+  const flagshipJourneyId = journeyIdForPatient(NAMOKAR_JOURNEYS, journeyIds, NAMOKAR_FLAGSHIP_PATIENT_IDX);
+  // The flagship gets a step-by-step visit timeline below, so the generic one-line visit event is dropped for it (never both).
+  const generalRows = timelineRows.filter((r) => !(r.journeyId === flagshipJourneyId && String(r.eventType).startsWith("appointment_")));
+  if (generalRows.length > 0) await db.insert(timelineEvents).values(generalRows);
 
   const journeyOf = (patientIdx: number) => journeyIdForPatient(NAMOKAR_JOURNEYS, journeyIds, patientIdx);
   const owner = (patientIdx: number) => (patientIdx % 2 === 0 ? coordinator : frontDesk);
@@ -270,6 +345,10 @@ export async function seedNamokarTenant(passwordHash: string) {
   const must = (label: string, r: { ok: boolean; reason?: string }) => {
     if (!r.ok) throw new Error(`seed: ${label} failed (${String(r.reason)})`);
   };
+
+  await seedFlagshipTrail({ tenantId: tenant.id, journeyId: flagshipJourneyId, patientId: patientRows[NAMOKAR_FLAGSHIP_PATIENT_IDX].id, patientFirstName: NAMOKAR_PATIENT_NAMES[NAMOKAR_FLAGSHIP_PATIENT_IDX].split(" ")[0]!, frontDeskId: frontDesk.id, doctorName: staff.doctor.name });
+  // The flagship's pre-operative follow-up: the cataract surgery is booked, someone must still brief the patient.
+  must("flagship pre-operative follow-up", await createFollowUp(db, tenant.id, { id: coordinator.id }, flagshipJourneyId, { followUpTypeId: await typeId("surgery_followup"), dueAt: daysFromNow(4, 10).toISOString(), assignedTo: owner(NAMOKAR_FLAGSHIP_PATIENT_IDX).id, note: "Pre-operative instructions and the fasting reminder before the cataract surgery" }, TZ));
 
   // F - the patient asked for a callback tomorrow at 11:00.
   must("callback tomorrow", await createTask(db, tenant.id, owner(5).id, { patientId: patientRows[5].id, journeyId: journeyOf(5), type: "CALLBACK", assignedTo: owner(5).id, dueAt: daysFromNow(1, 11).toISOString(), notes: "Caller asked to be rung tomorrow morning after her son is home" }, TZ));

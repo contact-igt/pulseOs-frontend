@@ -66,14 +66,14 @@ describe.skipIf(!DEMO_PASSWORD)("Namokar Eye & Oculoplasty Centre pilot (seeded)
     expect(services).toEqual(expect.arrayContaining(["Cataract", "Oculoplasty", "Laser Vision Correction", "General Eye Consultation"]));
   });
 
-  it("has a full clinic queue today: 8 appointments in every state", async () => {
+  it("has a full clinic queue today: 10 appointments in every state", async () => {
     const rows = await queryClient`
       select status, count(*)::int as c from appointments
       where tenant_id = ${tenantId} and to_char(scheduled_at at time zone ${tz}, 'YYYY-MM-DD') = ${today} group by status`;
     const by = Object.fromEntries(rows.map((r) => [r.status as string, r.c as number]));
-    expect(by).toMatchObject({ completed: 2, with_doctor: 1, waiting: 1, checked_in: 1, no_show: 1 });
+    expect(by).toMatchObject({ completed: 4, with_doctor: 1, waiting: 1, checked_in: 1, no_show: 1 });
     expect((by.confirmed ?? 0) + (by.scheduled ?? 0)).toBe(2);
-    expect(Object.values(by).reduce((a, b) => a + b, 0)).toBe(8);
+    expect(Object.values(by).reduce((a, b) => a + b, 0)).toBe(10);
   });
 
   it("logged this morning's calls: 4 incoming (1 missed), 5 outgoing (2 not connected)", async () => {
@@ -108,12 +108,13 @@ describe.skipIf(!DEMO_PASSWORD)("Namokar Eye & Oculoplasty Centre pilot (seeded)
 
     const strip = (await get("/dashboard/today")).json();
     expect(strip.newEnquiries).toBeGreaterThanOrEqual(8);
-    expect(strip.appointmentsToday).toBe(8);
+    expect(strip.appointmentsToday).toBe(10);
     expect(strip.waitingNow).toBe(2); // checked in + waiting
-    expect(strip.consultationsCompleted).toBe(2);
+    expect(strip.consultationsCompleted).toBe(4);
+    expect(strip.attributedRevenue, "Namokar runs no revenue workflow: no figure, not a zero").toBeNull();
 
     const desk = (await get("/front-desk")).json();
-    expect(desk.today).toHaveLength(8);
+    expect(desk.today).toHaveLength(10);
     expect(desk.noShows).toHaveLength(1);
 
     expect(await queryClient`select 1 from journeys where tenant_id = ${tenantId} and stage = 'lost'`).not.toHaveLength(0);

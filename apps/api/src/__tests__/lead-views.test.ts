@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { LeadRow } from "@pulseos/types";
+import { LEAD_VIEWS, type LeadRow } from "@pulseos/types";
 import { computeLeadsWorkspace, type LeadFact } from "../domain/lead/lead-views.js";
 
 const TODAY = "2026-10-02";
@@ -193,4 +193,24 @@ describe("Overdue and a date range apply to the SAME follow-up", () => {
     expect(run([f], { view: "follow_up_due", due: "overdue" }).rows).toHaveLength(1); // no range: the Sept task is overdue
   });
 });
+});
+
+describe("Missed Visit: a derived view, not a stored status", () => {
+  const missed = [
+    fact("noshow", { row: { operationalStatus: "no_show", stage: "booked", leadStatus: "uncontacted" } }),
+    fact("cancelled", { row: { operationalStatus: "cancelled", stage: "booked", leadStatus: "uncontacted" } }),
+    fact("rebooked", { row: { operationalStatus: "appointment_booked", stage: "booked", leadStatus: "appointment_booked" }, bookedPending: true }),
+    fact("seen", { row: { operationalStatus: "consultation_completed", stage: "consulted", leadStatus: "uncontacted" } }),
+    fact("fresh", { row: { operationalStatus: null } }),
+    fact("lost-noshow", { row: { operationalStatus: "closed", stage: "lost", leadStatus: "lost" } }),
+  ];
+
+  it("lists a no-show or cancelled visit that has not been rebooked, and nothing else", () => {
+    expect(ids(run(missed, { view: "missed_visit" }))).toEqual(["cancelled", "noshow"]);
+  });
+
+  it("its count equals its rows, and it is offered as a view", () => {
+    expect(run(missed).counts.missed_visit).toBe(2);
+    expect(LEAD_VIEWS.map((v) => v.key)).toContain("missed_visit");
+  });
 });

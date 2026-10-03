@@ -67,6 +67,9 @@ function matches(view: LeadView, f: LeadFact, i: LeadsWorkspaceInput): boolean {
       return !lost && f.appointmentDays.includes(i.today);
     case "appointment_booked":
       return !lost && f.bookedPending && (!range || inRange(f.createdDay, range));
+    case "missed_visit":
+      // Derived from the visit itself (no-show / cancelled, and nothing booked since), never a stored status.
+      return !lost && (f.row.operationalStatus === "no_show" || f.row.operationalStatus === "cancelled") && (!range || inRange(f.createdDay, range));
     case "no_response":
       return f.row.leadStatus === "no_response" && (!range || inRange(f.createdDay, range));
     case "converted":

@@ -2563,7 +2563,7 @@ export type ReportExportKind = "summary" | "enquiries" | "appointments" | "follo
 // never stored statuses. Every count shown next to a view is produced by the same predicate that selects its rows.
 // ---------------------------------------------------------------------------
 
-export type LeadView = "all" | "today" | "new_today" | "uncontacted" | "follow_up_due" | "appointments_today" | "appointment_booked" | "no_response" | "converted" | "lost";
+export type LeadView = "all" | "today" | "new_today" | "uncontacted" | "follow_up_due" | "appointments_today" | "appointment_booked" | "missed_visit" | "no_response" | "converted" | "lost";
 
 export const LEAD_VIEWS: { key: LeadView; label: string; hint: string }[] = [
   { key: "all", label: "All", hint: "Every lead" },
@@ -2573,6 +2573,7 @@ export const LEAD_VIEWS: { key: LeadView; label: string; hint: string }[] = [
   { key: "follow_up_due", label: "Follow-up Due", hint: "An open follow-up due today or overdue" },
   { key: "appointments_today", label: "Appointments Today", hint: "A visit scheduled today" },
   { key: "appointment_booked", label: "Appointment Booked", hint: "A visit booked that has not happened yet" },
+  { key: "missed_visit", label: "Missed Visit", hint: "A no-show or cancelled visit that has not been rebooked" },
   { key: "no_response", label: "No Response", hint: "Contacted, no reply, nothing scheduled" },
   { key: "converted", label: "Converted", hint: "Treatment accepted or completed" },
   { key: "lost", label: "Lost", hint: "Closed as lost" },
@@ -3023,4 +3024,105 @@ export function deriveOperationalStatus(i: OperationalStatusInput): OperationalS
   if (last?.status === "no_show") return "no_show";
   if (last?.status === "cancelled") return "cancelled";
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Owner performance view (Command Centre > Performance). Everything here is counted from real rows - journeys opened in the
+// chosen hospital-time period and what happened to them - and carries no revenue, so it exists for every hospital. Insights
+// and the alert are RULES over those counts (a threshold and a comparison), labelled as such; nothing here is AI or a forecast.
+// ---------------------------------------------------------------------------
+
+export const PERFORMANCE_FUNNEL_STEPS = [
+  { key: "enquiries", label: "Enquiries" },
+  { key: "contacted", label: "Contacted" },
+  { key: "booked", label: "Appointment booked" },
+  { key: "attended", label: "Attended" },
+  { key: "consulted", label: "Consultation completed" },
+  { key: "advised", label: "Procedure advised" },
+  { key: "scheduled", label: "Procedure scheduled" },
+] as const;
+export type PerformanceStepKey = (typeof PERFORMANCE_FUNNEL_STEPS)[number]["key"];
+
+export interface PerformanceFunnelStep {
+  key: PerformanceStepKey;
+  label: string;
+  /** Journeys (from this period's enquiries) that reached at least this step. */
+  count: number;
+  /** count / previous step's count, 0-100; null for the first step or when the previous step is empty. */
+  conversionFromPrevious: number | null;
+  /** Journeys that reached the previous step but not this one. */
+  droppedBefore: number;
+}
+
+export interface PerformanceBreakdownRow {
+  key: string;
+  label: string;
+  enquiries: number;
+  contacted: number;
+  booked: number;
+  attended: number;
+  consulted: number;
+  advised: number;
+  scheduled: number;
+}
+
+export interface PerformanceStaffRow {
+  userId: string;
+  name: string;
+  role: Role;
+  /** Enquiries (opened in the period) this person owns. */
+  owned: number;
+  contacted: number;
+  booked: number;
+  callsLogged: number;
+  followUpsDone: number;
+  /** Follow-ups assigned to them that are overdue right now (not limited to the period). */
+  overdueNow: number;
+}
+
+export type PerformanceInsightKey = "uncontacted" | "overdue_followups" | "no_shows" | "no_outcome" | "undecided" | "lost";
+export interface PerformanceInsight {
+  key: PerformanceInsightKey;
+  /** A plain sentence, e.g. "14 enquiries have not yet been contacted". */
+  message: string;
+  count: number;
+  /** Where to act on it (an existing view). */
+  href: string;
+  severity: "attention" | "info";
+}
+
+export type PerformanceAlertKind = "enquiries_down" | "contact_rate_low" | "no_show_rate_high";
+export interface PerformanceAlert {
+  kind: PerformanceAlertKind;
+  message: string;
+  /** The numbers behind it, so it can be checked. */
+  detail: string;
+  /** Always "Rule-based alert": a fixed threshold over the counts above, never a model. */
+  label: "Rule-based alert";
+}
+
+export interface PerformanceDashboard {
+  period: DashboardPeriod | null;
+  funnel: PerformanceFunnelStep[];
+  kpis: {
+    enquiries: number;
+    contacted: number;
+    booked: number;
+    attended: number;
+    consulted: number;
+    noShows: number;
+    advised: number;
+    scheduled: number;
+    /** attended / booked, 0-100 (null with nothing booked). */
+    attendanceRate: number | null;
+    /** consulted / attended, 0-100. */
+    consultationCompletionRate: number | null;
+    /** scheduled / enquiries, 0-100. */
+    conversionRate: number | null;
+  };
+  insights: PerformanceInsight[];
+  alert: PerformanceAlert | null;
+  sources: PerformanceBreakdownRow[];
+  services: PerformanceBreakdownRow[];
+  staff: PerformanceStaffRow[];
 }
