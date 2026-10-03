@@ -598,6 +598,9 @@ const CONVERSATION_CONFIGS: ConversationConfig[] = [
 export interface OphthalmologyVariant {
   environment: "ophthalmology" | "ophthalmology-v1";
   tenantName: string;
+  /** The address of this demo hospital's own sign-in page (/login/<slug>) and the short name shown on it. */
+  loginSlug: string;
+  loginShortName: string;
   edition: Edition;
   /** Upper-case tag that keeps each tenant's fixture secrets, page ids and provider refs unique. */
   tag: string;
@@ -605,12 +608,12 @@ export interface OphthalmologyVariant {
   formId: string;
 }
 
-export const OPHTHALMOLOGY_V2: OphthalmologyVariant = { environment: "ophthalmology", tenantName: "PulseOS Ophthalmology Demo", edition: "BETA_V2_GROWTH", tag: "EYE", formId: "eye-care-enquiry-v1" };
-export const OPHTHALMOLOGY_V1: OphthalmologyVariant = { environment: "ophthalmology-v1", tenantName: "PulseOS Ophthalmology V1 Demo", edition: "BETA_V1_CORE", tag: "EYEV1", formId: "eye-care-enquiry-v1core" };
+export const OPHTHALMOLOGY_V2: OphthalmologyVariant = { environment: "ophthalmology", loginSlug: "eye-demo", loginShortName: "Eye Demo", tenantName: "PulseOS Ophthalmology Demo", edition: "BETA_V2_GROWTH", tag: "EYE", formId: "eye-care-enquiry-v1" };
+export const OPHTHALMOLOGY_V1: OphthalmologyVariant = { environment: "ophthalmology-v1", loginSlug: "eye-v1-demo", loginShortName: "Eye V1 Demo", tenantName: "PulseOS Ophthalmology V1 Demo", edition: "BETA_V1_CORE", tag: "EYEV1", formId: "eye-care-enquiry-v1core" };
 
 export async function seedOphthalmologyTenant(passwordHash: string, variant: OphthalmologyVariant = OPHTHALMOLOGY_V2) {
   assertJourneyConfigsConsistent("ophthalmology", JOURNEY_CONFIGS, OPHTHALMOLOGY_PATIENT_NAMES, new Set(OPHTHALMOLOGY_TREATMENTS.map((t) => t.key)));
-  const tenant = await createDemoTenant(variant.tenantName, variant.edition);
+  const tenant = await createDemoTenant(variant.tenantName, variant.edition, { loginSlug: variant.loginSlug, login: { shortName: variant.loginShortName, badgeLabel: variant.edition === "BETA_V1_CORE" ? "Beta V1" : "Beta V2" } });
   // The same install a hospital admin runs from Settings: department, services, fields, catalogue, lead sources.
   await installDepartmentTemplate(db, tenant.id, "ophthalmology");
 

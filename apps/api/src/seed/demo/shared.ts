@@ -20,6 +20,7 @@ import {
   revenueEvents,
   specialtyTemplates,
   tasks,
+  tenantLoginConfigs,
   tenants,
   timelineEvents,
   treatmentDefinitions,
@@ -213,8 +214,18 @@ function lifecycleStamps(status: string, scheduledAt: Date, ordinal: number) {
   }
 }
 
-export async function createDemoTenant(name: string, edition: Edition = "BETA_V2_GROWTH", opts: { loginSlug?: string } = {}) {
+/** The safe words of a hospital's own sign-in page (see tenant_login_configs). Every field is optional; defaults cover the rest. */
+export interface DemoLoginConfig {
+  shortName?: string;
+  headline?: string;
+  tagline?: string;
+  badgeLabel?: string;
+  supportText?: string;
+}
+
+export async function createDemoTenant(name: string, edition: Edition = "BETA_V2_GROWTH", opts: { loginSlug?: string; login?: DemoLoginConfig } = {}) {
   const [tenant] = await db.insert(tenants).values({ name, timezone: "Asia/Kolkata", edition, loginSlug: opts.loginSlug ?? null }).returning();
+  if (opts.loginSlug) await db.insert(tenantLoginConfigs).values({ tenantId: tenant.id, ...opts.login });
   return tenant;
 }
 

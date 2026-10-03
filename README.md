@@ -4,7 +4,7 @@ Patient Engagement and Revenue Intelligence Operating System for Indian hospital
 the design system live in [CLAUDE.md](CLAUDE.md); demo data in [docs/demo-environments.md](docs/demo-environments.md).
 
 **Namokar Eye & Oculoplasty Centre pilot (V1):** own sign-in page `/login/namokar`, revenue tracking off, owner Performance view.
-Start at [docs/namokar/README.md](docs/namokar/README.md) (workflow, roles, daily SOP, quick start, routing, website intake).
+Every hospital workspace has its own branded sign-in (`/login/<slug>`, [architecture](docs/tenant-branded-login.md)). Start at [docs/namokar/README.md](docs/namokar/README.md) (workflow, roles, daily SOP, quick start, routing, website intake).
 
 ## Requirements
 

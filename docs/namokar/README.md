@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Pilot** | **ENABLED** — a dedicated tenant in the same PulseOS app (no fork). Sign-in page: `/login/namokar` |
+| **Pilot** | **ENABLED** — a dedicated tenant in the same PulseOS app (no fork). Sign-in page: `/login/namokar`. Each PulseOS hospital workspace has a dedicated branded login URL; Namokar uses the standard system ([architecture](../tenant-branded-login.md)). |
 | **Revenue** | **DISABLED** for this hospital (capability `REVENUE_TRACKING` is off by the hospital's own setting; nothing is deleted for other hospitals) |
 | **Runo (calls)** | Configured as a **FIXTURE** (nothing real is contacted). Manual call logging works today. Live Runo needs the hospital's Runo credentials in Integrations. |
 | **WhatsApp notifications** | **FIXTURE** (confirmations are recorded, not sent). Live sending needs the hospital's WhatsApp Business details in Integrations. WhatsApp Inbox and Conversation Intelligence are **off**. |

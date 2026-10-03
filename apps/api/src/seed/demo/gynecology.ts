@@ -242,7 +242,7 @@ export const JOURNEY_CONFIGS: DemoJourneyConfig[] = [
 ];
 
 export async function seedGynecologyTenant(passwordHash: string) {
-  const tenant = await createDemoTenant("PulseOS Gynecology Demo");
+  const tenant = await createDemoTenant("PulseOS Gynecology Demo", "BETA_V2_GROWTH", { loginSlug: "gyn-demo", login: { shortName: "Gynecology Demo", badgeLabel: "Beta V2" } });
   // The same install a hospital admin runs from Settings: department, services, fields, catalogue, lead sources.
   await installDepartmentTemplate(db, tenant.id, "gynecology");
 

@@ -260,6 +260,13 @@
       "when": 1791029045456,
       "tag": "0036_consultation_outcome_declined",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1791050207894,
+      "tag": "0037_tenant_login_configs",
+      "breakpoints": true
     }
   ]
 }

@@ -2,7 +2,7 @@ import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { SIGNUP_DEPARTMENTS, SIGNUP_DISCOVERY_SOURCES, SIGNUP_EDITIONS, SIGNUP_INDUSTRIES, SIGNUP_ORGANIZATION_TYPES, type Edition } from "@pulseos/types";
 import type { Db } from "../../db/client.js";
-import { branches, tenantProfiles, tenants, users } from "../../db/schema.js";
+import { branches, tenantLoginConfigs, tenantProfiles, tenants, users } from "../../db/schema.js";
 import { installDepartmentTemplate } from "../specialty/department.service.js";
 import { normalizePhone } from "../patient/phone.js";
 import { hashPassword } from "./auth.service.js";
@@ -49,8 +49,39 @@ const EDITION: Record<SignupPayload["edition"], Edition> = { V1: "BETA_V1_CORE",
 /** Departments that already have an installable template; the others are recorded on the profile only. */
 const TEMPLATE_BY_DEPARTMENT: Record<string, string> = { Ophthalmology: "ophthalmology", Gynaecology: "gynecology" };
 
+/** Words that must never be a hospital's sign-in address (they are, or could become, real routes). */
+const RESERVED_SLUGS = new Set(["admin", "api", "app", "auth", "login", "logout", "signup", "sign-up", "dev", "developer", "demo", "test", "www", "settings", "static", "public", "pulseos", "support", "help", "billing", "root"]);
+
+/** "ABC Eye Hospital" -> "abc-eye-hospital": lower-case words, at most 38 characters, starting with a letter. */
+export function slugifyWorkspaceName(name: string): string {
+  const base = name
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 30)
+    .replace(/-+$/g, "");
+  let slug = /^[a-z]/.test(base) ? base : `h-${base}`;
+  if (slug.length < 3 || RESERVED_SLUGS.has(slug)) slug = `${slug || "hospital"}-workspace`;
+  return slug.slice(0, 38).replace(/-+$/g, "");
+}
+
+/** The first free slug for this name: the plain one, then -2, -3 ... (inside the sign-up transaction, under a lock, so two sign-ups cannot pick the same). */
+async function uniqueSlug(tx: Pick<Db, "select" | "execute">, name: string): Promise<string> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext('signup-slug'))`);
+  const base = slugifyWorkspaceName(name);
+  for (let n = 1; n <= 50; n++) {
+    const candidate = n === 1 ? base : `${base.slice(0, 38 - String(n).length - 1)}-${n}`;
+    const [taken] = await tx.select({ id: tenants.id }).from(tenants).where(eq(tenants.loginSlug, candidate)).limit(1);
+    if (!taken) return candidate;
+  }
+  return `${base.slice(0, 29)}-${Date.now().toString(36)}`.slice(0, 38);
+}
+
 export type SignupResult =
-  | { ok: true; userId: string; tenantId: string; template: "installed" | "none" | "failed" }
+  | { ok: true; userId: string; tenantId: string; template: "installed" | "none" | "failed"; loginSlug: string }
   | { ok: false; reason: "email_in_use" | "invalid_phone" };
 
 /**
@@ -70,7 +101,10 @@ export async function signUpHospital(db: Db, input: SignupPayload, opts: { devVi
     const [taken] = await tx.select({ id: users.id }).from(users).where(sql`lower(${users.email}) = ${input.email}`).limit(1);
     if (taken) return null;
 
-    const [tenant] = await tx.insert(tenants).values({ name: input.organizationName, timezone: "Asia/Kolkata", edition: EDITION[input.edition] }).returning();
+    const loginSlug = await uniqueSlug(tx, input.organizationName);
+    const [tenant] = await tx.insert(tenants).values({ name: input.organizationName, timezone: "Asia/Kolkata", edition: EDITION[input.edition], loginSlug }).returning();
+    // The hospital's own sign-in page exists from this moment. The row holds only optional words; the defaults cover the rest.
+    await tx.insert(tenantLoginConfigs).values({ tenantId: tenant!.id });
     const [branch] = await tx.insert(branches).values({ tenantId: tenant!.id, name: `${input.organizationName} – Main`, city: input.city }).returning();
     const [user] = await tx
       .insert(users)
@@ -95,7 +129,7 @@ export async function signUpHospital(db: Db, input: SignupPayload, opts: { devVi
       discoverySource: input.discoverySource,
       discoveryNotes: input.discoveryNotes ?? null,
     });
-    return { tenantId: tenant!.id, userId: user!.id };
+    return { tenantId: tenant!.id, userId: user!.id, loginSlug };
   });
   if (!created) return { ok: false, reason: "email_in_use" };
 

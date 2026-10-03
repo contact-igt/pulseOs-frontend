@@ -69,6 +69,7 @@ export async function destroyTestTenant(db: Db, t: TestTenant): Promise<void> {
   const tenant = sql`${t.tenantId}::uuid`;
   const statements = [
     sql`delete from tenant_capabilities where tenant_id = ${tenant}`,
+    sql`delete from tenant_login_configs where tenant_id = ${tenant}`,
     sql`delete from activity_log where tenant_id = ${tenant}`,
     sql`delete from ads_daily_facts where tenant_id = ${tenant}`,
     sql`delete from ads_sync_runs where tenant_id = ${tenant}`,

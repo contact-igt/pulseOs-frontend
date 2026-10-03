@@ -37,6 +37,7 @@ import {
   leadSources,
   specialtyTemplates,
   tenants,
+  tenantLoginConfigs,
   tenantProfiles,
   tenantCapabilities,
   activityLog,
@@ -118,6 +119,7 @@ async function main() {
   await db.delete(departments);
   await db.delete(leadSources);
   await db.delete(tenantSettings);
+  await db.delete(tenantLoginConfigs);
   await db.delete(tenantProfiles);
   await db.delete(tenants);
 

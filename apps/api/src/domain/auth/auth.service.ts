@@ -2,8 +2,8 @@ import { resolveTenantCapabilities } from "../capability/capability.service.js";
 import { hash, verify } from "@node-rs/argon2";
 import { and, eq } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
-import { users, sessions, tenants, branches, tenantProfiles } from "../../db/schema.js";
-import { DEFAULT_EDITION, type DevEnvironment, type Role } from "@pulseos/types";
+import { users, sessions, tenants, branches, tenantLoginConfigs, tenantProfiles } from "../../db/schema.js";
+import { DEFAULT_EDITION, DEFAULT_LOGIN_SUPPORT_TEXT, DEFAULT_LOGIN_TAGLINE, LOGIN_LOGO_PATH_PATTERN, type DevEnvironment, type Role, type TenantLoginBranding } from "@pulseos/types";
 import { DEFAULT_DEMO_ENVIRONMENT, DEMO_ENVIRONMENTS, DEMO_LOGIN_ROLES, demoEmailForRole, type DemoEnvironmentKey } from "./demo-environments.js";
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 12;
@@ -96,10 +96,30 @@ export async function loginToTenant(db: Db, slug: string, email: string, passwor
   return createSessionFor(db, row.user, remember);
 }
 
-/** What the branded sign-in page may show: the hospital's name, by slug. Nothing else about a hospital is public. */
-export async function getTenantBranding(db: Db, slug: string): Promise<{ slug: string; name: string } | null> {
-  const [t] = await db.select({ name: tenants.name }).from(tenants).where(eq(tenants.loginSlug, slug)).limit(1);
-  return t ? { slug, name: t.name } : null;
+/**
+ * What the branded sign-in page may show, by slug: display words and one logo file. Nothing else about a hospital is public (no ids,
+ * edition, users or settings). Defaults fill every gap, so a missing logo or tagline can never block a sign-in; a stored logo is
+ * re-checked against the allowed shape on the way out as well as by the database.
+ */
+export async function getTenantBranding(db: Db, slug: string): Promise<TenantLoginBranding | null> {
+  const [row] = await db
+    .select({ name: tenants.name, c: tenantLoginConfigs })
+    .from(tenants)
+    .leftJoin(tenantLoginConfigs, eq(tenantLoginConfigs.tenantId, tenants.id))
+    .where(eq(tenants.loginSlug, slug))
+    .limit(1);
+  if (!row) return null;
+  const c = row.c;
+  return {
+    slug,
+    displayName: row.name,
+    shortName: c?.shortName ?? row.name.trim().split(/\s+/)[0] ?? row.name,
+    logoPath: c?.logoPath && LOGIN_LOGO_PATH_PATTERN.test(c.logoPath) ? c.logoPath : null,
+    headline: c?.headline ?? null,
+    tagline: c?.tagline ?? DEFAULT_LOGIN_TAGLINE,
+    badgeLabel: c?.badgeLabel ?? null,
+    supportText: c?.supportText ?? DEFAULT_LOGIN_SUPPORT_TEXT,
+  };
 }
 
 // Development convenience only — see auth.routes.ts for the env guard that

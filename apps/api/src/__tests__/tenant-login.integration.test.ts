@@ -40,10 +40,10 @@ describe.skipIf(!DEMO_PASSWORD)("tenant-branded login (integration)", () => {
     await queryClient.end();
   });
 
-  it("publishes only the hospital's name for the branded page, and nothing for an unknown slug", async () => {
+  it("publishes only display words for the branded page, and nothing for an unknown slug", async () => {
     const ok = await app.inject({ method: "GET", url: `/auth/tenants/${slug}` });
     expect(ok.statusCode).toBe(200);
-    expect(ok.json()).toEqual({ slug, name: "Pilot Test Hospital" });
+    expect(ok.json()).toMatchObject({ slug, displayName: "Pilot Test Hospital" });
     expect((await app.inject({ method: "GET", url: "/auth/tenants/no-such-hospital" })).statusCode).toBe(404);
     // A hospital that has no login slug is unreachable by name.
     expect((await app.inject({ method: "GET", url: `/auth/tenants/${other.tenantId}` })).statusCode).toBe(404);

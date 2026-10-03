@@ -3128,3 +3128,30 @@ export interface PerformanceDashboard {
   services: PerformanceBreakdownRow[];
   staff: PerformanceStaffRow[];
 }
+
+// ---------------------------------------------------------------------------
+// Tenant-branded sign-in. ONE approved PulseOS page serves every hospital (/login/<slug>); only the SAFE structured data below
+// differs. Structured data only: no HTML, no CSS, no script, no colours. This is everything the public endpoint may say.
+// ---------------------------------------------------------------------------
+
+export const DEFAULT_LOGIN_TAGLINE = "Every enquiry, call, appointment and follow-up in one place.";
+export const DEFAULT_LOGIN_SUPPORT_TEXT = "Need help? Contact your administrator.";
+
+/** A logo is a file of this app's own /brand folder (so it is served from the same origin, never an outside URL). */
+export const LOGIN_LOGO_PATH_PATTERN = /^\/brand\/[a-z0-9][a-z0-9._-]{0,80}\.(svg|png|webp)$/;
+
+export interface TenantLoginBranding {
+  slug: string;
+  /** The hospital's full name (tenants.name). */
+  displayName: string;
+  /** The short name used in "PulseOS × Namokar" and "Namokar's PulseOS workspace". */
+  shortName: string;
+  /** An approved client logo (/brand/…); null = the typographic fallback. */
+  logoPath: string | null;
+  /** The large line on the brand panel; null = the full name. */
+  headline: string | null;
+  tagline: string;
+  /** The small badge in the sign-in card ("V1 Pilot"); null = no badge. */
+  badgeLabel: string | null;
+  supportText: string;
+}

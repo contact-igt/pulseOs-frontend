@@ -136,7 +136,7 @@ export async function authRoutes(app: FastifyInstance) {
     if (!result.ok) return reply.status(result.reason === "email_in_use" ? 409 : 400).send({ error: result.reason });
     const session = await createSessionForUserId(app.db, result.userId, false);
     setSessionCookie(reply, session.sessionId, session.expiresAt, false);
-    return reply.status(201).send({ user: session.user, workspace: { template: result.template } });
+    return reply.status(201).send({ user: session.user, workspace: { template: result.template, loginPath: `/login/${result.loginSlug}` } });
   });
 
   // Development-only convenience — see devLoginEnabled() above. Registered

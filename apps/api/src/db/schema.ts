@@ -51,6 +51,27 @@ export const tenantProfiles = pgTable("tenant_profiles", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// What a hospital's own sign-in page says (/login/<slug>). SAFE STRUCTURED DATA only - short text and one logo file of this app's own
+// /brand folder; never HTML, CSS, script or a colour. Every column is optional: a hospital with no row (or null columns) gets the
+// defaults, so a missing logo or tagline can never block anyone from signing in. Bounded by CHECKs, so a page cannot be flooded.
+export const tenantLoginConfigs = pgTable("tenant_login_configs", {
+  tenantId: uuid("tenant_id").primaryKey().references(() => tenants.id),
+  shortName: text("short_name"),
+  logoPath: text("logo_path"),
+  headline: text("headline"),
+  tagline: text("tagline"),
+  badgeLabel: text("badge_label"),
+  supportText: text("support_text"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  shortNameLen: check("tenant_login_configs_short_name_len", sql`${t.shortName} is null or char_length(${t.shortName}) between 1 and 40`),
+  logoPathShape: check("tenant_login_configs_logo_path_shape", sql`${t.logoPath} is null or ${t.logoPath} ~ '^/brand/[a-z0-9][a-z0-9._-]{0,80}\\.(svg|png|webp)$'`),
+  headlineLen: check("tenant_login_configs_headline_len", sql`${t.headline} is null or char_length(${t.headline}) between 1 and 120`),
+  taglineLen: check("tenant_login_configs_tagline_len", sql`${t.tagline} is null or char_length(${t.tagline}) between 1 and 160`),
+  badgeLen: check("tenant_login_configs_badge_len", sql`${t.badgeLabel} is null or char_length(${t.badgeLabel}) between 1 and 24`),
+  supportLen: check("tenant_login_configs_support_len", sql`${t.supportText} is null or char_length(${t.supportText}) between 1 and 160`),
+}));
+
 // A tenant's OWN capability switches. A row overrides the edition's default for that capability (on or off); no row
 // means "use the edition default". The runtime authority for what a tenant can do is edition default + these rows.
 export const tenantCapabilities = pgTable("tenant_capabilities", {

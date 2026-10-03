@@ -286,7 +286,12 @@ async function seedFlagshipTrail(i: { tenantId: string; journeyId: string; patie
 
 export async function seedNamokarTenant(passwordHash: string) {
   assertJourneyConfigsConsistent("namokar", NAMOKAR_JOURNEYS, NAMOKAR_PATIENT_NAMES, new Set(OPHTHALMOLOGY_TREATMENTS.map((t) => t.key)));
-  const tenant = await createDemoTenant(NAMOKAR_TENANT_NAME, "BETA_V1_CORE", { loginSlug: NAMOKAR_LOGIN_SLUG });
+  const tenant = await createDemoTenant(NAMOKAR_TENANT_NAME, "BETA_V1_CORE", {
+    loginSlug: NAMOKAR_LOGIN_SLUG,
+    // The approved Namokar sign-in: "PulseOS × Namokar", the full name, one operational line, the V1 Pilot badge. No logo yet (none is approved):
+    // the page uses the typographic fallback. Add an approved mark as /brand/<file> and set logo_path - nothing else changes.
+    login: { shortName: "Namokar", tagline: "Every enquiry, call, appointment and follow-up for your patients, in one place.", badgeLabel: "V1 Pilot" },
+  });
   // Namokar does not run a revenue workflow. This is the hospital's own switch (not an edition default), so the V1 defaults
   // can never turn it back on: no revenue figures, no payments, no revenue-based ROAS anywhere.
   await db.insert(tenantCapabilities).values({ tenantId: tenant.id, capability: "REVENUE_TRACKING", enabled: false });
