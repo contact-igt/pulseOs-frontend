@@ -1,6 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { and, eq } from "drizzle-orm";
 import { hasPermission } from "@pulseos/types";
+import { appointments } from "../../db/schema.js";
 import { requirePermission } from "../auth/permission.middleware.js";
 import { diffDays, isRealDate } from "../../lib/hospital-time.js";
 import {
@@ -124,6 +126,27 @@ export async function appointmentRoutes(app: FastifyInstance) {
     return getFrontDeskDashboard(app.db, tenantId, parsed.data.branchId, new Date(), parsed.data.date);
   });
 
+  // Finishing a consultation: Front Desk, Coordinator, Admin and Super Admin (MANAGE_APPOINTMENTS) for any visit, and a Doctor for
+  // the visit that is with them and nobody else's. Everything else about a visit (check-in, waiting, sending to the doctor)
+  // stays with MANAGE_APPOINTMENTS.
+  app.patch("/appointments/:id/complete", async (request, reply) => {
+    const user = request.sessionUser!;
+    const { id } = request.params as { id: string };
+    if (!uuid.safeParse(id).success) return reply.status(404).send({ error: "appointment_not_found" });
+    const canManage = hasPermission(user.role, "MANAGE_APPOINTMENTS");
+    if (!canManage && !hasPermission(user.role, "COMPLETE_CONSULTATION")) return reply.status(403).send({ error: "forbidden", requiredPermission: "MANAGE_APPOINTMENTS" });
+    if (!canManage) {
+      const [own] = await app.db.select({ doctorUserId: appointments.doctorUserId }).from(appointments).where(and(eq(appointments.tenantId, user.tenantId), eq(appointments.id, id))).limit(1);
+      if (!own) return reply.status(404).send({ error: "appointment_not_found" });
+      if (own.doctorUserId !== user.id) return reply.status(403).send({ error: "forbidden" });
+    }
+    const parsed = completeBody.safeParse(request.body ?? undefined);
+    if (!parsed.success) return reply.status(400).send({ error: "invalid_request" });
+    const result = await completeAppointment(app.db, user.tenantId, id, { id: user.id, canManageTreatment: hasPermission(user.role, "MANAGE_TREATMENT") }, parsed.data ?? {}, user.timezone);
+    if (!result.ok) return reply.status(REASON_STATUS[result.reason] ?? 400).send({ error: result.reason });
+    return result;
+  });
+
   await app.register(async (manageApp) => {
     manageApp.addHook("preHandler", requirePermission("MANAGE_APPOINTMENTS"));
 
@@ -146,18 +169,6 @@ export async function appointmentRoutes(app: FastifyInstance) {
       const parsed = actionBody.safeParse(request.body);
       if (!parsed.success) return reply.status(400).send({ error: "invalid_request" });
       const result = await applyAppointmentAction(app.db, tenantId, id, actorId, parsed.data, request.sessionUser!.timezone);
-      if (!result.ok) return reply.status(REASON_STATUS[result.reason] ?? 400).send({ error: result.reason });
-      return result;
-    });
-
-    manageApp.patch("/appointments/:id/complete", async (request, reply) => {
-      const tenantId = request.sessionUser!.tenantId;
-      const actorId = request.sessionUser!.id;
-      const { id } = request.params as { id: string };
-      if (!uuid.safeParse(id).success) return reply.status(404).send({ error: "appointment_not_found" });
-      const parsed = completeBody.safeParse(request.body ?? undefined);
-      if (!parsed.success) return reply.status(400).send({ error: "invalid_request" });
-      const result = await completeAppointment(app.db, tenantId, id, { id: actorId, canManageTreatment: hasPermission(request.sessionUser!.role, "MANAGE_TREATMENT") }, parsed.data ?? {}, request.sessionUser!.timezone);
       if (!result.ok) return reply.status(REASON_STATUS[result.reason] ?? 400).send({ error: result.reason });
       return result;
     });

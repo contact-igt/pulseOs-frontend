@@ -302,10 +302,16 @@ describe.skipIf(!DEMO_PASSWORD)("M6 appointment lifecycle, resources, risk and s
       expect(await db.select().from(treatmentOpportunities).where(eq(treatmentOpportunities.journeyId, a.journeyId))).toHaveLength(0);
     });
 
-    it("a Doctor (view-only) cannot complete, and another hospital cannot touch the appointment at all", async () => {
+    it("a Doctor completes only a visit that is with them; another hospital cannot touch the appointment at all", async () => {
+      // A visit with a different doctor (a resource with no login): the logged-in doctor may not complete it.
+      const theirs = await book({ doctorId: loginlessId });
+      await toWithDoctor(theirs.id);
+      expect((await call(t, "DOCTOR", "PATCH", `/appointments/${theirs.id}/complete`)).statusCode).toBe(403);
+      expect((await row(theirs.id)).status).toBe("with_doctor");
+      // Their own visit: allowed (and they still cannot move it through check-in).
       const a = await book();
       await toWithDoctor(a.id);
-      expect((await call(t, "DOCTOR", "PATCH", `/appointments/${a.id}/complete`)).statusCode).toBe(403);
+      expect((await act(a.id, "check_in", undefined, "DOCTOR")).statusCode).toBe(403);
       expect((await call(other, "HOSPITAL_ADMIN", "PATCH", `/appointments/${a.id}/complete`)).statusCode).toBe(404);
       expect((await act(a.id, "cancel", { reasonCode: "other" }, "HOSPITAL_ADMIN", other)).statusCode).toBe(404);
       expect((await call(other, "HOSPITAL_ADMIN", "PATCH", `/appointments/${a.id}/reschedule`, { scheduledAt: inHours(30), reasonCode: "other" })).statusCode).toBe(404);

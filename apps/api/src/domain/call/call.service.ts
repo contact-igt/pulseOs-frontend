@@ -270,6 +270,12 @@ export async function logManualCall(db: Db, tenantId: string, actor: Actor, jour
         .where(eq(journeys.id, journeyId));
     }
 
+    // Staff actually spoke to the patient: a new enquiry is now contacted, with or without a configured outcome (an outcome that
+    // moves the stage further has already done so above). A call nobody answered changes nothing.
+    if (!outcome && input.connected && journey.stage === "enquiry") {
+      await tx.update(journeys).set({ stage: "contacted", contactedAt: journey.contactedAt ?? now }).where(and(eq(journeys.id, journeyId), eq(journeys.stage, "enquiry")));
+    }
+
     let callbackTaskId: string | null = null;
     if (callback && !("error" in callback)) {
       callbackTaskId = await createCallbackTask(tx, { tenantId, patientId: journey.patientId, journeyId, ownerUserId: journey.ownerUserId, actorId: actor.id, type: outcome?.followUpType ?? "CALLBACK", label: outcome?.label ?? "Callback", timezone }, { ...callback, assignedTo: input.callback?.assignedTo }, now);
