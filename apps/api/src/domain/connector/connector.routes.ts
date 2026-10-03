@@ -18,6 +18,7 @@ const REASON_STATUS: Record<string, number> = {
   sync_failed: 502,
   provider_ref_already_exists: 409,
   endpoint_not_found: 404,
+  branch_not_found: 404,
 };
 
 export async function connectorRoutes(app: FastifyInstance) {

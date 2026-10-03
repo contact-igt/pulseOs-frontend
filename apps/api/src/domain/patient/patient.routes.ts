@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requirePermission } from "../auth/permission.middleware.js";
 import { createPatient, getPatient360, listPatients, searchPatients } from "./patient.service.js";
+import { branchBelongsToTenant } from "./identity.service.js";
 import { getPatientTimeline } from "../timeline/timeline.service.js";
 import { hasPermission } from "@pulseos/types";
 import { getPatientUpcoming } from "./upcoming.service.js";
@@ -78,6 +79,8 @@ export async function patientRoutes(app: FastifyInstance) {
       const actorId = request.sessionUser!.id;
       const parsed = createPatientBody.safeParse(request.body);
       if (!parsed.success) return reply.status(400).send({ error: "invalid_request" });
+
+      if (!(await branchBelongsToTenant(app.db, tenantId, parsed.data.branchId))) return reply.status(400).send({ error: "invalid_request", field: "branchId" });
 
       const result = await createPatient(app.db, tenantId, actorId, parsed.data);
       return reply.status(201).send(result);

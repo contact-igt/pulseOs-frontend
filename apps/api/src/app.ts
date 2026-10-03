@@ -73,8 +73,36 @@ export async function buildApp() {
     request.sessionUser = await resolveSession(app.db, sessionId);
   });
 
+  // CSRF: the session cookie is SameSite=Lax, which still travels with same-site requests from a sibling subdomain or
+  // port. So a state-changing request must also come from the app's own origin. A request carrying neither Origin nor
+  // Sec-Fetch-Site is not a browser (server-to-server, scripts, tests) and is not a CSRF vector. Provider webhooks and
+  // the public website form are cross-origin by design and authenticate themselves.
+  const webOrigin = process.env.WEB_ORIGIN ?? "http://localhost:3000";
+  const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
   app.addHook("onRequest", async (request, reply) => {
-    reply.header("Access-Control-Allow-Origin", process.env.WEB_ORIGIN ?? "http://localhost:3000");
+    if (!UNSAFE_METHODS.has(request.method)) return;
+    const path = request.url.split("?")[0] ?? "";
+    if (path.startsWith("/webhooks/") || path.startsWith("/forms/website/")) return;
+    const origin = request.headers.origin;
+    const fetchSite = request.headers["sec-fetch-site"];
+    const foreign = origin !== undefined ? origin !== webOrigin : fetchSite === "cross-site" || fetchSite === "same-site";
+    if (foreign) return reply.status(403).send({ error: "cross_origin_request_blocked" });
+  });
+
+  // Standard response hardening. The API only serves JSON (and audio streams that set their own type), so it can say
+  // "never frame me, never sniff me, load nothing" without affecting the Next.js app that calls it. Authenticated
+  // responses are never cached by a shared proxy or the browser's back/forward cache.
+  app.addHook("onSend", async (request, reply, payload) => {
+    reply.header("X-Content-Type-Options", "nosniff");
+    reply.header("Referrer-Policy", "no-referrer");
+    reply.header("X-Frame-Options", "DENY");
+    reply.header("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
+    if (request.sessionUser && !reply.hasHeader("Cache-Control")) reply.header("Cache-Control", "private, no-store");
+    return payload;
+  });
+
+  app.addHook("onRequest", async (request, reply) => {
+    reply.header("Access-Control-Allow-Origin", webOrigin);
     reply.header("Access-Control-Allow-Credentials", "true");
     reply.header("Access-Control-Allow-Headers", "content-type");
     reply.header("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");

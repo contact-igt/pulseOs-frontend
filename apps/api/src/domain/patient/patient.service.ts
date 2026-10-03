@@ -215,7 +215,7 @@ export async function getPatient360(db: Db, tenantId: string, patientId: string,
   const [patient] = await db
     .select({ id: patients.id, name: patientNameSql, dateOfBirth: patients.dateOfBirth, reportedAge: patients.reportedAge, phone: patients.phone, preferredLanguage: patients.preferredLanguage, branchName: branches.name })
     .from(patients)
-    .leftJoin(branches, eq(patients.branchId, branches.id))
+    .leftJoin(branches, and(eq(patients.branchId, branches.id), eq(branches.tenantId, tenantId)))
     .where(and(eq(patients.tenantId, tenantId), eq(patients.id, patientId)))
     .limit(1);
   if (!patient) return null;

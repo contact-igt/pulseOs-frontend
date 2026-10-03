@@ -1,7 +1,13 @@
 import { and, desc, eq, isNull, ne, sql } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
-import { journeys, patients } from "../../db/schema.js";
+import { branches, journeys, patients } from "../../db/schema.js";
 import { normalizePhone, resolveDefaultPhoneRegion } from "./phone.js";
+
+/** True when `branchId` is a branch of this hospital. Every client-supplied branch is checked with this before it is stored. */
+export async function branchBelongsToTenant(db: Db, tenantId: string, branchId: string): Promise<boolean> {
+  const [b] = await db.select({ id: branches.id }).from(branches).where(and(eq(branches.tenantId, tenantId), eq(branches.id, branchId))).limit(1);
+  return !!b;
+}
 
 export interface ResolveOrCreatePatientInput {
   tenantId: string;
@@ -73,6 +79,9 @@ export async function resolveOrCreatePatient(db: Db, input: ResolveOrCreatePatie
   const existing = await findExisting();
   if (existing) return { patient: await fillMissingDetails(db, existing, input), isNewPatient: false };
 
+  // A branch that is not this hospital's (a stale or hostile id from a public form or a client) is dropped, never stored.
+  const branchId = input.branchId && (await branchBelongsToTenant(db, input.tenantId, input.branchId)) ? input.branchId : null;
+
   const values = {
     tenantId: input.tenantId,
     name: cleanName(input.name),
@@ -83,7 +92,7 @@ export async function resolveOrCreatePatient(db: Db, input: ResolveOrCreatePatie
     phoneCountry: normalized.country,
     email: input.email ?? null,
     preferredLanguage: input.preferredLanguage ?? "English",
-    branchId: input.branchId ?? null,
+    branchId,
   };
   const inserted = await db
     .insert(patients)

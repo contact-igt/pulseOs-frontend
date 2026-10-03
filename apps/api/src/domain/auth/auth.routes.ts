@@ -37,6 +37,11 @@ function setSessionCookie(reply: import("fastify").FastifyReply, sessionId: stri
   });
 }
 
+/** The caller is the same machine (IPv4/IPv6 loopback, or IPv4-mapped IPv6). */
+function isLoopback(ip: string): boolean {
+  return ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
+}
+
 export async function authRoutes(app: FastifyInstance) {
   // Failed sign-ins are throttled per account+address and per address (see login-throttle.ts). Limits are env-tunable.
   const num = (v: string | undefined) => (v && Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : undefined);
@@ -80,6 +85,8 @@ export async function authRoutes(app: FastifyInstance) {
     });
 
     app.post("/auth/dev-login", async (request, reply) => {
+      // Passwordless: only ever answers the machine it runs on, whatever the environment flags say.
+      if (!isLoopback(request.ip)) return reply.status(403).send({ error: "dev_login_local_only" });
       const parsed = devLoginBody.safeParse(request.body);
       if (!parsed.success) {
         return reply.status(400).send({ error: "invalid_request" });

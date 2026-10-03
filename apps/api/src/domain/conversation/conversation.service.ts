@@ -4,6 +4,7 @@ import type { Db } from "../../db/client.js";
 import { appointments, communicationEndpoints, conversationAutomationPreferences, conversations, journeys, messages, patients, tasks, timelineEvents, users } from "../../db/schema.js";
 import { getConnectorById, getConnectorSecrets, touchConnectorError, touchConnectorSuccess } from "../connector/connector.service.js";
 import { getMessagingAdapter } from "../connector/registry.js";
+import { eligibleAssignee } from "../task/task.service.js";
 import { getConversationSummaryState, recordConversationActivity } from "./summary/conversation-session.service.js";
 import type { ConversationAutomationMode, ConversationAutomationPreference, ConversationChannel, ConversationDetail, ConversationRow, OwnershipState } from "@pulseos/types";
 
@@ -196,8 +197,10 @@ export async function assignConversation(
   if (!existing) return { ok: false, reason: "conversation_not_found" };
   if (existing.ownershipState === "CLOSED") return { ok: false, reason: "conversation_closed" };
 
-  const [assignee] = await db.select({ name: users.name }).from(users).where(eq(users.id, assignedTo)).limit(1);
-  await db.update(conversations).set({ ownershipState: "HUMAN_ASSIGNED", assignedTo }).where(eq(conversations.id, conversationId));
+  // The assignee must be staff of THIS hospital — a foreign id is refused, never stored or named on the timeline.
+  const assignee = await eligibleAssignee(db, tenantId, assignedTo);
+  if (!assignee) return { ok: false, reason: "assignee_not_found" };
+  await db.update(conversations).set({ ownershipState: "HUMAN_ASSIGNED", assignedTo }).where(and(eq(conversations.id, conversationId), eq(conversations.tenantId, tenantId)));
   await db.insert(timelineEvents).values({
     tenantId, patientId: existing.patientId, journeyId: existing.journeyId,
     actorType: "user", actorId, eventType: "conversation_assigned",

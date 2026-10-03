@@ -16,6 +16,7 @@ import type { SetConversationAutomationInput } from "./conversation.service.js";
 
 const REASON_STATUS: Record<string, number> = {
   conversation_not_found: 404,
+  assignee_not_found: 404,
   conversation_closed: 409,
   schedule_required: 400,
 };

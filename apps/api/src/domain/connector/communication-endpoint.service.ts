@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
+import { branchBelongsToTenant } from "../patient/identity.service.js";
 import { branches, communicationEndpoints, connectors } from "../../db/schema.js";
 import type { CommunicationEndpointVm, CreateCommunicationEndpointInput, UpdateCommunicationEndpointInput } from "@pulseos/types";
 
@@ -51,7 +52,7 @@ export async function createCommunicationEndpoint(
   tenantId: string,
   connectorId: string,
   input: CreateCommunicationEndpointInput,
-): Promise<{ ok: true; endpoint: CommunicationEndpointVm } | { ok: false; reason: "connector_not_found" | "provider_ref_already_exists" }> {
+): Promise<{ ok: true; endpoint: CommunicationEndpointVm } | { ok: false; reason: "connector_not_found" | "provider_ref_already_exists" | "branch_not_found" }> {
   const connector = await findConnector(db, tenantId, connectorId);
   if (!connector) return { ok: false, reason: "connector_not_found" };
 
@@ -61,6 +62,7 @@ export async function createCommunicationEndpoint(
     .where(and(eq(communicationEndpoints.connectorId, connectorId), eq(communicationEndpoints.providerRef, input.providerRef)))
     .limit(1);
   if (existing) return { ok: false, reason: "provider_ref_already_exists" };
+  if (input.branchId && !(await branchBelongsToTenant(db, tenantId, input.branchId))) return { ok: false, reason: "branch_not_found" };
 
   const [row] = await db
     .insert(communicationEndpoints)
@@ -78,7 +80,7 @@ export async function createCommunicationEndpoint(
 
   let branchName: string | null = null;
   if (row!.branchId) {
-    const [branch] = await db.select({ name: branches.name }).from(branches).where(eq(branches.id, row!.branchId)).limit(1);
+    const [branch] = await db.select({ name: branches.name }).from(branches).where(and(eq(branches.tenantId, tenantId), eq(branches.id, row!.branchId))).limit(1);
     branchName = branch?.name ?? null;
   }
 
@@ -107,12 +109,13 @@ export async function updateCommunicationEndpoint(
   connectorId: string,
   endpointId: string,
   input: UpdateCommunicationEndpointInput,
-): Promise<{ ok: true; endpoint: CommunicationEndpointVm } | { ok: false; reason: "endpoint_not_found" }> {
+): Promise<{ ok: true; endpoint: CommunicationEndpointVm } | { ok: false; reason: "endpoint_not_found" | "branch_not_found" }> {
   // Scoped to tenant + connector together — an endpoint id that exists but
   // belongs to a different tenant, or to a different connector within the
   // same tenant, must be indistinguishable from one that doesn't exist.
   const existing = await findEndpointForConnector(db, tenantId, connectorId, endpointId);
   if (!existing) return { ok: false, reason: "endpoint_not_found" };
+  if (input.branchId && !(await branchBelongsToTenant(db, tenantId, input.branchId))) return { ok: false, reason: "branch_not_found" };
 
   const updates: Partial<EndpointRow> = {};
   if (input.branchId !== undefined) updates.branchId = input.branchId;
@@ -132,7 +135,7 @@ export async function updateCommunicationEndpoint(
 
   let branchName: string | null = null;
   if (row.branchId) {
-    const [branch] = await db.select({ name: branches.name }).from(branches).where(eq(branches.id, row.branchId)).limit(1);
+    const [branch] = await db.select({ name: branches.name }).from(branches).where(and(eq(branches.tenantId, tenantId), eq(branches.id, row.branchId))).limit(1);
     branchName = branch?.name ?? null;
   }
 

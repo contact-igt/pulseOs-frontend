@@ -21,6 +21,11 @@ const FROM_ROUTES: Record<string, { href: string; label: string }> = {
   settings: { href: "/settings", label: "Back to Settings" },
 };
 
+/** The route a `?from=` key stands for, or the fallback. Own keys only: `constructor`/`__proto__` are not routes. */
+export function resolveBackTarget(from: string | null, fallback: { href: string; label: string }): { href: string; label: string } {
+  return from && Object.hasOwn(FROM_ROUTES, from) ? FROM_ROUTES[from]! : fallback;
+}
+
 /**
  * Small ghost Back control for a detail/drilldown page's header — never a
  * dead control: always resolves to a real route, either the caller's
@@ -34,7 +39,7 @@ const FROM_ROUTES: Record<string, { href: string; label: string }> = {
 export function BackLink({ fallback, fallbackLabel }: { fallback: string; fallbackLabel: string }) {
   const searchParams = useSearchParams();
   const from = searchParams.get("from");
-  const resolved = (from && FROM_ROUTES[from]) || { href: fallback, label: fallbackLabel };
+  const resolved = resolveBackTarget(from, { href: fallback, label: fallbackLabel });
 
   return (
     <Link
