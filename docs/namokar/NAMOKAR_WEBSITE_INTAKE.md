@@ -36,6 +36,6 @@ Origin: (optional; if sent it must be https://www.namokar-eye.example)
 Finds the patient by normalized phone (or creates one), uses the patient's open journey or opens a new one for the service, records **Source = Website** (whatever UTM tags say), writes a Timeline line "Website enquiry received" with the message, and creates a callback task for the team. Internal ids are **not** returned.
 
 ## Configuration (non-secret, on the connector)
-`requireService`, `fixedSource: "website"`, `allowedOrigins: [...]`. The token is stored encrypted as the connector secret `intakeToken`. The seeded token is a **fixture** and must be replaced before any real website posts (Integrations → Website Contact Form → secrets, Super Admin only).
+`requireService`, `fixedSource: "website"`, `allowedOrigins: [...]`. The token is stored encrypted as the connector secret `intakeToken`. The seeded token is a **fixture** and must be replaced before any real website posts. Replace it with `PATCH /connectors/{connectorId}` and `{ "secrets": { "intakeToken": "<a long random value>" } }` (Super Admin only). The Integrations screen has **no field for this token yet** — a known gap; until then use the API.
 
 Not configured live: nothing posts to this endpoint until Namokar's website is changed to do so.
