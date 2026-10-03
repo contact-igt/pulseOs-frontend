@@ -1,0 +1,29 @@
+# Namokar Eye & Oculoplasty Centre — PulseOS V1 Pilot
+
+| | |
+|---|---|
+| **Pilot** | **ENABLED** — a dedicated tenant in the same PulseOS app (no fork). Sign-in page: `/login/namokar` |
+| **Revenue** | **DISABLED** for this hospital (capability `REVENUE_TRACKING` is off by the hospital's own setting; nothing is deleted for other hospitals) |
+| **Runo (calls)** | Configured as a **FIXTURE** (nothing real is contacted). Manual call logging works today. Live Runo needs the hospital's Runo credentials in Integrations. |
+| **WhatsApp notifications** | **FIXTURE** (confirmations are recorded, not sent). Live sending needs the hospital's WhatsApp Business details in Integrations. WhatsApp Inbox and Conversation Intelligence are **off**. |
+| **CCS IVR** | **Not configured** (needs the provider's documentation). |
+| **Meta / Google lead ingestion** | **Not configured live.** Leads from ads are entered by hand (source *Google*, *Instagram*, *Facebook*…) until a connector is set up. |
+| **Website "I am interested" form** | Protected endpoint ready; needs the website to post to it — see [NAMOKAR_WEBSITE_INTAKE.md](NAMOKAR_WEBSITE_INTAKE.md). |
+
+## Read these
+
+1. [NAMOKAR_PILOT_QUICK_START.md](NAMOKAR_PILOT_QUICK_START.md) — two pages, for the team.
+2. [NAMOKAR_DAILY_SOP.md](NAMOKAR_DAILY_SOP.md) — what each person does each day.
+3. [NAMOKAR_ROLE_GUIDE.md](NAMOKAR_ROLE_GUIDE.md) — who can do what.
+4. [NAMOKAR_PILOT_WORKFLOW.md](NAMOKAR_PILOT_WORKFLOW.md) — the patient path, with diagrams.
+5. [NAMOKAR_ROUTING_MODEL.md](NAMOKAR_ROUTING_MODEL.md) — the screens, the URLs and the breadcrumb.
+6. [NAMOKAR_WEBSITE_INTAKE.md](NAMOKAR_WEBSITE_INTAKE.md) — the website form contract.
+7. [NAMOKAR_DECISIONS_AND_SECURITY.md](NAMOKAR_DECISIONS_AND_SECURITY.md) — why things are the way they are.
+
+## What the pilot proves
+
+One continuous journey per enquiry: **enquiry → contact → appointment → arrival → consultation → treatment outcome → follow-up / procedure**, with the original source kept all the way, and a simple performance view for the owner (funnel, drop-offs, source, team). It is **not** an EMR: no prescriptions, diagnosis, medications, reports or clinical notes are stored.
+
+## Accounts (local / demo only)
+
+`namokar.superadmin`, `namokar.admin`, `namokar.frontdesk`, `namokar.coordinator`, `namokar.doctor`, `namokar.doctor2` `@pulseos.local`. The demo password is the `DEMO_PASSWORD` of the environment it was seeded in; it is **never** shown in the product. All data is fictional.
