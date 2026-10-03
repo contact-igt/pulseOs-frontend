@@ -143,7 +143,10 @@ describe.skipIf(!DEMO_PASSWORD)("ads sync and Marketing Analytics (integration, 
       expect(a.matched).toBeNull();
       expect(a.coverage).toMatchObject({ matchedCampaigns: 0, totalCampaigns: 3 });
       expect(a.campaigns[0]!.providerConversions).not.toBeNull();
-      expect(a.daily.length).toBe(30);
+      // One point per day that has stored facts inside the window (a late-evening run can sync across midnight, so the count is derived, never assumed).
+      expect(a.daily.length).toBe(new Set(inRange.map((r) => r.factDate)).size);
+      expect(a.daily.length).toBeGreaterThanOrEqual(29);
+      expect(a.daily.length).toBeLessThanOrEqual(30);
     });
 
     it("a campaign PulseOS can tie to its own journeys gets outcomes, derived costs and ROAS, with valid denominators only", async () => {

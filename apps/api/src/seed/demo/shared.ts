@@ -49,6 +49,17 @@ export function daysFromNow(days: number, hour = 10, minute = 0, now: Date = new
   return zonedWallTime(addDays(dayKeyIn(now, DEMO_TIMEZONE), days), hour, minute, DEMO_TIMEZONE);
 }
 
+/**
+ * When a seeded follow-up is due. Past days: 09:00. Future days: 19:00. TODAY: 19:00, or - when the seed is run in the evening -
+ * 90 minutes from now (never past 23:45), so "due later today" is true whenever the demo is seeded, not only before 19:00.
+ */
+export function taskDueAt(offsetDays: number, now: Date = new Date()): Date {
+  if (offsetDays !== 0) return daysFromNow(offsetDays, offsetDays > 0 ? 19 : 9, 0, now);
+  const evening = daysFromNow(0, 19, 0, now);
+  const lateToday = new Date(Math.min(now.getTime() + 90 * 60_000, daysFromNow(0, 23, 45, now).getTime()));
+  return evening.getTime() > now.getTime() + 60 * 60_000 ? evening : lateToday;
+}
+
 export function minutesAgo(mins: number) {
   return new Date(Date.now() - mins * 60_000);
 }
@@ -621,7 +632,7 @@ export async function seedJourneys(ctx: DemoContext, configs: DemoJourneyConfig[
 
     if (config.task) {
       await db.insert(tasks).values({
-        ...base, assignedTo: owner.id, reason: config.task.reason, status: "pending", dueAt: daysFromNow(config.task.dueOffsetDays, config.task.dueOffsetDays >= 0 ? 19 : 9), // "due today" means end of day, not already overdue
+        ...base, assignedTo: owner.id, reason: config.task.reason, status: "pending", dueAt: taskDueAt(config.task.dueOffsetDays), // "due today" means later today, not already overdue
         type: config.task.type ?? TASK_TYPE_BY_REASON[config.task.reason], priority: TASK_PRIORITY_BY_REASON[config.task.reason],
         notes: config.task.notes, createdBy: ctx.admin.id,
       });

@@ -110,10 +110,13 @@ export async function recordConsultationOutcome(db: Db, params: RecordOutcomePar
     const reused = await findOpenTreatment(OPEN_TREATMENT);
     if (reused) {
       treatmentOpportunity = reused;
+      // An explicit value on a repeat outcome is the doctor's latest word: it replaces the earlier estimate (never a silent default).
+      if (params.estimatedValue !== undefined && params.estimatedValue !== reused.estimatedValue) {
+        [treatmentOpportunity = reused] = await db.update(treatmentOpportunities).set({ estimatedValue: params.estimatedValue, updatedAt: new Date() }).where(eq(treatmentOpportunities.id, reused.id)).returning();
+      }
       // Advice that turns into "the patient is deciding" moves ADVISED forward; anything further along is left as it is.
       if (params.outcome === "DECISION_PENDING" && reused.status === "ADVISED") {
-        [treatmentOpportunity] = await db.update(treatmentOpportunities).set({ status: "DECISION_PENDING", updatedAt: new Date() }).where(and(eq(treatmentOpportunities.id, reused.id), eq(treatmentOpportunities.status, "ADVISED"))).returning();
-        treatmentOpportunity ??= reused;
+        [treatmentOpportunity = treatmentOpportunity ?? reused] = await db.update(treatmentOpportunities).set({ status: "DECISION_PENDING", updatedAt: new Date() }).where(and(eq(treatmentOpportunities.id, reused.id), eq(treatmentOpportunities.status, "ADVISED"))).returning();
       }
     } else {
       [treatmentOpportunity] = await db

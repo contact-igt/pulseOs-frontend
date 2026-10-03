@@ -30,6 +30,7 @@ describe.skipIf(!DEMO_PASSWORD)("treatment catalog (integration)", () => {
   let eyeCatalog: TreatmentDefinitionVm[];
   let gynCatalog: TreatmentDefinitionVm[];
   const createdAppointmentIds: string[] = [];
+  const createdJourneyIds: string[] = [];
   const originalStage = new Map<string, (typeof journeys.$inferSelect)["stage"]>();
 
   const get = <T>(url: string, cookie: string) => app.inject({ method: "GET", url, cookies: { pulseos_session: cookie } }).then((r) => ({ status: r.statusCode, body: r.json() as T }));
@@ -38,8 +39,11 @@ describe.skipIf(!DEMO_PASSWORD)("treatment catalog (integration)", () => {
   // which seeded appointments already carry an outcome.
   async function freshEyeAppointment(): Promise<{ appointmentId: string; journeyId: string }> {
     const [doctor] = await db.select().from(users).where(eq(users.email, "eye.doctor@pulseos.local"));
-    const [journey] = await db.select().from(journeys).where(and(eq(journeys.tenantId, eyeTenantId), eq(journeys.specialtyKey, "LASER_VISION_CORRECTION"))).limit(1);
-    originalStage.set(journey.id, journey.stage);
+    // Its own journey (on a real eye patient): advising a procedure that is already open on a journey reuses it (by design),
+    // so a shared seeded journey would make these cases depend on each other. Removed again in afterAll.
+    const [base] = await db.select().from(journeys).where(and(eq(journeys.tenantId, eyeTenantId), eq(journeys.specialtyKey, "LASER_VISION_CORRECTION"))).limit(1);
+    const [journey] = await db.insert(journeys).values({ tenantId: eyeTenantId, patientId: base.patientId, journeyType: "Laser Vision Correction", specialtyKey: "LASER_VISION_CORRECTION", source: "walk_in", stage: "attended" }).returning();
+    createdJourneyIds.push(journey.id);
     const [appt] = await db
       .insert(appointments)
       .values({
@@ -85,6 +89,10 @@ describe.skipIf(!DEMO_PASSWORD)("treatment catalog (integration)", () => {
         await db.delete(consultationOutcomes).where(inArray(consultationOutcomes.id, outcomeIds));
       }
       await db.delete(appointments).where(inArray(appointments.id, createdAppointmentIds));
+    }
+    if (createdJourneyIds.length > 0) {
+      await db.delete(timelineEvents).where(inArray(timelineEvents.journeyId, createdJourneyIds));
+      await db.delete(journeys).where(inArray(journeys.id, createdJourneyIds));
     }
     for (const [id, stage] of originalStage) await db.update(journeys).set({ stage }).where(eq(journeys.id, id));
     await app.close();
