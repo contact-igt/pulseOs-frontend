@@ -1,7 +1,7 @@
 "use client";
 
 import { Phone } from "lucide-react";
-import { Badge, fmtDateTime, urgencyLabel } from "@pulseos/ui";
+import { Badge, OperationalStatusBadge, fmtDateTime, urgencyLabel } from "@pulseos/ui";
 import type { LeadRow, LeadStatus } from "@pulseos/types";
 import { telHref } from "./LeadsTable";
 
@@ -22,7 +22,10 @@ export function LeadCards({ rows, onOpen }: { rows: LeadRow[]; onOpen: (lead: Le
                   {lead.journeyType} · {lead.outcomeLabel ?? STATUS_LABEL[lead.leadStatus]}
                 </p>
               </div>
-              <Badge tone={lead.leadStatus === "no_response" ? "danger" : lead.leadStatus === "follow_up_due" ? "warning" : "primary"}>{STATUS_LABEL[lead.leadStatus]}</Badge>
+              <span className="flex flex-col items-end gap-1">
+                <Badge tone={lead.leadStatus === "no_response" ? "danger" : lead.leadStatus === "follow_up_due" ? "warning" : "primary"}>{STATUS_LABEL[lead.leadStatus]}</Badge>
+                <OperationalStatusBadge status={lead.operationalStatus} data-testid={`lead-card-op-status-${lead.id}`} />
+              </span>
             </div>
             <p className="text-xs text-ink-2">{lead.sourceLabel}</p>
             {lead.nextAction && due && (

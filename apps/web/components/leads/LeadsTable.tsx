@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Phone, UserRoundCog } from "lucide-react";
-import { Badge, OverflowMenu, Table, TableBody, TableHead, Td, Th, Tr, fmtDate, fmtDateTime, relativeTime, urgencyLabel } from "@pulseos/ui";
+import { Badge, OperationalStatusBadge, OverflowMenu, Table, TableBody, TableHead, Td, Th, Tr, fmtDate, fmtDateTime, relativeTime, urgencyLabel } from "@pulseos/ui";
 import type { LeadRow, LeadStatus } from "@pulseos/types";
 import { withFrom } from "@/components/shell/BackLink";
 import type { LeadColumn } from "./leadList";
@@ -108,7 +108,11 @@ export function LeadsTable({
               )}
               {show("status") && (
                 <Td>
-                  <Badge tone={STATUS_TONE[lead.leadStatus]}>{STATUS_LABEL[lead.leadStatus]}</Badge>
+                  <span className="flex flex-col items-start gap-1">
+                    <Badge tone={STATUS_TONE[lead.leadStatus]}>{STATUS_LABEL[lead.leadStatus]}</Badge>
+                    {/* Where the patient is right now (derived): booked, checked in, waiting, no-show... */}
+                    <OperationalStatusBadge status={lead.operationalStatus} data-testid={`lead-op-status-${lead.id}`} />
+                  </span>
                 </Td>
               )}
               {show("outcome") && (

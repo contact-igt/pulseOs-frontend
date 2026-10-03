@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
 import {
@@ -12,7 +12,8 @@ import {
 } from "@pulseos/ui";
 import { formatInr, formatMoneyOrDash, fmtCallDuration, fmtDateTime as fmtDate, fmtSmartDateTime, urgencyLabel } from "@pulseos/ui";
 import { ArrowUpRight, CalendarClock, History, PhoneIncoming, PhoneMissed, PhoneOutgoing } from "lucide-react";
-import { BackLink, withFrom } from "@/components/shell/BackLink";
+import { carryFrom } from "@/components/shell/BackLink";
+import { PatientBreadcrumb } from "@/components/shell/Breadcrumb";
 import { hasPermission } from "@pulseos/types";
 import { pathAllowedForRole } from "@/components/shell/nav";
 import type { AppointmentStatus, CallVm, JourneyCardVm, JourneyStage, TreatmentStatus } from "@pulseos/types";
@@ -20,6 +21,7 @@ import { useViewState } from "@/lib/useViewState";
 import { useCallDetail } from "@/components/calls/useCallDetail";
 import { PatientUpcomingList } from "@/components/patient360/PatientUpcomingList";
 import { useHospitalTimeZone } from "@/lib/useHospitalTimeZone";
+import { useCapability } from "@/lib/useEdition";
 
 const VIEWS = ["timeline", "upcoming"] as const;
 type P360View = (typeof VIEWS)[number];
@@ -142,6 +144,8 @@ function OperationalStatus({ journey }: { journey: JourneyCardVm }) {
 }
 
 function JourneyCard({ journey, active, canOpen, onSelect }: { journey: JourneyCardVm; active: boolean; canOpen: boolean; onSelect: () => void }) {
+  // Opening a journey from here keeps the list this person came from (Leads > Patient > Cataract), else Patients.
+  const from = useSearchParams().get("from");
   return (
     <Card
       className={`p-4 transition-colors ${active ? "border-primary-500! ring-1 ring-primary-500/30" : ""}`}
@@ -156,7 +160,7 @@ function JourneyCard({ journey, active, canOpen, onSelect }: { journey: JourneyC
         </div>
         {canOpen && (
           <Link
-            href={withFrom(`/journeys/${journey.id}`, "patients")}
+            href={carryFrom(`/journeys/${journey.id}`, from, "patients")}
             onClick={(e) => e.stopPropagation()}
             className="inline-flex shrink-0 items-center gap-0.5 text-xs font-medium text-primary-700 hover:underline"
             data-testid={`open-journey-${journey.id}`}
@@ -247,6 +251,7 @@ export default function Patient360Page() {
   const params = useParams<{ patientId: string }>();
   const patientId = params.patientId;
   const [selection, setSelection] = useState<string>(ALL_JOURNEYS);
+  const showRevenue = useCapability("REVENUE_TRACKING");
 
   const session = useQuery({ queryKey: ["session"], queryFn: api.session });
   // Journey Detail needs VIEW_JOURNEYS *and* a place in the role's navigation (a Doctor has the permission but
@@ -302,7 +307,7 @@ export default function Patient360Page() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-4" data-testid="patient-360">
-      <BackLink fallback="/patients" fallbackLabel="Back to Patients" />
+      <PatientBreadcrumb patient={{ id: patient.id, name: patient.name }} />
 
       {/* Patient identity, journey selector and operational status: one header panel */}
       <Card className="overflow-hidden">
@@ -389,14 +394,14 @@ export default function Patient360Page() {
       </div>
 
       {/* Acquisition / revenue: subordinate, below the operational section */}
-      <Panel title="Acquisition & revenue" subtitle="Where this patient came from and what it has generated">
+      <Panel title={showRevenue ? "Acquisition & revenue" : "Acquisition"} subtitle={showRevenue ? "Where this patient came from and what it has generated" : "Where this patient came from"}>
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-6">
           <AcquisitionMetric label="Source">{acquisition.source ?? "—"}</AcquisitionMetric>
           <AcquisitionMetric label="Campaign">{acquisition.campaignName ?? "Organic / No campaign"}</AcquisitionMetric>
           <AcquisitionMetric label="First touch">{fmtDate(acquisition.firstTouchAt)}</AcquisitionMetric>
           <AcquisitionMetric label="Acquisition cost">{formatMoneyOrDash(acquisition.allocatedAcquisitionCost)}</AcquisitionMetric>
-          <AcquisitionMetric label="Est. treatment value">{formatInr(acquisition.estimatedTreatmentValue)}</AcquisitionMetric>
-          <AcquisitionMetric label="Attributed revenue" strong>{formatInr(acquisition.attributedRevenue)}</AcquisitionMetric>
+          {showRevenue && acquisition.estimatedTreatmentValue !== null && <AcquisitionMetric label="Est. treatment value">{formatInr(acquisition.estimatedTreatmentValue)}</AcquisitionMetric>}
+          {showRevenue && acquisition.attributedRevenue !== null && <AcquisitionMetric label="Attributed revenue" strong>{formatInr(acquisition.attributedRevenue)}</AcquisitionMetric>}
         </dl>
 
         {acquisition.lastTouch && (

@@ -3,17 +3,18 @@
 import { treatmentDateLine } from "@/components/treatments/treatmentDates";
 import { useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
 import {
-  APPOINTMENT_STATUS_LABEL, APPOINTMENT_STATUS_TONE, Badge, Button, Card, CustomFieldValueGrid, EmptyState, ErrorState, JOURNEY_STAGE_LABEL, JOURNEY_STAGE_TONE,
+  APPOINTMENT_STATUS_LABEL, APPOINTMENT_STATUS_TONE, Badge, Button, Card, OperationalStatusBadge, CustomFieldValueGrid, EmptyState, ErrorState, JOURNEY_STAGE_LABEL, JOURNEY_STAGE_TONE,
   PageHeader, Panel, Skeleton, TREATMENT_STATUS_LABEL, TREATMENT_STATUS_TONE, Timeline,
   fmtDate, fmtDateTime, formatInr, relativeTime, urgencyLabel,
 } from "@pulseos/ui";
 import { hasPermission, type JourneyDetailVm, type RevenueEventVm } from "@pulseos/types";
 import { CalendarPlus, ChevronRight, ListPlus, Phone, UserRoundCog } from "lucide-react";
-import { BackLink, withFrom } from "@/components/shell/BackLink";
+import { BackLink, carryFrom } from "@/components/shell/BackLink";
+import { JourneyBreadcrumb } from "@/components/shell/Breadcrumb";
 import { AssignOwnerDialog } from "@/components/journey/AssignOwnerDialog";
 import { LogOutcomeSheet } from "@/components/outcomes/LogOutcomeSheet";
 import { AddFollowUpSheet } from "@/components/followups/AddFollowUpSheet";
@@ -26,8 +27,9 @@ import { useQuickCreate } from "@/components/shell/QuickCreateProvider";
 import { LogCallSheet } from "@/components/calls/LogCallSheet";
 import { CallStatsStrip } from "@/components/calls/CallStatsStrip";
 import { useCallDetail } from "@/components/calls/useCallDetail";
-import { JourneyStageFlow } from "@/components/journey/JourneyStageFlow";
+import { JourneyProgress } from "@/components/journey/JourneyProgress";
 import { invalidateJourneyQueries } from "@/components/journey/invalidate";
+import { useCapability } from "@/lib/useEdition";
 
 const REVENUE_TYPE_LABEL: Record<RevenueEventVm["type"], string> = {
   consultation_fee: "Consultation fee",
@@ -86,6 +88,7 @@ function NotFound() {
 export default function JourneyDetailPage() {
   const params = useParams<{ journeyId: string }>();
   const journeyId = params.journeyId;
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [assigning, setAssigning] = useState(false);
   // "Log outcome" sheet; `taskId` is set when it is opened from one of the open follow-ups.
@@ -93,6 +96,7 @@ export default function JourneyDetailPage() {
   const [loggingCall, setLoggingCall] = useState(false);
   const [addingFollowUp, setAddingFollowUp] = useState(false);
   const quickCreate = useQuickCreate();
+  const revenueTracking = useCapability("REVENUE_TRACKING");
   // The same drawer, steps and "What happens next?" sheet the Appointments and Front Desk pages use.
   const workflow = useAppointmentWorkflow();
 
@@ -130,12 +134,13 @@ export default function JourneyDetailPage() {
   const stageTone = JOURNEY_STAGE_TONE[journey.stage] ?? "neutral";
   const openTasks = tasks.filter((t) => t.status === "pending" || t.status === "in_progress");
   const doneTasks = tasks.length - openTasks.length;
-  const restricted = [treatments === null ? "treatments" : null, revenue === null ? "revenue" : null].filter(Boolean) as string[];
+  // "Not available for your role" is only true when revenue is on for the hospital but this role cannot see it.
+  const restricted = [treatments === null ? "treatments" : null, revenue === null && revenueTracking ? "revenue" : null].filter(Boolean) as string[];
 
   return (
     <div className="mx-auto max-w-6xl space-y-5" data-testid="journey-detail">
       <PageHeader
-        back={<BackLink fallback="/journeys" fallbackLabel="Back to Journeys" />}
+        back={<JourneyBreadcrumb patient={{ id: patient.id, name: patient.name }} journey={{ id: journey.id, journeyType: journey.journeyType }} />}
         title={patient.name}
         subtitle={`${patient.age !== null ? `${patient.age} yrs · ` : ""}${patient.phone}${patient.branchName ? ` · ${patient.branchName}` : ""}`}
         actions={
@@ -160,22 +165,6 @@ export default function JourneyDetailPage() {
         }
       />
 
-      {/* What to do next, and the visit it leads to — right under the actions. */}
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.5fr_1fr]">
-        <NextActionCard journey={journey} canManage={canAddFollowUp} onAdd={() => setAddingFollowUp(true)} />
-        <AppointmentContext
-          appointments={appointments}
-          canBook={canBook}
-          canManage={workflow.canManage}
-          onBook={() => quickCreate.openNewAppointment({ patient: { id: patient.id, name: patient.name, phone: patient.phone }, journeyId: journey.id })}
-          onOpen={workflow.select}
-          onAction={workflow.handleAction}
-          onComplete={workflow.handleComplete}
-        />
-      </div>
-      <SurgeryCard treatments={treatments} canManage={canManageTreatment} />
-      {workflow.error && <InlineNotice message={workflow.error} onDismiss={workflow.clearError} testId="journey-appointment-error" />}
-
       {/* Journey summary: what this enquiry is, where it stands, who owns the next move. */}
       <Card className="p-4 sm:p-5">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -183,11 +172,13 @@ export default function JourneyDetailPage() {
             {initials(patient.name)}
           </span>
           <h2 className="text-base font-semibold tracking-tight text-ink" data-testid="journey-service">{journey.journeyType}</h2>
-          <Link href={withFrom(`/patients/${patient.id}`, "journeys")} className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-primary-700 hover:underline" data-testid="journey-patient-link">
+          <Link href={carryFrom(`/patients/${patient.id}`, searchParams.get("from"), "journeys")} className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-primary-700 hover:underline" data-testid="journey-patient-link">
             Open Patient 360
             <ChevronRight size={13} aria-hidden="true" />
           </Link>
           <span data-testid="journey-stage"><Badge tone={stageTone}>{JOURNEY_STAGE_LABEL[journey.stage] ?? journey.stage}</Badge></span>
+          {/* Where the patient is right now (derived from the visit, treatment and tasks - never stored). */}
+          <OperationalStatusBadge status={journey.operationalStatus} data-testid="journey-operational-status" />
           {journey.lastOutcome && (
             <span data-testid="journey-sub-status" title={`Last outcome logged ${fmtDateTime(journey.lastOutcome.at)}`}>
               <Badge tone="neutral">{journey.lastOutcome.label}</Badge>
@@ -195,14 +186,12 @@ export default function JourneyDetailPage() {
           )}
         </div>
 
-        {journey.stage !== "lost" && (
-          <div className="mt-4 max-w-xl">
-            <JourneyStageFlow stage={journey.stage} />
-          </div>
-        )}
+        <div className="mt-4 border-t border-line pt-4">
+          <JourneyProgress detail={detail.data} />
+        </div>
 
         <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-4">
-          <Fact label="Source">{journey.sourceLabel ?? SOURCE_LABEL[journey.source] ?? journey.source}</Fact>
+          <Fact label="Original source" testId="journey-original-source">{journey.sourceLabel ?? SOURCE_LABEL[journey.source] ?? journey.source}</Fact>
           {journey.departmentName && <Fact label="Department" testId="journey-department">{journey.departmentName}</Fact>}
           <Fact label="Campaign">{journey.campaign?.name ?? "Organic / no campaign"}</Fact>
           <Fact label="Owner" testId="journey-owner">
@@ -238,6 +227,23 @@ export default function JourneyDetailPage() {
           </div>
         )}
       </Card>
+
+
+      {/* What to do next, and the visit it leads to — right under the actions. */}
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.5fr_1fr]">
+        <NextActionCard journey={journey} canManage={canAddFollowUp} onAdd={() => setAddingFollowUp(true)} />
+        <AppointmentContext
+          appointments={appointments}
+          canBook={canBook}
+          canManage={workflow.canManage}
+          onBook={() => quickCreate.openNewAppointment({ patient: { id: patient.id, name: patient.name, phone: patient.phone }, journeyId: journey.id })}
+          onOpen={workflow.select}
+          onAction={workflow.handleAction}
+          onComplete={workflow.handleComplete}
+        />
+      </div>
+      <SurgeryCard treatments={treatments} canManage={canManageTreatment} />
+      {workflow.error && <InlineNotice message={workflow.error} onDismiss={workflow.clearError} testId="journey-appointment-error" />}
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.5fr_1fr]">
         <div className="min-w-0" data-testid="journey-timeline">
@@ -318,7 +324,7 @@ export default function JourneyDetailPage() {
                       <div className="min-w-0">
                         <p className="truncate text-ink">{t.treatmentLabel}</p>
                         <p className="truncate text-xs text-ink-2">
-                          {formatInr(t.estimatedValue)}{(() => { const line = treatmentDateLine(t, fmtDate); return !line ? "" : line.recorded ? ` · ${line.label.toLowerCase()} ${line.text}` : ` · ${line.label === "Completed on" ? "completed" : "scheduled"}, date not recorded`; })()}
+                          {revenueTracking ? formatInr(t.estimatedValue) : ""}{(() => { const line = treatmentDateLine(t, fmtDate); if (!line) return ""; const text = line.recorded ? `${line.label.toLowerCase()} ${line.text}` : `${line.label === "Completed on" ? "completed" : "scheduled"}, date not recorded`; return revenueTracking ? ` · ${text}` : text.replace(/^./, (c) => c.toUpperCase()); })()}
                         </p>
                       </div>
                       <Badge tone={TREATMENT_STATUS_TONE[t.status] ?? "neutral"}>{TREATMENT_STATUS_LABEL[t.status] ?? t.status}</Badge>
@@ -329,7 +335,7 @@ export default function JourneyDetailPage() {
             </Panel>
           )}
 
-          {revenue !== null && (
+          {revenueTracking && revenue !== null && (
             <Panel title="Revenue attribution" subtitle={formatInr(revenue.total)} data-testid="journey-revenue" padded={false}>
               {revenue.events.length === 0 ? (
                 <p className="px-4 py-3 text-xs text-ink-2">No revenue recorded yet. Attributed to {SOURCE_LABEL[journey.source] ?? journey.source}{journey.campaign ? ` · ${journey.campaign.name}` : ""} once payments post.</p>

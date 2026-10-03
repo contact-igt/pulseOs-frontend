@@ -11,6 +11,7 @@ import {
 } from "@pulseos/ui";
 import { withFrom } from "@/components/shell/BackLink";
 import { OwnerScopeControl, useOwnerScope } from "@/components/journey/OwnerScopeControl";
+import { useCapability } from "@/lib/useEdition";
 
 const STAGE_LABEL = JOURNEY_STAGE_LABEL;
 const STAGE_TONE = JOURNEY_STAGE_TONE;
@@ -22,6 +23,9 @@ export default function JourneysPage() {
   const [sourceFilter, setSourceFilter] = useState(searchParams.get("source") ?? "");
   const campaignFilter = searchParams.get("campaignId") ?? undefined;
   const [owner, setOwner] = useOwnerScope();
+  // Money columns follow the hospital capabilities: no revenue workflow, no spend tracking = no rupee figures to show.
+  const showRevenue = useCapability("REVENUE_TRACKING");
+  const showSpend = useCapability("SPEND_ATTRIBUTION");
   const lookups = useQuery({ queryKey: ["lookups"], queryFn: api.lookups, staleTime: 60_000 });
 
   const summary = useQuery({ queryKey: ["journeys-summary"], queryFn: api.journeysSummary });
@@ -40,8 +44,8 @@ export default function JourneysPage() {
             { key: "appointments_pending", label: "Appointments pending", value: summary.data.appointmentsPending },
             { key: "consultations_pending", label: "Consultations pending", value: summary.data.consultationsPending },
             { key: "treatment_decisions_pending", label: "Treatment decisions pending", value: summary.data.treatmentDecisionsPending },
-            { key: "revenue_opportunity", label: "Revenue opportunity", value: formatInr(summary.data.revenueOpportunity) },
-            { key: "spend_at_risk", label: "Spend at risk", value: formatInr(summary.data.spendAtRisk) },
+            ...(showRevenue ? [{ key: "revenue_opportunity", label: "Revenue opportunity", value: formatInr(summary.data.revenueOpportunity) }] : []),
+            ...(showSpend ? [{ key: "spend_at_risk", label: "Spend at risk", value: formatInr(summary.data.spendAtRisk) }] : []),
           ]}
         />
       )}
@@ -87,8 +91,8 @@ export default function JourneysPage() {
                 <Th>Owner</Th>
                 <Th>Last Activity</Th>
                 <Th>Next Action</Th>
-                <Th align="right">Acq. Cost</Th>
-                <Th align="right">Treatment Value</Th>
+                {showSpend && <Th align="right">Acq. Cost</Th>}
+                {showRevenue && <Th align="right">Treatment Value</Th>}
               </tr>
             </TableHead>
             <TableBody>
@@ -109,8 +113,8 @@ export default function JourneysPage() {
                   <Td className={j.ownerName ? "text-neutral-600" : "text-ink-2"}>{j.ownerName ?? "Unassigned"}</Td>
                   <Td className="text-neutral-600">{fmtDate(j.lastActivityAt)}</Td>
                   <Td className="text-neutral-600">{fmtDate(j.nextActionDueAt)}</Td>
-                  <Td align="right">{formatMoneyOrDash(j.acquisitionCost)}</Td>
-                  <Td align="right">{j.treatmentValue > 0 ? formatInr(j.treatmentValue) : "—"}</Td>
+                  {showSpend && <Td align="right">{formatMoneyOrDash(j.acquisitionCost)}</Td>}
+                  {showRevenue && <Td align="right">{j.treatmentValue > 0 ? formatInr(j.treatmentValue) : "—"}</Td>}
                 </Tr>
               ))}
             </TableBody>

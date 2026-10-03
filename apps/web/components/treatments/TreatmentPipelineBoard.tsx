@@ -24,12 +24,15 @@ export function TreatmentPipelineBoard({
   timeZone,
   onOpen,
   onMove,
+  showValue = true,
 }: {
   rows: TreatmentRow[];
   /** Hospital IANA zone for planned-date labels. */
   timeZone: string;
   onOpen: (row: TreatmentRow) => void;
   onMove?: (row: TreatmentRow, to: TreatmentStatus) => Promise<void>;
+  /** False when the hospital has revenue tracking off: no rupee value on the cards. */
+  showValue?: boolean;
 }) {
   const columns = useMemo<KanbanColumn[]>(
     () => boardColumnKeys(rows).map((key) => ({ key, title: TREATMENT_STATUS_LABEL[key], hint: COLUMN_HINT[key] })),
@@ -65,7 +68,7 @@ export function TreatmentPipelineBoard({
             <span className="truncate text-xs text-ink-2">{r.treatmentLabel}</span>
             <span className="mt-1 flex min-w-0 items-center justify-between gap-2 text-[11px] text-ink-2">
               <span className="truncate">{r.status === "SCHEDULED" || r.status === "COMPLETED" ? treatmentDoctorLabel(r) : (r.doctorName ?? r.service ?? "—")}</span>
-              <span className="shrink-0 font-medium tabular-nums text-ink">{formatInr(r.estimatedValue)}</span>
+              <span className="shrink-0 font-medium tabular-nums text-ink">{showValue ? formatInr(r.estimatedValue) : null}</span>
             </span>
             {(() => {
               const line = treatmentDateLine(r, (iso) => formatKey(localDayKey(iso, timeZone), { day: "numeric", month: "short" }));

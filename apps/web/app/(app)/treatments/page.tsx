@@ -27,6 +27,7 @@ import { periodPatch, readPeriodChoice } from "@/components/filters/periodFilter
 import { addDays } from "@/components/report/reportFilters";
 import type { TreatmentDateField, TreatmentFilters, TreatmentRow, TreatmentStatus } from "@pulseos/types";
 import { useHospitalTimeZone } from "@/lib/useHospitalTimeZone";
+import { useCapability } from "@/lib/useEdition";
 
 const STATUS_LABEL = TREATMENT_STATUS_LABEL;
 const STATUS_TONE = TREATMENT_STATUS_TONE;
@@ -62,6 +63,7 @@ const VIEW_OPTIONS: { key: TreatmentView; label: string; icon: ReactNode }[] = [
 ];
 
 export default function TreatmentPage() {
+  const showValue = useCapability("REVENUE_TRACKING");
   const timeZone = useHospitalTimeZone();
   const router = useRouter();
   const params = useSearchParams();
@@ -227,7 +229,7 @@ export default function TreatmentPage() {
       {/* Summary + view switcher on their own row so the switcher never clips on a phone. */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-xs text-ink-2" data-testid="treatments-summary">
-          {treatments.data ? `${rows.length} treatment${rows.length === 1 ? "" : "s"} · ${formatInr(totalValue)} est. value` : "\u00a0"}
+          {treatments.data ? `${rows.length} treatment${rows.length === 1 ? "" : "s"}${showValue ? ` · ${formatInr(totalValue)} est. value` : ""}` : "\u00a0"}
         </span>
         <ViewSwitcher<TreatmentView> ariaLabel="Treatments view" value={view} onChange={setView} options={VIEW_OPTIONS} />
       </div>
@@ -260,7 +262,7 @@ export default function TreatmentPage() {
       {view !== "table" && treatments.isLoading && <Skeleton className="h-96" />}
       {view !== "table" && treatments.isError && <ErrorState message="Could not load treatments." />}
       {view === "pipeline" && treatments.data && (
-        <TreatmentPipelineBoard rows={rows} timeZone={timeZone} onOpen={openJourney} onMove={canManage ? saveStatus : undefined} />
+        <TreatmentPipelineBoard rows={rows} showValue={showValue} timeZone={timeZone} onOpen={openJourney} onMove={canManage ? saveStatus : undefined} />
       )}
       {view === "calendar" && treatments.data && (
         <ProcedureCalendar
@@ -292,7 +294,7 @@ export default function TreatmentPage() {
                 <Th leading>Patient</Th>
                 <Th>Journey / service</Th>
                 <Th>Treatment</Th>
-                <Th align="right">Value</Th>
+                {showValue && <Th align="right">Value</Th>}
                 <Th>Doctor</Th>
                 <Th>Owner</Th>
                 <Th>State</Th>
@@ -325,7 +327,7 @@ export default function TreatmentPage() {
                       </Link>
                     </Td>
                     <Td className="text-ink" nowrap>{row.treatmentLabel}</Td>
-                    <Td align="right" className="text-ink">{formatInr(row.estimatedValue)}</Td>
+                    {showValue && <Td align="right" className="text-ink">{formatInr(row.estimatedValue)}</Td>}
                     <Td className="text-ink-2" nowrap>{treatmentDoctorLabel(row)}</Td>
                     <Td className="text-ink-2" nowrap>{row.ownerName ?? "—"}</Td>
                     <Td nowrap>
@@ -370,7 +372,7 @@ export default function TreatmentPage() {
         title={confirming ? `${confirming.label} this treatment?` : ""}
         description={
           confirming
-            ? `${confirming.row.patientName}'s "${confirming.row.treatmentLabel}" (${formatInr(confirming.row.estimatedValue)}) moves out of the active pipeline and off every conversion count. This can't be undone from here — a declined treatment isn't re-offered automatically.`
+            ? `${confirming.row.patientName}'s "${confirming.row.treatmentLabel}" ${showValue ? `(${formatInr(confirming.row.estimatedValue)}) ` : ""}moves out of the active pipeline and off every conversion count. This can't be undone from here — a declined treatment isn't re-offered automatically.`
             : ""
         }
         confirmLabel={confirming?.label ?? "Confirm"}

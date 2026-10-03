@@ -29,6 +29,7 @@ import {
   localDayKey,
 } from "@pulseos/ui";
 import { OperationsReportView } from "@/components/report/OperationsReportView";
+import { PerformanceView } from "@/components/command-centre/PerformanceView";
 import { WorkspaceWelcome } from "@/components/command-centre/WorkspaceWelcome";
 import { useUrlFilters } from "@/lib/useUrlFilters";
 import { withFrom } from "@/components/shell/BackLink";
@@ -53,7 +54,10 @@ import { parseFilters } from "@/components/analytics/filters";
 export default function CommandCentrePage() {
   const url = useUrlFilters();
   const session = useQuery({ queryKey: ["session"], queryFn: api.session, retry: false });
-  const tab = url.get("cc") === "report" ? "report" : "overview";
+  // A hospital that does not run a revenue workflow lands on Performance (funnel, drop-offs, source, team); the rest open on Overview.
+  const revenueTracking = useCapability("REVENUE_TRACKING");
+  const requested = url.get("cc");
+  const tab: "overview" | "performance" | "report" = requested === "report" ? "report" : requested === "performance" ? "performance" : requested === "overview" ? "overview" : revenueTracking ? "overview" : "performance";
   // A brand-new hospital has nothing to chart yet: show how PulseOS works and what to do first instead of a wall of zeros.
   const setup = useQuery({ queryKey: ["dashboard", "setup-status"], queryFn: api.setupStatus, staleTime: 30_000 });
   return (
@@ -62,14 +66,17 @@ export default function CommandCentrePage() {
         variant="underline"
         ariaLabel="Command Centre sections"
         value={tab}
-        onChange={(k) => url.set({ cc: k === "report" ? "report" : undefined })}
+        onChange={(k) => url.set({ cc: k })}
         items={[
           { key: "overview", label: "Overview", testId: "cc-tab-overview" },
+          { key: "performance", label: "Performance", testId: "cc-tab-performance" },
           { key: "report", label: "Operations report", testId: "cc-tab-report" },
         ]}
       />
       {tab === "report" ? (
         session.data && <OperationsReportView role={session.data.user.role} />
+      ) : tab === "performance" ? (
+        <PerformanceView />
       ) : setup.data && !setup.data.hasJourneys ? (
         <WorkspaceWelcome status={setup.data} hospitalName={session.data?.user.tenantName} />
       ) : (
@@ -94,6 +101,7 @@ function CommandCentreOverview() {
   // Spend, ROAS and source-performance panels exist only in the growth edition; a Beta V1 tenant neither shows nor requests them.
   const growth = useCapability("SPEND_ATTRIBUTION");
   const analyticsLink = useCapability("MARKETING_ANALYTICS");
+  const revenue = useCapability("REVENUE_TRACKING");
 
   // The period is always sent: an absent range would mean "all time" to the API.
   const period = { range: f.range, from: f.from, to: f.to };
@@ -252,7 +260,7 @@ function CommandCentreOverview() {
         ) : serviceMix.isError ? (
           <ErrorState message="Could not load service lines." />
         ) : (
-          serviceMix.data && <ServiceLinePanel rows={serviceMix.data} selected={journeyType} onSelect={setJourneyType} />
+          serviceMix.data && <ServiceLinePanel rows={serviceMix.data} selected={journeyType} onSelect={setJourneyType} showRevenue={revenue} />
         )}
         {!growth ? null : sourcePerformance.isLoading ? (
           <Skeleton className="h-72" />

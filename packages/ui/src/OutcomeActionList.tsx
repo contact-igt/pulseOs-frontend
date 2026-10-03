@@ -5,16 +5,19 @@ import type { ConsultationOutcomeValue, DoctorTodayItem, TreatmentDefinitionVm }
 import { Badge, Button, EmptyState, FilterSelect, Panel } from "./primitives";
 import { fmtTime } from "./format";
 
+// One simple OPERATIONAL outcome per consultation (what happens next for the patient), not a clinical record. Procedure
+// scheduling is not here: it goes through the existing surgery flow once the procedure is advised.
 const ACTIONS: { outcome: ConsultationOutcomeValue; label: string }[] = [
   { outcome: "CONSULTED", label: "Consultation Completed" },
-  { outcome: "TREATMENT_ADVISED", label: "Treatment Advised" },
-  { outcome: "DECISION_PENDING", label: "Decision Pending" },
-  { outcome: "FOLLOW_UP_REQUIRED", label: "Follow-up Required" },
-  { outcome: "NO_TREATMENT_REQUIRED", label: "No Treatment Required" },
+  { outcome: "NO_TREATMENT_REQUIRED", label: "No treatment needed" },
+  { outcome: "FOLLOW_UP_REQUIRED", label: "Review / follow-up" },
+  { outcome: "TREATMENT_ADVISED", label: "Surgery / procedure advised" },
+  { outcome: "DECISION_PENDING", label: "Patient is deciding" },
+  { outcome: "TREATMENT_DECLINED", label: "Patient declined" },
 ];
 
-// Outcomes that open a Treatment Opportunity on the API, so the doctor says which one.
-const OUTCOMES_WITH_TREATMENT: ConsultationOutcomeValue[] = ["TREATMENT_ADVISED", "DECISION_PENDING"];
+// Outcomes that open (or close) a Treatment Opportunity on the API, so the doctor says which one.
+const OUTCOMES_WITH_TREATMENT: ConsultationOutcomeValue[] = ["TREATMENT_ADVISED", "DECISION_PENDING", "TREATMENT_DECLINED"];
 
 const OUTCOME_LABEL = Object.fromEntries(ACTIONS.map((a) => [a.outcome, a.label])) as Record<ConsultationOutcomeValue, string>;
 

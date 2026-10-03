@@ -12,18 +12,21 @@ import {
   NextPatientCard,
   OutcomeActionList,
   RecentPatientsList,
+  Button,
   Skeleton,
   Toolbar,
   ViewSwitcher,
   formatKey,
   type OutcomeTreatmentChoice,
 } from "@pulseos/ui";
-import type { ConsultationOutcomeValue, DoctorTodayItem } from "@pulseos/types";
+import { hasPermission, type AppointmentRow, type ConsultationOutcomeValue, type DoctorTodayItem } from "@pulseos/types";
+import { CompleteConsultationSheet } from "@/components/appointments/CompleteConsultationSheet";
 import { withFrom } from "@/components/shell/BackLink";
 import { useViewState } from "@/lib/useViewState";
 import { useCalendarContext } from "@/components/appointments/hooks";
 import { DoctorDaySchedule } from "@/components/appointments/DoctorDaySchedule";
 import { DayNavigator, dayLabel } from "@/components/filters/DayNavigator";
+import { useCapability } from "@/lib/useEdition";
 
 const DOCTOR_VIEWS = ["overview", "schedule"] as const;
 type DoctorView = (typeof DOCTOR_VIEWS)[number];
@@ -34,10 +37,11 @@ const VIEW_OPTIONS = [
 
 const OUTCOME_NOTICE: Record<ConsultationOutcomeValue, string> = {
   CONSULTED: "Consultation completed",
-  TREATMENT_ADVISED: "Treatment advised",
-  NO_TREATMENT_REQUIRED: "No treatment required",
-  DECISION_PENDING: "Decision pending",
-  FOLLOW_UP_REQUIRED: "Follow-up required",
+  TREATMENT_ADVISED: "Surgery / procedure advised",
+  NO_TREATMENT_REQUIRED: "No treatment needed",
+  DECISION_PENDING: "Patient is deciding",
+  FOLLOW_UP_REQUIRED: "Review / follow-up",
+  TREATMENT_DECLINED: "Patient declined",
   REFERRED: "Referred",
   OTHER: "Outcome",
 };
@@ -45,6 +49,8 @@ const OUTCOME_NOTICE: Record<ConsultationOutcomeValue, string> = {
 const ERROR_TEXT: Record<string, string> = {
   outcome_already_recorded: "An outcome was already recorded for this consultation. The list has been refreshed.",
   invalid_treatment_definition: "That treatment is no longer available in the catalog. Pick another one.",
+  appointment_not_completed: "This consultation isn't completed yet. Complete it first, then record the outcome.",
+  forbidden: "This patient is not on your schedule, so you can't record an outcome for them.",
   appointment_not_found: "This appointment could not be found.",
 };
 
@@ -60,8 +66,13 @@ function patientLink(item: { patientId?: string }, children: ReactNode) {
 }
 
 export default function DoctorHomePage() {
+  const revenueTracking = useCapability("REVENUE_TRACKING");
   const queryClient = useQueryClient();
   const [notice, setNotice] = useState<Notice | null>(null);
+  // The doctor finishes the consultation of the patient who is with them; the outcome is recorded right after.
+  const [completing, setCompleting] = useState<DoctorTodayItem | null>(null);
+  const session = useQuery({ queryKey: ["session"], queryFn: api.session });
+  const canComplete = !!session.data && hasPermission(session.data.user.role, "COMPLETE_CONSULTATION");
   const { timeZone, today: todayKey } = useCalendarContext();
   const { view, setView, date, setState: setViewState } = useViewState<DoctorView>({ views: DOCTOR_VIEWS, defaultView: "overview", timeZone });
   const isToday = date === todayKey;
@@ -123,6 +134,18 @@ export default function DoctorHomePage() {
 
       <DoctorKpiStrip dashboard={data} />
 
+      {completing && (
+        <CompleteConsultationSheet
+          // Only what the sheet reads for a doctor: who, which journey and service. (Surgery scheduling is not offered to a doctor.)
+          appointment={{ id: completing.appointmentId, patientName: completing.patientName, journeyId: completing.journeyId ?? "", serviceKey: completing.specialtyKey ?? null } as AppointmentRow}
+          onClose={() => setCompleting(null)}
+          onDone={() => {
+            setNotice({ kind: "success", text: `Consultation completed for ${completing.patientName}. Record the outcome below.` });
+            setCompleting(null);
+          }}
+        />
+      )}
+
       {view === "schedule" ? (
         // Same `today` rows as the queue below, laid out as the doctor's day in hospital time.
         <div id="doctor-view-panel" role="tabpanel" className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[1.25fr_1fr]">
@@ -150,6 +173,13 @@ export default function DoctorHomePage() {
                 highlightId={data.nextPatient?.appointmentId}
                 emptyMessage={isToday ? "No appointments on your schedule today." : "No appointments on your schedule for this day."}
                 renderPatientLink={patientLink}
+                renderActions={(item) =>
+                  canComplete && item.status === "with_doctor" ? (
+                    <Button size="sm" variant="primary" className="min-h-11 sm:min-h-0" onClick={() => setCompleting(item)} data-testid={`complete-consultation-${item.appointmentId}`}>
+                      Complete consultation
+                    </Button>
+                  ) : null
+                }
                 testId="doctor-queue"
               />
             </div>
@@ -185,7 +215,7 @@ export default function DoctorHomePage() {
                 }}
               />
               <p className="px-1 text-[11px] leading-4 text-ink-2">
-                Outcomes here drive follow-up, treatment tracking and revenue. Clinical notes and prescriptions stay in your hospital&rsquo;s clinical system.
+                Outcomes here drive follow-up and treatment tracking{revenueTracking ? " and revenue" : ""}. Clinical notes and prescriptions stay in your hospital&rsquo;s clinical system.
               </p>
             </div>
           </div>

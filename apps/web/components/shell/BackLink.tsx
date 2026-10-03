@@ -56,3 +56,11 @@ export function BackLink({ fallback, fallbackLabel }: { fallback: string; fallba
 export function withFrom(href: string, fromKey: keyof typeof FROM_ROUTES): string {
   return `${href}${href.includes("?") ? "&" : "?"}from=${fromKey}`;
 }
+
+/**
+ * A link from one detail page to another keeps the list the person originally came from (Leads > Patient > Cataract stays
+ * rooted at Leads), and only falls back to `fallbackKey` when this page was opened directly. Own keys only.
+ */
+export function carryFrom(href: string, from: string | null, fallbackKey: keyof typeof FROM_ROUTES): string {
+  return withFrom(href, from && Object.hasOwn(FROM_ROUTES, from) ? from : fallbackKey);
+}

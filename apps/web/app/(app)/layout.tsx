@@ -8,6 +8,7 @@ import { PulseMark, getDisplayTimeZone, setDisplayTimeZone } from "@pulseos/ui";
 import { Sidebar } from "../../components/shell/Sidebar";
 import { TopBar } from "../../components/shell/TopBar";
 import { QuickCreateProvider } from "../../components/shell/QuickCreateProvider";
+import { ListContextRecorder } from "../../components/shell/Breadcrumb";
 import { pathAllowedForRole, ROLE_HOME } from "../../components/shell/nav";
 
 const PAGE_META: Record<string, { title: string; subtitle: string }> = {
@@ -96,7 +97,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         (pathname.startsWith("/patients/")
           ? { title: "Patient 360", subtitle: "Full journey context for one patient" }
           : pathname.startsWith("/journeys/")
-            ? { title: "Journey", subtitle: "One enquiry from source to treatment and revenue" }
+            ? { title: "Journey", subtitle: data.user.capabilities.REVENUE_TRACKING ? "One enquiry from source to treatment and revenue" : "One enquiry from source to treatment" }
           : pathname.startsWith("/campaigns/")
             ? { title: "Campaign Detail", subtitle: "Spend, attribution and outcomes for one campaign" }
             : { title: "PulseOS", subtitle: undefined }));
@@ -107,6 +108,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           nav rail + glass top bar. The TopBar is absolutely positioned over the
           scrolling <main>, so content passes beneath the glass. */}
       <div className="app-shell flex h-dvh overflow-hidden">
+        <ListContextRecorder />
         <Sidebar user={data.user} open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
         <div className="relative flex min-w-0 flex-1 flex-col">
           <TopBar user={data.user} title={meta.title} subtitle={meta.subtitle} onMenuClick={() => setMobileNavOpen((v) => !v)} />

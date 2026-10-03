@@ -119,6 +119,7 @@ export function DoctorTodayList({
   emptyMessage = "Nothing scheduled here right now.",
   showStatus = true,
   renderPatientLink,
+  renderActions,
   testId,
 }: {
   items: DoctorTodayItem[];
@@ -133,6 +134,8 @@ export function DoctorTodayList({
   showStatus?: boolean;
   /** Wrap the patient name in a link (the package is router-free, so the page supplies its own Link). */
   renderPatientLink?: PatientLinkRenderer;
+  /** Row-level actions (e.g. "Complete consultation" for a patient who is with the doctor). The package stays router/API-free. */
+  renderActions?: (item: DoctorTodayItem) => ReactNode;
   testId?: string;
 }) {
   return (
@@ -159,6 +162,7 @@ export function DoctorTodayList({
                   {item.journeyType && <Badge tone="neutral">{item.journeyType}</Badge>}
                   {showStatus && <Badge tone={STATUS_TONE[item.status]}>{STATUS_LABEL[item.status]}</Badge>}
                 </span>
+                {renderActions?.(item)}
               </li>
             );
           })}

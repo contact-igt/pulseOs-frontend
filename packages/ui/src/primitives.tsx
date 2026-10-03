@@ -1,4 +1,6 @@
 import { ChevronDown } from "lucide-react";
+import type { OperationalStatusKey } from "@pulseos/types";
+import { OPERATIONAL_STATUS_LABEL, OPERATIONAL_STATUS_TONE } from "./status";
 import type { ButtonHTMLAttributes, ComponentPropsWithoutRef, HTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
 
 /**
@@ -122,6 +124,16 @@ export function ErrorState({ message }: { message: string }) {
 }
 
 /** Status / category pill. Never wraps: a long label widens its table cell instead of breaking onto two lines. */
+/** The derived operational status as a badge; renders nothing before any visit or treatment. */
+export function OperationalStatusBadge({ status, className = "", "data-testid": testId }: { status: OperationalStatusKey | null | undefined; className?: string; "data-testid"?: string }) {
+  if (!status) return null;
+  return (
+    <span data-testid={testId} data-operational-status={status}>
+      <Badge tone={OPERATIONAL_STATUS_TONE[status]} className={className}>{OPERATIONAL_STATUS_LABEL[status]}</Badge>
+    </span>
+  );
+}
+
 export function Badge({ tone = "neutral", children, className = "" }: { tone?: "neutral" | "warning" | "danger" | "primary" | "success"; children: ReactNode; className?: string }) {
   const tones: Record<string, string> = {
     neutral: "bg-neutral-100 text-neutral-700 ring-neutral-200",

@@ -1,4 +1,4 @@
-import type { AppointmentStatus, AttentionReason, CallStatus, ConnectorStatus, JourneyStage, TaskReason, TreatmentStatus } from "@pulseos/types";
+import type { AppointmentStatus, AttentionReason, CallStatus, ConnectorStatus, JourneyStage, OperationalStatusKey, TaskReason, TreatmentStatus } from "@pulseos/types";
 
 // One display map per domain, shared across every table/badge/drawer that
 // shows this status — never a raw backend enum in front of a user, and
@@ -154,4 +154,35 @@ export const CONNECTOR_EVENT_STATUS_TONE: Record<string, Tone> = {
   failed: "danger",
   duplicate: "warning",
   pending: "neutral",
+};
+
+/** The derived operational status (see deriveOperationalStatus): where the patient is right now. Amber/red only for waiting and no-show. */
+export const OPERATIONAL_STATUS_LABEL: Record<OperationalStatusKey, string> = {
+  appointment_booked: "Appointment booked",
+  appointment_confirmed: "Appointment confirmed",
+  checked_in: "Checked in",
+  waiting: "Waiting",
+  with_doctor: "With doctor",
+  consultation_completed: "Consultation completed",
+  treatment_follow_up: "Treatment follow-up",
+  procedure_scheduled: "Procedure scheduled",
+  procedure_done: "Procedure done",
+  no_show: "No-show",
+  cancelled: "Cancelled",
+  closed: "Closed",
+};
+
+export const OPERATIONAL_STATUS_TONE: Record<OperationalStatusKey, Tone> = {
+  appointment_booked: "neutral",
+  appointment_confirmed: "primary",
+  checked_in: "warning",
+  waiting: "warning",
+  with_doctor: "primary",
+  consultation_completed: "success",
+  treatment_follow_up: "primary",
+  procedure_scheduled: "primary",
+  procedure_done: "success",
+  no_show: "danger",
+  cancelled: "neutral",
+  closed: "neutral",
 };
