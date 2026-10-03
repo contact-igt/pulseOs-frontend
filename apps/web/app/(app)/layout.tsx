@@ -9,6 +9,7 @@ import { Sidebar } from "../../components/shell/Sidebar";
 import { TopBar } from "../../components/shell/TopBar";
 import { QuickCreateProvider } from "../../components/shell/QuickCreateProvider";
 import { ListContextRecorder } from "../../components/shell/Breadcrumb";
+import { rememberLoginPage, rememberedLoginPath } from "../../lib/loginPage";
 import { pathAllowedForRole, ROLE_HOME } from "../../components/shell/nav";
 
 const PAGE_META: Record<string, { title: string; subtitle: string }> = {
@@ -48,8 +49,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [lastPathname, setLastPathname] = useState(pathname);
 
   useEffect(() => {
-    if (isError) router.replace("/login");
+    if (isError) router.replace(rememberedLoginPath());
   }, [isError, router]);
+  // Remember the hospital's own sign-in page, so an expired session returns there and not to the general page.
+  const loginSlug = data?.user.loginSlug;
+  useEffect(() => {
+    if (data) rememberLoginPage(loginSlug);
+  }, [data, loginSlug]);
 
   // A role's sidebar only ever links to pages it's meant to use (see nav.ts)
   // — but nothing previously stopped a direct URL, stale bookmark, or back

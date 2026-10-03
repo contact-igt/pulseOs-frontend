@@ -9,6 +9,7 @@ import { roleGroupLabel, type SessionUser } from "@pulseos/types";
 import { api, ApiError } from "@pulseos/api-client";
 import { useQuickCreate } from "./QuickCreateProvider";
 import { initials } from "./nav";
+import { loginPathFor } from "@/lib/loginPage";
 
 export function TopBar({
   user,
@@ -52,7 +53,7 @@ export function TopBar({
       }
     }
     queryClient.clear();
-    router.replace("/login");
+    router.replace(loginPathFor(user.loginSlug));
   }
 
   return (

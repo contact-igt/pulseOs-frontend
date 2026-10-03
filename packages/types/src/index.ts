@@ -140,6 +140,8 @@ export interface SessionUser {
   tenantId: string;
   /** The hospital's name (tenants.name). */
   tenantName?: string;
+  /** The hospital's own sign-in page (/login/<slug>), when it has one - where signing out returns to. */
+  loginSlug?: string | null;
   name: string;
   email: string;
   role: Role;

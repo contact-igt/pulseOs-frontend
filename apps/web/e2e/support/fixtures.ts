@@ -26,7 +26,8 @@ export function purgePatientsByPhone(phones: string[]) {
 }
 
 function purgePatientsWhere(predicate: string) {
-  const ps = `SELECT p.id FROM patients p JOIN tenants t ON t.id = p.tenant_id WHERE t.name LIKE 'PulseOS % Demo' AND ${predicate}`;
+  // Demo hospitals only: the three PulseOS demos and the Namokar pilot demo. Never anything else.
+  const ps = `SELECT p.id FROM patients p JOIN tenants t ON t.id = p.tenant_id WHERE (t.name LIKE 'PulseOS % Demo' OR t.name = 'Namokar Eye & Oculoplasty Centre') AND ${predicate}`;
   const cs = `SELECT id FROM conversations WHERE patient_id IN (${ps})`;
   sql(`
     BEGIN;

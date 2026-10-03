@@ -45,6 +45,7 @@ async function createSessionFor(db: Db, user: typeof users.$inferSelect, remembe
       id: user.id,
       tenantId: user.tenantId,
       tenantName: tenant?.name ?? "",
+      loginSlug: tenant?.loginSlug ?? null,
       timezone: tenant?.timezone ?? "Asia/Kolkata",
       edition: tenant?.edition ?? DEFAULT_EDITION,
       capabilities,
@@ -181,7 +182,7 @@ async function loginToDevTenant(db: Db, role: Role, tenantId: string) {
 export async function resolveSession(db: Db, sessionId: string) {
   if (!SESSION_ID.test(sessionId)) return null;
   const [row] = await db
-    .select({ session: sessions, user: users, branch: branches, tenantName: tenants.name, timezone: tenants.timezone, edition: tenants.edition })
+    .select({ session: sessions, user: users, branch: branches, tenantName: tenants.name, loginSlug: tenants.loginSlug, timezone: tenants.timezone, edition: tenants.edition })
     .from(sessions)
     .innerJoin(users, eq(sessions.userId, users.id))
     .innerJoin(tenants, eq(users.tenantId, tenants.id))
@@ -196,6 +197,7 @@ export async function resolveSession(db: Db, sessionId: string) {
     id: row.user.id,
     tenantId: row.user.tenantId,
     tenantName: row.tenantName,
+    loginSlug: row.loginSlug,
     branchId: row.user.branchId,
     branchName: row.branch?.name ?? null,
     name: row.user.name,
