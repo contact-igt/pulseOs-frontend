@@ -38,7 +38,8 @@ describe("api-client request()", () => {
     await api.login("a@b.test", "pw");
     const [, init] = fetchMock.mock.calls[0] as FetchArgs;
     expect(headerOf(init, "content-type")).toBe("application/json");
-    expect(JSON.parse(init.body as string)).toEqual({ email: "a@b.test", password: "pw" });
+    // Remember Me is server-owned: the client always states the choice, defaulting to the shorter session.
+    expect(JSON.parse(init.body as string)).toEqual({ email: "a@b.test", password: "pw", remember: false });
   });
 
   it("preserves a caller-provided content-type", async () => {
