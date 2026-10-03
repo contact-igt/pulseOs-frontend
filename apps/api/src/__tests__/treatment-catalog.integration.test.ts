@@ -4,7 +4,7 @@ import type { FastifyInstance } from "fastify";
 import type { TreatmentDefinitionVm, TreatmentRow } from "@pulseos/types";
 import { buildApp } from "../app.js";
 import { db } from "../db/client.js";
-import { appointments, consultationOutcomes, journeys, tenants, timelineEvents, treatmentDefinitions, treatmentOpportunities, users } from "../db/schema.js";
+import { appointments, consultationOutcomes, journeys, tenants, timelineEvents, tasks, treatmentDefinitions, treatmentOpportunities, users } from "../db/schema.js";
 
 // Integration test: requires a migrated + seeded DB (both demo tenants) and DEMO_PASSWORD.
 // The treatment catalog is tenant configuration data: every tenant sees only its own
@@ -91,6 +91,8 @@ describe.skipIf(!DEMO_PASSWORD)("treatment catalog (integration)", () => {
       await db.delete(appointments).where(inArray(appointments.id, createdAppointmentIds));
     }
     if (createdJourneyIds.length > 0) {
+      // An outcome may have made its follow-up task (and the Timeline line for it) on the journey: they go first.
+      await db.delete(tasks).where(inArray(tasks.journeyId, createdJourneyIds));
       await db.delete(timelineEvents).where(inArray(timelineEvents.journeyId, createdJourneyIds));
       await db.delete(journeys).where(inArray(journeys.id, createdJourneyIds));
     }
