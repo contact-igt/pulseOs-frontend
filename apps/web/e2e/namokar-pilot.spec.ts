@@ -55,9 +55,12 @@ async function bookToday(page: Page, lead: { journeyId: string; patientId: strin
   const lk = await lookups(page);
   const doctor = lk.doctors.find((d) => d.name === doctorName) ?? lk.doctors[0]!;
   for (let step = 0; step < 40; step++) {
+    const at = new Date(Date.now() + (6 + step * 3) * 60_000);
+    // "Today" must still be today at that minute: in the last minutes of the hospital's day there is nothing left to book (not a failure of the product).
+    test.skip(dayInHospital(0) !== at.toLocaleDateString("en-CA", { timeZone: TZ }), "no time left in the hospital's day to book a visit for today");
     const res = await api<{ id: string }>(page, "POST", "/appointments", {
       patientId: lead.patientId, journeyId: lead.journeyId, branchId: lk.branches[0]!.id, doctorId: doctor.id,
-      scheduledAt: new Date(Date.now() + (6 + step * 3) * 60_000).toISOString(), reason: "Cataract consultation",
+      scheduledAt: at.toISOString(), reason: "Cataract consultation",
     });
     if (res.status === 201) return res.body.id;
     expect(res.status).toBe(409);
