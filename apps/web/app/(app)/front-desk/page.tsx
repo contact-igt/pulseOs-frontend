@@ -14,6 +14,7 @@ import { useAppointmentWorkflow } from "@/components/appointments/AppointmentWor
 import { useUrlFilters } from "@/lib/useUrlFilters";
 import { InlineNotice } from "@/components/appointments/InlineNotice";
 import { TodayFlow } from "@/components/appointments/TodayFlow";
+import { DayNavigator } from "@/components/filters/DayNavigator";
 
 const FRONT_DESK_VIEWS = ["queue", "flow"] as const;
 type FrontDeskView = (typeof FRONT_DESK_VIEWS)[number];
@@ -51,7 +52,9 @@ function buildFlow(today: AppointmentRow[]): PatientFlowCount[] {
 export default function FrontDeskPage() {
   const quickCreate = useQuickCreate();
   const { timeZone, today: todayKey } = useCalendarContext();
-  const { view, setView } = useViewState<FrontDeskView>({ views: FRONT_DESK_VIEWS, defaultView: "queue", timeZone });
+  const { view, setView, date, setState: setViewState } = useViewState<FrontDeskView>({ views: FRONT_DESK_VIEWS, defaultView: "queue", timeZone });
+  // Today first; staff can step to another hospital day (yesterday's no-shows, tomorrow's bookings) and always see which day it is.
+  const isToday = date === todayKey;
   const urlFilters = useUrlFilters();
   const [search, setSearch] = useState(() => urlFilters.get("q"));
   // One drawer + completion sheet for every appointment on this page (and the same ones the Appointments page and Journey use).
@@ -63,7 +66,7 @@ export default function FrontDeskPage() {
   const flowFilter: FlowBucket | null = rawStage in FLOW_LABEL ? (rawStage as FlowBucket) : null;
   const setFlowFilter = (update: (cur: FlowBucket | null) => FlowBucket | null) => urlFilters.set({ stage: update(flowFilter) ?? undefined });
 
-  const dashboard = useQuery({ queryKey: ["front-desk"], queryFn: () => api.frontDesk() });
+  const dashboard = useQuery({ queryKey: ["front-desk", date], queryFn: () => api.frontDesk({ date }) });
 
   const today = useMemo(() => dashboard.data?.today ?? [], [dashboard.data]);
   const filteredToday = useMemo(() => {
@@ -117,12 +120,13 @@ export default function FrontDeskPage() {
       >
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <ViewSwitcher ariaLabel="Front desk view" value={view} onChange={(v) => setView(v)} options={VIEW_OPTIONS} />
+          <DayNavigator date={date} today={todayKey} onChange={(d) => setViewState({ date: d === todayKey ? undefined : d })} testIdPrefix="front-desk" />
           <label className="glass-control relative flex h-8 w-full min-w-0 max-w-xs flex-1 items-center rounded-control">
             <Search size={14} className="pointer-events-none absolute left-2.5 text-neutral-500" aria-hidden="true" />
             <input
               type="text"
-              placeholder="Search today's patients…"
-              aria-label="Search today's patients"
+              placeholder={isToday ? "Search today's patients…" : "Search patients…"}
+              aria-label={isToday ? "Search today's patients" : "Search patients"}
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);

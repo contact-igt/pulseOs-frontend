@@ -23,6 +23,7 @@ import { withFrom } from "@/components/shell/BackLink";
 import { useViewState } from "@/lib/useViewState";
 import { useCalendarContext } from "@/components/appointments/hooks";
 import { DoctorDaySchedule } from "@/components/appointments/DoctorDaySchedule";
+import { DayNavigator, dayLabel } from "@/components/filters/DayNavigator";
 
 const DOCTOR_VIEWS = ["overview", "schedule"] as const;
 type DoctorView = (typeof DOCTOR_VIEWS)[number];
@@ -62,9 +63,10 @@ export default function DoctorHomePage() {
   const queryClient = useQueryClient();
   const [notice, setNotice] = useState<Notice | null>(null);
   const { timeZone, today: todayKey } = useCalendarContext();
-  const { view, setView } = useViewState<DoctorView>({ views: DOCTOR_VIEWS, defaultView: "overview", timeZone });
+  const { view, setView, date, setState: setViewState } = useViewState<DoctorView>({ views: DOCTOR_VIEWS, defaultView: "overview", timeZone });
+  const isToday = date === todayKey;
 
-  const dashboard = useQuery({ queryKey: ["dashboard", "doctor"], queryFn: api.doctorDashboard });
+  const dashboard = useQuery({ queryKey: ["dashboard", "doctor", date], queryFn: () => api.doctorDashboard(date) });
   // The tenant's whole catalog, once; each awaiting row is offered only the slice matching its journey's specialty.
   const catalog = useQuery({ queryKey: ["treatment-catalog"], queryFn: () => api.treatmentCatalog() });
 
@@ -113,7 +115,10 @@ export default function DoctorHomePage() {
   return (
     <div className="mx-auto max-w-6xl space-y-4" data-testid="doctor-home">
       <Toolbar>
-        <ViewSwitcher ariaLabel="Doctor home view" value={view} onChange={(v) => setView(v)} options={VIEW_OPTIONS} />
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <ViewSwitcher ariaLabel="Doctor home view" value={view} onChange={(v) => setView(v)} options={VIEW_OPTIONS} />
+          <DayNavigator date={date} today={todayKey} onChange={(d) => setViewState({ date: d === todayKey ? undefined : d })} testIdPrefix="doctor" />
+        </div>
       </Toolbar>
 
       <DoctorKpiStrip dashboard={data} />
@@ -125,7 +130,7 @@ export default function DoctorHomePage() {
             <DoctorDaySchedule
               items={data.today}
               timeZone={timeZone}
-              dayLabel={formatKey(todayKey, { weekday: "short", day: "numeric", month: "short" })}
+              dayLabel={formatKey(date, { weekday: "short", day: "numeric", month: "short" })}
               highlightId={data.nextPatient?.appointmentId}
               renderPatientLink={patientLink}
             />
@@ -141,9 +146,9 @@ export default function DoctorHomePage() {
               <NextPatientCard patient={data.nextPatient} status={nextStatus} renderPatientLink={patientLink} />
               <DoctorTodayList
                 items={data.today}
-                title="Today's patient queue"
+                title={isToday ? "Today's patient queue" : `Patient queue · ${dayLabel(date, todayKey)}`}
                 highlightId={data.nextPatient?.appointmentId}
-                emptyMessage="No appointments on your schedule today."
+                emptyMessage={isToday ? "No appointments on your schedule today." : "No appointments on your schedule for this day."}
                 renderPatientLink={patientLink}
                 testId="doctor-queue"
               />

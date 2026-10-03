@@ -1,6 +1,7 @@
 import { emitIntegrationEvent } from "../integration/domain-events.js";
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { patientNameSql } from "../../lib/patient-name.js";
+import { inLocalRange, tenantTimezone } from "../../lib/hospital-time.js";
 import type { Db, DbOrTx } from "../../db/client.js";
 import { appointments, branches, journeys, patients, revenueEvents, scheduleResources, tasks, timelineEvents, treatmentOpportunities, users } from "../../db/schema.js";
 import { recordConversionFeedbackEvent } from "../acquisition/conversion-feedback.service.js";
@@ -19,6 +20,12 @@ function isUniqueViolation(err: unknown): boolean {
 }
 
 export async function listTreatments(db: Db, tenantId: string, filters: TreatmentFilters): Promise<TreatmentRow[]> {
+  // The date filter names its dimension: the scheduled (planned) day or the completed day, in the hospital's calendar.
+  const timezone = filters.dateField && filters.from && filters.to ? await tenantTimezone(db, tenantId) : null;
+  const dateClause =
+    timezone && filters.from && filters.to
+      ? inLocalRange(filters.dateField === "completed" ? treatmentOpportunities.completedAt : treatmentOpportunities.plannedDate, timezone, filters.from, filters.to)
+      : undefined;
   const rows = await db
     .select({
       id: treatmentOpportunities.id,
@@ -52,6 +59,7 @@ export async function listTreatments(db: Db, tenantId: string, filters: Treatmen
         filters.ownerId ? eq(treatmentOpportunities.ownerUserId, filters.ownerId) : undefined,
         filters.treatmentDefinitionId ? eq(treatmentOpportunities.treatmentDefinitionId, filters.treatmentDefinitionId) : undefined,
         filters.service ? eq(journeys.journeyType, filters.service) : undefined,
+        dateClause,
       ),
     )
     .orderBy(treatmentOpportunities.updatedAt);

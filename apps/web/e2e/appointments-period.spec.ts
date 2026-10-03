@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { expectPeriod, periodOptionLabels, pickPeriod, setCustomRange } from "./support/period";
 
 // The Appointments history tabs (No-shows, Completed) cover a chosen period, not every appointment ever; Upcoming is
 // bounded by the server from the hospital's today. Today/Day/Week/Month keep their calendar navigation untouched.
@@ -29,7 +30,7 @@ test.describe("Appointments list periods", () => {
 
   test("No-shows defaults to the last 30 days and asks the API for exactly that window", async ({ page }) => {
     await page.getByTestId("appointments-tab-no_show").click();
-    await expect(page.getByTestId("appointments-period-range")).toHaveValue("30d");
+    await expectPeriod(page, "appointments-period", "30d");
     const from = await panel(page).getAttribute("data-from");
     const to = await panel(page).getAttribute("data-to");
     expect(from).toMatch(/^\d{4}-\d{2}-\d{2}$/);
@@ -39,18 +40,18 @@ test.describe("Appointments list periods", () => {
 
   test("a chosen period is kept in the URL, narrows the query and survives a refresh", async ({ page }) => {
     await page.getByTestId("appointments-tab-completed").click();
-    await page.getByTestId("appointments-period-range").selectOption("7d");
+    await pickPeriod(page, "appointments-period", "7d");
     await expect(page).toHaveURL(/prange=7d/);
     const from = await panel(page).getAttribute("data-from");
     const to = await panel(page).getAttribute("data-to");
     expect((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000 + 1).toBe(7);
     await page.reload();
-    await expect(page.getByTestId("appointments-period-range")).toHaveValue("7d");
+    await expectPeriod(page, "appointments-period", "7d");
   });
 
   test("the 90-day preset is not offered (the API serves at most 62 days)", async ({ page }) => {
     await page.getByTestId("appointments-tab-no_show").click();
-    const options = await page.getByTestId("appointments-period-range").locator("option").allTextContents();
+    const options = await periodOptionLabels(page, "appointments-period");
     expect(options.join("|")).not.toContain("90");
   });
 

@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { expectPeriod, periodOptionLabels, pickPeriod, setCustomRange } from "./support/period";
 
 // My Work's Completed tab is a history: it covers a chosen window (default last 7 days) and keeps it in the URL. The
 // live buckets (Overdue / Today / Upcoming) never show a period control.
@@ -25,7 +26,7 @@ test.describe("My Work completed window", () => {
     await expect(page.getByTestId("my-work-completed-range")).toHaveCount(0);
 
     await page.getByTestId("my-work-tab-completed").click();
-    await expect(page.getByTestId("my-work-completed-range")).toHaveValue("7d");
+    await expectPeriod(page, "my-work-completed", "7d");
   });
 
   test("the chosen window is asked of the API, kept in the URL and survives a refresh", async ({ page }) => {
@@ -36,10 +37,10 @@ test.describe("My Work completed window", () => {
     };
     // The initial load asks for 7 days; choosing 30 must produce a request that asks for exactly 30.
     const request = page.waitForRequest((r) => r.url().includes("/tasks?") && r.url().includes("view=completed") && days(r.url()) === 30);
-    await page.getByTestId("my-work-completed-range").selectOption("30d");
+    await pickPeriod(page, "my-work-completed", "30d");
     expect(days((await request).url())).toBe(30);
     await expect(page).toHaveURL(/crange=30d/);
     await page.reload();
-    await expect(page.getByTestId("my-work-completed-range")).toHaveValue("30d");
+    await expectPeriod(page, "my-work-completed", "30d");
   });
 });

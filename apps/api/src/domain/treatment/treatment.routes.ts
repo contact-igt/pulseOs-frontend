@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { dayRangeShape, refineDayRange } from "../../lib/day-range.js";
 import { z } from "zod";
 import { requirePermission } from "../auth/permission.middleware.js";
 import { emitAppointmentEvent } from "../appointment/appointment-events.js";
@@ -26,12 +27,20 @@ const scheduleBody = z.object({
 });
 const rescheduleBody = z.object({ scheduledAt: z.string(), resourceId: z.string().uuid().optional(), branchId: z.string().uuid().optional(), note: z.string().max(500).optional() });
 
-const listQuery = z.object({
-  status: z.enum(["ADVISED", "DECISION_PENDING", "ACCEPTED", "SCHEDULED", "COMPLETED", "DECLINED", "CANCELLED", "LOST"]).optional(),
-  ownerId: z.string().uuid().optional(),
-  doctorId: z.string().uuid().optional(),
-  treatmentDefinitionId: z.string().uuid().optional(),
-  service: z.string().min(1).optional(),
+const listQuery = z
+  .object({
+    status: z.enum(["ADVISED", "DECISION_PENDING", "ACCEPTED", "SCHEDULED", "COMPLETED", "DECLINED", "CANCELLED", "LOST"]).optional(),
+    ownerId: z.string().uuid().optional(),
+    doctorId: z.string().uuid().optional(),
+    treatmentDefinitionId: z.string().uuid().optional(),
+    service: z.string().min(1).optional(),
+    dateField: z.enum(["scheduled", "completed"]).optional(),
+    ...dayRangeShape,
+  })
+  .superRefine((q, ctx) => {
+  refineDayRange(q, ctx);
+  // The dimension and the days travel together: "a date" must always say which date.
+  if (!!q.dateField !== !!q.from) ctx.addIssue({ code: "custom", path: ["dateField"], message: "dateField needs from and to, and from/to need a dateField" });
 });
 
 const statusBody = z.object({

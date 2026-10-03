@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { expectPeriod, periodOptionLabels, pickPeriod, setCustomRange } from "./support/period";
 
 // The Command Centre period (shared Analytics presets, hospital timezone) is part of the URL together with branch
 // and service, drives the period widgets, and survives refresh / back / forward.
@@ -30,7 +31,7 @@ test.describe("Command Centre period", () => {
 
   test("a preset changes the period widgets, is kept in the URL and survives a refresh", async ({ page }) => {
     const before = await spend(page);
-    await page.getByTestId("cc-range").selectOption("7d");
+    await pickPeriod(page, "cc", "7d");
     await expect(page).toHaveURL(/range=7d/);
     await expect(caption(page)).toContainText("Last 7 days");
     await expect(page.getByText("Last 7 days — which sources brought patients in each day?")).toBeVisible();
@@ -38,18 +39,18 @@ test.describe("Command Centre period", () => {
 
     await page.reload();
     await expect(caption(page)).toContainText("Last 7 days");
-    await expect(page.getByTestId("cc-range")).toHaveValue("7d");
+    await expectPeriod(page, "cc", "7d");
   });
 
   test("a custom range takes from/to dates and is reflected in the caption", async ({ page }) => {
-    await page.getByTestId("cc-range").selectOption("custom");
+    await pickPeriod(page, "cc", "custom");
     await expect(page.getByTestId("cc-custom-dates")).toBeVisible();
     await expect(page).toHaveURL(/range=custom&from=\d{4}-\d{2}-\d{2}&to=\d{4}-\d{2}-\d{2}/);
     await expect(caption(page)).toContainText("Custom range");
   });
 
   test("branch and service stay in the URL beside the period and survive back/forward", async ({ page }) => {
-    await page.getByTestId("cc-range").selectOption("9d");
+    await pickPeriod(page, "cc", "9d");
     const service = page.getByTestId("filter-service");
     const options = await service.locator("option").allTextContents();
     const pick = options.find((o) => o && !/^All /.test(o));

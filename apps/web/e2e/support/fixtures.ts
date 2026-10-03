@@ -60,3 +60,27 @@ export function purgeCrmFields(keyPrefix: string) {
     DELETE FROM custom_field_definitions WHERE key LIKE '${keyPrefix}%';
     COMMIT;`);
 }
+
+/**
+ * Remove hospitals created by sign-up specs (names start with "E2E Signup ") and everything they own. Foreign keys are
+ * switched off for the transaction (the local database user owns the database), so the order does not matter; orphaned
+ * sessions and connector secrets are swept up afterwards.
+ */
+export function purgeSignupTenants() {
+  sql(`
+    BEGIN;
+    SET LOCAL session_replication_role = replica;
+    DO $$
+    DECLARE r record; ids uuid[];
+    BEGIN
+      SELECT array_agg(id) INTO ids FROM tenants WHERE name LIKE 'E2E Signup %';
+      IF ids IS NULL THEN RETURN; END IF;
+      FOR r IN SELECT table_name FROM information_schema.columns WHERE table_schema = 'public' AND column_name = 'tenant_id' AND table_name <> 'tenants' LOOP
+        EXECUTE format('DELETE FROM %I WHERE tenant_id = ANY($1)', r.table_name) USING ids;
+      END LOOP;
+      DELETE FROM tenants WHERE id = ANY(ids);
+      DELETE FROM sessions WHERE user_id NOT IN (SELECT id FROM users);
+      DELETE FROM connector_secrets WHERE connector_id NOT IN (SELECT id FROM connectors);
+    END $$;
+    COMMIT;`);
+}

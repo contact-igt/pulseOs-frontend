@@ -2,9 +2,9 @@ import { resolveTenantCapabilities } from "../capability/capability.service.js";
 import { hash, verify } from "@node-rs/argon2";
 import { and, eq } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
-import { users, sessions, tenants, branches } from "../../db/schema.js";
-import { DEFAULT_EDITION, type Role } from "@pulseos/types";
-import { DEFAULT_DEMO_ENVIRONMENT, DEMO_ENVIRONMENTS, demoEmailForRole, type DemoEnvironmentKey } from "./demo-environments.js";
+import { users, sessions, tenants, branches, tenantProfiles } from "../../db/schema.js";
+import { DEFAULT_EDITION, type DevEnvironment, type Role } from "@pulseos/types";
+import { DEFAULT_DEMO_ENVIRONMENT, DEMO_ENVIRONMENTS, DEMO_LOGIN_ROLES, demoEmailForRole, type DemoEnvironmentKey } from "./demo-environments.js";
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 12;
 /** "Remember me": stay signed in on this device for a week. Without it the session ends after 12 hours or when the browser closes. */
@@ -78,11 +78,14 @@ export async function loginWithPassword(db: Db, email: string, password: string,
 // decides whether this is even reachable. No password check: it exists
 // specifically to skip typing one, for a fixed, non-secret set of seeded
 // demo accounts, never a real credential.
-export async function loginByRole(db: Db, role: Role, environment: DemoEnvironmentKey = DEFAULT_DEMO_ENVIRONMENT) {
+export async function loginByRole(db: Db, role: Role, environment: string = DEFAULT_DEMO_ENVIRONMENT) {
+  // A hospital that signed up while development login was on: found by tenant id, and only if it was made visible.
+  if (environment.startsWith(DEV_TENANT_PREFIX)) return loginToDevTenant(db, role, environment.slice(DEV_TENANT_PREFIX.length));
+  if (!DEMO_ENVIRONMENTS.some((e) => e.key === environment)) return { ok: false as const, reason: "no_seeded_user_for_role" as const };
   // Resolved to the environment's own seeded user: email AND tenant must both
   // match. Email alone is only unique per tenant, and "first user with this
   // role" would pick a user from an arbitrary tenant.
-  const email = demoEmailForRole(environment, role);
+  const email = demoEmailForRole(environment as DemoEnvironmentKey, role);
   const tenantName = DEMO_ENVIRONMENTS.find((e) => e.key === environment)?.tenantName;
   if (!email || !tenantName) return { ok: false as const, reason: "no_seeded_user_for_role" as const };
   const [row] = await db
@@ -96,10 +99,62 @@ export async function loginByRole(db: Db, role: Role, environment: DemoEnvironme
   return createSessionFor(db, user);
 }
 
+/** Sign-in as a user who was just created by the server (sign-up). Standard session length; no password check by design. */
+export async function createSessionForUserId(db: Db, userId: string, remember = false) {
+  const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  if (!user) throw new Error("createSessionForUserId: unknown user");
+  return createSessionFor(db, user, remember);
+}
+
+export const DEV_TENANT_PREFIX = "tenant:";
+const TENANT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ROLE_LABEL = new Map(DEMO_LOGIN_ROLES.map((r) => [r.role, r.label]));
+const ROLE_ORDER = DEMO_LOGIN_ROLES.map((r) => r.role);
+
+async function rolesInTenant(db: Db, tenantId: string): Promise<{ role: Role; label: string }[]> {
+  const rows = await db.selectDistinct({ role: users.role }).from(users).where(eq(users.tenantId, tenantId));
+  return rows
+    .map((r) => r.role)
+    .filter((r) => ROLE_LABEL.has(r))
+    .sort((a, b) => ROLE_ORDER.indexOf(a) - ROLE_ORDER.indexOf(b))
+    .map((role) => ({ role, label: ROLE_LABEL.get(role)! }));
+}
+
+/**
+ * Developer Access (development only): the seeded demo hospitals that exist, plus every hospital that signed up while
+ * development login was enabled - each with the roles that actually have an account. Read from the database, so a new
+ * sign-up appears with no code change. Only rows marked `dev_visible` are ever listed.
+ */
+export async function listDevEnvironments(db: Db): Promise<DevEnvironment[]> {
+  const out: DevEnvironment[] = [];
+  for (const env of DEMO_ENVIRONMENTS) {
+    const [tenant] = await db.select({ id: tenants.id }).from(tenants).where(eq(tenants.name, env.tenantName)).limit(1);
+    if (!tenant) continue;
+    out.push({ key: env.key, label: env.label, roles: await rolesInTenant(db, tenant.id) });
+  }
+  const signedUp = await db
+    .select({ id: tenants.id, name: tenants.name })
+    .from(tenantProfiles)
+    .innerJoin(tenants, eq(tenants.id, tenantProfiles.tenantId))
+    .where(and(eq(tenantProfiles.devVisible, true), eq(tenantProfiles.source, "signup")))
+    .orderBy(tenants.createdAt);
+  for (const t of signedUp) out.push({ key: `${DEV_TENANT_PREFIX}${t.id}`, label: t.name, roles: await rolesInTenant(db, t.id) });
+  return out;
+}
+
+async function loginToDevTenant(db: Db, role: Role, tenantId: string) {
+  if (!TENANT_ID.test(tenantId)) return { ok: false as const, reason: "no_seeded_user_for_role" as const };
+  const [visible] = await db.select({ id: tenantProfiles.tenantId }).from(tenantProfiles).where(and(eq(tenantProfiles.tenantId, tenantId), eq(tenantProfiles.devVisible, true), eq(tenantProfiles.source, "signup"))).limit(1);
+  if (!visible) return { ok: false as const, reason: "no_seeded_user_for_role" as const };
+  const [user] = await db.select().from(users).where(and(eq(users.tenantId, tenantId), eq(users.role, role))).orderBy(users.createdAt).limit(1);
+  if (!user) return { ok: false as const, reason: "no_seeded_user_for_role" as const };
+  return createSessionFor(db, user);
+}
+
 export async function resolveSession(db: Db, sessionId: string) {
   if (!SESSION_ID.test(sessionId)) return null;
   const [row] = await db
-    .select({ session: sessions, user: users, branch: branches, timezone: tenants.timezone, edition: tenants.edition })
+    .select({ session: sessions, user: users, branch: branches, tenantName: tenants.name, timezone: tenants.timezone, edition: tenants.edition })
     .from(sessions)
     .innerJoin(users, eq(sessions.userId, users.id))
     .innerJoin(tenants, eq(users.tenantId, tenants.id))
@@ -113,6 +168,7 @@ export async function resolveSession(db: Db, sessionId: string) {
   return {
     id: row.user.id,
     tenantId: row.user.tenantId,
+    tenantName: row.tenantName,
     branchId: row.user.branchId,
     branchName: row.branch?.name ?? null,
     name: row.user.name,

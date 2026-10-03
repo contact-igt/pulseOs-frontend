@@ -5,10 +5,13 @@ import { inLocalRange, localToday, tenantTimezone, tzLiteral } from "../../lib/h
 import { appointments, consultationOutcomes, journeys, patients, treatmentOpportunities } from "../../db/schema.js";
 import type { DoctorDashboard, DoctorRecentPatient, DoctorTodayItem } from "@pulseos/types";
 
-export async function getDoctorDashboard(db: Db, tenantId: string, doctorUserId: string, now: Date = new Date()): Promise<DoctorDashboard> {
+export async function getDoctorDashboard(db: Db, tenantId: string, doctorUserId: string, now: Date = new Date(), date?: string): Promise<DoctorDashboard> {
   // "Today" is the hospital's local day (tenants.timezone), not the server clock's.
   const timezone = await tenantTimezone(db, tenantId);
   const todayKey = await localToday(db, timezone, now);
+  // The schedule is for `date` (a hospital day) - today unless the doctor looked at another day. "Recent patients" always
+  // means before today, whichever day is on screen.
+  const dayKey = date ?? todayKey;
   const beforeToday = sql`${appointments.scheduledAt} < (${todayKey}::date)::timestamp at time zone ${tzLiteral(timezone)}`;
 
   const rows = await db
@@ -32,7 +35,7 @@ export async function getDoctorDashboard(db: Db, tenantId: string, doctorUserId:
       and(
         eq(appointments.tenantId, tenantId),
         eq(appointments.doctorUserId, doctorUserId),
-        inLocalRange(appointments.scheduledAt, timezone, todayKey, todayKey),
+        inLocalRange(appointments.scheduledAt, timezone, dayKey, dayKey),
       ),
     )
     .orderBy(appointments.scheduledAt);
@@ -124,6 +127,7 @@ export async function getDoctorDashboard(db: Db, tenantId: string, doctorUserId:
   }));
 
   return {
+    date: dayKey,
     todayCount: rows.length,
     checkedInCount,
     waitingNow,

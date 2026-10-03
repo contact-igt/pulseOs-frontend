@@ -117,10 +117,11 @@ export async function appointmentRoutes(app: FastifyInstance) {
     return { available: result.available, inPast: result.inPast };
   });
 
-  app.get("/front-desk", async (request) => {
+  app.get("/front-desk", async (request, reply) => {
     const tenantId = request.sessionUser!.tenantId;
-    const query = request.query as { branchId?: string };
-    return getFrontDeskDashboard(app.db, tenantId, query.branchId);
+    const parsed = z.object({ branchId: z.string().uuid().optional(), date: localDay.optional() }).safeParse(request.query);
+    if (!parsed.success) return reply.status(400).send({ error: "invalid_request" });
+    return getFrontDeskDashboard(app.db, tenantId, parsed.data.branchId, new Date(), parsed.data.date);
   });
 
   await app.register(async (manageApp) => {

@@ -7,8 +7,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarDays, GanttChart, Table2 } from "lucide-react";
 import { api } from "@pulseos/api-client";
-import { Card, ConnectorModeBadge, EmptyState, ErrorState, FilterBar, FilterSelect, MetricStrip, Panel, Skeleton, SpendAtRisk, Table, TableBody, TableHead, Td, Th, Tr, ViewSwitcher, formatInr, formatMoneyOrDash, formatRoas } from "@pulseos/ui";
+import { Card, ConnectorModeBadge, EmptyState, ErrorState, FilterBar, FilterSelect, MetricStrip, Panel, Skeleton, SpendAtRisk, Table, TableBody, TableHead, Td, Th, Tr, ViewSwitcher, formatInr, formatMoneyOrDash, formatRoas, localDayKey } from "@pulseos/ui";
+import { DATE_PRESETS, resolveDatePreset } from "@pulseos/types";
 import type { CampaignFilters, CampaignViewRow, SourceChannel } from "@pulseos/types";
+import { PeriodControls } from "@/components/filters/PeriodControls";
+import { periodPatch, readPeriodChoice } from "@/components/filters/periodFilter";
 import { withFrom } from "@/components/shell/BackLink";
 import { useViewState } from "@/lib/useViewState";
 import { replaceUrlParams } from "@/lib/urlParams";
@@ -18,7 +21,6 @@ import { CAMPAIGN_VIEWS, SOURCE_LABEL, SOURCE_OPTIONS, campaignFilterPatch, read
 import type { CampaignView } from "@/components/campaigns/runs";
 import { useHospitalTimeZone } from "@/lib/useHospitalTimeZone";
 
-const DATE_INPUT = "glass-control h-8 min-w-0 flex-1 rounded-control px-2 text-xs text-ink outline-none focus-visible:border-primary-500 sm:flex-none";
 // Two selects per row on a phone, the date range on its own row; natural widths from sm up.
 const FILTER_CLASS = "basis-[calc(50%-0.25rem)]! sm:basis-auto!";
 
@@ -35,14 +37,24 @@ export default function CampaignsPage() {
   const params = useSearchParams();
   // View, date and every filter live in the URL (refresh / back / shared link restore them).
   const { view, date, setView, setDate, calendarMode, setCalendarMode } = useViewState<CampaignView>({ views: CAMPAIGN_VIEWS, defaultView: "table", defaultRange: "month", timeZone });
-  const filters = useMemo(() => readCampaignFilters(new URLSearchParams(params.toString())), [params]);
+  const urlFilters = useMemo(() => readCampaignFilters(new URLSearchParams(params.toString())), [params]);
+  // The date range is a PulseOS period (shared presets, hospital days, in the URL as prange/pfrom/pto). An older shared
+  // link with plain dateFrom/dateTo still works and shows as a custom range.
+  const today = localDayKey(new Date(), timeZone);
+  const period = useMemo(() => readPeriodChoice(new URLSearchParams(params.toString()), { prefix: "p", presets: DATE_PRESETS }), [params]);
+  const span =
+    period.range === "custom" && period.from && period.to ? { from: period.from, to: period.to }
+    : period.range ? resolveDatePreset(period.range as Parameters<typeof resolveDatePreset>[0], today)
+    : urlFilters.dateFrom && urlFilters.dateTo ? { from: urlFilters.dateFrom, to: urlFilters.dateTo }
+    : null;
+  const filters = useMemo<CampaignFilters>(() => ({ ...urlFilters, dateFrom: span?.from, dateTo: span?.to }), [urlFilters, span?.from, span?.to]);
   const setFilters = useCallback(
     (update: (f: CampaignFilters) => CampaignFilters) => {
-      const next = update(filters);
+      const next = update(urlFilters);
       const cleared: Partial<CampaignFilters> = { branchId: undefined, specialtyKey: undefined, source: undefined, dateFrom: undefined, dateTo: undefined };
       replaceUrlParams(campaignFilterPatch({ ...cleared, ...next }));
     },
-    [filters],
+    [urlFilters],
   );
   const openCampaign = useCallback((row: CampaignViewRow) => router.push(withFrom(`/campaigns/${row.campaignId}`, "campaigns")), [router]);
 
@@ -86,28 +98,18 @@ export default function CampaignsPage() {
             </option>
           ))}
         </FilterSelect>
-        <div className="flex min-w-0 basis-full items-center gap-1.5 text-xs text-ink-2 sm:basis-auto">
-          <label htmlFor="campaigns-date-from">From</label>
-          <input
-            id="campaigns-date-from"
-            type="date"
-            value={filters.dateFrom ?? ""}
-            onChange={(e) => setFilters((f) => ({ ...f, dateFrom: e.target.value || undefined }))}
-            className={DATE_INPUT}
-            data-testid="campaigns-date-from"
-          />
-          <label htmlFor="campaigns-date-to">To</label>
-          <input
-            id="campaigns-date-to"
-            type="date"
-            value={filters.dateTo ?? ""}
-            onChange={(e) => setFilters((f) => ({ ...f, dateTo: e.target.value || undefined }))}
-            className={DATE_INPUT}
-            data-testid="campaigns-date-to"
-          />
-        </div>
-        {(filters.branchId || filters.specialtyKey || filters.source || filters.dateFrom || filters.dateTo) && (
-          <button type="button" onClick={() => setFilters(() => ({}))} className="text-xs font-medium text-primary-700 hover:underline">
+        <PeriodControls
+          presets={DATE_PRESETS}
+          value={{ range: period.range ?? (span ? "custom" : undefined), from: span?.from, to: span?.to }}
+          today={today}
+          noneLabel="Any date"
+          maxSpanDays={366}
+          label="Campaign period"
+          testIdPrefix="campaigns"
+          onChange={(next) => void replaceUrlParams({ ...periodPatch(next, { prefix: "p", defaultRange: "" }), dateFrom: undefined, dateTo: undefined })}
+        />
+        {(filters.branchId || filters.specialtyKey || filters.source || span) && (
+          <button type="button" onClick={() => { setFilters(() => ({})); void replaceUrlParams(periodPatch({ range: undefined, from: undefined, to: undefined }, { prefix: "p", defaultRange: "" })); }} className="text-xs font-medium text-primary-700 hover:underline">
             Clear filters
           </button>
         )}

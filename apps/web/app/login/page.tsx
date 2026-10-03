@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiError } from "@pulseos/api-client";
-import type { Role } from "@pulseos/types";
+import type { DevEnvironment, Role } from "@pulseos/types";
 import { ChevronDown, Eye, EyeOff } from "lucide-react";
 import { PulseLockup } from "@pulseos/ui";
 import { ROLE_HOME } from "../../components/shell/nav";
@@ -12,39 +13,36 @@ import { ROLE_HOME } from "../../components/shell/nav";
 // numbers or customer claims on this screen.
 const JOURNEY_STEPS = ["Enquiry", "Appointment", "Consultation", "Treatment", "Follow-up"];
 
-// Development-only one-click sign-in — entirely absent outside local
-// development, not just hidden: /auth/dev-login/roles is a 404 (the route
-// doesn't exist, see auth.routes.ts::devLoginEnabled) anywhere the env flag
-// isn't explicitly on, so this renders nothing rather than an empty
-// placeholder. Deliberately quiet — collapsed by default, secondary to the
-// real Sign in button above it, never a competing CTA. The demo environment
-// (a separate seeded tenant) is chosen first, then the role within it.
+// Developer Access - development only. Entirely absent outside local development, not just hidden:
+// /auth/dev-login/environments is a 404 (the route doesn't exist, see auth.routes.ts::devLoginEnabled) anywhere the env flag
+// isn't explicitly on, so this renders nothing rather than an empty placeholder. The list comes from the database - the
+// seeded demo hospitals plus every hospital that signed up in development - each with the roles that actually have an
+// account, so a new sign-up appears here with no code change. Deliberately quiet: collapsed by default, secondary to the
+// real Sign in button above it, never a competing CTA.
 function DevLoginBlock() {
   const router = useRouter();
-  const [roles, setRoles] = useState<{ role: Role; label: string }[] | null>(null);
-  const [environments, setEnvironments] = useState<{ key: string; label: string }[]>([]);
+  const [environments, setEnvironments] = useState<DevEnvironment[] | null>(null);
   const [environment, setEnvironment] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [loggingInAs, setLoggingInAs] = useState<Role | null>(null);
 
   useEffect(() => {
-    // Environments are optional: a server with a single tenant just has none to pick from.
-    Promise.all([api.devLoginRoles(), api.devLoginEnvironments().catch(() => [])])
-      .then(([r, e]) => {
-        setRoles(r);
+    api
+      .devLoginEnvironments()
+      .then((e) => {
         setEnvironments(e);
         setEnvironment(e[0]?.key ?? null);
       })
-      .catch(() => setRoles([]));
+      .catch(() => setEnvironments([]));
   }, []);
 
-  if (!roles || roles.length === 0) return null;
-  const environmentLabel = environments.find((e) => e.key === environment)?.label;
+  if (!environments || environments.length === 0) return null;
+  const current = environments.find((e) => e.key === environment) ?? environments[0]!;
 
   async function loginAs(role: Role) {
     setLoggingInAs(role);
     try {
-      const { user } = await api.devLogin(role, environment ?? undefined);
+      const { user } = await api.devLogin(role, current.key);
       router.push(ROLE_HOME[user.role]);
     } catch {
       setLoggingInAs(null);
@@ -61,21 +59,23 @@ function DevLoginBlock() {
         className="flex min-h-11 w-full items-center justify-between rounded text-xs font-medium text-neutral-600 transition hover:text-neutral-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500 lg:min-h-8"
         data-testid="dev-login-toggle"
       >
-        <span>Development</span>
+        <span>
+          Developer access <span className="font-normal text-neutral-500">· development only</span>
+        </span>
         <ChevronDown size={14} className={`transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
         <div id="dev-login-panel" className="mt-2 space-y-2">
           {environments.length > 1 && (
-            <div role="group" aria-label="Demo environment" className="grid grid-cols-2 gap-1" data-testid="dev-login-environments">
+            <div role="group" aria-label="Demo environment" className="grid max-h-44 grid-cols-2 gap-1 overflow-y-auto" data-testid="dev-login-environments">
               {environments.map((e) => (
                 <button
                   key={e.key}
                   type="button"
-                  aria-pressed={environment === e.key}
+                  aria-pressed={current.key === e.key}
                   onClick={() => setEnvironment(e.key)}
                   className={`min-h-11 rounded-md border px-2 py-1.5 text-xs font-medium transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500 lg:min-h-8 ${
-                    environment === e.key
+                    current.key === e.key
                       ? "border-primary-500 bg-primary-50 font-semibold text-primary-700"
                       : "border-neutral-300 bg-white text-neutral-600 hover:border-neutral-300 hover:text-neutral-900"
                   }`}
@@ -87,13 +87,13 @@ function DevLoginBlock() {
             </div>
           )}
           <div className="grid grid-cols-2 gap-1.5" data-testid="dev-login-roles">
-            {roles.map((r) => (
+            {current.roles.map((r) => (
               <button
                 key={r.role}
                 type="button"
                 onClick={() => loginAs(r.role)}
                 disabled={loggingInAs !== null}
-                aria-label={environmentLabel ? `${r.label}, ${environmentLabel}` : r.label}
+                aria-label={`${r.label}, ${current.label}`}
                 aria-busy={loggingInAs === r.role}
                 className="min-h-11 rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-xs text-neutral-700 transition hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500 disabled:opacity-50 lg:min-h-8"
                 data-testid={`dev-login-role-${r.role}`}
@@ -259,6 +259,17 @@ export default function LoginPage() {
               {loading ? "Signing in…" : "Sign in"}
             </button>
           </form>
+
+          <div className="mt-6 border-t border-neutral-100 pt-5 text-center" data-testid="signup-prompt">
+            <p className="text-sm text-neutral-600">New to PulseOS?</p>
+            <Link
+              href="/signup"
+              className="mt-2 flex h-11 w-full items-center justify-center rounded-control border border-primary-200 bg-primary-50/60 px-3 text-sm font-semibold text-primary-700 transition hover:border-primary-300 hover:bg-primary-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500"
+              data-testid="signup-link"
+            >
+              Create account
+            </Link>
+          </div>
 
           <DevLoginBlock />
 

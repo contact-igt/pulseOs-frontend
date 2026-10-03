@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { expectPeriod, periodOptionLabels, pickPeriod, setCustomRange } from "./support/period";
 import { sql } from "./support/fixtures";
 
 // Final gate: real sign-in as every role in both editions, the pages each role can reach, server-side permission
@@ -152,9 +153,9 @@ test.describe("final responsive date-control check", () => {
       // Command Centre: preset, custom dates, branch and service all reachable.
       await page.goto("/command-centre");
       await fits("cc-range", "Command Centre period");
-      await page.getByTestId("cc-range").selectOption("custom");
+      await pickPeriod(page, "cc", "custom");
       await fits("cc-range", "Command Centre period (custom)");
-      for (const id of ["cc-from", "cc-to"]) await fits(id, id);
+      await fits("cc-range-picker", "custom dates");
       await fits("filter-branch", "branch");
       await fits("filter-service", "service");
       await healthy(page, "command-centre custom", problems);

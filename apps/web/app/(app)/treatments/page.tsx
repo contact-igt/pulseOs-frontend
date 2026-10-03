@@ -11,7 +11,7 @@ import { api } from "@pulseos/api-client";
 import {
   Badge, Button, ConfirmDialog, EmptyState, ErrorState, FilterBar, FilterSelect, MetricStrip, OverflowMenu, Skeleton,
   Table, TableBody, TableHead, TableShell, Td, Th, Toolbar, Tr, ViewSwitcher,
-  formatInr, fmtDate, TREATMENT_STATUS_LABEL, TREATMENT_STATUS_TONE,
+  formatInr, fmtDate, localDayKey, TREATMENT_STATUS_LABEL, TREATMENT_STATUS_TONE,
 } from "@pulseos/ui";
 import { withFrom } from "@/components/shell/BackLink";
 import { useViewState } from "@/lib/useViewState";
@@ -20,8 +20,12 @@ import { ProcedureCalendar } from "@/components/treatments/ProcedureCalendar";
 import { TreatmentPipelineBoard } from "@/components/treatments/TreatmentPipelineBoard";
 import { ALL_STATUSES, TREATMENT_VIEWS, moveErrorMessage, readTreatmentFilters, treatmentFilterPatch } from "@/components/treatments/pipeline";
 import type { TreatmentUrlFilters, TreatmentView } from "@/components/treatments/pipeline";
-import { hasPermission } from "@pulseos/types";
-import type { TreatmentFilters, TreatmentRow, TreatmentStatus } from "@pulseos/types";
+import { DATE_PRESETS, hasPermission, resolveDatePreset } from "@pulseos/types";
+import { PeriodControls } from "@/components/filters/PeriodControls";
+import { PeriodSelect } from "@/components/filters/PeriodSelect";
+import { periodPatch, readPeriodChoice } from "@/components/filters/periodFilter";
+import { addDays } from "@/components/report/reportFilters";
+import type { TreatmentDateField, TreatmentFilters, TreatmentRow, TreatmentStatus } from "@pulseos/types";
 import { useHospitalTimeZone } from "@/lib/useHospitalTimeZone";
 
 const STATUS_LABEL = TREATMENT_STATUS_LABEL;
@@ -75,7 +79,21 @@ export default function TreatmentPage() {
   // service / doctor / owner / procedure are applied by the API; the state
   // filter is applied to the same result client-side so the pipeline counts
   // above the table always describe the other four filters, not the state.
+  // The date filter always names its dimension - the day a procedure is SCHEDULED for, or the day it was COMPLETED - and
+  // never "a date". It lives in the URL (tdate + trange/tfrom/tto) and resolves in the hospital's calendar.
+  const today = localDayKey(new Date(), timeZone);
+  const searchParams = useMemo(() => new URLSearchParams(params.toString()), [params]);
+  const rawDimension = searchParams.get("tdate");
+  const dimension: TreatmentDateField | "" = rawDimension === "scheduled" || rawDimension === "completed" ? rawDimension : "";
+  const chosen = readPeriodChoice(searchParams, { prefix: "t", presets: DATE_PRESETS });
+  // Choosing a dimension starts from a sensible window: look ahead for Scheduled, look back for Completed.
+  const period = chosen.range ? chosen : dimension === "scheduled" ? { range: "custom", from: today, to: addDays(today, 30) } : { range: "30d", from: undefined, to: undefined };
+  const dateSpan = dimension
+    ? period.range === "custom" && period.from && period.to ? { from: period.from, to: period.to } : resolveDatePreset((period.range ?? "30d") as Parameters<typeof resolveDatePreset>[0], today)
+    : null;
+
   const serverFilters: TreatmentFilters = {
+    ...(dimension && dateSpan ? { dateField: dimension, from: dateSpan.from, to: dateSpan.to } : {}),
     ...(service ? { service } : {}),
     ...(doctorId ? { doctorId } : {}),
     ...(ownerId ? { ownerId } : {}),
@@ -104,10 +122,11 @@ export default function TreatmentPage() {
     [treatments.data],
   );
   const totalValue = rows.reduce((sum, t) => sum + t.estimatedValue, 0);
-  const filtersActive = !!(status || service || doctorId || ownerId || procedureId);
+  const filtersActive = !!(status || service || doctorId || ownerId || procedureId || dimension);
 
   function clearFilters() {
     setFilters({ status: "", service: "", doctorId: "", ownerId: "", procedureId: "" });
+    void replaceUrlParams({ tdate: undefined, ...periodPatch({ range: undefined, from: undefined, to: undefined }, { prefix: "t", defaultRange: "" }) });
   }
 
   // MANAGE_TREATMENT gates the status-transition endpoint server-side
@@ -173,6 +192,26 @@ export default function TreatmentPage() {
             <option value="">All doctors</option>
             {(lookups.data?.doctors ?? []).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
           </FilterSelect>
+          <PeriodSelect
+            ariaLabel="Treatment date"
+            value={dimension}
+            options={[{ key: "scheduled", label: "Scheduled date" }, { key: "completed", label: "Completed date" }]}
+            noneLabel="Any date"
+            testId="treatment-date-dimension"
+            onChange={(next) => void replaceUrlParams({ tdate: next || undefined, ...periodPatch({ range: undefined, from: undefined, to: undefined }, { prefix: "t", defaultRange: "" }) })}
+          />
+          {dimension && (
+            <PeriodControls
+              presets={DATE_PRESETS}
+              value={{ range: period.range, from: dateSpan?.from, to: dateSpan?.to }}
+              today={today}
+              allowFuture={dimension === "scheduled"}
+              maxSpanDays={366}
+              label={dimension === "scheduled" ? "Scheduled in" : "Completed in"}
+              testIdPrefix="treatment-date"
+              onChange={(next) => void replaceUrlParams(periodPatch(next, { prefix: "t", defaultRange: "" }))}
+            />
+          )}
           <FilterSelect className={FILTER_CLASS} aria-label="Owner" value={ownerId} onChange={(e) => setFilters({ ownerId: e.target.value })} data-testid="treatment-filter-owner">
             <option value="">All owners</option>
             {(lookups.data?.owners ?? []).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}

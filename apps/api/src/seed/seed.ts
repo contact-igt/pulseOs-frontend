@@ -37,6 +37,7 @@ import {
   leadSources,
   specialtyTemplates,
   tenants,
+  tenantProfiles,
   tenantCapabilities,
   activityLog,
   notifications,
@@ -53,6 +54,7 @@ import { DEMO_ENVIRONMENTS, DEMO_STAFF_SLUGS } from "../domain/auth/demo-environ
 import { seedGynecologyTenant } from "./demo/gynecology.js";
 import { OPHTHALMOLOGY_V1, seedOphthalmologyTenant } from "./demo/ophthalmology.js";
 import { seedConversationSessions } from "./demo/conversation-sessions.js";
+import { seedNamokarTenant } from "./demo/namokar.js";
 
 function requireDemoPassword(): string {
   const value = process.env.DEMO_PASSWORD;
@@ -116,6 +118,7 @@ async function main() {
   await db.delete(departments);
   await db.delete(leadSources);
   await db.delete(tenantSettings);
+  await db.delete(tenantProfiles);
   await db.delete(tenants);
 
   const passwordHash = await hashPassword(demoPassword);
@@ -123,13 +126,16 @@ async function main() {
   await seedOphthalmologyTenant(passwordHash);
   // Same clinic data on the Beta V1 (core CRM) edition, so the edition gates can be seen against the very same journeys.
   await seedOphthalmologyTenant(passwordHash, OPHTHALMOLOGY_V1);
+  // A fictional telecalling / front-desk demo with a realistic "today" (see demo/namokar.ts).
+  await seedNamokarTenant(passwordHash);
   // Each WhatsApp thread gets its session line on the Timeline and a (FIXTURE-labelled) summary, exactly as
   // live traffic does once a conversation has been idle.
   await seedConversationSessions();
 
   console.log("Seed complete. Password for every demo account: value of DEMO_PASSWORD env var");
   for (const env of DEMO_ENVIRONMENTS) {
-    const logins = DEMO_STAFF_SLUGS.map((slug) => `${env.emailPrefix}.${slug}`).join(" / ");
+    const slugs = env.key === "namokar" ? ["admin", "doctor", "doctor2", "frontdesk", "coordinator"] : DEMO_STAFF_SLUGS;
+    const logins = slugs.map((slug) => `${env.emailPrefix}.${slug}`).join(" / ");
     console.log(`${env.label}: ${logins} @pulseos.local`);
   }
 }

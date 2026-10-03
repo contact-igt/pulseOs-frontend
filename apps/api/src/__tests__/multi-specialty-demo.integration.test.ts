@@ -406,11 +406,20 @@ describe.skipIf(!DEMO_PASSWORD)("Dev Login demo environments (integration)", () 
     apps.push(built);
     const res = await built.inject({ method: "GET", url: "/auth/dev-login/environments" });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual([
+    // Read from the database now: the seeded demos (each with the roles that really have an account) first, then any
+    // hospital that signed up in development ("tenant:<id>").
+    const envs = res.json() as { key: string; label: string; roles: { role: string }[] }[];
+    const seeded = envs.filter((e) => !e.key.startsWith("tenant:"));
+    expect(seeded.map(({ key, label }) => ({ key, label }))).toEqual([
       { key: "gynecology", label: "Gynecology V2" },
       { key: "ophthalmology", label: "Ophthalmology V2" },
       { key: "ophthalmology-v1", label: "Ophthalmology V1" },
+      { key: "namokar", label: "Namokar Telecalling Demo" },
     ]);
+    for (const e of seeded) expect(e.roles.length).toBeGreaterThan(0);
+    // Namokar has no Super Admin account, so none is offered.
+    expect(seeded.find((e) => e.key === "namokar")!.roles.map((r) => r.role)).toEqual(["HOSPITAL_ADMIN", "DOCTOR", "FRONT_DESK", "PATIENT_COORDINATOR"]);
+    expect(seeded.find((e) => e.key === "gynecology")!.roles.map((r) => r.role)).toContain("SUPER_ADMIN");
   });
 
   it.each([

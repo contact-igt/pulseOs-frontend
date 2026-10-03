@@ -257,9 +257,11 @@ export async function createAppointment(
   return { ok: true, appointment: (await getAppointmentRow(db, tenantId, row.id))! };
 }
 
-export async function getFrontDeskDashboard(db: Db, tenantId: string, branchId?: string, now: Date = new Date()): Promise<FrontDeskDashboard> {
+/** The queue for a hospital day: today by default, or any other day (`date`, YYYY-MM-DD) when staff look back or ahead. */
+export async function getFrontDeskDashboard(db: Db, tenantId: string, branchId?: string, now: Date = new Date(), date?: string): Promise<FrontDeskDashboard> {
   const { today: todayKey } = await getCalendarContext(db, tenantId, now);
-  const todayRows = (await selectAppointments(db, tenantId, { branchId, from: todayKey, to: todayKey })).map(toRow);
+  const day = date ?? todayKey;
+  const todayRows = (await selectAppointments(db, tenantId, { branchId, from: day, to: day })).map(toRow);
 
   const arrivals = todayRows.filter((r) => r.status === "checked_in" || r.status === "waiting" || r.status === "with_doctor" || r.status === "completed");
   // Longest-waiting first: arrival time (real timestamp), falling back to the booked time.
@@ -270,7 +272,7 @@ export async function getFrontDeskDashboard(db: Db, tenantId: string, branchId?:
   const pendingConfirmations = todayRows.filter((r) => r.status === "requested" || r.status === "scheduled");
   const atRisk = todayRows.filter((r) => r.atRisk);
 
-  return { today: todayRows, arrivals, waitingQueue, noShows, pendingConfirmations, atRisk };
+  return { date: day, today: todayRows, arrivals, waitingQueue, noShows, pendingConfirmations, atRisk };
 }
 
 // ---------------------------------------------------------------------------

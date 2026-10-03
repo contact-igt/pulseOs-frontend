@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { expectPeriod, periodOptionLabels, pickPeriod, setCustomRange } from "./support/period";
 
 // Analytics workspace: one filter state (the URL) drives every panel, and the
 // chart totals reconcile with the table and the API. Run twice without
@@ -120,11 +121,11 @@ test.describe("Analytics workspace", () => {
     await devLogin(page, "HOSPITAL_ADMIN", /\/command-centre/);
     await page.goto("/analytics?section=marketing&tab=revenue&range=14d&service=Cataract");
     await expect(page.getByTestId("panel-revenue")).toBeVisible();
-    await expect(page.getByTestId("analytics-range")).toHaveValue("14d"); // an older shared link still works
+    await expectPeriod(page, "analytics", "14d"); // an older shared link still works
     await expect(page.getByTestId("filter-service")).toHaveValue("Cataract");
     await page.goto("/analytics?section=marketing&tab=bogus&range=5y&source=telepathy");
     await expect(page.getByTestId("panel-daily-source")).toBeVisible();
-    await expect(page.getByTestId("analytics-range")).toHaveValue("30d");
+    await expectPeriod(page, "analytics", "30d");
   });
 
   test("every tab renders its panels and campaign rows link to the campaign", async ({ page }) => {

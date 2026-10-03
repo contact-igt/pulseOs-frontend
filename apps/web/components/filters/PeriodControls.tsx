@@ -1,11 +1,8 @@
 "use client";
 
-import { FilterSelect } from "@pulseos/ui";
 import { addDays } from "@/components/report/reportFilters";
-
-// On a phone the pair takes its own full-width row and each date shares it (a native date field has a wide intrinsic
-// size and would otherwise push the second date off-screen); from sm up they sit inline beside the preset.
-const DATE_INPUT = "glass-control h-8 w-0 min-w-0 flex-1 rounded-control px-2 text-xs text-ink outline-none focus-visible:border-primary-500 disabled:opacity-50 sm:w-auto sm:flex-none max-md:h-11";
+import { DateRangePicker } from "./DateRangePicker";
+import { PeriodSelect } from "./PeriodSelect";
 
 export interface PeriodValue {
   range: string | undefined;
@@ -14,9 +11,12 @@ export interface PeriodValue {
 }
 
 /**
- * Date presets + a custom from/to pair, shared by every list that filters by day. Days are hospital calendar days; the
+ * Date presets + a custom from/to range, shared by every list that filters by day. Days are hospital calendar days; the
  * caller passes the hospital's `today`. `allowFuture` lets a range reach ahead (follow-ups due next week).
  * `disabled` greys the control when the active view fixes its own date (and says why via `reason`).
+ *
+ * Both parts are PulseOS-owned UI (a Radix select and a calendar popover), never the browser's native menu or date
+ * popup, so they match the product and behave the same on every device.
  */
 export function PeriodControls({
   presets,
@@ -42,38 +42,35 @@ export function PeriodControls({
   reason?: string;
   testIdPrefix: string;
   label?: string;
-  /** The API refuses a longer span; the From picker will not offer a day beyond it. */
+  /** The API refuses a longer span; the calendar will not let a range exceed it. */
   maxSpanDays?: number;
 }) {
-  const max = allowFuture ? undefined : today;
   // An older shared link may carry a preset that is no longer offered: keep it visible instead of a blank control.
   const LEGACY: Record<string, string> = { "14d": "Last 14 days" };
   const options = value.range && LEGACY[value.range] && !presets.some((p) => p.key === value.range) ? [...presets, { key: value.range, label: LEGACY[value.range]! }] : presets;
-  const minFrom = maxSpanDays && (value.to ?? max) ? addDays((value.to ?? max)!, -(maxSpanDays - 1)) : undefined;
   return (
     <>
-      <FilterSelect
-        aria-label={label}
+      <PeriodSelect
+        ariaLabel={label}
         title={disabled ? reason : undefined}
         value={value.range ?? ""}
+        options={options}
+        noneLabel={noneLabel}
         disabled={disabled}
-        onChange={(e) => {
-          const range = e.target.value || undefined;
-          onChange(range === "custom" ? { range, from: addDays(today, -6), to: today } : { range, from: undefined, to: undefined });
-        }}
-        data-testid={`${testIdPrefix}-range`}
-        className="max-md:[&_select]:h-11"
-      >
-        {noneLabel && <option value="">{noneLabel}</option>}
-        {options.map((p) => (
-          <option key={p.key} value={p.key}>{p.label}</option>
-        ))}
-      </FilterSelect>
+        testId={`${testIdPrefix}-range`}
+        onChange={(range) => onChange(range === "custom" ? { range, from: addDays(today, -6), to: today } : { range: range || undefined, from: undefined, to: undefined })}
+      />
       {value.range === "custom" && !disabled && (
-        <div className="flex w-full basis-full items-center gap-1.5 sm:w-auto sm:basis-auto" data-testid={`${testIdPrefix}-custom-dates`}>
-          <input type="date" aria-label="From date" className={DATE_INPUT} value={value.from ?? ""} min={minFrom} max={value.to ?? max} onChange={(e) => e.target.value && onChange({ range: "custom", from: e.target.value, to: value.to ?? e.target.value })} data-testid={`${testIdPrefix}-from`} />
-          <span className="text-xs text-ink-2" aria-hidden="true">–</span>
-          <input type="date" aria-label="To date" className={DATE_INPUT} value={value.to ?? ""} min={value.from} max={max} onChange={(e) => e.target.value && onChange({ range: "custom", from: value.from ?? e.target.value, to: e.target.value })} data-testid={`${testIdPrefix}-to`} />
+        <div className="flex w-full basis-full items-center sm:w-auto sm:basis-auto" data-testid={`${testIdPrefix}-custom-dates`}>
+          <DateRangePicker
+            from={value.from}
+            to={value.to}
+            today={today}
+            allowFuture={allowFuture}
+            maxSpanDays={maxSpanDays}
+            testIdPrefix={testIdPrefix}
+            onApply={(r) => onChange({ range: "custom", from: r.from, to: r.to })}
+          />
         </div>
       )}
     </>

@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { expectPeriod, periodOptionLabels, pickPeriod, setCustomRange } from "./support/period";
 import { sql } from "./support/fixtures";
 
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD ?? "";
@@ -100,25 +101,24 @@ test.describe("M7 Google + Meta Ads reporting and shared date presets (fixtures 
     await login(page, "eyev1.superadmin@pulseos.local");
     await page.goto("/analytics?section=marketing&tab=ads");
     const PRESETS = ["Today", "Yesterday", "Last 7 days", "Last 9 days", "Last 30 days", "Last 90 days", "This month", "Previous month", "Custom range"];
-    const select = page.getByTestId("analytics-range");
-    await expect(select).toBeVisible();
-    expect(await select.locator("option").allTextContents()).toEqual(PRESETS);
-    await select.selectOption("yesterday");
+    await expect(page.getByTestId("analytics-range")).toBeVisible();
+    expect(await periodOptionLabels(page, "analytics")).toEqual(PRESETS);
+    await pickPeriod(page, "analytics", "yesterday");
     await expect(page).toHaveURL(/range=yesterday/);
     await expect(page.getByTestId("analytics-period")).toContainText("1 day");
     await page.reload();
-    await expect(page.getByTestId("analytics-range")).toHaveValue("yesterday");
-    await select.selectOption("prev_month");
+    await expectPeriod(page, "analytics", "yesterday");
+    await pickPeriod(page, "analytics", "prev_month");
     await expect(page).toHaveURL(/range=prev_month/);
-    await select.selectOption("custom");
+    await pickPeriod(page, "analytics", "custom");
     await expect(page.getByTestId("analytics-custom-dates")).toBeVisible();
     // The same list on the operations report and Leads (one component, one set of presets).
     await page.goto("/analytics");
     await expect(page.getByTestId("report-range")).toBeVisible();
-    expect(await page.getByTestId("report-range").locator("option").allTextContents()).toEqual(PRESETS);
+    expect(await periodOptionLabels(page, "report")).toEqual(PRESETS);
     await page.goto("/leads");
     await expect(page.getByTestId("leads-range")).toBeVisible();
-    expect((await page.getByTestId("leads-range").locator("option").allTextContents()).slice(1)).toEqual(PRESETS);
+    expect((await periodOptionLabels(page, "leads")).slice(1)).toEqual(PRESETS);
   });
 
   test("Doctor and front desk never get hospital-wide marketing; V1 default returns after reset", async ({ page }) => {

@@ -133,6 +133,8 @@ export const roleGroupLabel = (role: Role): string => ROLE_GROUP_LABEL[ROLE_GROU
 export interface SessionUser {
   id: string;
   tenantId: string;
+  /** The hospital's name (tenants.name). */
+  tenantName?: string;
   name: string;
   email: string;
   role: Role;
@@ -452,6 +454,9 @@ export interface DoctorRecentPatient {
 }
 
 export interface DoctorDashboard {
+  /** The hospital day the schedule is for (YYYY-MM-DD). Today unless another day was asked for. */
+  date: string;
+  /** Visits on that day (named todayCount for history; it is the selected day's count). */
   todayCount: number;
   checkedInCount: number;
   waitingNow: number;
@@ -1182,6 +1187,8 @@ export interface CreateAppointmentInput {
 }
 
 export interface FrontDeskDashboard {
+  /** The hospital day these rows are for (YYYY-MM-DD). Today unless another day was asked for. */
+  date: string;
   /** Today's appointments with an unresolved Appointment Risk task. */
   atRisk?: AppointmentRow[];
   today: AppointmentRow[];
@@ -1250,7 +1257,14 @@ export interface TreatmentFilters {
   doctorId?: string;
   service?: string;
   treatmentDefinitionId?: string;
+  /** Which treatment date the range is about: the day it is scheduled for, or the day it was completed. Never payment date. */
+  dateField?: TreatmentDateField;
+  /** Hospital days (YYYY-MM-DD, inclusive); both or neither, and only with `dateField`. */
+  from?: string;
+  to?: string;
 }
+
+export type TreatmentDateField = "scheduled" | "completed";
 
 /** One procedure in the tenant's treatment catalog (GET /treatment-catalog — active entries only). */
 export interface TreatmentDefinitionVm {
@@ -2870,4 +2884,55 @@ export interface AdsAnalytics {
   coverage: { matchedCampaigns: number; totalCampaigns: number; matchedSpend: number; totalSpend: number };
   campaigns: AdsCampaignRow[];
   daily: { date: string; spend: number; clicks: number; impressions: number }[];
+}
+
+// ---------------------------------------------------------------------------
+// Hospital sign-up (public onboarding). The option lists are shared so the form and the API validate the same words.
+// ---------------------------------------------------------------------------
+
+export const SIGNUP_INDUSTRIES = ["Healthcare", "Other"] as const;
+export const SIGNUP_ORGANIZATION_TYPES = ["Hospital", "Eye Hospital", "Clinic", "Multi-specialty Hospital", "Other"] as const;
+/** Departments a hospital can name at sign-up. Ophthalmology and Gynaecology install a ready template; the rest are recorded. */
+export const SIGNUP_DEPARTMENTS = ["Ophthalmology", "Gynaecology", "ENT / Rhinology", "Other"] as const;
+export const SIGNUP_DISCOVERY_SOURCES = ["Google", "Instagram", "Facebook", "YouTube", "Referral", "Event / Conference", "Invictus Global Tech", "Other"] as const;
+export const SIGNUP_EDITIONS = ["V1", "V2"] as const;
+
+export type SignupIndustry = (typeof SIGNUP_INDUSTRIES)[number];
+export type SignupEditionChoice = (typeof SIGNUP_EDITIONS)[number];
+
+export interface SignupInput {
+  fullName: string;
+  email: string;
+  phone: string;
+  password: string;
+  organizationName: string;
+  industry: SignupIndustry;
+  organizationType?: (typeof SIGNUP_ORGANIZATION_TYPES)[number];
+  department?: (typeof SIGNUP_DEPARTMENTS)[number];
+  addressLine: string;
+  locality?: string;
+  city: string;
+  state: string;
+  pinCode: string;
+  country: string;
+  discoverySource: (typeof SIGNUP_DISCOVERY_SOURCES)[number];
+  discoveryNotes?: string;
+  edition: SignupEditionChoice;
+}
+
+/** One hospital listed in Developer Access (development only): who it is and which sign-in roles actually exist in it. */
+export interface DevEnvironment {
+  key: string;
+  label: string;
+  roles: { role: Role; label: string }[];
+}
+
+/** What a hospital has already set up: drives the "Welcome to PulseOS" checklist on an empty Command Centre. */
+export interface SetupStatus {
+  hasJourneys: boolean;
+  crmConfigured: boolean;
+  hasDoctors: boolean;
+  callingConnected: boolean;
+  whatsappConnected: boolean;
+  hasStaff: boolean;
 }

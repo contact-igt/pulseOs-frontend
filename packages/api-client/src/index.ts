@@ -1,4 +1,7 @@
 import type {
+  SetupStatus,
+  DevEnvironment,
+  SignupInput,
   ActivityEntry,
   AdsAnalytics,
   AdsSyncRunVm,
@@ -142,9 +145,12 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4310";
 
 class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /** Field-level problems the API reported (validation errors), when it sent any. */
+  issues: { path: string; message: string }[];
+  constructor(status: number, message: string, issues: { path: string; message: string }[] = []) {
     super(message);
     this.status = status;
+    this.issues = issues;
   }
 }
 
@@ -171,8 +177,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   const res = await fetch(`${API_BASE}${path}`, { ...init, credentials: "include", headers });
   if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new ApiError(res.status, body?.error ?? res.statusText);
+    const body = (await res.json().catch(() => null)) as { error?: string; issues?: { path: string; message: string }[] } | null;
+    throw new ApiError(res.status, body?.error ?? res.statusText, Array.isArray(body?.issues) ? body.issues : []);
   }
   // 204, or a 200 with no body (e.g. a bare acknowledgement): nothing to parse.
   const text = res.status === 204 ? "" : await res.text();
@@ -248,12 +254,16 @@ export const api = {
    * apps/api/src/domain/auth/auth.routes.ts::devLoginEnabled. Callers treat
    * that 404 as "feature unavailable here", not an error to surface. */
   devLoginRoles: () => request<{ role: Role; label: string }[]>("/auth/dev-login/roles"),
-  devLoginEnvironments: () => request<{ key: string; label: string }[]>("/auth/dev-login/environments"),
+  /** Hospitals listed in Developer Access (development only), each with the roles that exist in it. */
+  devLoginEnvironments: () => request<DevEnvironment[]>("/auth/dev-login/environments"),
+  /** Public hospital sign-up: the server creates the workspace and signs the owner in. */
+  signup: (input: SignupInput) => request<{ user: SessionUser; workspace: { template: "installed" | "none" | "failed" } }>("/auth/signup", { method: "POST", body: JSON.stringify(input) }),
   devLogin: (role: Role, environment?: string) =>
     request<{ user: SessionUser }>("/auth/dev-login", { method: "POST", body: JSON.stringify({ role, environment }) }),
   branches: () => request<Branch[]>("/branches"),
   journeyTypes: () => request<string[]>("/journey-types"),
   today: (f: DashboardQuery = {}) => request<TodayStrip>(`/dashboard/today${qs(f)}`),
+  setupStatus: () => request<SetupStatus>("/dashboard/setup-status"),
   executive: (f: DashboardQuery = {}) => request<ExecutiveStrip>(`/dashboard/executive${qs(f)}`),
   conversion: (f: DashboardQuery = {}) => request<ConversionStage[]>(`/dashboard/conversion${qs(f)}`),
   journeyHealth: (f: DashboardQuery = {}) => request<JourneyHealth>(`/dashboard/journey-health${qs(f)}`),
@@ -266,7 +276,7 @@ export const api = {
   team: (f: DashboardQuery = {}) => request<TeamWorkloadRow[]>(`/dashboard/team${qs(f)}`),
   branchDoctor: (f: DashboardQuery = {}) => request<BranchDoctorRow[]>(`/dashboard/branch-doctor${qs(f)}`),
   serviceMix: (f: DashboardQuery = {}) => request<ServiceMixRow[]>(`/dashboard/service-mix${qs(f)}`),
-  doctorDashboard: () => request<DoctorDashboard>("/dashboard/doctor"),
+  doctorDashboard: (date?: string) => request<DoctorDashboard>(`/dashboard/doctor${toQuery({ date })}`),
   patients: (filters: PatientListFilters = {}) => request<PatientListRow[]>(`/patients${toQuery({ ...filters })}`),
   searchPatients: (q: string) => request<PatientSearchRow[]>(`/patients/search${toQuery({ q })}`),
   createPatient: (input: CreatePatientInput) => request<CreatePatientResult>("/patients", { method: "POST", body: JSON.stringify(input) }),
@@ -304,7 +314,7 @@ export const api = {
   completeTask: (id: string) => request<TaskRow>(`/tasks/${id}/complete`, { method: "PATCH", body: JSON.stringify({}) }),
   appointments: (filters: { branchId?: string; doctorId?: string; status?: AppointmentStatus; date?: string; search?: string } = {}) =>
     request<AppointmentRow[]>(`/appointments${toQuery({ ...filters })}`),
-  frontDesk: (branchId?: string) => request<FrontDeskDashboard>(`/front-desk${toQuery({ branchId })}`),
+  frontDesk: (opts: { branchId?: string; date?: string } = {}) => request<FrontDeskDashboard>(`/front-desk${toQuery({ ...opts })}`),
   appointmentAction: (id: string, action: AppointmentAction, reason?: { reasonCode?: AppointmentReasonCode; note?: string }) =>
     request<AppointmentActionResult>(`/appointments/${id}/action`, { method: "PATCH", body: JSON.stringify({ action, ...reason }) }),
   completeAppointment: (id: string, input: CompleteAppointmentInput = {}) => request<CompleteAppointmentResult>(`/appointments/${id}/complete`, { method: "PATCH", body: JSON.stringify(input) }),

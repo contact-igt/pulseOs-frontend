@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { expectPeriod, periodOptionLabels, pickPeriod, setCustomRange } from "./support/period";
 
 // M6.6 Analytics (operations): one URL filter state → one request → every KPI, chart and table. V1 has no spend / ROAS.
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD ?? "";
@@ -49,10 +50,10 @@ test.describe("M6.6 — Analytics (operations)", () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await login(page, "eyev1.admin@pulseos.local");
     await page.goto("/analytics");
-    await expect(page.getByTestId("report-range")).toHaveValue("30d"); // the default is not written to the URL
+    await expectPeriod(page, "report", "30d"); // the default is not written to the URL
     expect(page.url()).not.toContain("aRange");
 
-    await page.getByTestId("report-range").selectOption("7d");
+    await pickPeriod(page, "report", "7d");
     await expect(page).toHaveURL(/aRange=7d/);
     const first = await apiJson<Op>(page, "/reports/operations?range=7d");
     await expect.poll(() => kpi(page, "enquiries")).toBe(first.kpis.newEnquiries);
@@ -73,7 +74,7 @@ test.describe("M6.6 — Analytics (operations)", () => {
     await expect.poll(() => kpi(page, "enquiries")).toBe(filtered.kpis.newEnquiries);
 
     await page.reload();
-    await expect(page.getByTestId("report-range")).toHaveValue("7d");
+    await expectPeriod(page, "report", "7d");
     await expect(page.getByTestId("report-filter-service")).toHaveValue(svc);
     await expect.poll(() => kpi(page, "enquiries")).toBe(filtered.kpis.newEnquiries);
     await page.goto("/command-centre");
@@ -83,7 +84,7 @@ test.describe("M6.6 — Analytics (operations)", () => {
     // Reset clears the analytics keys only and the filters return to the default.
     await page.getByTestId("report-reset").click();
     await expect(page).not.toHaveURL(/aService|aRange/);
-    await expect(page.getByTestId("report-range")).toHaveValue("30d");
+    await expectPeriod(page, "report", "30d");
   });
 
   test("Date range offers Today, Yesterday, 7, 30, This month, Previous month and Custom; custom is validated", async ({ page }) => {
@@ -91,15 +92,15 @@ test.describe("M6.6 — Analytics (operations)", () => {
     await login(page, "eyev1.admin@pulseos.local");
     await page.goto("/analytics");
     await expect(page.getByTestId("report-range")).toBeVisible();
-    expect(await page.getByTestId("report-range").locator("option").allTextContents()).toEqual(["Today", "Yesterday", "Last 7 days", "Last 9 days", "Last 30 days", "Last 90 days", "This month", "Previous month", "Custom range"]);
-    await page.getByTestId("report-range").selectOption("custom");
+    expect(await periodOptionLabels(page, "report")).toEqual(["Today", "Yesterday", "Last 7 days", "Last 9 days", "Last 30 days", "Last 90 days", "This month", "Previous month", "Custom range"]);
+    await pickPeriod(page, "report", "custom");
     await expect(page.getByTestId("report-custom-dates")).toBeVisible();
     await expect(page).toHaveURL(/aRange=custom&.*aFrom=\d{4}-\d\d-\d\d/);
     // A hand-made bad link falls back to the default instead of breaking.
     await page.goto("/analytics?aRange=custom&aFrom=2026-10-05&aTo=2026-09-01");
-    await expect(page.getByTestId("report-range")).toHaveValue("30d");
+    await expectPeriod(page, "report", "30d");
     await page.goto("/analytics?aRange=forever&aBranch=not-a-uuid");
-    await expect(page.getByTestId("report-range")).toHaveValue("30d");
+    await expectPeriod(page, "report", "30d");
     await expect(page.locator("[data-nextjs-dialog]")).toHaveCount(0);
   });
 
@@ -170,7 +171,7 @@ test.describe("M6.6 — Analytics (operations)", () => {
     await expect(page.getByTestId("panel-campaigns")).toBeVisible();
     await page.getByTestId("analytics-area-operations").click();
     await expect(page.getByTestId("operations-analytics")).toBeVisible();
-    await expect(page.getByTestId("report-range")).toHaveValue("30d");
+    await expectPeriod(page, "report", "30d");
   });
 
   test("Staff cannot open Analytics: no sidebar entry, the page redirects home, and the data API is 403", async ({ page }) => {

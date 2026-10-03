@@ -29,6 +29,7 @@ import {
   localDayKey,
 } from "@pulseos/ui";
 import { OperationsReportView } from "@/components/report/OperationsReportView";
+import { WorkspaceWelcome } from "@/components/command-centre/WorkspaceWelcome";
 import { useUrlFilters } from "@/lib/useUrlFilters";
 import { withFrom } from "@/components/shell/BackLink";
 import { useCapability } from "@/lib/useEdition";
@@ -53,6 +54,8 @@ export default function CommandCentrePage() {
   const url = useUrlFilters();
   const session = useQuery({ queryKey: ["session"], queryFn: api.session, retry: false });
   const tab = url.get("cc") === "report" ? "report" : "overview";
+  // A brand-new hospital has nothing to chart yet: show how PulseOS works and what to do first instead of a wall of zeros.
+  const setup = useQuery({ queryKey: ["dashboard", "setup-status"], queryFn: api.setupStatus, staleTime: 30_000 });
   return (
     <div className="mx-auto max-w-7xl space-y-4">
       <Tabs
@@ -65,7 +68,13 @@ export default function CommandCentrePage() {
           { key: "report", label: "Operations report", testId: "cc-tab-report" },
         ]}
       />
-      {tab === "report" ? session.data && <OperationsReportView role={session.data.user.role} /> : <CommandCentreOverview />}
+      {tab === "report" ? (
+        session.data && <OperationsReportView role={session.data.user.role} />
+      ) : setup.data && !setup.data.hasJourneys ? (
+        <WorkspaceWelcome status={setup.data} hospitalName={session.data?.user.tenantName} />
+      ) : (
+        <CommandCentreOverview />
+      )}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { expectPeriod, periodOptionLabels, pickPeriod, setCustomRange } from "./support/period";
 import { test, expect, type Page } from "@playwright/test";
 
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD ?? "";
@@ -25,7 +26,7 @@ test.describe("Command Centre — Operations report", () => {
 
     // Period: the API is the source of truth — the page shows exactly what /reports/operations returns.
     const responsePromise = page.waitForResponse((r) => r.url().includes("/reports/operations") && r.url().includes("range=30d"));
-    await page.getByTestId("report-range").selectOption("30d");
+    await pickPeriod(page, "report", "30d");
     const body = (await (await responsePromise).json()) as { kpis: { newEnquiries: number } };
     await expect(page.getByTestId("report-kpi-new")).toContainText(String(body.kpis.newEnquiries));
 
@@ -37,7 +38,7 @@ test.describe("Command Centre — Operations report", () => {
 
     // Refresh keeps the view.
     await page.reload();
-    await expect(page.getByTestId("report-range")).toHaveValue("30d");
+    await expectPeriod(page, "report", "30d");
     await expect(page.getByTestId("report-filter-service")).toHaveValue("Cataract");
 
     // Chart ⇄ table.
@@ -56,7 +57,7 @@ test.describe("Command Centre — Operations report", () => {
 
     // Reset clears every report filter.
     await page.getByTestId("report-reset").click();
-    await expect(page.getByTestId("report-range")).toHaveValue("7d");
+    await expectPeriod(page, "report", "7d");
     await expect(page.getByTestId("report-chips")).toHaveCount(0);
     expect(errors).toEqual([]);
   });
@@ -65,7 +66,7 @@ test.describe("Command Centre — Operations report", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await login(page, "eye.admin@pulseos.local");
     await page.goto("/command-centre?cc=report");
-    await page.getByTestId("report-range").selectOption("custom");
+    await pickPeriod(page, "report", "custom");
     await expect(page.getByTestId("report-custom-dates")).toBeVisible();
     await expect(page).toHaveURL(/rRange=custom&rFrom=\d{4}-\d{2}-\d{2}&rTo=\d{4}-\d{2}-\d{2}/);
     await page.getByTestId("report-filters-open").click();

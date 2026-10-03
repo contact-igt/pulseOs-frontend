@@ -11,6 +11,7 @@ import {
   getMarketingSources,
   getPatientFlow,
   getServiceMix,
+  getSetupStatus,
   getSourcePerformance,
   getSpendAtRisk,
   getSpendAtRiskByReason,
@@ -77,6 +78,8 @@ export async function dashboardRoutes(app: FastifyInstance) {
     const tenantId = request.sessionUser!.tenantId;
     return listJourneyTypes(app.db, tenantId);
   });
+
+  app.get("/dashboard/setup-status", async (request) => getSetupStatus(app.db, request.sessionUser!.tenantId));
 
   app.get("/dashboard/today", async (request, reply) => {
     const tenantId = request.sessionUser!.tenantId;

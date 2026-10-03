@@ -21,6 +21,30 @@ export const tenants = pgTable("tenants", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// What a hospital told us about itself when it signed up (or, for the seeded demos, who it is). One row per tenant.
+// `devVisible` is the ONLY thing that lists a tenant in Developer Access: it is set at sign-up when development login is
+// enabled, and by the demo seed - never in production, never from a request field.
+export const tenantProfiles = pgTable("tenant_profiles", {
+  tenantId: uuid("tenant_id").primaryKey().references(() => tenants.id),
+  source: text("source").notNull().default("signup"), // signup | demo
+  devVisible: boolean("dev_visible").notNull().default(false),
+  ownerName: text("owner_name").notNull(),
+  ownerEmail: text("owner_email").notNull(),
+  ownerPhone: text("owner_phone").notNull(),
+  industry: text("industry").notNull(),
+  organizationType: text("organization_type"),
+  department: text("department"),
+  addressLine: text("address_line").notNull(),
+  locality: text("locality"),
+  city: text("city").notNull(),
+  state: text("state").notNull(),
+  pinCode: text("pin_code").notNull(),
+  country: text("country").notNull().default("India"),
+  discoverySource: text("discovery_source").notNull(),
+  discoveryNotes: text("discovery_notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // A tenant's OWN capability switches. A row overrides the edition's default for that capability (on or off); no row
 // means "use the edition default". The runtime authority for what a tenant can do is edition default + these rows.
 export const tenantCapabilities = pgTable("tenant_capabilities", {

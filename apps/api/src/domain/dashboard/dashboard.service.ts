@@ -9,10 +9,12 @@ import {
   campaignTouchpoints,
   connectors,
   consultationOutcomes,
+  departments,
   journeys,
   marketingCampaigns,
   patients,
   revenueEvents,
+  scheduleResources,
   tasks,
   treatmentOpportunities,
   users,
@@ -30,6 +32,7 @@ import type {
   MarketingSourceRow,
   PatientFlowCount,
   ServiceMixRow,
+  SetupStatus,
   SourcePerformanceRow,
   SpendAtRisk,
   SpendAtRiskCategory,
@@ -605,4 +608,27 @@ export async function getServiceMix(db: Db, tenantId: string, filters: Dashboard
       revenue: revenueBy.get(r.service) ?? 0,
     }))
     .sort((a, b) => b.revenue - a.revenue || b.journeys - a.journeys);
+}
+
+/**
+ * What this hospital has set up so far. Cheap existence checks (no counting of data), used to show a guided
+ * "Welcome to PulseOS" checklist instead of a dashboard full of zeros on a brand-new workspace.
+ */
+export async function getSetupStatus(db: Db, tenantId: string): Promise<SetupStatus> {
+  const [journey, department, resource, calling, whatsapp, staff] = await Promise.all([
+    db.select({ id: journeys.id }).from(journeys).where(eq(journeys.tenantId, tenantId)).limit(1),
+    db.select({ id: departments.id }).from(departments).where(eq(departments.tenantId, tenantId)).limit(1),
+    db.select({ id: scheduleResources.id }).from(scheduleResources).where(eq(scheduleResources.tenantId, tenantId)).limit(1),
+    db.select({ id: connectors.id }).from(connectors).where(and(eq(connectors.tenantId, tenantId), eq(connectors.provider, "runo"), inArray(connectors.status, ["CONNECTED", "DEGRADED"]))).limit(1),
+    db.select({ id: connectors.id }).from(connectors).where(and(eq(connectors.tenantId, tenantId), eq(connectors.provider, "whatsapp_meta_cloud"), inArray(connectors.status, ["CONNECTED", "DEGRADED"]))).limit(1),
+    db.select({ c: count() }).from(users).where(eq(users.tenantId, tenantId)),
+  ]);
+  return {
+    hasJourneys: journey.length > 0,
+    crmConfigured: department.length > 0,
+    hasDoctors: resource.length > 0,
+    callingConnected: calling.length > 0,
+    whatsappConnected: whatsapp.length > 0,
+    hasStaff: (staff[0]?.c ?? 0) > 1,
+  };
 }

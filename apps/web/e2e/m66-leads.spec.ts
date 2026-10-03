@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { expectPeriod, periodOptionLabels, pickPeriod, setCustomRange } from "./support/period";
 import { purgePatients, sql } from "./support/fixtures";
 
 // M6.6 Leads: operational quick views, date + owner filters in hospital time, URL state, today strip, table columns.
@@ -100,26 +101,25 @@ test.describe("M6.6 — Leads operational views", () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await login(page, "eyev1.coordinator@pulseos.local");
     await page.goto("/leads");
-    await page.getByTestId("leads-range").selectOption("7d");
+    await pickPeriod(page, "leads", "7d");
     await expect(page).toHaveURL(/range=7d/);
     await expect(page.getByTestId("leads-date-context")).toContainText("Enquiry date");
     await expect.poll(() => visible(page)).toEqual(["Fresh", "Next", "Visit"]); // Overdue is 10 days old, Old 40
-    await page.getByTestId("leads-range").selectOption("30d");
+    await pickPeriod(page, "leads", "30d");
     await expect.poll(() => visible(page)).toEqual(["Fresh", "Next", "Overdue", "Visit"]);
-    await page.getByTestId("leads-range").selectOption("today");
+    await pickPeriod(page, "leads", "today");
     await expect.poll(() => visible(page)).toEqual(["Fresh"]);
 
     // Custom: from/to inputs, inclusive.
-    await page.getByTestId("leads-range").selectOption("custom");
-    await page.getByTestId("leads-from").fill(dayIST(-11));
-    await page.getByTestId("leads-to").fill(dayIST(-9));
+    await pickPeriod(page, "leads", "custom");
+    await setCustomRange(page, "leads", dayIST(-11), dayIST(-9));
     await expect(page).toHaveURL(new RegExp(`from=${dayIST(-11)}`));
     await expect.poll(() => visible(page)).toEqual(["Overdue"]);
 
     // Refresh keeps everything; navigating away and back restores it.
     await page.reload();
-    await expect(page.getByTestId("leads-range")).toHaveValue("custom");
-    await expect(page.getByTestId("leads-from")).toHaveValue(dayIST(-11));
+    await expectPeriod(page, "leads", "custom");
+    await expect(page.getByTestId("leads-range-picker")).toHaveAttribute("data-from", dayIST(-11));
     await expect.poll(() => visible(page)).toEqual(["Overdue"]);
     await page.goto("/command-centre");
     await page.goBack();
@@ -127,7 +127,7 @@ test.describe("M6.6 — Leads operational views", () => {
     await expect.poll(() => visible(page)).toEqual(["Overdue"]);
     // An impossible custom range in the URL falls back to "any date" instead of breaking the page.
     await page.goto(`/leads?range=custom&from=${dayIST(0)}&to=${dayIST(-5)}`);
-    await expect(page.getByTestId("leads-range")).toHaveValue("");
+    await expectPeriod(page, "leads", "");
     await expect(page.getByTestId("leads-table-error")).toHaveCount(0);
   });
 
