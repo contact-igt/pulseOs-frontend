@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { CreateTaskInput, TaskReason, TaskView } from "@pulseos/types";
 import { hasPermission } from "@pulseos/types";
 import { requirePermission } from "../auth/permission.middleware.js";
+import { readDayWindow } from "../../lib/day-range.js";
 import {
   addTaskNote,
   completeTask,
@@ -48,7 +49,7 @@ export async function taskRoutes(app: FastifyInstance) {
   // — every mutation below still requires the stronger MANAGE_TASKS.
   app.addHook("preHandler", requirePermission("VIEW_TASKS"));
 
-  app.get("/tasks", async (request) => {
+  app.get("/tasks", async (request, reply) => {
     const tenantId = request.sessionUser!.tenantId;
     const query = request.query as { view?: TaskView; assignedTo?: string; patientId?: string; reason?: TaskReason; followUpTypeKey?: string };
     // A caller without MANAGE_TASKS (e.g. Doctor: VIEW_TASKS only) gets a
@@ -70,16 +71,20 @@ export async function taskRoutes(app: FastifyInstance) {
     // tasks.integration.test.ts's "unassigned view" describe block for proof).
     const canManageTasks = hasPermission(request.sessionUser!.role, "MANAGE_TASKS");
     const assignedTo = canManageTasks ? query.assignedTo : request.sessionUser!.id;
-    return listTasks(app.db, tenantId, { view: query.view, assignedTo, patientId: query.patientId, reason: query.reason, followUpTypeKey: query.followUpTypeKey }, request.sessionUser!.timezone);
+    const window = readDayWindow(request.query, "completedFrom", "completedTo");
+    if (window && "error" in window) return reply.status(400).send({ error: "invalid_query", message: window.error });
+    return listTasks(app.db, tenantId, { view: query.view, assignedTo, patientId: query.patientId, reason: query.reason, followUpTypeKey: query.followUpTypeKey, completedWindow: window }, request.sessionUser!.timezone);
   });
 
   // Registered ahead of nothing conflicting — "/tasks/:id/..." mutation
   // routes below are all PATCH with a fixed suffix, so this GET is unambiguous.
-  app.get("/tasks/counts", async (request) => {
+  app.get("/tasks/counts", async (request, reply) => {
     const tenantId = request.sessionUser!.tenantId;
     const userId = request.sessionUser!.id;
     const canManageTasks = hasPermission(request.sessionUser!.role, "MANAGE_TASKS");
-    return getTaskCounts(app.db, tenantId, userId, canManageTasks, request.sessionUser!.timezone);
+    const window = readDayWindow(request.query, "completedFrom", "completedTo");
+    if (window && "error" in window) return reply.status(400).send({ error: "invalid_query", message: window.error });
+    return getTaskCounts(app.db, tenantId, userId, canManageTasks, request.sessionUser!.timezone, window);
   });
 
   app.post("/tasks", { preHandler: requirePermission("MANAGE_TASKS") }, async (request, reply) => {

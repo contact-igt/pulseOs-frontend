@@ -288,9 +288,10 @@ export const api = {
   recordOutcome: (appointmentId: string, input: Omit<RecordOutcomeInput, "appointmentId">) =>
     request<{ ok: true }>(`/appointments/${appointmentId}/outcome`, { method: "POST", body: JSON.stringify(input) }),
   lookups: () => request<Lookups>("/lookups"),
-  tasks: (filters: { view?: TaskView; assignedTo?: string; patientId?: string; reason?: TaskReason; followUpTypeKey?: string } = {}) =>
+  tasks: (filters: { view?: TaskView; assignedTo?: string; patientId?: string; reason?: TaskReason; followUpTypeKey?: string; completedFrom?: string; completedTo?: string } = {}) =>
     request<TaskRow[]>(`/tasks${toQuery({ ...filters })}`),
-  taskCounts: () => request<TaskCounts>("/tasks/counts"),
+  /** `window` bounds the Completed count to the days tasks were completed on (hospital days), matching the Completed list. */
+  taskCounts: (window: { completedFrom?: string; completedTo?: string } = {}) => request<TaskCounts>(`/tasks/counts${toQuery({ ...window })}`),
   createTask: (input: CreateTaskInput) => request<TaskRow>("/tasks", { method: "POST", body: JSON.stringify(input) }),
   addTaskNote: (id: string, notes: string) => request<TaskRow>(`/tasks/${id}/note`, { method: "PATCH", body: JSON.stringify({ notes }) }),
   rescheduleTask: (id: string, dueAt: string, note?: string) => request<TaskRow>(`/tasks/${id}/reschedule`, { method: "PATCH", body: JSON.stringify({ dueAt, ...(note ? { note } : {}) }) }),

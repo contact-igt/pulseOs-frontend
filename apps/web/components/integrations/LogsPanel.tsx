@@ -1,11 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
 import { Badge, EmptyState, ErrorState, Skeleton, localDayKey, relativeTime } from "@pulseos/ui";
 import { DATE_PRESETS, resolveDatePreset } from "@pulseos/types";
-import { PeriodControls, type PeriodValue } from "@/components/filters/PeriodControls";
+import { PeriodControls } from "@/components/filters/PeriodControls";
+import { periodPatch, readPeriodChoice } from "@/components/filters/periodFilter";
+import { useUrlFilters } from "@/lib/useUrlFilters";
 import { useHospitalTimeZone } from "@/lib/useHospitalTimeZone";
 
 const PROVIDERS = [
@@ -25,7 +28,10 @@ export function LogsPanel({ provider: fixedProvider }: { provider?: string }) {
   const [status, setStatus] = useState("");
   const tz = useHospitalTimeZone();
   const today = localDayKey(new Date(), tz);
-  const [period, setPeriod] = useState<PeriodValue>({ range: undefined, from: undefined, to: undefined });
+  // The period lives in the URL (refresh, back/forward and shared links restore it); "Any date" is the default.
+  const params = useSearchParams();
+  const url = useUrlFilters();
+  const period = useMemo(() => readPeriodChoice(new URLSearchParams(params.toString()), { prefix: "lg", presets: DATE_PRESETS }), [params]);
   // The shared presets resolve to hospital-local days; the API takes the resolved day span.
   const span = period.range === "custom" ? { from: period.from, to: period.to } : period.range ? resolveDatePreset(period.range as never, today) : {};
   const q = useQuery({ queryKey: ["integration-logs", provider, status, span.from, span.to], queryFn: () => api.integrationLogs({ provider, status, ...(span.from && span.to ? { from: span.from, to: span.to } : {}) }) });
@@ -47,7 +53,7 @@ export function LogsPanel({ provider: fixedProvider }: { provider?: string }) {
             {STATUSES.map((s) => <option key={s} value={s}>{s || "Any status"}</option>)}
           </select>
         </label>
-        <PeriodControls presets={DATE_PRESETS} value={period} today={today} onChange={setPeriod} noneLabel="Any date" testIdPrefix="logs" />
+        <PeriodControls presets={DATE_PRESETS} value={period} today={today} onChange={(next) => url.set(periodPatch(next, { prefix: "lg", defaultRange: "" }))} noneLabel="Any date" testIdPrefix="logs" maxSpanDays={366} />
       </div>
       {q.isLoading && <Skeleton className="h-24" />}
       {q.isError && <ErrorState message="Could not load activity." />}

@@ -8,6 +8,7 @@ import { syncAds } from "../ads/ads-sync.service.js";
 import { configureIntegration, getHubDetail, listHub, listIntegrationLogs } from "./hub.service.js";
 import { createWebhook, deleteWebhook, listWebhooks, updateWebhook } from "./outbound-webhook.service.js";
 import { webhookInputSchema } from "./webhook-rules.js";
+import { dayRangeShape, refineDayRange } from "../../lib/day-range.js";
 
 const REASON_STATUS: Record<string, number> = {
   unknown_integration: 404,
@@ -27,12 +28,13 @@ const configureSchema = z.object({
   mode: z.enum(["FIXTURE", "SANDBOX", "LIVE"]).optional(),
 });
 
-const logQuerySchema = z.object({
-  provider: z.string().max(40).optional(),
-  status: z.string().max(20).optional(),
-  from: z.string().max(10).optional(),
-  to: z.string().max(10).optional(),
-});
+const logQuerySchema = z
+  .object({
+    provider: z.string().max(40).optional(),
+    status: z.string().max(20).optional(),
+    ...dayRangeShape,
+  })
+  .superRefine(refineDayRange);
 
 export async function integrationHubRoutes(app: FastifyInstance) {
   app.addHook("preHandler", requirePermission("VIEW_INTEGRATIONS"));

@@ -50,3 +50,17 @@ export function periodPatch(next: { range: string | undefined; from: string | un
     [`${o.prefix}to`]: custom ? next.to : undefined,
   };
 }
+
+/**
+ * The same URL vocabulary for lists that default to "Any date": the chosen preset (left unresolved - the panel turns it
+ * into hospital days) or a valid custom range, otherwise nothing.
+ */
+export function readPeriodChoice(params: URLSearchParams, o: Pick<PeriodOptions, "prefix" | "presets">): { range: string | undefined; from: string | undefined; to: string | undefined } {
+  const none = { range: undefined, from: undefined, to: undefined };
+  const raw = params.get(`${o.prefix}range`);
+  if (!raw || !o.presets.some((p) => p.key === raw)) return none;
+  if (raw !== "custom") return { range: raw, from: undefined, to: undefined };
+  const from = params.get(`${o.prefix}from`);
+  const to = params.get(`${o.prefix}to`);
+  return isRealDate(from) && isRealDate(to) && from <= to ? { range: "custom", from, to } : none;
+}

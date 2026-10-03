@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DATE_PRESETS } from "@pulseos/types";
-import { periodPatch, readPeriod } from "../periodFilter";
+import { periodPatch, readPeriod, readPeriodChoice } from "../periodFilter";
 
 const opts = { prefix: "p", defaultRange: "30d", presets: DATE_PRESETS.filter((p) => p.key !== "90d"), today: "2026-10-03" } as const;
 const read = (qs: string) => readPeriod(new URLSearchParams(qs), opts);
@@ -41,5 +41,33 @@ describe("periodPatch", () => {
   it("writes a preset, and from/to only for custom", () => {
     expect(periodPatch({ range: "7d", from: "x", to: "y" }, opts)).toEqual({ prange: "7d", pfrom: undefined, pto: undefined });
     expect(periodPatch({ range: "custom", from: "2026-09-10", to: "2026-09-12" }, opts)).toEqual({ prange: "custom", pfrom: "2026-09-10", pto: "2026-09-12" });
+  });
+});
+
+describe("readPeriodChoice (lists whose default is 'Any date')", () => {
+  const o = { prefix: "lg", presets: DATE_PRESETS } as const;
+  const choice = (qs: string) => readPeriodChoice(new URLSearchParams(qs), o);
+
+  it("is empty when the URL has no period", () => {
+    expect(choice("")).toEqual({ range: undefined, from: undefined, to: undefined });
+  });
+
+  it("returns an offered preset unresolved (the panel resolves it in the hospital's calendar)", () => {
+    expect(choice("lgrange=7d")).toEqual({ range: "7d", from: undefined, to: undefined });
+  });
+
+  it("returns a custom range only when both ends are real days in order", () => {
+    expect(choice("lgrange=custom&lgfrom=2026-09-10&lgto=2026-09-12")).toEqual({ range: "custom", from: "2026-09-10", to: "2026-09-12" });
+    expect(choice("lgrange=custom&lgfrom=2026-09-12&lgto=2026-09-10").range).toBeUndefined();
+    expect(choice("lgrange=custom").range).toBeUndefined();
+  });
+
+  it("ignores values it does not offer", () => {
+    expect(choice("lgrange=forever").range).toBeUndefined();
+  });
+
+  it("round-trips through periodPatch with an empty default", () => {
+    expect(periodPatch({ range: undefined, from: undefined, to: undefined }, { prefix: "lg", defaultRange: "" })).toEqual({ lgrange: undefined, lgfrom: undefined, lgto: undefined });
+    expect(periodPatch({ range: "9d", from: undefined, to: undefined }, { prefix: "lg", defaultRange: "" })).toEqual({ lgrange: "9d", lgfrom: undefined, lgto: undefined });
   });
 });

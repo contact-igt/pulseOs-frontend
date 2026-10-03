@@ -3,7 +3,7 @@ import { and, eq, gte, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { patientNameSql } from "../../lib/patient-name.js";
 import type { Db, DbOrTx } from "../../db/client.js";
-import { hospitalTodayBounds } from "../../lib/hospital-time.js";
+import { hospitalTodayBounds, inLocalRange } from "../../lib/hospital-time.js";
 import { followUpTypes, journeys, patients, tasks, timelineEvents, users } from "../../db/schema.js";
 import { FOLLOW_UP_KEYS, TASK_TYPE_LABEL, type CreateFollowUpInput, type CreateTaskInput, type TaskCounts, type TaskReason, type TaskRow, type TaskView } from "@pulseos/types";
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -115,10 +115,13 @@ export interface TaskFilters {
   assignedTo?: string;
   patientId?: string;
   reason?: TaskReason;
+  /** Completed view only: hospital days (inclusive) the task was completed on. */
+  completedWindow?: { from: string; to: string };
 }
 
 export async function listTasks(db: Db, tenantId: string, filters: TaskFilters, timezone: string): Promise<TaskRow[]> {
   const { start, end } = hospitalTodayBounds(timezone);
+  const tz = timezone;
   const now = new Date();
 
   const viewCondition =
@@ -129,7 +132,7 @@ export async function listTasks(db: Db, tenantId: string, filters: TaskFilters, 
         : filters.view === "upcoming"
           ? and(or(eq(tasks.status, "pending"), eq(tasks.status, "in_progress")), gte(tasks.dueAt, end))
           : filters.view === "completed"
-            ? eq(tasks.status, "completed")
+            ? and(eq(tasks.status, "completed"), filters.completedWindow ? inLocalRange(tasks.completedAt, tz, filters.completedWindow.from, filters.completedWindow.to) : undefined)
             : filters.view === "unassigned"
               ? and(isNull(tasks.assignedTo), or(eq(tasks.status, "pending"), eq(tasks.status, "in_progress")))
               : filters.view === "appointment_risk"
@@ -178,14 +181,14 @@ export async function listTasks(db: Db, tenantId: string, filters: TaskFilters, 
  * task.routes.ts applies to the `unassigned` view itself — a VIEW_TASKS-only
  * caller (e.g. Doctor) gets `unassigned: undefined`, never a tenant count.
  */
-export async function getTaskCounts(db: Db, tenantId: string, userId: string, canManageTasks: boolean, timezone: string): Promise<TaskCounts> {
+export async function getTaskCounts(db: Db, tenantId: string, userId: string, canManageTasks: boolean, timezone: string, completedWindow?: { from: string; to: string }): Promise<TaskCounts> {
   const { start, end } = hospitalTodayBounds(timezone);
   const now = new Date();
 
   const overdueCond = and(eq(tasks.status, "pending"), lt(tasks.dueAt, now));
   const todayCond = and(eq(tasks.status, "pending"), gte(tasks.dueAt, start), lt(tasks.dueAt, end));
   const upcomingCond = and(or(eq(tasks.status, "pending"), eq(tasks.status, "in_progress")), gte(tasks.dueAt, end));
-  const completedCond = eq(tasks.status, "completed");
+  const completedCond = and(eq(tasks.status, "completed"), completedWindow ? inLocalRange(tasks.completedAt, timezone, completedWindow.from, completedWindow.to) : undefined);
 
   const [row] = await db
     .select({

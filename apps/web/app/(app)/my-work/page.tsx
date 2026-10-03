@@ -4,11 +4,12 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
 import Link from "next/link";
-import { Badge, Button, EmptyState, ErrorState, Panel, Skeleton, Tabs, Toolbar, TASK_REASON_LABEL, TASK_REASON_TONE, ViewSwitcher, fmtDateTime as fmtDate, urgencyLabel } from "@pulseos/ui";
+import { useSearchParams } from "next/navigation";
+import { Badge, Button, EmptyState, ErrorState, Panel, Skeleton, Tabs, Toolbar, TASK_REASON_LABEL, TASK_REASON_TONE, ViewSwitcher, fmtDateTime as fmtDate, localDayKey, urgencyLabel } from "@pulseos/ui";
 import { CalendarDays, Columns3, List } from "lucide-react";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import { withFrom } from "@/components/shell/BackLink";
-import { hasPermission } from "@pulseos/types";
+import { DATE_PRESETS, hasPermission } from "@pulseos/types";
 import type { TaskReason, TaskRow, TaskView } from "@pulseos/types";
 import { pathAllowedForRole } from "@/components/shell/nav";
 import { useViewState } from "@/lib/useViewState";
@@ -21,6 +22,8 @@ import { TaskDrawer } from "@/components/my-work/TaskDrawer";
 import { LogOutcomeSheet } from "@/components/outcomes/LogOutcomeSheet";
 import { useHospitalTimeZone } from "@/lib/useHospitalTimeZone";
 import { useUrlFilters } from "@/lib/useUrlFilters";
+import { PeriodControls } from "@/components/filters/PeriodControls";
+import { periodPatch, readPeriod } from "@/components/filters/periodFilter";
 
 const VIEWS = ["list", "board", "calendar"] as const;
 type WorkView = (typeof VIEWS)[number];
@@ -116,8 +119,16 @@ export default function MyWorkPage() {
   const { view, setView, date, setDate, range, calendarMode, setCalendarMode } = useViewState<WorkView>({ views: VIEWS, defaultView: "list", timeZone });
   const canOpenJourney = !!session.data && pathAllowedForRole(session.data.user.role, "/journeys");
 
+  // Completed is a history, so it covers a chosen window (default: last 7 days, by the day each task was completed in
+  // the hospital's calendar). Overdue / Today / Upcoming are live buckets and never take one.
+  const searchParams = useSearchParams();
+  const periodOptions = { prefix: "c", defaultRange: "7d", presets: DATE_PRESETS, today: localDayKey(now, timeZone) } as const;
+  const period = readPeriod(new URLSearchParams(searchParams.toString()), periodOptions);
+  const completedWindow = { completedFrom: period.from, completedTo: period.to };
+  const windowKey = effectiveTab === "completed" ? `${period.from}..${period.to}` : "";
+
   // ONE tasks query feeds List, Board and Calendar: a view is a presentation, never a different dataset.
-  const tasksKey = ["tasks", effectiveTab, currentUserId] as const;
+  const tasksKey = ["tasks", effectiveTab, currentUserId, windowKey] as const;
   const actions = useTaskActions(tasksKey);
   const tasks = useQuery({
     queryKey: tasksKey,
@@ -129,14 +140,16 @@ export default function MyWorkPage() {
           ? { assignedTo: currentUserId }
           : effectiveTab === "unassigned"
             ? { view: "unassigned" }
-            : { view: effectiveTab, assignedTo: currentUserId },
+            : effectiveTab === "completed"
+              ? { view: "completed", assignedTo: currentUserId, ...completedWindow }
+              : { view: effectiveTab, assignedTo: currentUserId },
       ),
     enabled: !!currentUserId,
   });
 
   const counts = useQuery({
-    queryKey: ["tasks", "counts", currentUserId],
-    queryFn: api.taskCounts,
+    queryKey: ["tasks", "counts", currentUserId, `${period.from}..${period.to}`],
+    queryFn: () => api.taskCounts(completedWindow),
     enabled: !!currentUserId,
   });
 
@@ -257,6 +270,17 @@ export default function MyWorkPage() {
         })}
       </div>
         <div className="flex flex-wrap items-center gap-1.5">
+          {effectiveTab === "completed" && (
+            <PeriodControls
+              presets={DATE_PRESETS}
+              value={{ range: period.range, from: period.from, to: period.to }}
+              today={periodOptions.today}
+              maxSpanDays={366}
+              onChange={(next) => urlFilters.set(periodPatch(next, periodOptions))}
+              testIdPrefix="my-work-completed"
+              label="Completed in"
+            />
+          )}
           <label className="sr-only" htmlFor="my-work-type-filter">Follow-up type</label>
           <select
             id="my-work-type-filter"
