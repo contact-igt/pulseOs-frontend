@@ -1,6 +1,7 @@
 import { APPOINTMENT_STATUS_LABEL, APPOINTMENT_STATUS_TONE, visibleRange } from "@pulseos/ui";
 import type { CalendarEvent } from "@pulseos/ui";
 import type { AppointmentRangeFilters, AppointmentRow, AppointmentStatus, DoctorTodayItem } from "@pulseos/types";
+import { addDays } from "../report/reportFilters";
 
 // Pure view-model helpers shared by the Appointments, Doctor Home and Front
 // Desk alternate views. Every view is a presentation of the SAME query result;
@@ -12,16 +13,31 @@ export type AppointmentView = (typeof APPOINTMENT_VIEWS)[number];
 export type ListTab = "today" | "upcoming" | "no_show" | "completed";
 export const LIST_TABS: readonly ListTab[] = ["today", "upcoming", "no_show", "completed"];
 
+/** The API refuses a longer /appointments range (MAX_APPOINTMENT_RANGE_DAYS = 62), so the list periods never ask for one. */
+export const APPOINTMENT_RANGE_DAYS = 62;
+export const DEFAULT_LIST_PERIOD = "30d";
+
 /**
  * The /appointments filters for a view. List/Today, Day and Doctor Schedule all
  * ask for the selected local day (so they return identical rows); Week/Month ask
  * for the visible grid. The list-only status tabs never apply to calendar views.
  */
-export function appointmentQuery(input: { view: AppointmentView; tab: ListTab; date: string; branchId: string; doctorId: string }): AppointmentRangeFilters {
+export function appointmentQuery(input: {
+  view: AppointmentView;
+  tab: ListTab;
+  date: string;
+  branchId: string;
+  doctorId: string;
+  /** The hospital's local today. With it, Upcoming is bounded by the server instead of filtered by the browser clock. */
+  today?: string;
+  /** Hospital-local days the No-shows / Completed tabs cover. Without it they return the whole history (legacy). */
+  period?: { from: string; to: string };
+}): AppointmentRangeFilters {
   const common = { branchId: input.branchId || undefined, doctorId: input.doctorId || undefined };
   if (input.view === "week" || input.view === "month") return { ...visibleRange(input.view, input.date), ...common };
   if (input.view === "day" || input.view === "doctors" || input.tab === "today") return { from: input.date, to: input.date, ...common };
-  if (input.tab === "no_show" || input.tab === "completed") return { status: input.tab, ...common };
+  if (input.tab === "no_show" || input.tab === "completed") return { status: input.tab, ...(input.period ?? {}), ...common };
+  if (input.tab === "upcoming" && input.today) return { from: input.today, to: addDays(input.today, APPOINTMENT_RANGE_DAYS - 1), ...common };
   return common;
 }
 

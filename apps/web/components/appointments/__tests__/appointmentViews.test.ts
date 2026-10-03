@@ -45,9 +45,18 @@ describe("appointmentQuery: every view asks the same endpoint with the same filt
     expect(appointmentQuery({ ...base, view: "month" })).toMatchObject({ from: "2026-08-31", to: "2026-10-11" });
   });
 
-  it("keeps the existing list tabs: no-shows / completed filter by status, upcoming has no date", () => {
+  it("no-shows / completed filter by status AND by the chosen period (never the whole history)", () => {
+    const period = { from: "2026-09-01", to: "2026-09-30" };
+    expect(appointmentQuery({ ...base, view: "list", tab: "no_show", today: "2026-09-30", period })).toEqual({ status: "no_show", ...period, branchId: "b1", doctorId: undefined });
+    expect(appointmentQuery({ ...base, view: "list", tab: "completed", today: "2026-09-30", period })).toEqual({ status: "completed", ...period, branchId: "b1", doctorId: undefined });
+  });
+
+  it("upcoming starts today and looks ahead one API window, so the server (not the browser clock) bounds it", () => {
+    expect(appointmentQuery({ ...base, view: "list", tab: "upcoming", today: "2026-09-30" })).toEqual({ from: "2026-09-30", to: "2026-11-30", branchId: "b1", doctorId: undefined });
+  });
+
+  it("without a period or today the legacy status-only / unbounded queries are kept", () => {
     expect(appointmentQuery({ ...base, view: "list", tab: "no_show" })).toEqual({ status: "no_show", branchId: "b1", doctorId: undefined });
-    expect(appointmentQuery({ ...base, view: "list", tab: "completed" })).toEqual({ status: "completed", branchId: "b1", doctorId: undefined });
     expect(appointmentQuery({ ...base, view: "list", tab: "upcoming" })).toEqual({ branchId: "b1", doctorId: undefined });
   });
 

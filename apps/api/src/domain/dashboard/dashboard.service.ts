@@ -1,7 +1,7 @@
 import { and, count, eq, gte, inArray, lt, sql, sum, isNotNull, type SQL } from "drizzle-orm";
 import { patientNameSql } from "../../lib/patient-name.js";
-import { hospitalTodayBounds, inLocalRange, tzLiteral } from "../../lib/hospital-time.js";
-import { proratedSpend } from "../analytics/analytics.service.js";
+import { hospitalTodayBounds, inLocalRange } from "../../lib/hospital-time.js";
+import { loadCampaignRunDays, spendInRange } from "../marketing/campaign-run-days.js";
 import type { Db } from "../../db/client.js";
 import {
   appointments,
@@ -115,16 +115,9 @@ async function getTotalSpend(db: Db, tenantId: string, period?: DashboardPeriod)
     const [row] = await db.select({ total: sum(marketingCampaigns.spendAmount) }).from(marketingCampaigns).where(eq(marketingCampaigns.tenantId, tenantId));
     return Number(row?.total ?? 0);
   }
-  const tz = tzLiteral(period.timezone);
-  const runs = await db
-    .select({
-      spend: marketingCampaigns.spendAmount,
-      startDay: sql<string>`to_char(${marketingCampaigns.startDate} at time zone ${tz}, 'YYYY-MM-DD')`,
-      endDay: sql<string | null>`to_char(${marketingCampaigns.endDate} at time zone ${tz}, 'YYYY-MM-DD')`,
-    })
-    .from(marketingCampaigns)
-    .where(eq(marketingCampaigns.tenantId, tenantId));
-  return runs.reduce((sum, r) => sum + proratedSpend(r.spend, r.startDay, r.endDay ?? period.today, period.from, period.to), 0);
+  const runs = await loadCampaignRunDays(db, tenantId, period.timezone);
+  const campaignsSpend = await db.select({ id: marketingCampaigns.id, spend: marketingCampaigns.spendAmount }).from(marketingCampaigns).where(eq(marketingCampaigns.tenantId, tenantId));
+  return campaignsSpend.reduce((sum, c) => sum + spendInRange(c.spend, runs.get(c.id), period, period.today), 0);
 }
 
 /**
@@ -394,23 +387,8 @@ export async function getSpendAtRiskByReason(db: Db, tenantId: string, filters: 
 export async function getSourcePerformance(db: Db, tenantId: string, filters: DashboardFilters = {}): Promise<SourcePerformanceRow[]> {
   const campaigns = await db.select().from(marketingCampaigns).where(eq(marketingCampaigns.tenantId, tenantId));
   const period = filters.period;
-  const tz = period ? tzLiteral(period.timezone) : null;
-  const runDays = new Map<string, { startDay: string; endDay: string | null }>();
-  if (period && tz) {
-    const days = await db
-      .select({
-        id: marketingCampaigns.id,
-        startDay: sql<string>`to_char(${marketingCampaigns.startDate} at time zone ${tz}, 'YYYY-MM-DD')`,
-        endDay: sql<string | null>`to_char(${marketingCampaigns.endDate} at time zone ${tz}, 'YYYY-MM-DD')`,
-      })
-      .from(marketingCampaigns)
-      .where(eq(marketingCampaigns.tenantId, tenantId));
-    for (const d of days) runDays.set(d.id, d);
-  }
-  const spendOf = (c: (typeof campaigns)[number]): number => {
-    const run = runDays.get(c.id);
-    return period && run ? Math.round(proratedSpend(c.spendAmount, run.startDay, run.endDay ?? period.today, period.from, period.to)) : c.spendAmount;
-  };
+  const runDays = period ? await loadCampaignRunDays(db, tenantId, period.timezone) : new Map();
+  const spendOf = (c: (typeof campaigns)[number]): number => (period ? Math.round(spendInRange(c.spendAmount, runDays.get(c.id), period, period.today)) : c.spendAmount);
 
   // A synced campaign's numbers are only as real as the connector that
   // produced them — one lookup up front rather than N, joined in below so

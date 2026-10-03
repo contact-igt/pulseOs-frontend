@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import {
   appointments,
@@ -14,6 +14,8 @@ import {
 } from "../../db/schema.js";
 import { costPer, roas as roasOf } from "../marketing/formulas.js";
 import { getSpendAtRiskByReason } from "../dashboard/dashboard.service.js";
+import { inLocalRange, localToday, tenantTimezone } from "../../lib/hospital-time.js";
+import { loadCampaignRunDays, spendInRange } from "../marketing/campaign-run-days.js";
 import type { CampaignFilters, CampaignViewRow, MarketingEfficiencySummary, SpendAtRisk } from "@pulseos/types";
 
 const NON_TERMINAL_TREATMENT = new Set(["ADVISED", "DECISION_PENDING", "ACCEPTED", "SCHEDULED", "COMPLETED"]);
@@ -26,6 +28,15 @@ export async function getCampaignPerformance(db: Db, tenantId: string, filters: 
     .select()
     .from(marketingCampaigns)
     .where(and(eq(marketingCampaigns.tenantId, tenantId), filters.source ? eq(marketingCampaigns.source, filters.source) : undefined, filters.campaignId ? eq(marketingCampaigns.id, filters.campaignId) : undefined));
+
+  // Dates are hospital-calendar days. A range bounds the leads (touchpoints that happened in it) and prorates spend over
+  // the days each campaign ran inside it; with no dates spend is lifetime, as before.
+  const timezone = await tenantTimezone(db, tenantId);
+  const today = await localToday(db, timezone, new Date());
+  const ranged = !!(filters.dateFrom || filters.dateTo);
+  const range = { from: filters.dateFrom ?? "1970-01-01", to: filters.dateTo ?? today };
+  const runDays = ranged ? await loadCampaignRunDays(db, tenantId, timezone) : new Map();
+  const spendOf = (c: (typeof campaigns)[number]) => (ranged ? Math.round(spendInRange(c.spendAmount, runDays.get(c.id), range, today)) : c.spendAmount);
 
   const specialties = await db.select({ key: specialtyTemplates.key, displayName: specialtyTemplates.displayName }).from(specialtyTemplates).where(eq(specialtyTemplates.tenantId, tenantId));
   const specialtyLabelByKey = new Map(specialties.map((s) => [s.key, s.displayName]));
@@ -40,6 +51,7 @@ export async function getCampaignPerformance(db: Db, tenantId: string, filters: 
 
   for (const campaign of campaigns) {
     const connectorMode = campaign.connectorId ? (connectorModeById.get(campaign.connectorId) ?? null) : null;
+    const spend = spendOf(campaign);
     const runWindow = {
       startDate: campaign.startDate.toISOString(),
       endDate: campaign.endDate ? campaign.endDate.toISOString() : null,
@@ -51,8 +63,7 @@ export async function getCampaignPerformance(db: Db, tenantId: string, filters: 
       .where(and(
         eq(campaignTouchpoints.tenantId, tenantId),
         eq(campaignTouchpoints.campaignId, campaign.id),
-        filters.dateFrom ? gte(campaignTouchpoints.occurredAt, new Date(`${filters.dateFrom}T00:00:00.000Z`)) : undefined,
-        filters.dateTo ? lte(campaignTouchpoints.occurredAt, new Date(`${filters.dateTo}T23:59:59.999Z`)) : undefined,
+        ranged ? inLocalRange(campaignTouchpoints.occurredAt, timezone, range.from, range.to) : undefined,
       ));
     let journeyIds = touchpointRows.map((r) => r.journeyId);
 
@@ -86,7 +97,7 @@ export async function getCampaignPerformance(db: Db, tenantId: string, filters: 
         source: campaign.source,
         specialtyKey: null,
         specialtyLabel: null,
-        spend: campaign.spendAmount,
+        spend,
         leads: 0,
         appointments: 0,
         consultations: 0,
@@ -120,17 +131,17 @@ export async function getCampaignPerformance(db: Db, tenantId: string, filters: 
       source: campaign.source,
       specialtyKey: filters.specialtyKey ?? null,
       specialtyLabel: filters.specialtyKey ? (specialtyLabelByKey.get(filters.specialtyKey) ?? filters.specialtyKey) : null,
-      spend: campaign.spendAmount,
+      spend,
       leads: journeyIds.length,
       appointments: apptCount,
       consultations: consultCount,
       treatmentAdvised,
       treatmentCompleted,
       revenue,
-      cpl: costPer(campaign.spendAmount, journeyIds.length),
-      costPerAppointment: costPer(campaign.spendAmount, apptCount),
-      costPerTreatment: costPer(campaign.spendAmount, treatmentCompleted),
-      roas: roasOf(revenue, campaign.spendAmount),
+      cpl: costPer(spend, journeyIds.length),
+      costPerAppointment: costPer(spend, apptCount),
+      costPerTreatment: costPer(spend, treatmentCompleted),
+      roas: roasOf(revenue, spend),
       connectorMode,
       ...runWindow,
     });

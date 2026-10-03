@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
+import { DATE_PRESETS } from "@pulseos/types";
 import { Search } from "lucide-react";
 import {
   AppointmentList,
@@ -19,14 +21,21 @@ import {
 } from "@pulseos/ui";
 import { useQuickCreate } from "../../../components/shell/QuickCreateProvider";
 import { useViewState } from "@/lib/useViewState";
-import { APPOINTMENT_VIEWS, LIST_TABS, appointmentQuery, matchesSearch, toCalendarEvent } from "@/components/appointments/appointmentViews";
+import { APPOINTMENT_RANGE_DAYS, APPOINTMENT_VIEWS, DEFAULT_LIST_PERIOD, LIST_TABS, appointmentQuery, matchesSearch, toCalendarEvent } from "@/components/appointments/appointmentViews";
 import type { AppointmentView, ListTab } from "@/components/appointments/appointmentViews";
 import { useCalendarContext } from "@/components/appointments/hooks";
 import { useAppointmentWorkflow } from "@/components/appointments/AppointmentWorkflow";
 import { useUrlFilters } from "@/lib/useUrlFilters";
+import { PeriodControls } from "@/components/filters/PeriodControls";
+import { periodPatch, readPeriod } from "@/components/filters/periodFilter";
 import { DoctorScheduleView } from "@/components/appointments/DoctorScheduleView";
 import { InlineNotice } from "@/components/appointments/InlineNotice";
 import { renderAppointmentEvent } from "@/components/appointments/AppointmentEventBody";
+
+// The appointments API serves at most APPOINTMENT_RANGE_DAYS at a time, so the 90-day preset is not offered here.
+const LIST_PERIOD_PRESETS = DATE_PRESETS.filter((p) => p.key !== "90d");
+// Tabs whose rows are a history: they cover a chosen period instead of every appointment ever.
+const PERIOD_TABS: readonly ListTab[] = ["no_show", "completed"];
 
 const TAB_LABEL: Record<ListTab, string> = { today: "Today", upcoming: "Upcoming", no_show: "No-shows", completed: "Completed" };
 
@@ -46,6 +55,9 @@ export default function AppointmentsPage() {
   const filters = useUrlFilters();
   const rawTab = filters.get("tab");
   const tab: ListTab = LIST_TABS.find((t) => t === rawTab) ?? "today";
+  const params = useSearchParams();
+  const periodOptions = { prefix: "p", defaultRange: DEFAULT_LIST_PERIOD, presets: LIST_PERIOD_PRESETS, today } as const;
+  const period = useMemo(() => readPeriod(new URLSearchParams(params.toString()), periodOptions), [params, today]); // eslint-disable-line react-hooks/exhaustive-deps
   const branchId = filters.get("branch");
   const doctorId = filters.get("doctor");
   const [search, setSearch] = useState(() => filters.get("q"));
@@ -56,7 +68,7 @@ export default function AppointmentsPage() {
   const lookups = useQuery({ queryKey: ["lookups"], queryFn: api.lookups });
 
   // One query for every view: same endpoint, same filters; only the day range follows the view + ?date.
-  const query = appointmentQuery({ view, tab, date, branchId, doctorId });
+  const query = appointmentQuery({ view, tab, date, branchId, doctorId, today, period: { from: period.from, to: period.to } });
   const appointments = useQuery({
     queryKey: ["appointments", query],
     queryFn: () => api.appointmentsInRange(query),
@@ -74,6 +86,8 @@ export default function AppointmentsPage() {
 
   const dayLabel = date === today ? "Today" : formatKey(date, { weekday: "short", day: "numeric", month: "short" });
   const tabLabel = (t: ListTab) => (t === "today" ? dayLabel : TAB_LABEL[t]);
+  const showPeriod = view === "list" && PERIOD_TABS.includes(tab);
+  const periodText = period.from === period.to ? formatKey(period.from, { day: "numeric", month: "short" }) : `${formatKey(period.from, { day: "numeric", month: "short" })} – ${formatKey(period.to, { day: "numeric", month: "short" })}`;
 
   return (
     <div className="mx-auto max-w-6xl space-y-3" data-testid="appointments-page">
@@ -99,6 +113,17 @@ export default function AppointmentsPage() {
             />
           )}
           <FilterBar>
+            {showPeriod && (
+              <PeriodControls
+                presets={LIST_PERIOD_PRESETS}
+                value={{ range: period.range, from: period.from, to: period.to }}
+                today={today}
+                maxSpanDays={APPOINTMENT_RANGE_DAYS}
+                onChange={(next) => filters.set(periodPatch(next, periodOptions))}
+                testIdPrefix="appointments-period"
+                label="Period"
+              />
+            )}
             <FilterSelect value={branchId} onChange={(e) => filters.set({ branch: e.target.value })} aria-label="Branch">
               <option value="">All branches</option>
               {lookups.data?.branches.map((b) => (
@@ -138,7 +163,7 @@ export default function AppointmentsPage() {
           <ErrorState message="Could not load appointments." />
         ) : view === "list" ? (
           <AppointmentList
-            title={tabLabel(tab)}
+            title={showPeriod ? `${tabLabel(tab)} · ${periodText}` : tab === "upcoming" ? `${tabLabel(tab)} · next ${APPOINTMENT_RANGE_DAYS} days` : tabLabel(tab)}
             rows={visibleRows}
             onAction={canManage ? workflow.handleAction : undefined}
             onComplete={canManage ? workflow.handleComplete : undefined}
