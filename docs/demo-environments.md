@@ -1,6 +1,6 @@
 # Demo environments
 
-> **Also seeded:** **Namokar Telecalling Demo** — a fictional telecalling / front-desk clinic (**Beta V1**, Ophthalmology, Asia/Kolkata) with a realistic *today*: 10 new enquiries, 8 appointments in every queue state, 9 calls (1 missed IVR, 2 not connected), follow-ups due today / overdue / coming up, an Appointment Risk and a Surgery Follow-up. Accounts `namokar.{admin,doctor,doctor2,frontdesk,coordinator}@pulseos.local`. Everything is invented. See `apps/api/src/seed/demo/namokar.ts`.
+> **Also seeded:** **Namokar Eye & Oculoplasty Centre** (pilot; own sign-in page `/login/namokar`, Revenue Tracking off) — a fictional telecalling / front-desk clinic (**Beta V1**, Ophthalmology, Asia/Kolkata) with a realistic *today*: 10 new enquiries, 8 appointments in every queue state, 9 calls (1 missed IVR, 2 not connected), follow-ups due today / overdue / coming up, an Appointment Risk and a Surgery Follow-up. Accounts `namokar.{superadmin,admin,doctor,doctor2,frontdesk,coordinator}@pulseos.local`. Everything is invented. See `apps/api/src/seed/demo/namokar.ts`.
 
 `pnpm db:seed` wipes every tenant and re-creates three fully separate demo tenants:
 **PulseOS Gynecology Demo** and **PulseOS Ophthalmology Demo** (both **Beta V2 · Growth** edition), and

@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import type { ReportExportKind, ReportQuery } from "@pulseos/types";
+import { capabilityEnabled, type ReportExportKind, type ReportQuery } from "@pulseos/types";
 import { branches, departments, leadSources, scheduleResources, tenants, users } from "../../db/schema.js";
 import { requireCapability, requirePermission } from "../auth/permission.middleware.js";
 import { getOperationsReport, getReportFilterOptions } from "./operations-report.service.js";
@@ -73,6 +73,7 @@ export async function reportRoutes(app: FastifyInstance) {
       const { buffer, filename, rows } = await buildReportWorkbook(app.db, user.tenantId, kind as ReportExportKind, q as ReportQuery, {
         hospital: tenant?.name ?? "Hospital",
         generatedBy: user.name,
+        revenueTracking: capabilityEnabled(user.capabilities, "REVENUE_TRACKING"),
         filterLabels: await filterLabels(app, user.tenantId, q as ReportQuery),
       });
       // Who exported what, how much — never the rows themselves.

@@ -8,6 +8,8 @@ import { recordConversionFeedbackEvent } from "../acquisition/conversion-feedbac
 import { findActiveResource } from "../resource/resource.service.js";
 import { findActiveTreatmentDefinition } from "../specialty/treatment-catalog.service.js";
 import { emitAppointmentEvent } from "../appointment/appointment-events.js";
+import { tenantCapabilityMap } from "../capability/capability.service.js";
+import { capabilityEnabled } from "@pulseos/types";
 import type { ScheduleSurgeryInput, TreatmentFilters, TreatmentRow, TreatmentStatus } from "@pulseos/types";
 
 // Postgres unique_violation SQLSTATE. Used to recognize a lost race against
@@ -164,6 +166,8 @@ export async function updateTreatmentStatus(
   if (!VALID_TRANSITIONS[existing.status].includes(nextStatus)) return { ok: false, reason: "invalid_transition" };
   const plannedAt = plannedDate ? new Date(plannedDate) : null;
   if (plannedAt && Number.isNaN(plannedAt.getTime())) return { ok: false, reason: "invalid_request" };
+  // A hospital with revenue tracking off records the completion but never a payment: no financial workflow is created.
+  const recordRevenue = nextStatus === "COMPLETED" ? capabilityEnabled(await tenantCapabilityMap(db, tenantId), "REVENUE_TRACKING") : true;
 
   // The read above and the write below are two separate round-trips, so two
   // concurrent requests can both read the pre-transition status and both pass
@@ -257,7 +261,7 @@ export async function updateTreatmentStatus(
       // handled gracefully via a savepoint so a stray violation can't abort
       // the rest of this transaction.
       try {
-        await tx.transaction(async (tx2) => {
+        if (recordRevenue) await tx.transaction(async (tx2) => {
           await tx2.insert(revenueEvents).values({
             tenantId,
             patientId: existing.patientId,

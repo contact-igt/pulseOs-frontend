@@ -25,6 +25,7 @@ import {
 } from "../../db/schema.js";
 import { normalizePhone, resolveDefaultPhoneRegion } from "../patient/phone.js";
 import { resolveOrCreatePatient } from "../patient/identity.service.js";
+import { loadOperationalStatuses } from "../journey/operational-status.service.js";
 import { resolveLeadSource } from "./lead-source.service.js";
 import { isValidPastDate, MAX_AGE_YEARS } from "../../lib/age.js";
 import { recordTouchpoint } from "../acquisition/attribution.service.js";
@@ -420,6 +421,8 @@ async function buildLeadFacts(db: Db, tenantId: string, timezone: string, now: D
     if (!existing || e.occurredAt > existing) lastInteractionByJourney.set(e.journeyId, e.occurredAt);
   }
 
+  const operational = await loadOperationalStatuses(db, tenantId, rows.map((r) => ({ id: r.id, stage: r.stage })));
+
   return rows.map((r): LeadFact => {
     let leadStatus: LeadStatus;
     if (r.stage === "lost") {
@@ -450,6 +453,7 @@ async function buildLeadFacts(db: Db, tenantId: string, timezone: string, now: D
       campaignName: campaignId ? (campaignNameById.get(campaignId) ?? null) : null,
       stage: r.stage,
       leadStatus,
+      operationalStatus: operational.get(r.id) ?? null,
       ownerId: r.ownerId,
       ownerName: r.ownerName,
       priority: r.priority,

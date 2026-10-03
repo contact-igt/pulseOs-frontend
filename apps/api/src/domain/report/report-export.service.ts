@@ -189,7 +189,7 @@ function followUpsSheet(wb: ExcelJS.Workbook, facts: ReportFacts) {
 
 const NOT_RECORDED = "Date not recorded";
 
-function proceduresSheet(wb: ExcelJS.Workbook, facts: ReportFacts) {
+function proceduresSheet(wb: ExcelJS.Workbook, facts: ReportFacts, revenueTracking: boolean) {
   const tz = facts.period.timezone;
   // Scheduled for / Completed on / Payment date are three different facts; a missing one is said plainly, never filled in from another.
   addSheet(
@@ -198,16 +198,17 @@ function proceduresSheet(wb: ExcelJS.Workbook, facts: ReportFacts) {
     [
       { header: "Procedure", key: "label", width: 30 }, { header: "Patient", key: "patient", width: 24 }, { header: "Phone", key: "phone", width: 16 },
       { header: "Service", key: "service", width: 20 }, { header: "Status", key: "status", width: 14 }, { header: "Scheduled for", key: "planned", width: 20 },
-      { header: "Completed on", key: "completed", width: 20 }, { header: "Payment date", key: "paid", width: 20 }, { header: "Doctor", key: "doctor", width: 22 },
-      { header: "Branch", key: "branch", width: 18 }, { header: "Estimated value (₹)", key: "value", width: 18 },
+      { header: "Completed on", key: "completed", width: 20 }, ...(revenueTracking ? [{ header: "Payment date", key: "paid", width: 20 }] : []), { header: "Doctor", key: "doctor", width: 22 },
+      { header: "Branch", key: "branch", width: 18 }, ...(revenueTracking ? [{ header: "Estimated value (₹)", key: "value", width: 18 }] : []),
       { header: "In this report", key: "counted", width: 40 },
     ],
     facts.procedures.map((p) => ({
       label: p.label, patient: p.patientName ?? UNKNOWN_PATIENT, phone: p.phone, service: p.service, status: p.status === "COMPLETED" ? "Completed" : "Scheduled",
       planned: p.plannedDate ? dateTime(p.plannedDate, tz) : NOT_RECORDED,
       completed: p.status !== "COMPLETED" ? "" : p.completedAt ? dateTime(p.completedAt, tz) : NOT_RECORDED,
-      paid: p.paymentAt ? dateTime(new Date(p.paymentAt), tz) : "",
-      doctor: p.doctorName ?? "Doctor not recorded", branch: p.branchName ?? "", value: p.estimatedValue,
+      // A hospital with revenue tracking off gets no payment date and no rupee value in the file.
+      ...(revenueTracking ? { paid: p.paymentAt ? dateTime(new Date(p.paymentAt), tz) : "", value: p.estimatedValue } : {}),
+      doctor: p.doctorName ?? "Doctor not recorded", branch: p.branchName ?? "",
       // Reconciles every row with the screen's counts: which KPI (if any) this row is part of for the chosen period.
       counted: [p.plannedInPeriod && "Planned in period", p.completedInPeriod && "Completed in period"].filter(Boolean).join(" · ") || "Not counted — completion date not recorded",
     })),
@@ -218,6 +219,8 @@ export interface ExportContext {
   hospital: string;
   generatedBy: string;
   filterLabels: [string, string][];
+  /** False when the hospital has revenue tracking off. Absent = on. */
+  revenueTracking?: boolean;
 }
 
 export async function buildReportWorkbook(db: Db, tenantId: string, kind: ReportExportKind, q: ReportQuery, ctx: ExportContext, now: Date = new Date()): Promise<{ buffer: Buffer; filename: string; rows: number }> {
@@ -229,7 +232,7 @@ export async function buildReportWorkbook(db: Db, tenantId: string, kind: Report
   if (kind === "enquiries") enquiriesSheet(wb, facts);
   if (kind === "appointments") appointmentsSheet(wb, facts);
   if (kind === "follow-ups") followUpsSheet(wb, facts);
-  if (kind === "procedures") proceduresSheet(wb, facts);
+  if (kind === "procedures") proceduresSheet(wb, facts, ctx.revenueTracking !== false);
   filtersSheet(wb, facts.period, ctx.filterLabels, ctx.hospital, ctx.generatedBy, now);
   const rows = wb.worksheets.filter((w) => w.name !== "About").reduce((s, w) => s + Math.max(0, w.rowCount - 1), 0);
   const buffer = Buffer.from(await wb.xlsx.writeBuffer());

@@ -246,6 +246,20 @@
       "when": 1791025097629,
       "tag": "0034_sturdy_abomination",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1791028310347,
+      "tag": "0035_tenant_login_slug",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1791029045456,
+      "tag": "0036_consultation_outcome_declined",
+      "breakpoints": true
     }
   ]
 }

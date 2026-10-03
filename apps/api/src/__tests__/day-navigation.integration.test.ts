@@ -30,7 +30,7 @@ describe.skipIf(!DEMO_PASSWORD)("Front Desk / Doctor Home day navigation (integr
     await app.ready();
     desk = await signIn("namokar.frontdesk@pulseos.local");
     doctor = await signIn("namokar.doctor@pulseos.local");
-    const [t] = await queryClient`select id, timezone from tenants where name = 'Namokar Telecalling Demo'`;
+    const [t] = await queryClient`select id, timezone from tenants where name = 'Namokar Eye & Oculoplasty Centre'`;
     tenantId = t!.id as string;
     tz = t!.timezone as string;
     today = (await queryClient`select to_char(now() at time zone ${tz}, 'YYYY-MM-DD') as d`)[0]!.d as string;

@@ -4,7 +4,7 @@ import { requirePermission } from "../auth/permission.middleware.js";
 import { createPatient, getPatient360, listPatients, searchPatients } from "./patient.service.js";
 import { branchBelongsToTenant } from "./identity.service.js";
 import { getPatientTimeline } from "../timeline/timeline.service.js";
-import { hasPermission } from "@pulseos/types";
+import { capabilityEnabled, hasPermission } from "@pulseos/types";
 import { getPatientUpcoming } from "./upcoming.service.js";
 
 const createPatientBody = z.object({
@@ -41,7 +41,7 @@ export async function patientRoutes(app: FastifyInstance) {
   app.get("/patients/:id/360", async (request, reply) => {
     const tenantId = request.sessionUser!.tenantId;
     const { id } = request.params as { id: string };
-    const result = await getPatient360(app.db, tenantId, id, request.sessionUser!.role, request.sessionUser!.timezone);
+    const result = await getPatient360(app.db, tenantId, id, request.sessionUser!.role, request.sessionUser!.timezone, capabilityEnabled(request.sessionUser!.capabilities, "REVENUE_TRACKING"));
     if (!result) return reply.status(404).send({ error: "patient_not_found" });
     return result;
   });

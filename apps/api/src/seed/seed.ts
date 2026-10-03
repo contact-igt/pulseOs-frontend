@@ -134,7 +134,7 @@ async function main() {
 
   console.log("Seed complete. Password for every demo account: value of DEMO_PASSWORD env var");
   for (const env of DEMO_ENVIRONMENTS) {
-    const slugs = env.key === "namokar" ? ["admin", "doctor", "doctor2", "frontdesk", "coordinator"] : DEMO_STAFF_SLUGS;
+    const slugs = DEMO_STAFF_SLUGS;
     const logins = slugs.map((slug) => `${env.emailPrefix}.${slug}`).join(" / ");
     console.log(`${env.label}: ${logins} @pulseos.local`);
   }

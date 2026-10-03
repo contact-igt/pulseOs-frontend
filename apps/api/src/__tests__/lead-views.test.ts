@@ -10,7 +10,7 @@ function fact(id: string, over: Omit<Partial<LeadFact>, "row"> & { row?: Partial
   return {
     row: {
       id, patientId: `p-${id}`, patientName: `Patient ${id}`, phone: "+919999900000", specialtyKey: "CATARACT", specialtyLabel: "Cataract", source: "google", sourceLabel: "Google", campaignName: null,
-      stage: "enquiry", leadStatus: "uncontacted", ownerId: null, ownerName: null, priority: "normal", lastInteractionAt: null, nextActionDueAt: null, createdAt: "2026-10-01T05:00:00Z",
+      stage: "enquiry", leadStatus: "uncontacted", operationalStatus: null, ownerId: null, ownerName: null, priority: "normal", lastInteractionAt: null, nextActionDueAt: null, createdAt: "2026-10-01T05:00:00Z",
       journeyType: "Cataract", outcomeLabel: null, nextAction: null, nextAppointment: null, ...row,
     },
     createdDay: "2026-10-01",

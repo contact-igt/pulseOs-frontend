@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, pgEnum, index, uniqueIndex, primaryKey, date, numeric, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, boolean, jsonb, pgEnum, index, uniqueIndex, primaryKey, date, numeric, check, type AnyPgColumn } from "drizzle-orm/pg-core";
 
 export const roleEnum = pgEnum("role", ["SUPER_ADMIN", "HOSPITAL_ADMIN", "FRONT_DESK", "PATIENT_COORDINATOR", "DOCTOR"]);
 
@@ -18,8 +18,14 @@ export const tenants = pgTable("tenants", {
   timezone: text("timezone").notNull().default("Asia/Kolkata"),
   // Existing tenants predate editions and keep every capability they already had.
   edition: tenantEditionEnum("edition").notNull().default("BETA_V2_GROWTH"),
+  // The name a hospital's dedicated sign-in page is reached by (/login/<slug>). Null = no dedicated page (sign-up and demo
+  // hospitals). Lower-case words only, unique; the page can sign people into THIS hospital and no other.
+  loginSlug: text("login_slug"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  loginSlugUnique: uniqueIndex("tenants_login_slug_unique").on(t.loginSlug),
+  loginSlugShape: check("tenants_login_slug_shape", sql`${t.loginSlug} is null or ${t.loginSlug} ~ '^[a-z][a-z0-9-]{1,38}[a-z0-9]$'`),
+}));
 
 // What a hospital told us about itself when it signed up (or, for the seeded demos, who it is). One row per tenant.
 // `devVisible` is the ONLY thing that lists a tenant in Developer Access: it is set at sign-up when development login is
@@ -476,7 +482,7 @@ export const conversionFeedbackEvents = pgTable("conversion_feedback_events", {
 }));
 
 export const consultationOutcomeEnum = pgEnum("consultation_outcome_type", [
-  "CONSULTED", "TREATMENT_ADVISED", "NO_TREATMENT_REQUIRED", "DECISION_PENDING", "FOLLOW_UP_REQUIRED", "REFERRED", "OTHER",
+  "CONSULTED", "TREATMENT_ADVISED", "NO_TREATMENT_REQUIRED", "DECISION_PENDING", "FOLLOW_UP_REQUIRED", "REFERRED", "OTHER", "TREATMENT_DECLINED",
 ]);
 
 export const consultationOutcomes = pgTable("consultation_outcomes", {

@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { createSessionForUserId, DEV_TENANT_PREFIX, listDevEnvironments, loginByRole, loginWithPassword, revokeSession } from "./auth.service.js";
+import { createSessionForUserId, DEV_TENANT_PREFIX, getTenantBranding, listDevEnvironments, loginByRole, loginToTenant, loginWithPassword, revokeSession } from "./auth.service.js";
 import { signUpHospital, signupSchema } from "./signup.service.js";
 import { LoginThrottle } from "./login-throttle.js";
 import { DEFAULT_DEMO_ENVIRONMENT, DEMO_ENVIRONMENTS, DEMO_LOGIN_ROLES } from "./demo-environments.js";
@@ -10,6 +10,10 @@ const loginBody = z.object({
   password: z.string().min(1),
   remember: z.boolean().optional(),
 });
+
+// A hospital's dedicated sign-in: the body is strict, so a tenant id (or anything else) smuggled in is refused, never honoured.
+const tenantLoginBody = loginBody.strict();
+const SLUG = /^[a-z][a-z0-9-]{1,38}[a-z0-9]$/;
 
 const SESSION_COOKIE = "pulseos_session";
 
@@ -88,6 +92,33 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.status(401).send({ error: result.reason });
     }
     throttle.succeed(request.ip, parsed.data.email);
+
+    setSessionCookie(reply, result.sessionId, result.expiresAt, result.remember);
+    return reply.send({ user: result.user });
+  });
+
+  // The dedicated hospital sign-in page (e.g. /login/namokar). Same session, same checks, same throttle - but the hospital is
+  // fixed by the route, so there is nothing to choose and no way to reach another hospital from here.
+  app.get("/auth/tenants/:slug", async (request, reply) => {
+    const { slug } = request.params as { slug: string };
+    const branding = SLUG.test(slug) ? await getTenantBranding(app.db, slug) : null;
+    if (!branding) return reply.status(404).send({ error: "not_found" });
+    return reply.send(branding);
+  });
+
+  app.post("/auth/login/tenant/:slug", async (request, reply) => {
+    const { slug } = request.params as { slug: string };
+    const parsed = tenantLoginBody.safeParse(request.body);
+    if (!parsed.success) return reply.status(400).send({ error: "invalid_request" });
+
+    const account = `${slug}:${parsed.data.email}`;
+    const gate = throttle.begin(request.ip, account);
+    if (!gate.allowed) {
+      return reply.header("Retry-After", String(gate.retryAfterSeconds)).status(429).send({ error: "too_many_attempts", message: "Too many sign-in attempts. Please wait a few minutes and try again." });
+    }
+    const result = SLUG.test(slug) ? await loginToTenant(app.db, slug, parsed.data.email, parsed.data.password, parsed.data.remember === true) : ({ ok: false, reason: "invalid_credentials" } as const);
+    if (!result.ok) return reply.status(401).send({ error: result.reason });
+    throttle.succeed(request.ip, account);
 
     setSessionCookie(reply, result.sessionId, result.expiresAt, result.remember);
     return reply.send({ user: result.user });

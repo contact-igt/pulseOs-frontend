@@ -414,11 +414,11 @@ describe.skipIf(!DEMO_PASSWORD)("Dev Login demo environments (integration)", () 
       { key: "gynecology", label: "Gynecology V2" },
       { key: "ophthalmology", label: "Ophthalmology V2" },
       { key: "ophthalmology-v1", label: "Ophthalmology V1" },
-      { key: "namokar", label: "Namokar Telecalling Demo" },
+      { key: "namokar", label: "Namokar Pilot (V1)" },
     ]);
     for (const e of seeded) expect(e.roles.length).toBeGreaterThan(0);
-    // Namokar has no Super Admin account, so none is offered.
-    expect(seeded.find((e) => e.key === "namokar")!.roles.map((r) => r.role)).toEqual(["HOSPITAL_ADMIN", "DOCTOR", "FRONT_DESK", "PATIENT_COORDINATOR"]);
+    // Namokar's owner is a (tenant-scoped) Super Admin, like every other demo hospital's.
+    expect(seeded.find((e) => e.key === "namokar")!.roles.map((r) => r.role)).toEqual(["SUPER_ADMIN", "HOSPITAL_ADMIN", "DOCTOR", "FRONT_DESK", "PATIENT_COORDINATOR"]);
     expect(seeded.find((e) => e.key === "gynecology")!.roles.map((r) => r.role)).toContain("SUPER_ADMIN");
   });
 

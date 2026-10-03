@@ -21,11 +21,12 @@ export function KpiStripSection({ data, onSegmentClick }: { data: TodayStrip; on
   return (
     <MetricStrip
       testId="kpi-strip"
-      anchorKey="attributedRevenue"
-      cells={KPIS.map((kpi) => ({
+      anchorKey={data.attributedRevenue === null ? undefined : "attributedRevenue"}
+      // Revenue tracking off: the revenue cell is simply absent (never a 0).
+      cells={KPIS.filter((kpi) => data[kpi.key] !== null).map((kpi) => ({
         key: String(kpi.key),
         label: kpi.label,
-        value: kpi.format ? kpi.format(data[kpi.key]) : data[kpi.key],
+        value: kpi.format ? kpi.format(data[kpi.key] as number) : (data[kpi.key] as number),
         onClick: onSegmentClick ? () => onSegmentClick(kpi.key) : undefined,
         testId: `kpi-${String(kpi.key)}`,
       }))}

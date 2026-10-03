@@ -1,3 +1,4 @@
+import { loadOperationalStatuses } from "./operational-status.service.js";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { patientNameSql } from "../../lib/patient-name.js";
 import { z } from "zod";
@@ -235,6 +236,8 @@ export interface JourneyViewer {
   id: string;
   role: Role;
   timezone: string;
+  /** The hospital runs a revenue workflow. Absent = yes (unchanged behaviour for every other caller). */
+  revenueTracking?: boolean;
 }
 
 export async function getJourneyDetail(db: Db, tenantId: string, journeyId: string, viewer: JourneyViewer): Promise<JourneyDetailVm | null> {
@@ -274,7 +277,7 @@ export async function getJourneyDetail(db: Db, tenantId: string, journeyId: stri
   const canManageTasks = hasPermission(viewer.role, "MANAGE_TASKS");
   const canViewTasks = canManageTasks || hasPermission(viewer.role, "VIEW_TASKS");
   const canViewTreatment = hasPermission(viewer.role, "VIEW_TREATMENT");
-  const canViewRevenue = hasPermission(viewer.role, "VIEW_REVENUE");
+  const canViewRevenue = hasPermission(viewer.role, "VIEW_REVENUE") && viewer.revenueTracking !== false;
 
   const [firstTouch] = await db
     .select({ campaignId: campaignTouchpoints.campaignId })
@@ -385,12 +388,15 @@ export async function getJourneyDetail(db: Db, tenantId: string, journeyId: stri
     };
   }
 
+  const operationalStatus = (await loadOperationalStatuses(db, tenantId, [{ id: j.id, stage: j.stage }])).get(j.id) ?? null;
+
   return {
     patient: { id: j.patientId, name: j.patientName, age: displayAge(j.patientDateOfBirth, j.patientReportedAge, dayKeyIn(new Date(), viewer.timezone)), phone: j.patientPhone, branchName: j.branchName },
     journey: {
       id: j.id,
       journeyType: j.journeyType,
       stage: j.stage,
+      operationalStatus,
       source: j.source,
       sourceLabel: j.sourceLabel ?? null,
       departmentName: j.departmentName ?? null,

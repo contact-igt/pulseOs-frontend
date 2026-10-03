@@ -244,6 +244,10 @@ export interface DashboardQuery {
 export const api = {
   login: (email: string, password: string, remember = false) =>
     request<{ user: SessionUser }>("/auth/login", { method: "POST", body: JSON.stringify({ email, password, remember }) }),
+  /** A hospital's dedicated sign-in page: the hospital is fixed by the slug; the body can name nothing else. */
+  tenantBranding: (slug: string) => request<{ slug: string; name: string }>(`/auth/tenants/${encodeURIComponent(slug)}`),
+  tenantLogin: (slug: string, email: string, password: string, remember = false) =>
+    request<{ user: SessionUser }>(`/auth/login/tenant/${encodeURIComponent(slug)}`, { method: "POST", body: JSON.stringify({ email, password, remember }) }),
   logout: () => request<{ ok: true }>("/auth/logout", { method: "POST" }),
   session: () => request<{ user: SessionUser }>("/auth/session"),
   capabilities: () => request<{ edition: Edition; capabilities: CapabilityState[] }>("/capabilities"),

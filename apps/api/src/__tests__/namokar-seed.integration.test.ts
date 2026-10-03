@@ -24,7 +24,7 @@ describe("Namokar journey configs", () => {
   });
 });
 
-describe.skipIf(!DEMO_PASSWORD)("Namokar Telecalling Demo (seeded)", () => {
+describe.skipIf(!DEMO_PASSWORD)("Namokar Eye & Oculoplasty Centre pilot (seeded)", () => {
   let app: FastifyInstance;
   let tenantId: string;
   let tz: string;

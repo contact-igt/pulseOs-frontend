@@ -74,6 +74,33 @@ export async function loginWithPassword(db: Db, email: string, password: string,
   return createSessionFor(db, user, remember);
 }
 
+/**
+ * Sign-in through a hospital's dedicated page. The hospital is found by the route's slug on the server and the user by
+ * (that hospital, email): a person of any other hospital cannot sign in here, and a shared email resolves to THIS
+ * hospital's account. An unknown slug costs the same password check as an unknown email and answers identically.
+ */
+export async function loginToTenant(db: Db, slug: string, email: string, password: string, remember = false) {
+  const [row] = await db
+    .select({ user: users })
+    .from(tenants)
+    .innerJoin(users, eq(users.tenantId, tenants.id))
+    .where(and(eq(tenants.loginSlug, slug), eq(users.email, email)))
+    .limit(1);
+  if (!row) {
+    decoyHash ??= hashPassword("decoy-password-never-matches");
+    await verifyPassword(await decoyHash, password);
+    return { ok: false as const, reason: "invalid_credentials" as const };
+  }
+  if (!(await verifyPassword(row.user.passwordHash, password))) return { ok: false as const, reason: "invalid_credentials" as const };
+  return createSessionFor(db, row.user, remember);
+}
+
+/** What the branded sign-in page may show: the hospital's name, by slug. Nothing else about a hospital is public. */
+export async function getTenantBranding(db: Db, slug: string): Promise<{ slug: string; name: string } | null> {
+  const [t] = await db.select({ name: tenants.name }).from(tenants).where(eq(tenants.loginSlug, slug)).limit(1);
+  return t ? { slug, name: t.name } : null;
+}
+
 // Development convenience only — see auth.routes.ts for the env guard that
 // decides whether this is even reachable. No password check: it exists
 // specifically to skip typing one, for a fixed, non-secret set of seeded

@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "../../db/client.js";
-import { followUpTypes, timelineEvents } from "../../db/schema.js";
+import { followUpTypes, tenantCapabilities, timelineEvents } from "../../db/schema.js";
 import { installDepartmentTemplate } from "../../domain/specialty/department.service.js";
 import { OPHTHALMOLOGY_TREATMENTS } from "../../domain/specialty/ophthalmology.templates.js";
 import { ensureFollowUpTypes } from "../../domain/task/followup-type.service.js";
@@ -28,7 +28,9 @@ import {
 // Desk and Appointments all have something real to show at any time. Edition V1 (core CRM + core analytics); Runo and
 // WhatsApp notifications run as FIXTURES.
 
-export const NAMOKAR_TENANT_NAME = "Namokar Telecalling Demo";
+export const NAMOKAR_TENANT_NAME = "Namokar Eye & Oculoplasty Centre";
+/** The address of the hospital's own sign-in page: /login/namokar. */
+export const NAMOKAR_LOGIN_SLUG = "namokar";
 
 export const NAMOKAR_PATIENT_NAMES = [
   "Suresh Kulkarni", "Rajan Pillai", "Anjali Deshmukh", "Tanvi Rao", "Mahesh Reddy", "Kamala Bai Jadhav", "Sunita Patil", "Neelam Gupta",
@@ -165,7 +167,6 @@ export const NAMOKAR_JOURNEYS: DemoJourneyConfig[] = [
     appt: { status: "completed", offsetDays: -14, hour: 10, doctor: "meera", reason: "Cataract consultation" },
     outcome: { value: "TREATMENT_ADVISED", notes: "Cataract surgery advised for the right eye." },
     treatment: { definitionKey: "CATARACT_SURGERY", label: "Cataract Surgery — Right Eye", status: "COMPLETED", estimatedValue: 42_000, decisionOffsetDays: -12, plannedOffsetDays: -9 },
-    revenueAmount: 41_000, revenueOffsetDays: -9,
   },
   // A new enquiry, uncontacted.
   {
@@ -215,7 +216,10 @@ export const NAMOKAR_JOURNEYS: DemoJourneyConfig[] = [
 
 export async function seedNamokarTenant(passwordHash: string) {
   assertJourneyConfigsConsistent("namokar", NAMOKAR_JOURNEYS, NAMOKAR_PATIENT_NAMES, new Set(OPHTHALMOLOGY_TREATMENTS.map((t) => t.key)));
-  const tenant = await createDemoTenant(NAMOKAR_TENANT_NAME, "BETA_V1_CORE");
+  const tenant = await createDemoTenant(NAMOKAR_TENANT_NAME, "BETA_V1_CORE", { loginSlug: NAMOKAR_LOGIN_SLUG });
+  // Namokar does not run a revenue workflow. This is the hospital's own switch (not an edition default), so the V1 defaults
+  // can never turn it back on: no revenue figures, no payments, no revenue-based ROAS anywhere.
+  await db.insert(tenantCapabilities).values({ tenantId: tenant.id, capability: "REVENUE_TRACKING", enabled: false });
   await installDepartmentTemplate(db, tenant.id, "ophthalmology");
 
   const branchByKey = await createDemoBranches(tenant.id, [
@@ -238,6 +242,8 @@ export async function seedNamokarTenant(passwordHash: string) {
   });
 
   const staff = await createDemoUsers("namokar", tenant.id, passwordHash, branchByKey, [
+    // The owner: Namokar's Super Admin, tenant-scoped like every Super Admin (it can never see another hospital).
+    { slug: "superadmin", name: "Dr. Rajesh Shah", role: "SUPER_ADMIN", branch: "a" },
     { slug: "admin", name: "Kavita Shah", role: "HOSPITAL_ADMIN", branch: "a" },
     { slug: "doctor", name: "Dr. Meera Shah", role: "DOCTOR", branch: "a" },
     { slug: "doctor2", name: "Dr. Anand Jain", role: "DOCTOR", branch: "a" },

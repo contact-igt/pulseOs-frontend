@@ -31,6 +31,8 @@ export const CAPABILITIES = [
   "SMS_NOTIFICATIONS",
   "CAMPAIGNS",
   "SPEND_ATTRIBUTION",
+  /** Revenue figures, payments and revenue-based ROAS. A hospital that does not run a revenue workflow switches it off. */
+  "REVENUE_TRACKING",
 ] as const;
 export type Capability = (typeof CAPABILITIES)[number];
 /** Kept for existing call sites: a capability name. */
@@ -39,14 +41,16 @@ export type CapabilityMap = Record<Capability, boolean>;
 
 /** What each edition switches on by default. Super Admin may override any of them per tenant. */
 export const EDITION_CAPABILITIES: Record<Edition, Capability[]> = {
-  BETA_V1_CORE: ["ANALYTICS_CORE", "RUNO_CALLING", "WHATSAPP_NOTIFICATIONS"],
-  BETA_V2_GROWTH: ["ANALYTICS_CORE", "MARKETING_ANALYTICS", "GOOGLE_ADS", "META_ADS", "RUNO_CALLING", "WHATSAPP_NOTIFICATIONS", "WHATSAPP_INBOX", "CONVERSATION_INTELLIGENCE", "CAMPAIGNS", "SPEND_ATTRIBUTION"],
+  BETA_V1_CORE: ["ANALYTICS_CORE", "RUNO_CALLING", "WHATSAPP_NOTIFICATIONS", "REVENUE_TRACKING"],
+  BETA_V2_GROWTH: ["ANALYTICS_CORE", "MARKETING_ANALYTICS", "GOOGLE_ADS", "META_ADS", "RUNO_CALLING", "WHATSAPP_NOTIFICATIONS", "WHATSAPP_INBOX", "CONVERSATION_INTELLIGENCE", "CAMPAIGNS", "SPEND_ATTRIBUTION", "REVENUE_TRACKING"],
 };
 
 /** A capability that needs another one on. Explicit and small; nothing else is implied. */
 export const CAPABILITY_DEPENDENCIES: Partial<Record<Capability, Capability[]>> = {
   CONVERSATION_INTELLIGENCE: ["WHATSAPP_INBOX"],
   SPEND_ATTRIBUTION: ["MARKETING_ANALYTICS"],
+  // Revenue attribution and ROAS are computed from revenue, so a hospital without revenue tracking cannot have them.
+  MARKETING_ANALYTICS: ["REVENUE_TRACKING"],
   CAMPAIGNS: ["MARKETING_ANALYTICS"],
   // Their only read surface is Marketing Analytics; syncing spend nobody can see would be silent cost.
   GOOGLE_ADS: ["MARKETING_ANALYTICS"],
@@ -81,6 +85,7 @@ export const CAPABILITY_META: Record<Capability, CapabilityMeta> = {
   SMS_NOTIFICATIONS: { label: "SMS Notifications", description: "Text-message reminders (provider required).", provider: "sms" },
   CAMPAIGNS: { label: "Campaigns & Sources", description: "Campaign and source management.", growth: true },
   SPEND_ATTRIBUTION: { label: "Spend & Attribution", description: "Spend at risk and source performance on the Command Centre.", growth: true },
+  REVENUE_TRACKING: { label: "Revenue Tracking", description: "Revenue figures, treatment payments and revenue-based ROAS. Off for hospitals that do not run a revenue workflow." },
 };
 
 export function isEdition(value: unknown): value is Edition {
@@ -170,6 +175,8 @@ export type Permission =
   | "VIEW_APPOINTMENTS"
   | "MANAGE_APPOINTMENTS"
   | "RECORD_CONSULTATION_OUTCOME"
+  /** Finish the consultation of a visit that is with THIS doctor (everyone else completes visits through MANAGE_APPOINTMENTS). */
+  | "COMPLETE_CONSULTATION"
   | "VIEW_TREATMENT"
   | "MANAGE_TREATMENT"
   | "VIEW_REVENUE"
@@ -214,7 +221,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   ],
   DOCTOR: [
     "VIEW_DOCTOR_COMMAND_CENTRE", "VIEW_PATIENTS", "VIEW_JOURNEYS", "VIEW_APPOINTMENTS",
-    "RECORD_CONSULTATION_OUTCOME", "VIEW_TREATMENT", "VIEW_TASKS",
+    "RECORD_CONSULTATION_OUTCOME", "COMPLETE_CONSULTATION", "VIEW_TREATMENT", "VIEW_TASKS",
   ],
 };
 
@@ -228,7 +235,8 @@ export interface TodayStrip {
   waitingNow: number;
   consultationsCompleted: number;
   treatmentDecisionsPending: number;
-  attributedRevenue: number;
+  /** null when the hospital has revenue tracking off - never a fake 0. */
+  attributedRevenue: number | null;
 }
 
 export type JourneyHealthKey = "contacted" | "booked" | "attended" | "consulted" | "treatment_advised";
@@ -405,7 +413,8 @@ export interface ServiceMixRow {
   /** Advised, decision pending, accepted or scheduled. */
   treatmentsInPipeline: number;
   treatmentsCompleted: number;
-  revenue: number;
+  /** null when the hospital has revenue tracking off. */
+  revenue: number | null;
 }
 
 export interface DoctorNextPatient {
@@ -477,7 +486,8 @@ export type ConsultationOutcomeValue =
   | "DECISION_PENDING"
   | "FOLLOW_UP_REQUIRED"
   | "REFERRED"
-  | "OTHER";
+  | "OTHER"
+  | "TREATMENT_DECLINED";
 
 export interface RecordOutcomeInput {
   appointmentId: string;
@@ -533,6 +543,8 @@ export interface JourneyCardVm {
   id: string;
   journeyType: string;
   stage: JourneyStage;
+  /** Where the patient is right now (derived, never stored); null before any visit. */
+  operationalStatus: OperationalStatusKey | null;
   source: SourceChannel;
   ownerName: string | null;
   nextActionDueAt: string | null;
@@ -710,8 +722,9 @@ export interface Patient360 {
     campaignName: string | null;
     firstTouchAt: string | null;
     allocatedAcquisitionCost: number | null;
-    estimatedTreatmentValue: number;
-    attributedRevenue: number;
+    /** null when the hospital has revenue tracking off. */
+    estimatedTreatmentValue: number | null;
+    attributedRevenue: number | null;
     // Full multi-touch context — lastTouch is null when the journey has
     // only ever had the one (first) touch.
     touchpointCount: number;
@@ -792,6 +805,8 @@ export interface JourneyDetailVm {
     id: string;
     journeyType: string;
     stage: JourneyStage;
+    /** Where the patient is right now (derived, never stored); null before any visit. */
+    operationalStatus: OperationalStatusKey | null;
     source: SourceChannel;
     sourceLabel: string | null;
     departmentName: string | null;
@@ -1862,6 +1877,8 @@ export interface LeadRow {
   campaignName: string | null;
   stage: JourneyStage;
   leadStatus: LeadStatus;
+  /** Where the patient is right now (derived, never stored): Appointment booked, Checked in, Waiting, No-show... null before any visit. */
+  operationalStatus: OperationalStatusKey | null;
   ownerId: string | null;
   ownerName: string | null;
   priority: TaskPriority;
@@ -2935,4 +2952,75 @@ export interface SetupStatus {
   callingConnected: boolean;
   whatsappConnected: boolean;
   hasStaff: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Operational status - a DERIVED indicator ("where is this patient right now?") over the canonical data: the journey's
+// stage, its appointments, its treatment and its open tasks. It is never stored, never written back and never replaces a
+// stage; it is the one deterministic answer every screen (Leads, Journey, Patient) shows for the same facts.
+//
+// Precedence, first match wins:
+//   1. closed                      the journey is lost
+//   2. with_doctor / waiting / checked_in   a visit is in the clinic right now (the furthest step first)
+//   3. procedure_done / procedure_scheduled a procedure is booked or finished (the bigger milestone wins over a review visit)
+//   4. appointment_confirmed / appointment_booked   a visit is booked and has not happened yet
+//   5. treatment_follow_up         an open treatment decision (ADVISED / DECISION_PENDING / ACCEPTED, or a treatment-decision task)
+//   6. consultation_completed / no_show / cancelled   the MOST RECENT closed visit decides
+//   otherwise null: before any appointment the existing lead status (new, uncontacted, follow-up due...) already says it.
+// ---------------------------------------------------------------------------
+
+export const OPERATIONAL_STATUS_KEYS = [
+  "appointment_booked",
+  "appointment_confirmed",
+  "checked_in",
+  "waiting",
+  "with_doctor",
+  "consultation_completed",
+  "treatment_follow_up",
+  "procedure_scheduled",
+  "procedure_done",
+  "no_show",
+  "cancelled",
+  "closed",
+] as const;
+export type OperationalStatusKey = (typeof OPERATIONAL_STATUS_KEYS)[number];
+
+export interface OperationalStatusInput {
+  stage: JourneyStage;
+  appointments: { status: AppointmentStatus; scheduledAt: string | Date }[];
+  treatments: { status: TreatmentStatus }[];
+  /** Types of the journey's OPEN tasks (pending / in progress). */
+  openTaskTypes: string[];
+}
+
+const IN_CLINIC_RANK: Partial<Record<AppointmentStatus, number>> = { checked_in: 1, waiting: 2, with_doctor: 3 };
+const IN_CLINIC_KEY: Record<number, OperationalStatusKey> = { 1: "checked_in", 2: "waiting", 3: "with_doctor" };
+const OPEN_TREATMENT: TreatmentStatus[] = ["ADVISED", "DECISION_PENDING", "ACCEPTED"];
+const DECISION_TASK_TYPES = ["TREATMENT_DECISION"];
+
+export function deriveOperationalStatus(i: OperationalStatusInput): OperationalStatusKey | null {
+  if (i.stage === "lost") return "closed";
+
+  const rank = Math.max(0, ...i.appointments.map((a) => IN_CLINIC_RANK[a.status] ?? 0));
+  if (rank > 0) return IN_CLINIC_KEY[rank]!;
+
+  if (i.treatments.some((t) => t.status === "COMPLETED")) return "procedure_done";
+  if (i.treatments.some((t) => t.status === "SCHEDULED")) return "procedure_scheduled";
+
+  const pending = i.appointments.filter((a) => a.status === "requested" || a.status === "scheduled" || a.status === "confirmed");
+  if (pending.length > 0) return pending.some((a) => a.status === "confirmed") ? "appointment_confirmed" : "appointment_booked";
+
+  const closed = i.appointments
+    .filter((a) => a.status === "completed" || a.status === "no_show" || a.status === "cancelled")
+    .map((a) => ({ status: a.status, at: new Date(a.scheduledAt).getTime() }))
+    // Latest visit first; the status name breaks an exact tie so the answer never depends on input order.
+    .sort((a, b) => b.at - a.at || a.status.localeCompare(b.status));
+  const last = closed[0];
+
+  if (last?.status === "completed" && (i.treatments.some((t) => OPEN_TREATMENT.includes(t.status)) || i.openTaskTypes.some((t) => DECISION_TASK_TYPES.includes(t)))) return "treatment_follow_up";
+  if (!last && i.treatments.some((t) => OPEN_TREATMENT.includes(t.status))) return "treatment_follow_up";
+  if (last?.status === "completed") return "consultation_completed";
+  if (last?.status === "no_show") return "no_show";
+  if (last?.status === "cancelled") return "cancelled";
+  return null;
 }

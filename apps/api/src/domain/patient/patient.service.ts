@@ -1,4 +1,5 @@
 import { and, desc, eq, ilike, inArray, or } from "drizzle-orm";
+import { loadOperationalStatuses } from "../journey/operational-status.service.js";
 import { displayAge } from "../../lib/age.js";
 import { dayKeyIn } from "../../lib/hospital-time.js";
 import { patientNameSql } from "../../lib/patient-name.js";
@@ -211,7 +212,7 @@ export async function listPatients(db: Db, tenantId: string, filters: PatientLis
     .map(({ ownerUserId: _ownerUserId, ...rest }) => rest);
 }
 
-export async function getPatient360(db: Db, tenantId: string, patientId: string, viewerRole: Role, timezone: string): Promise<Patient360 | null> {
+export async function getPatient360(db: Db, tenantId: string, patientId: string, viewerRole: Role, timezone: string, revenueTracking = true): Promise<Patient360 | null> {
   const [patient] = await db
     .select({ id: patients.id, name: patientNameSql, dateOfBirth: patients.dateOfBirth, reportedAge: patients.reportedAge, phone: patients.phone, preferredLanguage: patients.preferredLanguage, branchName: branches.name })
     .from(patients)
@@ -230,6 +231,7 @@ export async function getPatient360(db: Db, tenantId: string, patientId: string,
     .where(and(eq(journeys.tenantId, tenantId), eq(journeys.patientId, patientId)))
     .orderBy(desc(journeys.createdAt));
 
+  const operational = await loadOperationalStatuses(db, tenantId, journeyRows.map((j) => ({ id: j.id, stage: j.stage })));
   const journeyCards: JourneyCardVm[] = [];
   for (const j of journeyRows) {
     const [nextTask] = await db
@@ -268,6 +270,7 @@ export async function getPatient360(db: Db, tenantId: string, patientId: string,
       id: j.id,
       journeyType: j.journeyType,
       stage: j.stage,
+      operationalStatus: operational.get(j.id) ?? null,
       source: j.source,
       ownerName: j.ownerName,
       nextActionDueAt: nextTask ? nextTask.dueAt.toISOString() : null,
@@ -291,8 +294,8 @@ export async function getPatient360(db: Db, tenantId: string, patientId: string,
     campaignName: null,
     firstTouchAt: null,
     allocatedAcquisitionCost: null,
-    estimatedTreatmentValue: 0,
-    attributedRevenue: 0,
+    estimatedTreatmentValue: revenueTracking ? 0 : null,
+    attributedRevenue: revenueTracking ? 0 : null,
     touchpointCount: 0,
     lastTouch: null,
   };
@@ -341,8 +344,8 @@ export async function getPatient360(db: Db, tenantId: string, patientId: string,
       campaignName,
       firstTouchAt: firstTouch ? firstTouch.occurredAt.toISOString() : null,
       allocatedAcquisitionCost: allocatedCost,
-      estimatedTreatmentValue,
-      attributedRevenue,
+      estimatedTreatmentValue: revenueTracking ? estimatedTreatmentValue : null,
+      attributedRevenue: revenueTracking ? attributedRevenue : null,
       touchpointCount: history.length,
       lastTouch,
     };

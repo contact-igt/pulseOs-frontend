@@ -75,7 +75,7 @@ export async function listJourneyTypes(db: Db, tenantId: string): Promise<string
   return rows.map((r) => r.journeyType).sort();
 }
 
-export async function getTodayStrip(db: Db, tenantId: string, filters: DashboardFilters, timezone: string): Promise<TodayStrip> {
+export async function getTodayStrip(db: Db, tenantId: string, filters: DashboardFilters, timezone: string, revenueTracking = true): Promise<TodayStrip> {
   const { start, end } = hospitalTodayBounds(timezone);
   const branchClause = filters.branchId ? eq(patients.branchId, filters.branchId) : undefined;
   const apptBranchClause = filters.branchId ? eq(appointments.branchId, filters.branchId) : undefined;
@@ -95,7 +95,10 @@ export async function getTodayStrip(db: Db, tenantId: string, filters: Dashboard
     db.select({ c: count() }).from(appointments).where(and(eq(appointments.tenantId, tenantId), inArray(appointments.status, ["checked_in", "waiting"]), apptBranchClause, apptServiceClause)),
     db.select({ c: count() }).from(appointments).where(and(eq(appointments.tenantId, tenantId), eq(appointments.status, "completed"), gte(appointments.scheduledAt, start), lt(appointments.scheduledAt, end), apptBranchClause, apptServiceClause)),
     db.select({ c: count() }).from(treatmentOpportunities).where(and(eq(treatmentOpportunities.tenantId, tenantId), eq(treatmentOpportunities.status, "DECISION_PENDING"), treatmentScope)),
-    db.select({ total: sum(revenueEvents.amount) }).from(revenueEvents).where(and(eq(revenueEvents.tenantId, tenantId), gte(revenueEvents.occurredAt, start), lt(revenueEvents.occurredAt, end), revenueScope)),
+    // A hospital with revenue tracking off never queries (or shows) revenue.
+    revenueTracking
+      ? db.select({ total: sum(revenueEvents.amount) }).from(revenueEvents).where(and(eq(revenueEvents.tenantId, tenantId), gte(revenueEvents.occurredAt, start), lt(revenueEvents.occurredAt, end), revenueScope))
+      : Promise.resolve([{ total: null }]),
   ]);
 
   return {
@@ -104,7 +107,7 @@ export async function getTodayStrip(db: Db, tenantId: string, filters: Dashboard
     waitingNow: waitingNow.c,
     consultationsCompleted: consultationsCompleted.c,
     treatmentDecisionsPending: treatmentPending.c,
-    attributedRevenue: Number(revenueRow?.total ?? 0),
+    attributedRevenue: revenueTracking ? Number(revenueRow?.total ?? 0) : null,
   };
 }
 
@@ -561,7 +564,7 @@ const PIPELINE_TREATMENT_STATUSES = ["ADVISED", "DECISION_PENDING", "ACCEPTED", 
  * so the Command Centre can show which services actually convert — three
  * grouped queries, never one per service.
  */
-export async function getServiceMix(db: Db, tenantId: string, filters: DashboardFilters = {}): Promise<ServiceMixRow[]> {
+export async function getServiceMix(db: Db, tenantId: string, filters: DashboardFilters = {}, revenueTracking = true): Promise<ServiceMixRow[]> {
   const branchClause = filters.branchId ? eq(patients.branchId, filters.branchId) : undefined;
 
   const journeyRows = await db
@@ -587,13 +590,15 @@ export async function getServiceMix(db: Db, tenantId: string, filters: Dashboard
     .where(and(eq(treatmentOpportunities.tenantId, tenantId), branchClause, inPeriod(journeys.createdAt, filters)))
     .groupBy(journeys.journeyType);
 
-  const revenueRows = await db
-    .select({ service: journeys.journeyType, total: sum(revenueEvents.amount) })
-    .from(revenueEvents)
-    .innerJoin(journeys, eq(revenueEvents.journeyId, journeys.id))
-    .innerJoin(patients, eq(journeys.patientId, patients.id))
-    .where(and(eq(revenueEvents.tenantId, tenantId), branchClause, inPeriod(journeys.createdAt, filters)))
-    .groupBy(journeys.journeyType);
+  const revenueRows = revenueTracking
+    ? await db
+        .select({ service: journeys.journeyType, total: sum(revenueEvents.amount) })
+        .from(revenueEvents)
+        .innerJoin(journeys, eq(revenueEvents.journeyId, journeys.id))
+        .innerJoin(patients, eq(journeys.patientId, patients.id))
+        .where(and(eq(revenueEvents.tenantId, tenantId), branchClause, inPeriod(journeys.createdAt, filters)))
+        .groupBy(journeys.journeyType)
+    : [];
 
   const treatmentsBy = new Map(treatmentRows.map((r) => [r.service, r]));
   const revenueBy = new Map(revenueRows.map((r) => [r.service, Number(r.total ?? 0)]));
@@ -605,9 +610,9 @@ export async function getServiceMix(db: Db, tenantId: string, filters: Dashboard
       activeJourneys: Number(r.active),
       treatmentsInPipeline: Number(treatmentsBy.get(r.service)?.pipeline ?? 0),
       treatmentsCompleted: Number(treatmentsBy.get(r.service)?.completed ?? 0),
-      revenue: revenueBy.get(r.service) ?? 0,
+      revenue: revenueTracking ? (revenueBy.get(r.service) ?? 0) : null,
     }))
-    .sort((a, b) => b.revenue - a.revenue || b.journeys - a.journeys);
+    .sort((a, b) => (b.revenue ?? 0) - (a.revenue ?? 0) || b.journeys - a.journeys);
 }
 
 /**

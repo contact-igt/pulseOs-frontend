@@ -202,8 +202,8 @@ function lifecycleStamps(status: string, scheduledAt: Date, ordinal: number) {
   }
 }
 
-export async function createDemoTenant(name: string, edition: Edition = "BETA_V2_GROWTH") {
-  const [tenant] = await db.insert(tenants).values({ name, timezone: "Asia/Kolkata", edition }).returning();
+export async function createDemoTenant(name: string, edition: Edition = "BETA_V2_GROWTH", opts: { loginSlug?: string } = {}) {
+  const [tenant] = await db.insert(tenants).values({ name, timezone: "Asia/Kolkata", edition, loginSlug: opts.loginSlug ?? null }).returning();
   return tenant;
 }
 

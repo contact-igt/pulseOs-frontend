@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import type { SpendAtRiskCategoryKey } from "@pulseos/types";
+import { capabilityEnabled, type SpendAtRiskCategoryKey } from "@pulseos/types";
 import { requirePermission } from "../auth/permission.middleware.js";
 import { assignJourneyOwner, getJourneyDetail, getJourneysSummary, listJourneys, parseOwnerFilter } from "./journey.service.js";
 
@@ -39,7 +39,7 @@ export async function journeyRoutes(app: FastifyInstance) {
     const { tenantId, id: userId, role } = request.sessionUser!;
     const id = idParam.safeParse((request.params as { id: string }).id);
     if (!id.success) return reply.status(404).send({ error: "journey_not_found" });
-    const detail = await getJourneyDetail(app.db, tenantId, id.data, { id: userId, role, timezone: request.sessionUser!.timezone });
+    const detail = await getJourneyDetail(app.db, tenantId, id.data, { id: userId, role, timezone: request.sessionUser!.timezone, revenueTracking: capabilityEnabled(request.sessionUser!.capabilities, "REVENUE_TRACKING") });
     if (!detail) return reply.status(404).send({ error: "journey_not_found" });
     return detail;
   });

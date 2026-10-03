@@ -85,7 +85,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
     const tenantId = request.sessionUser!.tenantId;
     const filters = await dashboardFilters(request, reply);
     if (!filters) return reply;
-    return getTodayStrip(app.db, tenantId, filters, request.sessionUser!.timezone);
+    return getTodayStrip(app.db, tenantId, filters, request.sessionUser!.timezone, capabilityEnabled(request.sessionUser!.capabilities, "REVENUE_TRACKING"));
   });
 
   app.get("/dashboard/executive", { preHandler: requireCapability("SPEND_ATTRIBUTION") }, async (request, reply) => {
@@ -171,6 +171,6 @@ export async function dashboardRoutes(app: FastifyInstance) {
     const tenantId = request.sessionUser!.tenantId;
     const filters = await dashboardFilters(request, reply);
     if (!filters) return reply;
-    return getServiceMix(app.db, tenantId, filters);
+    return getServiceMix(app.db, tenantId, filters, capabilityEnabled(request.sessionUser!.capabilities, "REVENUE_TRACKING"));
   });
 }
