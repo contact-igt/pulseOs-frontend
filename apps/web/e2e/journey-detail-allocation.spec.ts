@@ -65,8 +65,9 @@ test.describe("Journey detail + allocation", () => {
     await expect(page.getByTestId("journey-treatments")).toBeVisible();
     await expect(page.getByTestId("journey-revenue")).toBeVisible();
 
-    // Back arrives at Leads (row click carried ?from=leads).
-    await expect(page.getByRole("link", { name: "Back to Leads" })).toBeVisible();
+    // The breadcrumb's root is Leads (the row click carried ?from=leads) and takes you back to it.
+    await expect(page.getByTestId("breadcrumb-0")).toHaveText("Leads");
+    await expect(page.getByTestId("breadcrumb-0")).toHaveAttribute("href", /^\/leads/);
 
     // Journey -> Patient 360 -> browser back -> Journey.
     await page.getByTestId("journey-patient-link").click();

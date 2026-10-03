@@ -37,7 +37,7 @@ test.describe("Global patient search", () => {
     await page.keyboard.press("Enter");
     await expect(page).toHaveURL(/\/patients\/[0-9a-f-]+/);
     await expect(page.getByTestId("patient-360")).toBeVisible();
-    await expect(page.getByText("Priya Sharma")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Priya Sharma" })).toBeVisible(); // (the breadcrumb names her too)
 
     // The box clears after a selection — no stale query left behind.
     await expect(page.getByTestId("global-patient-search")).toHaveValue("");

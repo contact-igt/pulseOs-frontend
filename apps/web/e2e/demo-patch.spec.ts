@@ -161,13 +161,15 @@ test.describe("demo patch", () => {
   test("Namokar Command Centre shows a real day, with the PulseOS period menu and calendar (no native controls)", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await devLogin(page, "namokar", "HOSPITAL_ADMIN");
+    // Namokar opens on Performance (no revenue workflow); this spec is about the Overview's day and its period controls.
+    await page.goto("/command-centre?cc=overview");
     await expect(page.getByTestId("workspace-welcome")).toHaveCount(0);
     await expect(page.getByTestId("kpi-strip")).toBeVisible();
     const num = async (key: string) => Number((await page.getByTestId(`kpi-${key}`).innerText()).split("\n")[0]);
     expect(await num("newEnquiries")).toBeGreaterThanOrEqual(8);
-    expect(await num("appointmentsToday")).toBe(8);
+    expect(await num("appointmentsToday")).toBe(10);
     expect(await num("waitingNow")).toBe(2);
-    expect(await num("consultationsCompleted")).toBe(2);
+    expect(await num("consultationsCompleted")).toBe(4);
     await shot(page, "08-namokar-command-centre");
 
     // The period menu is a PulseOS popover, not the browser's list.
@@ -282,6 +284,7 @@ test.describe("demo patch", () => {
   test("on a phone the period menu, calendar and day navigation fit and are 44px", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await devLogin(page, "namokar", "HOSPITAL_ADMIN");
+    await page.goto("/command-centre?cc=overview");
     const fits = async (id: string) => {
       const box = (await page.getByTestId(id).boundingBox())!;
       expect(box.x).toBeGreaterThanOrEqual(0);

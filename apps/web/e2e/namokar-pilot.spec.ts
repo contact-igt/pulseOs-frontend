@@ -210,11 +210,10 @@ test.describe("Namokar pilot", () => {
 
     const doc = await as(browser, "doctor");
     await doc.page.goto("/doctor-home");
-    const complete = doc.page.locator('[data-testid^="complete-consultation-"]').filter({ has: doc.page.locator("xpath=.") });
-    await expect(doc.page.getByText(name).first()).toBeVisible();
-    const button = doc.page.getByRole("button", { name: "Complete consultation" }).first();
-    void complete;
-    await button.click();
+    // THIS patient's row (the seeded clinic day has its own patient with the doctor right now; never touch that one).
+    const queueRow = doc.page.getByTestId("doctor-queue").locator("li").filter({ hasText: name });
+    await expect(queueRow).toBeVisible();
+    await queueRow.getByRole("button", { name: "Complete consultation" }).click();
     const sheet = doc.page.getByTestId("complete-consultation");
     // A doctor is not offered surgery scheduling while completing.
     await expect(sheet.getByTestId("complete-next-surgery")).toHaveCount(0);

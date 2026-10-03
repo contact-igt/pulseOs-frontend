@@ -36,7 +36,11 @@ async function parkCreated(request: APIRequestContext) {
   }
 }
 
-async function createTodayAppointment(page: Page, name: string, hhmm: string): Promise<string> {
+async function createTodayAppointment(page: Page, name: string, wanted: string): Promise<string> {
+  // "Later today" must still be later when the suite runs in the evening: never book a time that has already passed.
+  const soon = new Date(Date.now() + 5 * 60_000).toLocaleTimeString("en-GB", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit" });
+  const hhmm = wanted > soon ? wanted : soon;
+  test.skip(hhmm > "23:55", "no time left in the hospital's day to book a visit for later today");
   const { today } = (await (await page.request.get(`${API}/appointments/calendar-context`)).json()) as { today: string };
   const lookups = (await (await page.request.get(`${API}/lookups`)).json()) as { branches: { id: string }[]; doctors: { id: string }[] };
   const lead = await page.request.post(`${API}/leads`, {
