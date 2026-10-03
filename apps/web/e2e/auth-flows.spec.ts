@@ -32,7 +32,8 @@ async function expectNoOverlay(page: Page) {
 async function logout(page: Page) {
   await page.getByTestId("profile-menu-trigger").click();
   await page.getByTestId("logout-button").click();
-  await page.waitForURL(/\/login$/);
+  // A hospital with its own sign-in page (every seeded demo has one) sends its people back to THAT page; others to /login.
+  await page.waitForURL(/\/login(\/[a-z0-9-]+)?$/);
 }
 
 test.describe("auth flows (live)", () => {
