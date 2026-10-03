@@ -1,6 +1,7 @@
-import { and, count, eq, gte, inArray, lt, sql, sum, isNotNull } from "drizzle-orm";
+import { and, count, eq, gte, inArray, lt, sql, sum, isNotNull, type SQL } from "drizzle-orm";
 import { patientNameSql } from "../../lib/patient-name.js";
-import { hospitalTodayBounds } from "../../lib/hospital-time.js";
+import { hospitalTodayBounds, inLocalRange, tzLiteral } from "../../lib/hospital-time.js";
+import { proratedSpend } from "../analytics/analytics.service.js";
 import type { Db } from "../../db/client.js";
 import {
   appointments,
@@ -22,6 +23,7 @@ import type {
   Branch,
   BranchDoctorRow,
   ConversionStage,
+  DashboardPeriod,
   ExecutiveStrip,
   JourneyHealth,
   JourneyHealthKey,
@@ -40,6 +42,24 @@ import type {
 export interface DashboardFilters {
   branchId?: string;
   journeyType?: string;
+  /** Hospital-timezone days the period widgets cover; absent = all time. Live snapshots ("now"/"today") ignore it. */
+  period?: DashboardPeriod;
+}
+
+/**
+ * Narrows any journey-linked row (appointment, task, treatment, revenue...) to journeys in the selected branch
+ * (the patient's branch) and service. Undefined when neither filter is set, so callers can pass it straight to and().
+ */
+function journeyScope(journeyIdColumn: unknown, filters: Pick<DashboardFilters, "branchId" | "journeyType">): SQL | undefined {
+  if (!filters.branchId && !filters.journeyType) return undefined;
+  const branch = filters.branchId ? sql` and p.branch_id = ${filters.branchId}` : sql``;
+  const service = filters.journeyType ? sql` and j.journey_type = ${filters.journeyType}` : sql``;
+  return sql`exists (select 1 from journeys j join patients p on p.id = j.patient_id where j.id = ${journeyIdColumn}${branch}${service})`;
+}
+
+/** The period as a SQL predicate on a timestamp column, or undefined when the widget is all-time. */
+function inPeriod(column: unknown, filters: DashboardFilters): SQL | undefined {
+  return filters.period ? inLocalRange(column, filters.period.timezone, filters.period.from, filters.period.to) : undefined;
 }
 
 export async function listBranches(db: Db, tenantId: string): Promise<Branch[]> {
@@ -57,6 +77,10 @@ export async function getTodayStrip(db: Db, tenantId: string, filters: Dashboard
   const branchClause = filters.branchId ? eq(patients.branchId, filters.branchId) : undefined;
   const apptBranchClause = filters.branchId ? eq(appointments.branchId, filters.branchId) : undefined;
   const journeyTypeClause = filters.journeyType ? eq(journeys.journeyType, filters.journeyType) : undefined;
+  // Visits narrow by the visit's own branch; everything else by the journey's patient branch. Service always via the journey.
+  const apptServiceClause = journeyScope(appointments.journeyId, { journeyType: filters.journeyType });
+  const treatmentScope = journeyScope(treatmentOpportunities.journeyId, filters);
+  const revenueScope = journeyScope(revenueEvents.journeyId, filters);
 
   const [[newEnquiries], [appointmentsToday], [waitingNow], [consultationsCompleted], [treatmentPending], [revenueRow]] = await Promise.all([
     db
@@ -64,11 +88,11 @@ export async function getTodayStrip(db: Db, tenantId: string, filters: Dashboard
       .from(journeys)
       .innerJoin(patients, eq(journeys.patientId, patients.id))
       .where(and(eq(journeys.tenantId, tenantId), gte(journeys.createdAt, start), lt(journeys.createdAt, end), branchClause, journeyTypeClause)),
-    db.select({ c: count() }).from(appointments).where(and(eq(appointments.tenantId, tenantId), gte(appointments.scheduledAt, start), lt(appointments.scheduledAt, end), apptBranchClause)),
-    db.select({ c: count() }).from(appointments).where(and(eq(appointments.tenantId, tenantId), inArray(appointments.status, ["checked_in", "waiting"]), apptBranchClause)),
-    db.select({ c: count() }).from(appointments).where(and(eq(appointments.tenantId, tenantId), eq(appointments.status, "completed"), gte(appointments.scheduledAt, start), lt(appointments.scheduledAt, end), apptBranchClause)),
-    db.select({ c: count() }).from(treatmentOpportunities).where(and(eq(treatmentOpportunities.tenantId, tenantId), eq(treatmentOpportunities.status, "DECISION_PENDING"))),
-    db.select({ total: sum(revenueEvents.amount) }).from(revenueEvents).where(and(eq(revenueEvents.tenantId, tenantId), gte(revenueEvents.occurredAt, start), lt(revenueEvents.occurredAt, end))),
+    db.select({ c: count() }).from(appointments).where(and(eq(appointments.tenantId, tenantId), gte(appointments.scheduledAt, start), lt(appointments.scheduledAt, end), apptBranchClause, apptServiceClause)),
+    db.select({ c: count() }).from(appointments).where(and(eq(appointments.tenantId, tenantId), inArray(appointments.status, ["checked_in", "waiting"]), apptBranchClause, apptServiceClause)),
+    db.select({ c: count() }).from(appointments).where(and(eq(appointments.tenantId, tenantId), eq(appointments.status, "completed"), gte(appointments.scheduledAt, start), lt(appointments.scheduledAt, end), apptBranchClause, apptServiceClause)),
+    db.select({ c: count() }).from(treatmentOpportunities).where(and(eq(treatmentOpportunities.tenantId, tenantId), eq(treatmentOpportunities.status, "DECISION_PENDING"), treatmentScope)),
+    db.select({ total: sum(revenueEvents.amount) }).from(revenueEvents).where(and(eq(revenueEvents.tenantId, tenantId), gte(revenueEvents.occurredAt, start), lt(revenueEvents.occurredAt, end), revenueScope)),
   ]);
 
   return {
@@ -82,37 +106,54 @@ export async function getTodayStrip(db: Db, tenantId: string, filters: Dashboard
 }
 
 /**
- * Total marketing spend across all of a tenant's campaigns — the denominator
- * for every cost-per-outcome and ROAS figure on the dashboard.
+ * Total marketing spend — the denominator for every cost-per-outcome and ROAS figure on the dashboard. With a period it
+ * is each campaign's spend prorated over the days its run overlaps the period (an open-ended run extends to today), the
+ * same rule Marketing Analytics uses; without one it is lifetime spend.
  */
-async function getTotalSpend(db: Db, tenantId: string): Promise<number> {
-  const [row] = await db
-    .select({ total: sum(marketingCampaigns.spendAmount) })
+async function getTotalSpend(db: Db, tenantId: string, period?: DashboardPeriod): Promise<number> {
+  if (!period) {
+    const [row] = await db.select({ total: sum(marketingCampaigns.spendAmount) }).from(marketingCampaigns).where(eq(marketingCampaigns.tenantId, tenantId));
+    return Number(row?.total ?? 0);
+  }
+  const tz = tzLiteral(period.timezone);
+  const runs = await db
+    .select({
+      spend: marketingCampaigns.spendAmount,
+      startDay: sql<string>`to_char(${marketingCampaigns.startDate} at time zone ${tz}, 'YYYY-MM-DD')`,
+      endDay: sql<string | null>`to_char(${marketingCampaigns.endDate} at time zone ${tz}, 'YYYY-MM-DD')`,
+    })
     .from(marketingCampaigns)
     .where(eq(marketingCampaigns.tenantId, tenantId));
-  return Number(row?.total ?? 0);
+  return runs.reduce((sum, r) => sum + proratedSpend(r.spend, r.startDay, r.endDay ?? period.today, period.from, period.to), 0);
 }
 
-export async function getExecutiveStrip(db: Db, tenantId: string): Promise<ExecutiveStrip> {
+/**
+ * Hospital performance. With a period every figure is that period (enquiries by journey created date, consultations by
+ * outcome recorded date, completed treatments by completion date, revenue by payment date, spend prorated); without one
+ * it is all time. It is hospital-wide: branch and service do not narrow it because spend cannot be split by either.
+ * Spend At Risk is always a live snapshot.
+ */
+export async function getExecutiveStrip(db: Db, tenantId: string, filters: DashboardFilters = {}): Promise<ExecutiveStrip> {
   const [spend, [enquiries], [consultations], [treatmentsCompleted], [revenue], spendAtRisk] = await Promise.all([
-    getTotalSpend(db, tenantId),
-    db.select({ c: count() }).from(journeys).where(eq(journeys.tenantId, tenantId)),
-    db.select({ c: count() }).from(consultationOutcomes).where(eq(consultationOutcomes.tenantId, tenantId)),
-    db.select({ c: count() }).from(treatmentOpportunities).where(and(eq(treatmentOpportunities.tenantId, tenantId), eq(treatmentOpportunities.status, "COMPLETED"))),
-    db.select({ total: sum(revenueEvents.amount) }).from(revenueEvents).where(eq(revenueEvents.tenantId, tenantId)),
+    getTotalSpend(db, tenantId, filters.period),
+    db.select({ c: count() }).from(journeys).where(and(eq(journeys.tenantId, tenantId), inPeriod(journeys.createdAt, filters))),
+    db.select({ c: count() }).from(consultationOutcomes).where(and(eq(consultationOutcomes.tenantId, tenantId), inPeriod(consultationOutcomes.recordedAt, filters))),
+    db.select({ c: count() }).from(treatmentOpportunities).where(and(eq(treatmentOpportunities.tenantId, tenantId), eq(treatmentOpportunities.status, "COMPLETED"), inPeriod(treatmentOpportunities.completedAt, filters))),
+    db.select({ total: sum(revenueEvents.amount) }).from(revenueEvents).where(and(eq(revenueEvents.tenantId, tenantId), inPeriod(revenueEvents.occurredAt, filters))),
     getSpendAtRisk(db, tenantId),
   ]);
 
   const attributedRevenue = Number(revenue?.total ?? 0);
 
   return {
-    marketingSpend: spend,
+    marketingSpend: Math.round(spend),
     enquiries: enquiries.c,
     consultations: consultations.c,
     treatmentsCompleted: treatmentsCompleted.c,
     attributedRevenue,
     roas: roasOf(attributedRevenue, spend),
     spendAtRisk: spendAtRisk.total,
+    period: filters.period ?? null,
   };
 }
 
@@ -138,7 +179,7 @@ async function getStageReachedCounts(db: Db, tenantId: string, filters: Dashboar
     .select({ stage: journeys.stage, c: count() })
     .from(journeys)
     .innerJoin(patients, eq(journeys.patientId, patients.id))
-    .where(and(eq(journeys.tenantId, tenantId), branchClause, journeyTypeClause))
+    .where(and(eq(journeys.tenantId, tenantId), branchClause, journeyTypeClause, inPeriod(journeys.createdAt, filters)))
     .groupBy(journeys.stage);
 
   const counts = new Map(rows.map((r) => [r.stage, r.c]));
@@ -157,7 +198,7 @@ async function getStageReachedCounts(db: Db, tenantId: string, filters: Dashboar
 
 export async function getConversionFunnel(db: Db, tenantId: string, filters: DashboardFilters = {}): Promise<ConversionStage[]> {
   const reached = await getStageReachedCounts(db, tenantId, filters);
-  const totalSpend = await getTotalSpend(db, tenantId);
+  const totalSpend = await getTotalSpend(db, tenantId, filters.period);
   return CONVERSION_STAGES.map((s) => {
     const c = reached.get(s.key) ?? 0;
     return { key: s.key, label: s.label, count: c, costPerOutcome: COST_TRACKED_STAGES.has(s.key) ? costPer(totalSpend, c) : null };
@@ -183,18 +224,19 @@ export async function getJourneyHealth(db: Db, tenantId: string, filters: Dashbo
 
   const overallPct = totalJourneys > 0 ? Math.round(((reached.get("treatment_advised") ?? 0) / totalJourneys) * 100) : 0;
 
-  return { segments, totalJourneys, overallPct };
+  return { segments, totalJourneys, overallPct, period: filters.period ?? null };
 }
 
 
 export async function getPatientFlow(db: Db, tenantId: string, filters: DashboardFilters, timezone: string): Promise<PatientFlowCount[]> {
   const apptBranchClause = filters.branchId ? eq(appointments.branchId, filters.branchId) : undefined;
+  const apptServiceClause = journeyScope(appointments.journeyId, { journeyType: filters.journeyType });
   const { start, end } = hospitalTodayBounds(timezone);
 
   const rows = await db
     .select({ status: appointments.status, c: count() })
     .from(appointments)
-    .where(and(eq(appointments.tenantId, tenantId), gte(appointments.scheduledAt, start), lt(appointments.scheduledAt, end), apptBranchClause))
+    .where(and(eq(appointments.tenantId, tenantId), gte(appointments.scheduledAt, start), lt(appointments.scheduledAt, end), apptBranchClause, apptServiceClause))
     .groupBy(appointments.status);
 
   const buckets: Record<PatientFlowCount["bucket"], number> = {
@@ -247,7 +289,7 @@ export async function getAttentionQueue(db: Db, tenantId: string, filters: Dashb
     .innerJoin(patients, eq(tasks.patientId, patients.id))
     .leftJoin(journeys, eq(tasks.journeyId, journeys.id))
     .leftJoin(users, eq(tasks.assignedTo, users.id))
-    .where(and(eq(tasks.tenantId, tenantId), eq(tasks.status, "pending"), inArray(tasks.reason, ATTENTION_TASK_REASONS), branchClause))
+    .where(and(eq(tasks.tenantId, tenantId), eq(tasks.status, "pending"), inArray(tasks.reason, ATTENTION_TASK_REASONS), branchClause, filters.journeyType ? eq(journeys.journeyType, filters.journeyType) : undefined))
     .orderBy(tasks.dueAt)
     .limit(20);
 
@@ -309,7 +351,8 @@ async function getCampaignAllocationByJourney(db: Db, tenantId: string): Promise
   return byJourney;
 }
 
-export async function getSpendAtRisk(db: Db, tenantId: string): Promise<SpendAtRiskSummary> {
+/** A live snapshot ("as of now"): the period does not apply, but branch and service do. */
+export async function getSpendAtRisk(db: Db, tenantId: string, filters: DashboardFilters = {}): Promise<SpendAtRiskSummary> {
   const allocationByJourney = await getCampaignAllocationByJourney(db, tenantId);
   const now = Date.now();
 
@@ -318,7 +361,7 @@ export async function getSpendAtRisk(db: Db, tenantId: string): Promise<SpendAtR
     const rows = await db
       .select({ journeyId: tasks.journeyId, dueAt: tasks.dueAt })
       .from(tasks)
-      .where(and(eq(tasks.tenantId, tenantId), eq(tasks.status, "pending"), eq(tasks.reason, cat.taskReason as (typeof tasks.reason.enumValues)[number])));
+      .where(and(eq(tasks.tenantId, tenantId), eq(tasks.status, "pending"), eq(tasks.reason, cat.taskReason as (typeof tasks.reason.enumValues)[number]), journeyScope(tasks.journeyId, filters)));
 
     let allocatedSpend = 0;
     let oldestAgeDays = 0;
@@ -335,8 +378,8 @@ export async function getSpendAtRisk(db: Db, tenantId: string): Promise<SpendAtR
 }
 
 /** Same underlying task-reason categories as getSpendAtRisk, reshaped as {reason, count, estimatedValue} for the segmented-bar Spend At Risk visual. */
-export async function getSpendAtRiskByReason(db: Db, tenantId: string): Promise<SpendAtRisk> {
-  const summary = await getSpendAtRisk(db, tenantId);
+export async function getSpendAtRiskByReason(db: Db, tenantId: string, filters: DashboardFilters = {}): Promise<SpendAtRisk> {
+  const summary = await getSpendAtRisk(db, tenantId, filters);
   const byReason = summary.categories.map((c) => {
     const cat = SPEND_AT_RISK_CATEGORIES.find((x) => x.key === c.key)!;
     return { reason: cat.taskReason as AttentionItem["reason"], count: c.journeyCount, estimatedValue: c.allocatedSpend };
@@ -344,8 +387,30 @@ export async function getSpendAtRiskByReason(db: Db, tenantId: string): Promise<
   return { totalAtRisk: summary.total, byReason };
 }
 
-export async function getSourcePerformance(db: Db, tenantId: string): Promise<SourcePerformanceRow[]> {
+/**
+ * Per campaign. With a period: enquiries are touchpoints that occurred in it and spend is prorated over the days the
+ * campaign ran inside it; appointments, consultations, treatments and revenue are those enquiries' outcomes (a cohort).
+ */
+export async function getSourcePerformance(db: Db, tenantId: string, filters: DashboardFilters = {}): Promise<SourcePerformanceRow[]> {
   const campaigns = await db.select().from(marketingCampaigns).where(eq(marketingCampaigns.tenantId, tenantId));
+  const period = filters.period;
+  const tz = period ? tzLiteral(period.timezone) : null;
+  const runDays = new Map<string, { startDay: string; endDay: string | null }>();
+  if (period && tz) {
+    const days = await db
+      .select({
+        id: marketingCampaigns.id,
+        startDay: sql<string>`to_char(${marketingCampaigns.startDate} at time zone ${tz}, 'YYYY-MM-DD')`,
+        endDay: sql<string | null>`to_char(${marketingCampaigns.endDate} at time zone ${tz}, 'YYYY-MM-DD')`,
+      })
+      .from(marketingCampaigns)
+      .where(eq(marketingCampaigns.tenantId, tenantId));
+    for (const d of days) runDays.set(d.id, d);
+  }
+  const spendOf = (c: (typeof campaigns)[number]): number => {
+    const run = runDays.get(c.id);
+    return period && run ? Math.round(proratedSpend(c.spendAmount, run.startDay, run.endDay ?? period.today, period.from, period.to)) : c.spendAmount;
+  };
 
   // A synced campaign's numbers are only as real as the connector that
   // produced them — one lookup up front rather than N, joined in below so
@@ -360,14 +425,15 @@ export async function getSourcePerformance(db: Db, tenantId: string): Promise<So
     const journeyIdsResult = await db
       .select({ journeyId: campaignTouchpoints.journeyId })
       .from(campaignTouchpoints)
-      .where(and(eq(campaignTouchpoints.tenantId, tenantId), eq(campaignTouchpoints.campaignId, campaign.id)));
-    const journeyIds = journeyIdsResult.map((r) => r.journeyId);
+      .where(and(eq(campaignTouchpoints.tenantId, tenantId), eq(campaignTouchpoints.campaignId, campaign.id), inPeriod(campaignTouchpoints.occurredAt, filters)));
+    const journeyIds = [...new Set(journeyIdsResult.map((r) => r.journeyId))];
+    const spend = spendOf(campaign);
     if (journeyIds.length === 0) {
       rows.push({
         campaignId: campaign.id,
         campaignName: campaign.name,
         source: campaign.source,
-        spend: campaign.spendAmount,
+        spend,
         enquiries: 0,
         appointments: 0,
         consultations: 0,
@@ -391,13 +457,13 @@ export async function getSourcePerformance(db: Db, tenantId: string): Promise<So
       campaignId: campaign.id,
       campaignName: campaign.name,
       source: campaign.source,
-      spend: campaign.spendAmount,
+      spend,
       enquiries: journeyIds.length,
       appointments: apptCount.c,
       consultations: consultCount.c,
       treatments: treatCount.c,
       revenue,
-      roas: roasOf(revenue, campaign.spendAmount),
+      roas: roasOf(revenue, spend),
       connectorMode,
     });
   }
@@ -406,8 +472,8 @@ export async function getSourcePerformance(db: Db, tenantId: string): Promise<So
 }
 
 /** Simpler, non-campaign-scoped sibling of getSourcePerformance, grouped by raw source channel — feeds the flagship Source Performance table variant. */
-export async function getMarketingSources(db: Db, tenantId: string): Promise<MarketingSourceRow[]> {
-  const rows = await getSourcePerformance(db, tenantId);
+export async function getMarketingSources(db: Db, tenantId: string, filters: DashboardFilters = {}): Promise<MarketingSourceRow[]> {
+  const rows = await getSourcePerformance(db, tenantId, filters);
   const bySource = new Map<string, MarketingSourceRow>();
   for (const r of rows) {
     const existing = bySource.get(r.source);
@@ -447,7 +513,7 @@ export async function getTeamWorkload(db: Db, tenantId: string, filters: Dashboa
       openTasks: count(tasks.id),
     })
     .from(users)
-    .leftJoin(tasks, and(eq(tasks.assignedTo, users.id), eq(tasks.status, "pending")))
+    .leftJoin(tasks, and(eq(tasks.assignedTo, users.id), eq(tasks.status, "pending"), journeyScope(tasks.journeyId, { journeyType: filters.journeyType })))
     .where(and(eq(users.tenantId, tenantId), sql`${users.role} IN ('FRONT_DESK', 'PATIENT_COORDINATOR')`, branchClause))
     .groupBy(users.id, users.name, users.role);
 
@@ -455,7 +521,7 @@ export async function getTeamWorkload(db: Db, tenantId: string, filters: Dashboa
   const overdueRows = await db
     .select({ userId: tasks.assignedTo, overdue: count(tasks.id) })
     .from(tasks)
-    .where(and(eq(tasks.tenantId, tenantId), eq(tasks.status, "pending"), lt(tasks.dueAt, now)))
+    .where(and(eq(tasks.tenantId, tenantId), eq(tasks.status, "pending"), lt(tasks.dueAt, now), journeyScope(tasks.journeyId, { journeyType: filters.journeyType })))
     .groupBy(tasks.assignedTo);
 
   const overdueMap = new Map(overdueRows.map((r) => [r.userId, r.overdue]));
@@ -478,7 +544,7 @@ export async function getBranchDoctorPerformance(db: Db, tenantId: string, filte
       appointments: count(appointments.id),
     })
     .from(users)
-    .leftJoin(appointments, eq(appointments.doctorUserId, users.id))
+    .leftJoin(appointments, and(eq(appointments.doctorUserId, users.id), inPeriod(appointments.scheduledAt, filters)))
     .where(and(eq(users.tenantId, tenantId), eq(users.role, "DOCTOR"), branchClause))
     .groupBy(users.id, users.name);
 
@@ -491,7 +557,7 @@ export async function getBranchDoctorPerformance(db: Db, tenantId: string, filte
   const consultRows = await db
     .select({ doctorId: appointments.doctorUserId, consultations: count(appointments.id) })
     .from(appointments)
-    .where(and(eq(appointments.tenantId, tenantId), eq(appointments.status, "completed")))
+    .where(and(eq(appointments.tenantId, tenantId), eq(appointments.status, "completed"), inPeriod(appointments.scheduledAt, filters)))
     .groupBy(appointments.doctorUserId);
 
   const waitingMap = new Map(waitingRows.map((r) => [r.doctorId, r.waiting]));
@@ -525,7 +591,7 @@ export async function getServiceMix(db: Db, tenantId: string, filters: Dashboard
     })
     .from(journeys)
     .innerJoin(patients, eq(journeys.patientId, patients.id))
-    .where(and(eq(journeys.tenantId, tenantId), branchClause))
+    .where(and(eq(journeys.tenantId, tenantId), branchClause, inPeriod(journeys.createdAt, filters)))
     .groupBy(journeys.journeyType);
 
   const treatmentRows = await db
@@ -537,7 +603,7 @@ export async function getServiceMix(db: Db, tenantId: string, filters: Dashboard
     .from(treatmentOpportunities)
     .innerJoin(journeys, eq(treatmentOpportunities.journeyId, journeys.id))
     .innerJoin(patients, eq(journeys.patientId, patients.id))
-    .where(and(eq(treatmentOpportunities.tenantId, tenantId), branchClause))
+    .where(and(eq(treatmentOpportunities.tenantId, tenantId), branchClause, inPeriod(journeys.createdAt, filters)))
     .groupBy(journeys.journeyType);
 
   const revenueRows = await db
@@ -545,7 +611,7 @@ export async function getServiceMix(db: Db, tenantId: string, filters: Dashboard
     .from(revenueEvents)
     .innerJoin(journeys, eq(revenueEvents.journeyId, journeys.id))
     .innerJoin(patients, eq(journeys.patientId, patients.id))
-    .where(and(eq(revenueEvents.tenantId, tenantId), branchClause))
+    .where(and(eq(revenueEvents.tenantId, tenantId), branchClause, inPeriod(journeys.createdAt, filters)))
     .groupBy(journeys.journeyType);
 
   const treatmentsBy = new Map(treatmentRows.map((r) => [r.service, r]));

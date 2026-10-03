@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@pulseos/api-client";
+import { DATE_PRESETS, resolveDatePreset } from "@pulseos/types";
 import {
   AnalyticsPanel,
   AttentionQueue,
@@ -24,21 +25,29 @@ import {
   TodayPulse,
   Tabs,
   Toolbar,
+  formatKey,
+  localDayKey,
 } from "@pulseos/ui";
 import { OperationsReportView } from "@/components/report/OperationsReportView";
 import { useUrlFilters } from "@/lib/useUrlFilters";
 import { withFrom } from "@/components/shell/BackLink";
 import { useCapability } from "@/lib/useEdition";
+import { useHospitalTimeZone } from "@/lib/useHospitalTimeZone";
+import { PeriodControls } from "@/components/filters/PeriodControls";
+import { parseFilters } from "@/components/analytics/filters";
 
 /**
  * Command Centre composition (top to bottom):
- *  1. Hospital performance (all time): revenue anchor, spend, ROAS, spend at
- *     risk, volume — from /dashboard/executive.
- *  2. Today: a quiet operational strip (follows the filters).
- *  3. Primary analytics: the journey funnel + a right stack (Spend At Risk,
- *     patient flow today).
- *  4. Where the revenue comes from: service lines + top campaigns.
- *  5. What needs a person: attention queue + team / doctor load.
+ *  1. Hospital performance (the selected period, whole hospital): revenue anchor, spend, ROAS, volume.
+ *  2. Today: a quiet operational strip — always today, follows branch + service.
+ *  3. Primary analytics: the journey funnel (period) + a right stack (Spend At
+ *     Risk — live, patient flow — today).
+ *  4. Where the revenue comes from: service lines + campaigns (period).
+ *  5. What needs a person: attention queue + team (live) / doctor load (period).
+ *
+ * One period (the shared Analytics presets, hospital timezone, kept in the URL
+ * with branch + service) drives every period widget. Live snapshots say "now"
+ * or "today" and never pretend to follow it.
  */
 export default function CommandCentrePage() {
   const url = useUrlFilters();
@@ -63,32 +72,46 @@ export default function CommandCentrePage() {
 
 function CommandCentreOverview() {
   const router = useRouter();
-  const [branchId, setBranchId] = useState<string>("");
-  const [journeyType, setJourneyType] = useState<string>("");
+  const params = useSearchParams();
+  const url = useUrlFilters();
+  const tz = useHospitalTimeZone();
+  const f = useMemo(() => parseFilters(new URLSearchParams(params.toString())), [params]);
+  const branchId = f.branchId ?? "";
+  const journeyType = f.service ?? "";
+  const setBranchId = (v: string) => url.set({ branch: v || undefined });
+  const setJourneyType = (v: string) => url.set({ service: v || undefined });
+  const todayKey = localDayKey(new Date(), tz);
 
   // Spend, ROAS and source-performance panels exist only in the growth edition; a Beta V1 tenant neither shows nor requests them.
   const growth = useCapability("SPEND_ATTRIBUTION");
   const analyticsLink = useCapability("MARKETING_ANALYTICS");
 
-  const filters = { branchId: branchId || undefined, journeyType: journeyType || undefined };
+  // The period is always sent: an absent range would mean "all time" to the API.
+  const period = { range: f.range, from: f.from, to: f.to };
+  const scope = { branchId: branchId || undefined, journeyType: journeyType || undefined };
+  const filters = { ...scope, ...period };
+  const resolved = f.range === "custom" && f.from && f.to ? { from: f.from, to: f.to } : resolveDatePreset(f.range === "custom" ? "30d" : f.range, todayKey);
+  const presetLabel = DATE_PRESETS.find((p) => p.key === f.range)?.label ?? "Last 14 days";
+  const day = (k: string) => formatKey(k, { day: "numeric", month: "short" });
+  const periodLabel = resolved.from === resolved.to ? `${presetLabel} · ${day(resolved.from)}` : `${presetLabel} · ${day(resolved.from)} – ${day(resolved.to)}`;
 
   const branches = useQuery({ queryKey: ["branches"], queryFn: api.branches });
   const journeyTypes = useQuery({ queryKey: ["journey-types"], queryFn: api.journeyTypes });
 
-  const executive = useQuery({ queryKey: ["dashboard", "executive"], queryFn: () => api.executive(), enabled: growth });
-  const today = useQuery({ queryKey: ["dashboard", "today", filters], queryFn: () => api.today(filters) });
+  const executive = useQuery({ queryKey: ["dashboard", "executive", period], queryFn: () => api.executive(period), enabled: growth });
+  const today = useQuery({ queryKey: ["dashboard", "today", scope], queryFn: () => api.today(scope) });
   const journeyHealth = useQuery({ queryKey: ["dashboard", "journey-health", filters], queryFn: () => api.journeyHealth(filters) });
-  const patientFlow = useQuery({ queryKey: ["dashboard", "patient-flow", filters], queryFn: () => api.patientFlow(filters) });
-  const attention = useQuery({ queryKey: ["dashboard", "attention", filters], queryFn: () => api.attention(filters) });
-  const spendAtRisk = useQuery({ queryKey: ["dashboard", "spend-at-risk-by-reason"], queryFn: () => api.spendAtRiskByReason(), enabled: growth });
-  const sourcePerformance = useQuery({ queryKey: ["dashboard", "source-performance"], queryFn: () => api.sourcePerformance(), enabled: growth });
-  const serviceMix = useQuery({ queryKey: ["dashboard", "service-mix", { branchId: filters.branchId }], queryFn: () => api.serviceMix({ branchId: filters.branchId }) });
-  const team = useQuery({ queryKey: ["dashboard", "team", filters], queryFn: () => api.team(filters) });
-  const branchDoctor = useQuery({ queryKey: ["dashboard", "branch-doctor", filters], queryFn: () => api.branchDoctor(filters) });
+  const patientFlow = useQuery({ queryKey: ["dashboard", "patient-flow", scope], queryFn: () => api.patientFlow(scope) });
+  const attention = useQuery({ queryKey: ["dashboard", "attention", scope], queryFn: () => api.attention(scope) });
+  const spendAtRisk = useQuery({ queryKey: ["dashboard", "spend-at-risk-by-reason", scope], queryFn: () => api.spendAtRiskByReason(scope), enabled: growth });
+  const sourcePerformance = useQuery({ queryKey: ["dashboard", "source-performance", period], queryFn: () => api.sourcePerformance(period), enabled: growth });
+  const serviceMix = useQuery({ queryKey: ["dashboard", "service-mix", { branchId: scope.branchId, ...period }], queryFn: () => api.serviceMix({ branchId: scope.branchId, ...period }) });
+  const team = useQuery({ queryKey: ["dashboard", "team", scope], queryFn: () => api.team(scope) });
+  const branchDoctor = useQuery({ queryKey: ["dashboard", "branch-doctor", { branchId: scope.branchId, ...period }], queryFn: () => api.branchDoctor({ branchId: scope.branchId, ...period }) });
 
   const dailyLeads = useQuery({
-    queryKey: ["analytics", "leads", { range: "14d", branchId: filters.branchId, service: filters.journeyType }],
-    queryFn: () => api.analyticsLeads({ range: "14d", branchId: filters.branchId, service: filters.journeyType }),
+    queryKey: ["analytics", "leads", { ...period, branchId: scope.branchId, service: scope.journeyType }],
+    queryFn: () => api.analyticsLeads({ ...period, branchId: scope.branchId, service: scope.journeyType }),
   });
 
   const doctors = branchDoctor.data?.filter((r) => r.kind === "doctor");
@@ -98,6 +121,15 @@ function CommandCentreOverview() {
       <Toolbar
         actions={
           <FilterBar data-testid="filter-bar" className="w-full sm:w-auto">
+            <PeriodControls
+              presets={DATE_PRESETS}
+              maxSpanDays={366}
+              value={period}
+              today={todayKey}
+              onChange={(next) => url.set({ range: next.range === "30d" ? undefined : next.range, from: next.range === "custom" ? next.from : undefined, to: next.range === "custom" ? next.to : undefined })}
+              testIdPrefix="cc"
+              label="Period"
+            />
             <FilterSelect value={branchId} onChange={(e) => setBranchId(e.target.value)} aria-label="Branch" data-testid="filter-branch">
               <option value="">All branches</option>
               {branches.data?.map((b) => (
@@ -119,7 +151,10 @@ function CommandCentreOverview() {
       >
         <div>
           <h2 className="text-sm font-semibold tracking-tight text-ink">Hospital performance</h2>
-          <p className="text-xs text-ink-2">All time · whole hospital<span className="hidden lg:inline">. Filters apply to today, the funnel, flow, attention and team.</span></p>
+          <p className="text-xs text-ink-2" data-testid="cc-period-caption">
+            {periodLabel} · whole hospital
+            <span className="hidden lg:inline">. The period drives hospital performance, the funnel, enquiries by source, service lines, campaigns and doctor load; Today, flow, spend at risk, attention and team are live. Branch and service narrow everything except hospital performance and campaigns.</span>
+          </p>
         </div>
       </Toolbar>
 
@@ -179,7 +214,7 @@ function CommandCentreOverview() {
 
       <AnalyticsPanel
         title="Enquiries by source"
-        question="Last 14 days — which sources brought patients in each day?"
+        question={`${presetLabel} — which sources brought patients in each day?`}
         testId="cc-daily-source"
         actions={
           analyticsLink ? (

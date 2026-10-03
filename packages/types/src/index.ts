@@ -238,10 +238,22 @@ export interface JourneyHealthSegment {
   pct: number;
 }
 
+/** The hospital-timezone period a Command Centre widget was computed for. Absent when no period was requested (all time). */
+export interface DashboardPeriod {
+  preset: AnalyticsRangePreset;
+  /** Inclusive first / last local day, YYYY-MM-DD, in `timezone`. */
+  from: string;
+  to: string;
+  days: number;
+  timezone: string;
+  today: string;
+}
+
 export interface JourneyHealth {
   segments: JourneyHealthSegment[];
   totalJourneys: number;
   overallPct: number;
+  period?: DashboardPeriod | null;
 }
 
 export type ConversionStageKey =
@@ -315,6 +327,7 @@ export interface ExecutiveStrip {
   attributedRevenue: number;
   roas: number | null;
   spendAtRisk: number;
+  period?: DashboardPeriod | null;
 }
 
 export type SpendAtRiskCategoryKey =

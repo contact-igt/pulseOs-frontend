@@ -2,7 +2,7 @@ import type { ExecutiveStrip } from "@pulseos/types";
 import { formatInr, formatRoas } from "./format";
 
 interface Metric {
-  key: keyof ExecutiveStrip;
+  key: Exclude<keyof ExecutiveStrip, "period">;
   label: string;
   format: (v: number | null) => string;
 }
@@ -23,8 +23,8 @@ const METRICS: Metric[] = [
 /**
  * Hospital-level business headline: one connected strip (same material as
  * MetricStrip), attributed revenue as the single blue anchor. Numbers come
- * from `/dashboard/executive`, which is all-time and not affected by the
- * branch/service filters.
+ * from `/dashboard/executive`: the selected period (all time when none is
+ * sent), whole hospital — branch/service filters do not narrow it.
  *
  * Container-driven columns rather than MetricStrip's fixed one-per-cell row:
  * seven ₹-figures do not fit one line in a ~740px content area, so the strip

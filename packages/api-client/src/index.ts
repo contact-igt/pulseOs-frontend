@@ -229,6 +229,10 @@ const qs = toQuery;
 export interface DashboardQuery {
   branchId?: string;
   journeyType?: string;
+  /** Shared date preset (hospital timezone); omit for all time. `from`/`to` accompany range "custom". */
+  range?: string;
+  from?: string;
+  to?: string;
 }
 
 export const api = {
@@ -250,14 +254,14 @@ export const api = {
   branches: () => request<Branch[]>("/branches"),
   journeyTypes: () => request<string[]>("/journey-types"),
   today: (f: DashboardQuery = {}) => request<TodayStrip>(`/dashboard/today${qs(f)}`),
-  executive: () => request<ExecutiveStrip>("/dashboard/executive"),
+  executive: (f: DashboardQuery = {}) => request<ExecutiveStrip>(`/dashboard/executive${qs(f)}`),
   conversion: (f: DashboardQuery = {}) => request<ConversionStage[]>(`/dashboard/conversion${qs(f)}`),
   journeyHealth: (f: DashboardQuery = {}) => request<JourneyHealth>(`/dashboard/journey-health${qs(f)}`),
   patientFlow: (f: DashboardQuery = {}) => request<PatientFlowCount[]>(`/dashboard/patient-flow${qs(f)}`),
   attention: (f: DashboardQuery = {}) => request<AttentionItem[]>(`/dashboard/attention${qs(f)}`),
   spendAtRisk: () => request<SpendAtRiskSummary>("/dashboard/spend-at-risk"),
-  spendAtRiskByReason: () => request<SpendAtRisk>("/dashboard/spend-at-risk-by-reason"),
-  sourcePerformance: () => request<SourcePerformanceRow[]>("/dashboard/source-performance"),
+  spendAtRiskByReason: (f: DashboardQuery = {}) => request<SpendAtRisk>(`/dashboard/spend-at-risk-by-reason${qs(f)}`),
+  sourcePerformance: (f: DashboardQuery = {}) => request<SourcePerformanceRow[]>(`/dashboard/source-performance${qs(f)}`),
   marketing: () => request<MarketingSourceRow[]>("/dashboard/marketing"),
   team: (f: DashboardQuery = {}) => request<TeamWorkloadRow[]>(`/dashboard/team${qs(f)}`),
   branchDoctor: (f: DashboardQuery = {}) => request<BranchDoctorRow[]>(`/dashboard/branch-doctor${qs(f)}`),
