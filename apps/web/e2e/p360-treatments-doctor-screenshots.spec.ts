@@ -24,6 +24,7 @@ async function shot(page: Page, name: string, width: number) {
 }
 
 test.describe("Patient 360 / Treatments / Doctor Home screenshots", () => {
+  test.setTimeout(120_000); // five widths x several pages of full-page screenshots take longer than the 30s default
   test.skip(!DEMO_PASSWORD, "DEMO_PASSWORD must be set");
   test.beforeAll(() => fs.mkdirSync(OUT, { recursive: true }));
 
