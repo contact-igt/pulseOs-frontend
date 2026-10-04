@@ -158,6 +158,8 @@ export interface SubjectContext {
   start: Date | null;
   /** The visit/surgery is no longer something to remind about (cancelled, completed, no-show, not scheduled). */
   inactiveReason: string | null;
+  /** Appointment status (appointments only): messages are planned for a CONFIRMED visit. */
+  status?: string;
   values: Record<string, string>;
 }
 
@@ -179,7 +181,7 @@ export async function loadSubjectContext(db: Db, tenantId: string, type: "APPOIN
     if (!row) return null;
     const active = ["requested", "scheduled", "confirmed"].includes(row.a.status);
     return {
-      type, id, patientId: row.a.patientId, journeyId: row.a.journeyId, phone: row.phone ?? null, start: row.a.scheduledAt,
+      type, id, patientId: row.a.patientId, journeyId: row.a.journeyId, phone: row.phone ?? null, start: row.a.scheduledAt, status: row.a.status,
       inactiveReason: active ? null : row.a.status === "cancelled" ? "APPOINTMENT_CANCELLED" : row.a.status === "no_show" ? "NO_SHOW" : "APPOINTMENT_NOT_UPCOMING",
       values: {
         patient_name: row.patientName?.trim() || "there",
@@ -237,6 +239,7 @@ export async function planForSubject(db: Db, tenantId: string, type: "APPOINTMEN
   await ensureNotificationDefaults(db, tenantId);
   const ctx = await loadSubjectContext(db, tenantId, type, id);
   if (!ctx || !ctx.start) return { planned: 0, suppressed: [] };
+  if (type === "APPOINTMENT" && ctx.status !== "confirmed" && !ctx.inactiveReason) return { planned: 0, suppressed: ["NOT_CONFIRMED"] };
 
   const ruleRows = await db.select().from(notificationRules).where(and(eq(notificationRules.tenantId, tenantId), eq(notificationRules.subject, type)));
   const rules: PlanRule[] = ruleRows.map((r) => ({ id: r.id, kind: r.kind as PlanRule["kind"], enabled: r.enabled, offsetValue: r.offsetValue, offsetUnit: r.offsetUnit as NotificationOffsetUnit, minGapMinutes: r.minGapMinutes }));

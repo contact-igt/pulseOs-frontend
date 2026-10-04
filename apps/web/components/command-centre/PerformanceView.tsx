@@ -118,10 +118,12 @@ export function PerformanceView() {
               testIdPrefix="perf"
               label="Period"
             />
+            {branches.data?.length !== 1 && (
             <FilterSelect value={f.branchId ?? ""} onChange={(e) => url.set({ branch: e.target.value || undefined })} aria-label="Branch" data-testid="perf-filter-branch" className="max-md:[&_select]:h-11">
               <option value="">All branches</option>
               {branches.data?.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </FilterSelect>
+            )}
             <FilterSelect value={f.service ?? ""} onChange={(e) => url.set({ service: e.target.value || undefined })} aria-label="Service" data-testid="perf-filter-service" className="max-md:[&_select]:h-11">
               <option value="">All services</option>
               {journeyTypes.data?.map((t) => <option key={t} value={t}>{t}</option>)}

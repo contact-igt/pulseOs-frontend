@@ -28,11 +28,11 @@ const sectionHead = "mb-3 text-xs font-semibold uppercase tracking-wide text-neu
 /** Tomorrow's date in the HOSPITAL's calendar (pickers are hospital wall time). */
 const tomorrow = () => hospitalLocalInput(new Date(Date.now() + 24 * 3600 * 1000)).slice(0, 10);
 
-function emptyForm(sourceKey: string, branchId: string): LeadFormValues {
+function emptyForm(sourceKey: string, branchId: string, doctorId = ""): LeadFormValues {
   const d = tomorrow();
   return {
     patientId: undefined, phone: "", name: "", age: "", dateOfBirth: "", specialtyKey: "", journeyType: "", branchId, sourceKey, channel: "", outcomeKey: "", outcomeReason: "",
-    nextStep: "none", callbackDate: d, callbackTime: "11:00", callbackOwner: "", callbackNote: "", apptDate: d, apptTime: "10:00", apptDoctorId: "", apptBranchId: "", apptNote: "",
+    nextStep: "none", callbackDate: d, callbackTime: "11:00", callbackOwner: "", callbackNote: "", apptDate: d, apptTime: "10:00", apptDoctorId: doctorId, apptBranchId: "", apptNote: "",
     followUpDate: d, followUpTime: "10:00", followUpNote: "", callEnabled: false, callDirection: "inbound", callConnected: true, callMinutes: "", callNote: "",
     email: "", preferredLanguage: "English", doctorId: "", campaignId: "", ownerId: "", priority: "normal" as TaskPriority, notes: "", customFieldValues: {},
   };
@@ -82,7 +82,10 @@ export function AddLeadDrawer({
   onSubmit: (input: CreateLeadInput) => Promise<CreateLeadResult>;
   onCreated?: (result: CreateLeadResult) => void;
 }) {
-  const [form, setForm] = useState<LeadFormValues>(() => emptyForm((defaultSource && leadSources.find((s) => s.bucket === defaultSource)?.key) || leadSources[0]?.key || "", lookups.branches.length === 1 ? lookups.branches[0]!.id : ""));
+  const [form, setForm] = useState<LeadFormValues>(() => emptyForm((defaultSource && leadSources.find((s) => s.bucket === defaultSource)?.key) || leadSources[0]?.key || "", lookups.branches.length === 1 ? lookups.branches[0]!.id : "", lookups.doctors.length === 1 ? lookups.doctors[0]!.id : ""));
+  // One branch / one doctor: nothing to choose, so it is pre-selected above and the field is not shown.
+  const soleBranch = lookups.branches.length === 1;
+  const soleDoctor = lookups.doctors.length === 1;
   const [existingPatient, setExistingPatient] = useState<{ id: string; name: string; activeJourneyCount: number } | null>(null);
   const [phoneChecked, setPhoneChecked] = useState(false);
   const [fields, setFields] = useState<CustomFieldDefinitionVm[]>([]);
@@ -317,7 +320,7 @@ export function AddLeadDrawer({
                 </div>
               </div>
               <p className="-mt-1 text-[11px] text-neutral-500">Source is where the patient first came from; it stays with them. Channel is how this contact happened.</p>
-              <div>
+              {!soleBranch && (<div>
                 <label className={labelClass} htmlFor="lead-branch">
                   Branch <span className="text-danger-500">*</span>
                 </label>
@@ -329,7 +332,7 @@ export function AddLeadDrawer({
                     </option>
                   ))}
                 </select>
-              </div>
+              </div>)}
 
               {form.channel === "MANUAL_CALL" && (
                 <div className="rounded-lg border border-neutral-100 bg-neutral-50 p-3" data-testid="lead-call-details">
@@ -479,7 +482,7 @@ export function AddLeadDrawer({
                   <label className={labelClass} htmlFor="lead-appt-time">Time</label>
                   <input id="lead-appt-time" type="time" required value={form.apptTime} onChange={(e) => set("apptTime", e.target.value)} aria-invalid={apptPast || undefined} className={inputClass} data-testid="lead-appt-time" />
                 </div>
-                <div className="col-span-2 sm:col-span-1">
+                {!soleDoctor && (<div className="col-span-2 sm:col-span-1">
                   <label className={labelClass} htmlFor="lead-appt-doctor">Doctor <span className="text-danger-500">*</span></label>
                   <select id="lead-appt-doctor" required value={form.apptDoctorId} onChange={(e) => set("apptDoctorId", e.target.value)} className={inputClass} data-testid="lead-appt-doctor">
                     <option value="">Select doctor…</option>
@@ -489,8 +492,8 @@ export function AddLeadDrawer({
                       </option>
                     ))}
                   </select>
-                </div>
-                <div className="col-span-2 sm:col-span-1">
+                </div>)}
+                {!soleBranch && (<div className="col-span-2 sm:col-span-1">
                   <label className={labelClass} htmlFor="lead-appt-branch">Branch</label>
                   <select id="lead-appt-branch" value={form.apptBranchId || form.branchId} onChange={(e) => set("apptBranchId", e.target.value)} className={inputClass} data-testid="lead-appt-branch">
                     {lookups.branches.map((b) => (
@@ -499,7 +502,7 @@ export function AddLeadDrawer({
                       </option>
                     ))}
                   </select>
-                </div>
+                </div>)}
                 <div className="col-span-2">
                   <label className={labelClass} htmlFor="lead-appt-note">Note (optional)</label>
                   <input id="lead-appt-note" type="text" maxLength={500} value={form.apptNote} onChange={(e) => set("apptNote", e.target.value)} className={inputClass} data-testid="lead-appt-note" />
@@ -533,7 +536,7 @@ export function AddLeadDrawer({
                   <label className={labelClass} htmlFor="lead-journey-type">Journey type</label>
                   <input id="lead-journey-type" type="text" value={form.journeyType} onChange={(e) => set("journeyType", e.target.value)} className={inputClass} />
                 </div>
-                <div>
+                {!soleDoctor && (<div>
                   <label className={labelClass} htmlFor="lead-doctor">Preferred doctor</label>
                   <select id="lead-doctor" value={form.doctorId} onChange={(e) => set("doctorId", e.target.value)} className={inputClass}>
                     <option value="">No preference</option>
@@ -543,7 +546,7 @@ export function AddLeadDrawer({
                       </option>
                     ))}
                   </select>
-                </div>
+                </div>)}
                 <div>
                   <label className={labelClass} htmlFor="lead-owner">Owner / Coordinator</label>
                   <select id="lead-owner" value={form.ownerId} onChange={(e) => set("ownerId", e.target.value)} className={inputClass}>

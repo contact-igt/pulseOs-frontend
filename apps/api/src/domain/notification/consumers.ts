@@ -15,7 +15,10 @@ export function registerNotificationConsumers(db: Db): void {
 
   onAppointmentEvent(async (e) => {
     switch (e.type) {
+      // Booked is not confirmed: the confirmation message and the reminders start only once the visit is CONFIRMED (a visit
+      // that is booked already confirmed is planned right here). planForSubject itself refuses an unconfirmed visit.
       case "appointment.booked":
+      case "appointment.confirmed":
         await planForSubject(db, e.tenantId, "APPOINTMENT", e.appointmentId);
         return;
       case "appointment.rescheduled":

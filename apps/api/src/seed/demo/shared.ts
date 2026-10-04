@@ -171,6 +171,8 @@ export interface DemoContext {
   branches: { a: BranchRow; b: BranchRow };
   admin: UserRow;
   coordinator: UserRow;
+  /** Optional second coordinator: with it, demo journeys are spread across three staff (frontDesk, coordinator, coordinator2). */
+  coordinator2?: UserRow;
   frontDesk: UserRow;
   doctors: Record<string, UserRow>;
   campaigns: Record<string, CampaignRow>;
@@ -229,12 +231,13 @@ export async function createDemoTenant(name: string, edition: Edition = "BETA_V2
   return tenant;
 }
 
-export async function createDemoBranches(tenantId: string, defs: [{ name: string; city: string }, { name: string; city: string }]) {
+export async function createDemoBranches(tenantId: string, defs: [{ name: string; city: string }, { name: string; city: string }] | [{ name: string; city: string }]) {
   const [a, b] = await db
     .insert(branches)
     .values(defs.map((d) => ({ tenantId, ...d })))
     .returning();
-  return { a, b };
+  // A single-branch hospital (Namokar): key "b" aliases the one real branch, so no second branch ever exists.
+  return { a, b: b ?? a };
 }
 
 interface DemoUserDef {
@@ -495,7 +498,7 @@ export async function seedJourneys(ctx: DemoContext, configs: DemoJourneyConfig[
 
   for (const config of configs) {
     const patient = ctx.patients[config.patientIdx];
-    const owner = config.patientIdx % 2 === 0 ? ctx.coordinator : ctx.frontDesk;
+    const owner = ctx.coordinator2 ? [ctx.frontDesk, ctx.coordinator, ctx.coordinator2][config.patientIdx % 3] : config.patientIdx % 2 === 0 ? ctx.coordinator : ctx.frontDesk;
     const branch = config.patientIdx % 2 === 0 ? ctx.branches.a : ctx.branches.b;
     const doctor = config.appt ? ctx.doctors[config.appt.doctor] : null;
 

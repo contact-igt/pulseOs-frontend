@@ -401,6 +401,7 @@ export async function applyAppointmentAction(
     return { ok: false, reason: "invalid_transition" };
   }
 
+  if (action === "confirm") emitAppointmentEvent({ type: "appointment.confirmed", tenantId, appointmentId });
   if (action === "cancel") emitAppointmentEvent({ type: "appointment.cancelled", tenantId, appointmentId, reasonCode: reason!.code, hospitalAction: reason!.hospitalAction });
   if (action === "mark_no_show") emitAppointmentEvent({ type: "appointment.no_show", tenantId, appointmentId });
   return { ok: true, status: target };

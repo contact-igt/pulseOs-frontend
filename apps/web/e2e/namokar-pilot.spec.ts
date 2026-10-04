@@ -50,8 +50,8 @@ async function createLead(page: Page, name: string, over: Record<string, unknown
   return res.body;
 }
 
-/** Books a visit today with Dr. Meera Shah (so her Doctor Home shows it), moving to a later minute while the slot is taken. */
-async function bookToday(page: Page, lead: { journeyId: string; patientId: string }, doctorName = "Dr. Meera Shah"): Promise<string> {
+/** Books a visit today with Dr. Poonam Jain (so her Doctor Home shows it), moving to a later minute while the slot is taken. */
+async function bookToday(page: Page, lead: { journeyId: string; patientId: string }, doctorName = "Dr. Poonam Jain"): Promise<string> {
   const lk = await lookups(page);
   const doctor = lk.doctors.find((d) => d.name === doctorName) ?? lk.doctors[0]!;
   for (let step = 0; step < 40; step++) {

@@ -190,10 +190,12 @@ export default function TreatmentPage() {
             <option value="">All states</option>
             {ALL_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
           </FilterSelect>
+          {lookups.data?.doctors.length !== 1 && (
           <FilterSelect className={FILTER_CLASS} aria-label="Doctor" value={doctorId} onChange={(e) => setFilters({ doctorId: e.target.value })} data-testid="treatment-filter-doctor">
             <option value="">All doctors</option>
             {(lookups.data?.doctors ?? []).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
           </FilterSelect>
+          )}
           <PeriodSelect
             ariaLabel="Treatment date"
             value={dimension}

@@ -33,6 +33,7 @@ function Period({ filters, onChange }: Pick<BarProps, "filters" | "onChange">) {
 function Selects({ filters, options, branches, onChange }: Omit<BarProps, "onReset">) {
   return (
     <>
+      {branches?.length !== 1 && (
       <FilterSelect aria-label="Branch" value={filters.branchId ?? ""} onChange={(e) => onChange({ branchId: e.target.value || undefined })} data-testid="filter-branch">
         <option value="">All branches</option>
         {branches?.map((b) => (
@@ -41,6 +42,7 @@ function Selects({ filters, options, branches, onChange }: Omit<BarProps, "onRes
           </option>
         ))}
       </FilterSelect>
+      )}
       <FilterSelect aria-label="Service line" value={filters.service ?? ""} onChange={(e) => onChange({ service: e.target.value || undefined })} data-testid="filter-service">
         <option value="">All services</option>
         {options?.services.map((s) => (

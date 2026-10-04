@@ -52,6 +52,18 @@ describe.skipIf(!DEMO_PASSWORD)("Namokar Eye & Oculoplasty Centre pilot (seeded)
     expect((await queryClient`select 1 from departments where tenant_id = ${tenantId} and template_key = 'ophthalmology'`).length).toBe(1);
   });
 
+  it("is the real pilot shape: one Ashok Vihar branch, one doctor (Dr. Poonam Jain), a receptionist and two coordinators; a one-hour reminder, not a one-day one", async () => {
+    const br = await queryClient`select name, city from branches where tenant_id = ${tenantId}`;
+    expect(br).toHaveLength(1);
+    expect(br[0]!.city).toMatch(/Ashok Vihar/);
+    const docs = await queryClient`select name from schedule_resources where tenant_id = ${tenantId} and is_active`;
+    expect(docs.map((d) => d.name)).toEqual(["Dr. Poonam Jain"]);
+    const staff = await queryClient`select role, count(*)::int as n from users where tenant_id = ${tenantId} and role in ('FRONT_DESK','PATIENT_COORDINATOR','DOCTOR') group by role`;
+    expect(Object.fromEntries(staff.map((r) => [r.role, r.n]))).toEqual({ FRONT_DESK: 1, PATIENT_COORDINATOR: 2, DOCTOR: 1 });
+    const rules = await queryClient`select kind, offset_unit, enabled from notification_rules where tenant_id = ${tenantId} and subject = 'APPOINTMENT'`;
+    expect(rules.filter((r) => r.enabled && r.kind === "REMINDER").map((r) => r.offset_unit)).toEqual(["hours"]);
+  });
+
   it("opened 8-12 new enquiries today, from every channel, across the services", async () => {
     const rows = await queryClient`
       select j.journey_type, j.source from journeys j

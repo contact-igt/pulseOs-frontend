@@ -32,11 +32,15 @@ describe.skipIf(!DEMO_PASSWORD)("notifications: reminders and staff WhatsApp (in
     expect(res.statusCode).toBe(201);
     return res.json() as { patientId: string; journeyId: string };
   }
-  async function book(hours: number, tt: TestTenant = t, doctorId = resourceOf.get(tt.tenantId)!) {
+  const confirm = async (id: string, tt: TestTenant = t) => expect((await call(tt, "FRONT_DESK", "PATCH", `/appointments/${id}/action`, { action: "confirm" })).statusCode).toBe(200);
+  /** Books the visit and, by default, confirms it: the confirmation message and the reminders follow CONFIRMED, not booked. */
+  async function book(hours: number, tt: TestTenant = t, doctorId = resourceOf.get(tt.tenantId)!, confirmIt = true) {
     const { patientId, journeyId } = await journey(tt);
     const res = await call(tt, "FRONT_DESK", "POST", "/appointments", { patientId, journeyId, branchId: tt.branchId, doctorId, scheduledAt: inHours(hours).toISOString(), reason: "Consultation" });
     expect(res.statusCode).toBe(201);
-    return { ...(res.json() as AppointmentRow), patientId, journeyId };
+    const booked = res.json() as AppointmentRow;
+    if (confirmIt) await confirm(booked.id, tt);
+    return { ...booked, patientId, journeyId };
   }
   const rows = (subjectId: string) => db.select().from(notifications).where(eq(notifications.subjectId, subjectId));
   /** Domain events are published after commit and consumed asynchronously: wait for the consumer to finish. */
@@ -98,6 +102,19 @@ describe.skipIf(!DEMO_PASSWORD)("notifications: reminders and staff WhatsApp (in
     expect(templates.map((x) => x.purpose).sort()).toEqual(["APPOINTMENT_CONFIRMATION", "APPOINTMENT_REMINDER", "FOLLOW_UP_MESSAGE", "SURGERY_REMINDER"]);
   });
 
+  it("booked is not confirmed: nothing is planned until the visit is confirmed; confirming plans exactly one confirmation + the reminders; confirming again adds nothing", async () => {
+    const a = await book(72, t, resourceOf.get(t.tenantId)!, false);
+    await new Promise((r) => setTimeout(r, 400));
+    expect(await rows(a.id)).toHaveLength(0);
+    await confirm(a.id);
+    const rs = await planned(a.id, 3);
+    expect(rs.filter((r) => r.kind === "CONFIRMATION" || r.scheduledFor.getTime() < Date.now() + 10_000)).toHaveLength(1);
+    await confirm(a.id); // a repeat click: the visit is already confirmed
+    expect((await planForSubject(db, t.tenantId, "APPOINTMENT", a.id)).planned).toBe(0);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(await rows(a.id)).toHaveLength(3);
+  });
+
   it("booking creates the confirmation (now) and both reminders; a repeat plan adds nothing (idempotent)", async () => {
     const a = await book(72);
     const rs = sorted(await planned(a.id, 3));
@@ -143,6 +160,9 @@ describe.skipIf(!DEMO_PASSWORD)("notifications: reminders and staff WhatsApp (in
     await processDueNotifications(db, new Date(), fixtureOnly); // confirmation goes out
     const newAt = inHours(120);
     expect((await call(t, "FRONT_DESK", "PATCH", `/appointments/${a.id}/reschedule`, { scheduledAt: newAt.toISOString(), reasonCode: "patient_requested" })).statusCode).toBe(200);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(await rows(a.id)).toHaveLength(3); // moved visits are booked again, not confirmed: nothing new until re-confirmed
+    await confirm(a.id);
     const all = await until(() => rows(a.id), (r) => r.length >= 6);
     expect(all.filter((r) => r.status === "CANCELLED" && r.reason === "RESCHEDULED")).toHaveLength(2); // the old day/hour reminders
     expect(all.filter((r) => r.status === "SENT")).toHaveLength(1);

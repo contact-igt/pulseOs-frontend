@@ -63,8 +63,13 @@ export function NewAppointmentDrawer({
   const [patient, setPatient] = useState<PatientRef | null>(initialPatient ?? null);
   const [journeys, setJourneys] = useState<JourneyCardVm[]>([]);
   const [journeyId, setJourneyId] = useState("");
-  const [branchId, setBranchId] = useState("");
-  const [doctorId, setDoctorId] = useState("");
+  const [pickedBranchId, setBranchId] = useState("");
+  const [pickedDoctorId, setDoctorId] = useState("");
+  // One branch / one doctor: nothing to choose, so it is selected for the user and the field is not shown.
+  const soleBranch = branches.length === 1;
+  const soleDoctor = doctors.length === 1;
+  const branchId = pickedBranchId || (soleBranch ? branches[0]!.id : "");
+  const doctorId = pickedDoctorId || (soleDoctor ? doctors[0]!.id : "");
   const [scheduledAt, setScheduledAt] = useState(defaultDateTime());
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -253,8 +258,9 @@ export function NewAppointmentDrawer({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
+          {(!soleBranch || !soleDoctor) && (
+          <div className={soleBranch || soleDoctor ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3"}>
+            {!soleBranch && (<div>
               <label className={labelClass} htmlFor="appt-branch">
                 Branch <span className="text-danger-500">*</span>
               </label>
@@ -266,8 +272,8 @@ export function NewAppointmentDrawer({
                   </option>
                 ))}
               </select>
-            </div>
-            <div>
+            </div>)}
+            {!soleDoctor && (<div>
               <label className={labelClass} htmlFor="appt-doctor">
                 Doctor <span className="text-danger-500">*</span>
               </label>
@@ -279,8 +285,9 @@ export function NewAppointmentDrawer({
                   </option>
                 ))}
               </select>
-            </div>
+            </div>)}
           </div>
+          )}
 
           <div>
             <label className={labelClass} htmlFor="appt-time">

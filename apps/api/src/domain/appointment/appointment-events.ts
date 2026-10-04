@@ -5,6 +5,7 @@
  */
 export type AppointmentDomainEvent =
   | { type: "appointment.booked"; tenantId: string; appointmentId: string; scheduledAt: Date }
+  | { type: "appointment.confirmed"; tenantId: string; appointmentId: string }
   | { type: "appointment.rescheduled"; tenantId: string; appointmentId: string; previousScheduledAt: Date; scheduledAt: Date; reasonCode: string; hospitalAction: boolean }
   | { type: "appointment.cancelled"; tenantId: string; appointmentId: string; reasonCode: string; hospitalAction: boolean }
   | { type: "appointment.no_show"; tenantId: string; appointmentId: string }

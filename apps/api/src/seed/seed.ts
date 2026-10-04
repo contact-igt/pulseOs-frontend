@@ -51,7 +51,7 @@ import {
 } from "../db/schema.js";
 import { assertSafeToWipe } from "./safety.js";
 import { hashPassword } from "../domain/auth/auth.service.js";
-import { DEMO_ENVIRONMENTS, DEMO_STAFF_SLUGS } from "../domain/auth/demo-environments.js";
+import { DEMO_ENVIRONMENTS, DEMO_STAFF_SLUGS, NAMOKAR_STAFF_SLUGS } from "../domain/auth/demo-environments.js";
 import { seedGynecologyTenant } from "./demo/gynecology.js";
 import { OPHTHALMOLOGY_V1, seedOphthalmologyTenant } from "./demo/ophthalmology.js";
 import { seedConversationSessions } from "./demo/conversation-sessions.js";
@@ -136,7 +136,7 @@ async function main() {
 
   console.log("Seed complete. Password for every demo account: value of DEMO_PASSWORD env var");
   for (const env of DEMO_ENVIRONMENTS) {
-    const slugs = DEMO_STAFF_SLUGS;
+    const slugs = env.key === "namokar" ? NAMOKAR_STAFF_SLUGS : DEMO_STAFF_SLUGS;
     const logins = slugs.map((slug) => `${env.emailPrefix}.${slug}`).join(" / ");
     console.log(`${env.label}: ${logins} @pulseos.local`);
   }

@@ -151,6 +151,7 @@ function CommandCentreOverview() {
               testIdPrefix="cc"
               label="Period"
             />
+            {branches.data?.length !== 1 && (
             <FilterSelect value={branchId} onChange={(e) => setBranchId(e.target.value)} aria-label="Branch" data-testid="filter-branch" className="max-md:[&_select]:h-11">
               <option value="">All branches</option>
               {branches.data?.map((b) => (
@@ -159,6 +160,7 @@ function CommandCentreOverview() {
                 </option>
               ))}
             </FilterSelect>
+            )}
             <FilterSelect value={journeyType} onChange={(e) => setJourneyType(e.target.value)} aria-label="Service" data-testid="filter-service" className="max-md:[&_select]:h-11">
               <option value="">All services</option>
               {journeyTypes.data?.map((t) => (

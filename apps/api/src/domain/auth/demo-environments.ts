@@ -17,6 +17,9 @@ export const DEMO_LOGIN_ROLES: { role: Role; label: string; emailSlug: string }[
 /** Every seeded staff account per environment: the four Dev Login roles plus a second doctor. */
 export const DEMO_STAFF_SLUGS = ["superadmin", "admin", "doctor", "doctor2", "frontdesk", "coordinator"] as const;
 
+/** Namokar is a one-doctor clinic with two coordinators: its accounts differ from the shared list above. */
+export const NAMOKAR_STAFF_SLUGS = ["superadmin", "admin", "doctor", "frontdesk", "coordinator", "coordinator2"] as const;
+
 export const DEMO_ENVIRONMENTS = [
   { key: "gynecology", label: "Gynecology V2", tenantName: "PulseOS Gynecology Demo", emailPrefix: "gyn", edition: "BETA_V2_GROWTH" },
   { key: "ophthalmology", label: "Ophthalmology V2", tenantName: "PulseOS Ophthalmology Demo", emailPrefix: "eye", edition: "BETA_V2_GROWTH" },

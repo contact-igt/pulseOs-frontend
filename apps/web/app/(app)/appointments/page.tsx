@@ -124,18 +124,22 @@ export default function AppointmentsPage() {
                 label="Period"
               />
             )}
+            {lookups.data?.branches.length !== 1 && (
             <FilterSelect value={branchId} onChange={(e) => filters.set({ branch: e.target.value })} aria-label="Branch">
               <option value="">All branches</option>
               {lookups.data?.branches.map((b) => (
                 <option key={b.id} value={b.id}>{b.name}</option>
               ))}
             </FilterSelect>
+            )}
+            {lookups.data?.doctors.length !== 1 && (
             <FilterSelect value={doctorId} onChange={(e) => filters.set({ doctor: e.target.value })} aria-label="Doctor">
               <option value="">All doctors</option>
               {lookups.data?.doctors.map((d) => (
                 <option key={d.id} value={d.id}>{d.name}</option>
               ))}
             </FilterSelect>
+            )}
             <label className="glass-control relative flex h-8 min-w-0 flex-1 items-center rounded-control sm:w-48 sm:flex-none">
               <Search size={14} className="pointer-events-none absolute left-2.5 text-neutral-500" aria-hidden="true" />
               <input

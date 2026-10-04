@@ -25,10 +25,12 @@ const EXPORTS: { kind: ReportExportKind; label: string; hint: string }[] = [
 function FilterSelects({ q, options, onChange }: { q: ReportQuery; options?: ReportFilterOptions; onChange: (p: Partial<ReportQuery>) => void }) {
   return (
     <>
+      {options?.branches.length !== 1 && (
       <FilterSelect aria-label="Branch" value={q.branchId ?? ""} onChange={(e) => onChange({ branchId: e.target.value })} data-testid="report-filter-branch">
         <option value="">All branches</option>
         {options?.branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
       </FilterSelect>
+      )}
       <FilterSelect aria-label="Department" value={q.departmentId ?? ""} onChange={(e) => onChange({ departmentId: e.target.value })} data-testid="report-filter-department">
         <option value="">All departments</option>
         {options?.departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
@@ -45,10 +47,12 @@ function FilterSelects({ q, options, onChange }: { q: ReportQuery; options?: Rep
         <option value="">All team members</option>
         {options?.owners.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
       </FilterSelect>
+      {options?.doctors.length !== 1 && (
       <FilterSelect aria-label="Doctor" value={q.doctorId ?? ""} onChange={(e) => onChange({ doctorId: e.target.value })} data-testid="report-filter-doctor">
         <option value="">All doctors</option>
         {options?.doctors.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
       </FilterSelect>
+      )}
     </>
   );
 }

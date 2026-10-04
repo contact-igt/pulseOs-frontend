@@ -27,8 +27,11 @@ function setup(over: Partial<Parameters<typeof NewAppointmentDrawer>[0]> = {}) {
 
 async function fillRequired() {
   await waitFor(() => expect((screen.getByLabelText(/Journey/) as HTMLSelectElement).value).toBe("j1"));
-  fireEvent.change(screen.getByLabelText(/Branch/), { target: { value: "b1" } });
-  fireEvent.change(screen.getByLabelText(/Doctor/), { target: { value: "d1" } });
+  // A sole branch/doctor is auto-selected and not shown (see the "one branch, one doctor" tests).
+  const branch = screen.queryByLabelText(/Branch/);
+  if (branch) fireEvent.change(branch, { target: { value: "b1" } });
+  const doctor = screen.queryByLabelText(/Doctor/);
+  if (doctor) fireEvent.change(doctor, { target: { value: "d1" } });
 }
 
 afterEach(() => {
@@ -122,5 +125,23 @@ describe("NewAppointmentDrawer — time and doctor rules", () => {
       await vi.advanceTimersByTimeAsync(500);
     });
     expect(screen.queryByTestId("new-appointment-error")).toBeNull();
+  });
+});
+
+describe("NewAppointmentDrawer — one branch, one doctor", () => {
+  it("shows no Branch or Doctor field and books against the only ones", async () => {
+    const { onSubmit } = setup({ doctors: [{ id: "d1", name: "Dr Menon" }] });
+    await waitFor(() => expect((screen.getByLabelText(/Journey/) as HTMLSelectElement).value).toBe("j1"));
+    expect(screen.queryByLabelText(/Branch/)).toBeNull();
+    expect(screen.queryByLabelText(/Doctor/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /book|save|create/i }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit.mock.calls[0]![0]).toMatchObject({ branchId: "b1", doctorId: "d1" });
+  });
+
+  it("still asks for the doctor when there are several", async () => {
+    setup();
+    expect(screen.queryByLabelText(/Branch/)).toBeNull();
+    expect(screen.getByLabelText(/Doctor/)).toBeTruthy();
   });
 });
