@@ -118,7 +118,7 @@ export function PerformanceView() {
               testIdPrefix="perf"
               label="Period"
             />
-            {branches.data?.length !== 1 && (
+            {(branches.data?.length ?? 0) > 1 && (
             <FilterSelect value={f.branchId ?? ""} onChange={(e) => url.set({ branch: e.target.value || undefined })} aria-label="Branch" data-testid="perf-filter-branch" className="max-md:[&_select]:h-11">
               <option value="">All branches</option>
               {branches.data?.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}

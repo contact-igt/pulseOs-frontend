@@ -106,6 +106,8 @@ describe.skipIf(!DEMO_PASSWORD)("notifications: reminders and staff WhatsApp (in
     const a = await book(72, t, resourceOf.get(t.tenantId)!, false);
     await new Promise((r) => setTimeout(r, 400));
     expect(await rows(a.id)).toHaveLength(0);
+    // The guard itself, not just the absence of rows after a sleep:
+    expect(await planForSubject(db, t.tenantId, "APPOINTMENT", a.id)).toEqual({ planned: 0, suppressed: ["NOT_CONFIRMED"] });
     await confirm(a.id);
     const rs = await planned(a.id, 3);
     expect(rs.filter((r) => r.scheduledFor.getTime() < Date.now() + 10_000)).toHaveLength(1);
@@ -195,6 +197,16 @@ describe.skipIf(!DEMO_PASSWORD)("notifications: reminders and staff WhatsApp (in
     expect(movedRows.every((r) => r.status === "CANCELLED" && r.reason === "RESCHEDULED")).toBe(true);
     expect((await rows(cancelled.id)).filter((r) => r.status === "SENT")).toHaveLength(0);
     expect((await rows(cancelled.id))[0]!.reason).toBe("APPOINTMENT_CANCELLED");
+  });
+
+  it("the worker never sends for a visit that is not confirmed (e.g. planned earlier, then demoted behind the engine's back)", async () => {
+    const a = await book(72);
+    await planned(a.id, 3);
+    await db.update(appointments).set({ status: "scheduled" }).where(eq(appointments.id, a.id)); // no event published
+    await processDueNotifications(db, new Date(Date.now() + 71.5 * 3_600_000), fixtureOnly);
+    const after = await rows(a.id);
+    expect(after.filter((r) => r.status === "SENT")).toHaveLength(0);
+    expect(after.every((r) => r.status === "CANCELLED" && r.reason === "NOT_CONFIRMED")).toBe(true);
   });
 
   it("provider not configured → BLOCKED with the reason, not silently dropped; capability off → nothing is planned", async () => {

@@ -25,7 +25,10 @@ export function AddPatientDrawer({
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [preferredLanguage, setPreferredLanguage] = useState("English");
-  const [branchId, setBranchId] = useState("");
+  const [pickedBranchId, setBranchId] = useState("");
+  // One branch: nothing to choose, so it is used for the user and the field is not shown.
+  const soleBranch = branches.length === 1;
+  const branchId = pickedBranchId || (soleBranch ? branches[0]!.id : "");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -97,6 +100,7 @@ export function AddPatientDrawer({
             </label>
             <input id="patient-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={inputClass} />
           </div>
+          {!soleBranch && (
           <div>
             <label className={labelClass} htmlFor="patient-branch">
               Branch <span className="text-danger-500">*</span>
@@ -110,6 +114,7 @@ export function AddPatientDrawer({
               ))}
             </select>
           </div>
+          )}
           <div>
             <label className={labelClass} htmlFor="patient-language">
               Preferred language

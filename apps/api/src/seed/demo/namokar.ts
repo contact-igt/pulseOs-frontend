@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, gt } from "drizzle-orm";
 import { db } from "../../db/client.js";
 import { appointments, followUpTypes, notificationRules, notifications, tenantCapabilities, timelineEvents, treatmentOpportunities } from "../../db/schema.js";
 import { ensureNotificationDefaults, planForSubject } from "../../domain/notification/notification.service.js";
@@ -368,7 +368,7 @@ export async function seedNamokarTenant(passwordHash: string) {
   // directly, so the plan the confirm action would have made is made here, for the confirmed ones still ahead (FIXTURE sends).
   await ensureNotificationDefaults(db, tenant.id);
   await db.update(notificationRules).set({ enabled: false }).where(and(eq(notificationRules.tenantId, tenant.id), eq(notificationRules.subject, "APPOINTMENT"), eq(notificationRules.kind, "REMINDER"), eq(notificationRules.offsetUnit, "days")));
-  const upcoming = await db.select({ id: appointments.id }).from(appointments).where(and(eq(appointments.tenantId, tenant.id), eq(appointments.status, "confirmed")));
+  const upcoming = await db.select({ id: appointments.id }).from(appointments).where(and(eq(appointments.tenantId, tenant.id), eq(appointments.status, "confirmed"), gt(appointments.scheduledAt, new Date())));
   for (const a of upcoming) await planForSubject(db, tenant.id, "APPOINTMENT", a.id);
 
   console.log(`Namokar tenant: ${tenant.name} (${tenant.id}) - ${NAMOKAR_JOURNEYS.length} journeys, ${patientRows.length} patients`);

@@ -151,7 +151,7 @@ function CommandCentreOverview() {
               testIdPrefix="cc"
               label="Period"
             />
-            {branches.data?.length !== 1 && (
+            {(branches.data?.length ?? 0) > 1 && (
             <FilterSelect value={branchId} onChange={(e) => setBranchId(e.target.value)} aria-label="Branch" data-testid="filter-branch" className="max-md:[&_select]:h-11">
               <option value="">All branches</option>
               {branches.data?.map((b) => (

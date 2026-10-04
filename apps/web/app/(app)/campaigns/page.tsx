@@ -68,6 +68,7 @@ export default function CampaignsPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-5" data-testid="campaigns-page">
       <FilterBar data-testid="campaigns-filter-bar">
+        {(lookups.data?.branches.length ?? 0) > 1 && (
         <FilterSelect className={FILTER_CLASS} value={filters.branchId ?? ""} onChange={(e) => setFilters((f) => ({ ...f, branchId: e.target.value || undefined }))} aria-label="Branch">
           <option value="">All branches</option>
           {lookups.data?.branches.map((b) => (
@@ -76,6 +77,7 @@ export default function CampaignsPage() {
             </option>
           ))}
         </FilterSelect>
+        )}
         <FilterSelect
           className={FILTER_CLASS}
           value={filters.specialtyKey ?? ""}

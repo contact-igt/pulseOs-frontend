@@ -322,6 +322,8 @@ async function sendClaimed(db: Db, n: Row, now: Date, deps: SendDeps): Promise<"
     const ctx = await loadSubjectContext(db, tenantId, n.subjectType as "APPOINTMENT" | "SURGERY", n.subjectId);
     if (!ctx) return (await finish(db, n.id, { status: "CANCELLED", reason: "SUBJECT_GONE" }), "cancelled");
     if (ctx.inactiveReason) return (await finish(db, n.id, { status: "CANCELLED", reason: ctx.inactiveReason }), "cancelled");
+    // Messages follow CONFIRMED: a visit that is not (or is no longer) confirmed never gets one, whatever was planned earlier.
+    if (n.subjectType === "APPOINTMENT" && ctx.status !== "confirmed") return (await finish(db, n.id, { status: "CANCELLED", reason: "NOT_CONFIRMED" }), "cancelled");
     if (n.subjectAt && ctx.start && ctx.start.getTime() !== n.subjectAt.getTime()) return (await finish(db, n.id, { status: "CANCELLED", reason: "RESCHEDULED" }), "cancelled");
     if (ctx.start && ctx.start.getTime() <= now.getTime()) return (await finish(db, n.id, { status: "CANCELLED", reason: "TRIGGER_ALREADY_PASSED" }), "cancelled");
     // A reminder is never sent late: after downtime or a backlog its moment has gone (retries of one already tried are exempt).

@@ -124,7 +124,7 @@ export default function AppointmentsPage() {
                 label="Period"
               />
             )}
-            {lookups.data?.branches.length !== 1 && (
+            {(lookups.data?.branches.length ?? 0) > 1 && (
             <FilterSelect value={branchId} onChange={(e) => filters.set({ branch: e.target.value })} aria-label="Branch">
               <option value="">All branches</option>
               {lookups.data?.branches.map((b) => (
@@ -132,7 +132,7 @@ export default function AppointmentsPage() {
               ))}
             </FilterSelect>
             )}
-            {lookups.data?.doctors.length !== 1 && (
+            {(lookups.data?.doctors.length ?? 0) > 1 && (
             <FilterSelect value={doctorId} onChange={(e) => filters.set({ doctor: e.target.value })} aria-label="Doctor">
               <option value="">All doctors</option>
               {lookups.data?.doctors.map((d) => (
