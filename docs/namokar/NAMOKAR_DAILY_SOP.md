@@ -1,5 +1,19 @@
 # Daily routine
 
+**Who:** one Receptionist and two Patient Coordinators share the phones and the queue; Dr. Poonam Jain sees patients. Anyone on the phone team can pick up any item — an owner is helpful, never required.
+
+## For every call (Receptionist or Coordinator)
+1. Open the patient's journey (**Leads**, or **+ Create → Add Lead** for a new caller: *name, phone, how they reached us, service* — that is all that is needed).
+2. **Log call**: *Incoming / Outgoing*, the outcome, and a line of **feedback** (what happened, what the patient wants).
+3. Choose what happens next: **No action**, **Callback** (date + time) or **Appointment** (date + time). The doctor and the clinic are filled in for you.
+4. Booked an appointment? When the patient agrees, press **Confirm** on the visit. PulseOS then sends the WhatsApp confirmation **once** and the reminder **1 hour before** the visit. A booked-but-not-confirmed visit sends nothing. If the visit is moved, the old reminder is cancelled and you confirm the new time.
+
+## Start of day
+Open **My Work** (*Mine · All team · Unassigned*): *Overdue* first, then *Today*; then **Leads → Uncontacted** and **Today's appointments** on Front Desk.
+
+## End of day
+Enter walk-ins; clear *Overdue*; make sure every active journey that needs it has a next action (callback or follow-up).
+
 ## Morning — Front Desk
 1. Open **Front Desk**: today's arrivals, who is waiting, who has not confirmed.
 2. Patients not yet confirmed → call or WhatsApp; confirm from the visit.

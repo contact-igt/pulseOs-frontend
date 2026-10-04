@@ -5,7 +5,7 @@
 ## The five things to know
 1. **One enquiry = one Journey.** Click a name in **Leads** to open it. At the top you see who they are, where they came from (**Original source**), where they are now, who owns it and what happens next.
 2. **Log every call** (**Log call** on the journey). A call where you spoke to the patient marks the enquiry *Contacted*.
-3. **Always book from the journey** (**Book appointment**). The patient's status then reads *Appointment booked*.
+3. **Always book from the journey** (**Book appointment**; only date and time are asked — the doctor and clinic are automatic). When the patient agrees, press **Confirm**: that sends the WhatsApp confirmation once and schedules the reminder 1 hour before.
 4. **On the day:** *Check in patient → Move to waiting → Send to doctor*. The doctor completes the consultation and picks one result.
 5. **No-show?** Mark it on the visit. PulseOS creates one follow-up for you in **My Work** — do not add another.
 

@@ -108,7 +108,7 @@ describe.skipIf(!DEMO_PASSWORD)("notifications: reminders and staff WhatsApp (in
     expect(await rows(a.id)).toHaveLength(0);
     await confirm(a.id);
     const rs = await planned(a.id, 3);
-    expect(rs.filter((r) => r.kind === "CONFIRMATION" || r.scheduledFor.getTime() < Date.now() + 10_000)).toHaveLength(1);
+    expect(rs.filter((r) => r.scheduledFor.getTime() < Date.now() + 10_000)).toHaveLength(1);
     await confirm(a.id); // a repeat click: the visit is already confirmed
     expect((await planForSubject(db, t.tenantId, "APPOINTMENT", a.id)).planned).toBe(0);
     await new Promise((r) => setTimeout(r, 300));

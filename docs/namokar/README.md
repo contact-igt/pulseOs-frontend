@@ -10,6 +10,10 @@
 | **Meta / Google lead ingestion** | **Not configured live.** Leads from ads are entered by hand (source *Google*, *Instagram*, *Facebook*…) until a connector is set up. |
 | **Website "I am interested" form** | Protected endpoint ready; needs the website to post to it — see [NAMOKAR_WEBSITE_INTAKE.md](NAMOKAR_WEBSITE_INTAKE.md). |
 
+## The pilot shape
+
+One clinic (Ashok Vihar, New Delhi), one doctor (Dr. Poonam Jain), and **three people who share the phones**: the Receptionist and two Patient Coordinators. Because there is exactly one branch and one doctor, PulseOS **does not ask** for either: the Add Lead, Book Appointment and surgery forms pick them automatically and the Branch / Doctor filters are hidden. (The rule is generic — any hospital with exactly one branch or one doctor gets the same simpler screens; a hospital with several still sees the choosers.)
+
 ## Read these
 
 1. [NAMOKAR_PILOT_QUICK_START.md](NAMOKAR_PILOT_QUICK_START.md) — two pages, for the team.
@@ -19,6 +23,8 @@
 5. [NAMOKAR_ROUTING_MODEL.md](NAMOKAR_ROUTING_MODEL.md) — the screens, the URLs and the breadcrumb.
 6. [NAMOKAR_WEBSITE_INTAKE.md](NAMOKAR_WEBSITE_INTAKE.md) — the website form contract.
 7. [NAMOKAR_DECISIONS_AND_SECURITY.md](NAMOKAR_DECISIONS_AND_SECURITY.md) — why things are the way they are.
+8. [NAMOKAR_INTEGRATION_STATUS.md](NAMOKAR_INTEGRATION_STATUS.md) — what is live, fixture or not configured, per provider.
+9. [NAMOKAR_GO_LIVE_CHECKLIST.md](NAMOKAR_GO_LIVE_CHECKLIST.md) — the steps before staff start.
 
 ## What the pilot proves
 
@@ -26,4 +32,4 @@ One continuous journey per enquiry: **enquiry → contact → appointment → ar
 
 ## Accounts (local / demo only)
 
-`namokar.superadmin`, `namokar.admin`, `namokar.frontdesk`, `namokar.coordinator`, `namokar.doctor`, `namokar.doctor2` `@pulseos.local`. The demo password is the `DEMO_PASSWORD` of the environment it was seeded in; it is **never** shown in the product. All data is fictional.
+`namokar.superadmin` (owner), `namokar.admin`, `namokar.frontdesk` (Receptionist), `namokar.coordinator` and `namokar.coordinator2` (the two Patient Coordinators), `namokar.doctor` (Dr. Poonam Jain) `@pulseos.local`. The demo password is the `DEMO_PASSWORD` of the environment it was seeded in; it is **never** shown in the product. All data is fictional.

@@ -33,6 +33,12 @@ flowchart LR
 
 Precedence when several things are true (first match wins): Closed → in the clinic (With doctor > Waiting > Checked in) → Procedure done / scheduled → Appointment booked / confirmed → Treatment follow-up → the most recent closed visit (Consultation completed / No-show / Cancelled).
 
+## WhatsApp: when it is sent
+
+* **Booked** (the visit exists) sends nothing. **Confirmed** (the patient agreed, on the phone or by reply) creates exactly one *Appointment Confirmation* and a *1 hour before* reminder (the Namokar setting; Settings → Notifications can change it).
+* No reminder is created if its time has already passed. **Reschedule** cancels the pending reminder; the visit is *Booked* again until it is re-confirmed. **Cancel**, **No-show** and **Complete** cancel pending reminders. Repeating *Confirm* never sends twice.
+* WhatsApp Notifications work with the WhatsApp Inbox switched off. If the provider is not set up or fails, the visit stays booked/confirmed and the message shows *Blocked* / *Failed* with the reason.
+
 ## Who moves the patient
 
 ```mermaid
