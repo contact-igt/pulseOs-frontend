@@ -145,8 +145,7 @@ test.describe("Namokar pilot", () => {
     await page.getByTestId("lead-phone-input").fill(phone());
     await page.getByTestId("lead-name-input").fill(name);
     await page.getByTestId("lead-specialty-select").selectOption({ label: "Cataract" });
-    const branch = page.locator("#lead-branch");
-    if ((await branch.inputValue()) === "") await branch.selectOption({ index: 1 });
+    await expect(page.locator("#lead-branch")).toHaveCount(0); // one branch: chosen for the receptionist, not asked
     await page.getByTestId("lead-source-select").selectOption("google");
     const saved = page.waitForResponse((r) => r.url().endsWith("/leads") && r.request().method() === "POST");
     await page.getByTestId("add-lead-submit").click();
@@ -175,8 +174,8 @@ test.describe("Namokar pilot", () => {
     // Booked from the journey: the status says so, here and on the Leads list.
     await page.getByTestId("journey-book-appointment").click();
     const drawer = page.getByTestId("new-appointment-drawer");
-    await drawer.locator("#appt-branch").selectOption({ index: 1 });
-    await drawer.locator("#appt-doctor").selectOption({ index: 1 });
+    await expect(drawer.locator("#appt-branch")).toHaveCount(0); // one branch, one doctor: nothing to choose
+    await expect(drawer.locator("#appt-doctor")).toHaveCount(0);
     const day = dayInHospital(20 + (Number(RUN) % 40));
     await drawer.locator("#appt-time").fill(`${day}T${String(9 + (Number(RUN) % 8)).padStart(2, "0")}:15`);
     await drawer.getByTestId("new-appointment-submit").click();
@@ -258,7 +257,7 @@ test.describe("Namokar pilot", () => {
     await procedures.selectOption({ index: 1 });
     await sheet.getByTestId("complete-surgery-date").fill(dayInHospital(9));
     await sheet.getByTestId("complete-surgery-time").fill("09:30");
-    await sheet.getByTestId("complete-surgery-doctor").selectOption({ index: 1 });
+    await expect(sheet.getByTestId("complete-surgery-doctor")).toHaveCount(0); // the only doctor is chosen for the user
     await sheet.getByTestId("complete-consultation-save").click();
     await expect(sheet).not.toBeVisible();
 
@@ -344,8 +343,7 @@ test.describe("Namokar pilot", () => {
     await page.getByTestId("lead-phone-input").fill(phone());
     await page.getByTestId("lead-name-input").fill(name);
     await page.getByTestId("lead-specialty-select").selectOption({ label: "General Eye Consultation" });
-    const branch = page.locator("#lead-branch");
-    if ((await branch.inputValue()) === "") await branch.selectOption({ index: 1 });
+    await expect(page.locator("#lead-branch")).toHaveCount(0); // one branch: chosen for the receptionist, not asked
     await page.getByTestId("lead-source-select").selectOption("walk_in");
     await page.getByTestId("lead-channel-select").selectOption("WALK_IN");
     const saved = page.waitForResponse((r) => r.url().endsWith("/leads") && r.request().method() === "POST");
@@ -374,8 +372,7 @@ test.describe("Namokar pilot", () => {
     await expect(page.getByTestId("existing-patient-banner")).toContainText("Existing patient found");
     await expect(page.getByTestId("existing-patient-banner")).toContainText("new journey, not a duplicate patient");
     await page.getByTestId("lead-specialty-select").selectOption({ label: "Oculoplasty" });
-    const branch = page.locator("#lead-branch");
-    if ((await branch.inputValue()) === "") await branch.selectOption({ index: 1 });
+    await expect(page.locator("#lead-branch")).toHaveCount(0); // one branch: chosen for the receptionist, not asked
     await page.getByTestId("lead-source-select").selectOption("instagram");
     const saved = page.waitForResponse((r) => r.url().endsWith("/leads") && r.request().method() === "POST");
     await page.getByTestId("add-lead-submit").click();
