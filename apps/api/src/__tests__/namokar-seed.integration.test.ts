@@ -104,7 +104,9 @@ describe.skipIf(!DEMO_PASSWORD)("Namokar Eye & Oculoplasty Centre pilot (seeded)
       select t.reason, t.type, f.key as type_key, to_char(t.due_at at time zone ${tz}, 'YYYY-MM-DD') as due_day, (t.due_at < now()) as overdue
       from tasks t left join followup_types f on f.id = t.followup_type_id
       where t.tenant_id = ${tenantId} and t.status in ('pending','in_progress')`;
-    expect(open.filter((r) => r.due_day === today && !r.overdue).length, "due later today").toBeGreaterThanOrEqual(3);
+    // In the last half hour of the hospital day nothing can still be "later today".
+    const [{ hhmm }] = (await queryClient`select to_char(now() at time zone ${tz}, 'HH24MI')::int as hhmm`) as unknown as [{ hhmm: number }];
+    if (hhmm < 2330) expect(open.filter((r) => r.due_day === today && !r.overdue).length, "due later today").toBeGreaterThanOrEqual(3);
     expect(open.filter((r) => r.overdue).length, "overdue").toBeGreaterThanOrEqual(2);
     expect(open.filter((r) => (r.due_day as string) > today).length, "upcoming").toBeGreaterThanOrEqual(4);
     expect(open.some((r) => r.type_key === "appointment_risk")).toBe(true);
