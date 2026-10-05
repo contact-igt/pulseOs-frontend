@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@pulseos/api-client";
-import { DATE_PRESETS, type PerformanceBreakdownRow, type PerformanceDashboard } from "@pulseos/types";
+import { DATE_PRESETS, type DemographicDimension, type PerformanceBreakdownRow, type PerformanceDashboard } from "@pulseos/types";
 import { EmptyState, ErrorState, FilterBar, FilterSelect, MetricStrip, Panel, Skeleton, Table, TableBody, TableHead, TableShell, Td, Th, Toolbar, Tr, formatKey, localDayKey } from "@pulseos/ui";
 import { ArrowRight, TriangleAlert } from "lucide-react";
 import { useUrlFilters } from "@/lib/useUrlFilters";
@@ -42,6 +42,38 @@ function Funnel({ data }: { data: PerformanceDashboard }) {
   );
 }
 
+/** Who is enquiring: one small list-with-bars per dimension that really has answers (age group, then the hospital's filterable fields). */
+function Demographics({ dimensions }: { dimensions: DemographicDimension[] }) {
+  if (dimensions.length === 0) return null; // nothing recorded yet: no empty charts
+  return (
+    <Panel title="Who is enquiring" subtitle="From what was recorded for this period's enquiries. Age group is worked out from date of birth or reported age." data-testid="perf-demographics">
+      <div className="grid grid-cols-1 gap-x-6 gap-y-4 md:grid-cols-2 xl:grid-cols-3">
+        {dimensions.map((d) => (
+          <section key={d.key} aria-label={d.label} data-testid={`perf-demo-${d.key}`}>
+            <h3 className="flex items-baseline justify-between gap-2 text-xs font-semibold text-ink">
+              {d.label}
+              <span className="font-normal text-ink-2">{d.answered} answered</span>
+            </h3>
+            <ul className="mt-2 space-y-1.5">
+              {d.rows.map((r) => (
+                <li key={r.label} className="text-xs">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="min-w-0 truncate text-ink">{r.label}</span>
+                    <span className="shrink-0 tabular-nums text-ink-2">{r.count} · {r.pct}%</span>
+                  </div>
+                  <div className="mt-0.5 h-1.5 overflow-hidden rounded-full bg-primary-50" aria-hidden="true">
+                    <div className="h-full rounded-full bg-primary-500" style={{ width: `${r.pct}%` }} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
 function BreakdownTable({ title, subtitle, rows, testId, nameHeader }: { title: string; subtitle: string; rows: PerformanceBreakdownRow[]; testId: string; nameHeader: string }) {
   return (
     <Panel title={title} subtitle={subtitle} padded={false} data-testid={testId}>
@@ -49,16 +81,17 @@ function BreakdownTable({ title, subtitle, rows, testId, nameHeader }: { title: 
         <EmptyState message="No enquiries in this period" />
       ) : (
         <TableShell className="border-0 shadow-none">
-          <Table className="min-w-[520px]">
+          <Table className="min-w-[600px]">
             <TableHead>
               <tr>
                 <Th leading>{nameHeader}</Th>
                 <Th align="right">Enquiries</Th>
                 <Th align="right">Booked</Th>
-                <Th align="right">Attended</Th>
+                <Th align="right">Visited</Th>
                 <Th align="right">Consulted</Th>
                 <Th align="right">Advised</Th>
                 <Th align="right">Scheduled</Th>
+                <Th align="right">Done</Th>
               </tr>
             </TableHead>
             <TableBody>
@@ -71,6 +104,7 @@ function BreakdownTable({ title, subtitle, rows, testId, nameHeader }: { title: 
                   <Td align="right" className="tabular-nums">{r.consulted}</Td>
                   <Td align="right" className="tabular-nums">{r.advised}</Td>
                   <Td align="right" className="tabular-nums">{r.scheduled}</Td>
+                  <Td align="right" className="tabular-nums">{r.done}</Td>
                 </Tr>
               ))}
             </TableBody>
@@ -156,14 +190,14 @@ export function PerformanceView() {
             testId="perf-kpis"
             cells={[
               { key: "enquiries", label: "Enquiries", value: perf.data.kpis.enquiries },
-              { key: "contacted", label: "Contacted", value: perf.data.kpis.contacted },
               { key: "booked", label: "Booked", value: perf.data.kpis.booked },
-              { key: "attended", label: "Attended", value: perf.data.kpis.attended },
+              { key: "attended", label: "Visits attended", value: perf.data.kpis.attended },
               { key: "consulted", label: "Consultations done", value: perf.data.kpis.consulted },
               { key: "noshows", label: "No-shows", value: perf.data.kpis.noShows },
               { key: "advised", label: "Procedure advised", value: perf.data.kpis.advised },
               { key: "scheduled", label: "Procedure scheduled", value: perf.data.kpis.scheduled },
-              { key: "conversion", label: "Enquiry → scheduled", value: perf.data.kpis.conversionRate === null ? "—" : `${perf.data.kpis.conversionRate}%` },
+              { key: "done", label: "Procedures done", value: perf.data.kpis.done },
+              { key: "conversion", label: "Enquiry → procedure done", value: perf.data.kpis.conversionRate === null ? "—" : `${perf.data.kpis.conversionRate}%` },
             ]}
           />
 
@@ -199,6 +233,8 @@ export function PerformanceView() {
             <BreakdownTable title="By service" subtitle="What they enquired about" rows={perf.data.services} testId="perf-services" nameHeader="Service" />
           </div>
 
+          <Demographics dimensions={perf.data.demographics} />
+
           <Panel title="Team" subtitle="Enquiries owned, calls logged and follow-ups done in the period" padded={false} data-testid="perf-team">
             <TableShell className="border-0 shadow-none">
               <Table className="min-w-[640px]">
@@ -207,7 +243,7 @@ export function PerformanceView() {
                     <Th leading>Name</Th>
                     <Th>Role</Th>
                     <Th align="right">Enquiries owned</Th>
-                    <Th align="right">Contacted</Th>
+                    <Th align="right">Reached</Th>
                     <Th align="right">Booked</Th>
                     <Th align="right">Calls logged</Th>
                     <Th align="right">Follow-ups done</Th>

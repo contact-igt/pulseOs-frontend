@@ -1,9 +1,12 @@
-import { and, eq, inArray, isNotNull, lt, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, lt, sql, type SQL } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
-import { appointments, calls, consultationOutcomes, journeys, leadSources, patients, tasks, treatmentOpportunities, users } from "../../db/schema.js";
+import { appointments, calls, consultationOutcomes, customFieldDefinitions, customFieldValues, journeys, leadSources, patients, tasks, tenants, treatmentOpportunities, users } from "../../db/schema.js";
+import { displayAge } from "../../lib/age.js";
+import { dayKeyIn } from "../../lib/hospital-time.js";
+import { buildAgeDimension, buildFieldDimension } from "./demographics.js";
 import { inLocalRange } from "../../lib/hospital-time.js";
 import { addDays } from "../../lib/hospital-time.js";
-import type { DashboardPeriod, PerformanceDashboard, PerformanceStaffRow, SourceChannel } from "@pulseos/types";
+import type { DashboardPeriod, DemographicDimension, PerformanceDashboard, PerformanceStaffRow, SourceChannel } from "@pulseos/types";
 import { buildAlert, buildBreakdown, buildFunnel, buildInsights, furthestStep, type PerfJourneyFact } from "./performance.js";
 
 export interface PerformanceFilters {
@@ -50,10 +53,10 @@ async function loadFacts(db: Db, tenantId: string, filters: PerformanceFilters, 
     db.select({ journeyId: treatmentOpportunities.journeyId, status: treatmentOpportunities.status }).from(treatmentOpportunities).where(and(eq(treatmentOpportunities.tenantId, tenantId), inArray(treatmentOpportunities.journeyId, ids))),
   ]);
 
-  const flags = new Map<string, { booked: boolean; attended: boolean; consulted: boolean; noShow: boolean; advised: boolean; scheduled: boolean }>();
+  const flags = new Map<string, { booked: boolean; attended: boolean; consulted: boolean; noShow: boolean; advised: boolean; scheduled: boolean; done: boolean }>();
   const flag = (id: string) => {
     let f = flags.get(id);
-    if (!f) flags.set(id, (f = { booked: false, attended: false, consulted: false, noShow: false, advised: false, scheduled: false }));
+    if (!f) flags.set(id, (f = { booked: false, attended: false, consulted: false, noShow: false, advised: false, scheduled: false, done: false }));
     return f;
   };
   for (const a of apptRows) {
@@ -67,6 +70,7 @@ async function loadFacts(db: Db, tenantId: string, filters: PerformanceFilters, 
     const f = flag(t.journeyId);
     f.advised = true;
     if (t.status === "SCHEDULED" || t.status === "COMPLETED") f.scheduled = true;
+    if (t.status === "COMPLETED") f.done = true;
   }
 
   return rows.map((r) => ({
@@ -77,9 +81,44 @@ async function loadFacts(db: Db, tenantId: string, filters: PerformanceFilters, 
     ownerId: r.ownerId,
     contacted: r.contactedAt !== null,
     lost: r.stage === "lost",
-    booked: false, attended: false, consulted: false, noShow: false, advised: false, scheduled: false,
+    booked: false, attended: false, consulted: false, noShow: false, advised: false, scheduled: false, done: false,
     ...flags.get(r.id),
   }));
+}
+
+/**
+ * Who is enquiring, for the journeys on the funnel: the age group (derived from date of birth, else the reported age) and every field
+ * the hospital marked filterable - choice fields, and free text that repeats (an area). Real answers only; a dimension with none is
+ * simply absent. Fields only some roles may see (clinical-only) never appear in this report.
+ */
+async function loadDemographics(db: Db, tenantId: string, journeyIds: string[], now: Date): Promise<DemographicDimension[]> {
+  if (journeyIds.length === 0) return [];
+  const [tenant] = await db.select({ timezone: tenants.timezone }).from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+  const today = dayKeyIn(now, tenant?.timezone ?? "Asia/Kolkata");
+  const people = await db.select({ dateOfBirth: patients.dateOfBirth, reportedAge: patients.reportedAge }).from(journeys).innerJoin(patients, eq(patients.id, journeys.patientId)).where(and(eq(journeys.tenantId, tenantId), inArray(journeys.id, journeyIds)));
+  const out: DemographicDimension[] = [];
+  const age = buildAgeDimension(people.map((p) => displayAge(p.dateOfBirth, p.reportedAge, today)));
+  if (age) out.push(age);
+
+  const defs = await db
+    .select({ id: customFieldDefinitions.id, key: customFieldDefinitions.key, label: customFieldDefinitions.label, fieldType: customFieldDefinitions.fieldType })
+    .from(customFieldDefinitions)
+    .where(and(eq(customFieldDefinitions.tenantId, tenantId), eq(customFieldDefinitions.archived, false), eq(customFieldDefinitions.filterable, true), eq(customFieldDefinitions.visibleTo, "everyone"), inArray(customFieldDefinitions.fieldType, ["SELECT", "TEXT"])))
+    .orderBy(asc(customFieldDefinitions.sortOrder));
+  if (defs.length === 0) return out;
+  const values = await db
+    .select({ defId: customFieldValues.fieldDefinitionId, value: customFieldValues.value })
+    .from(customFieldValues)
+    .where(and(eq(customFieldValues.tenantId, tenantId), inArray(customFieldValues.journeyId, journeyIds), inArray(customFieldValues.fieldDefinitionId, defs.map((d) => d.id))));
+  const seen = new Set<string>();
+  for (const d of defs) {
+    if (seen.has(d.key)) continue; // a service-specific copy and the shared one are the same question
+    seen.add(d.key);
+    const sameKey = new Set(defs.filter((x) => x.key === d.key).map((x) => x.id));
+    const dim = buildFieldDimension(d, values.filter((v) => sameKey.has(v.defId) && typeof v.value === "string").map((v) => v.value as string));
+    if (dim) out.push(dim);
+  }
+  return out;
 }
 
 const pct = (part: number, whole: number): number | null => (whole > 0 ? Math.round((part / whole) * 100) : null);
@@ -130,7 +169,7 @@ export async function getPerformanceDashboard(db: Db, tenantId: string, filters:
   let alert: PerformanceDashboard["alert"] = null;
   if (period) {
     const prev = await loadFacts(db, tenantId, filters, { from: addDays(period.from, -period.days), to: addDays(period.from, -1), timezone: period.timezone });
-    const snap = (fs: PerfJourneyFact[]) => ({ enquiries: fs.length, contacted: fs.filter((f) => furthestStep(f) >= 1).length, booked: fs.filter((f) => furthestStep(f) >= 2).length, noShows: fs.filter((f) => f.noShow).length });
+    const snap = (fs: PerfJourneyFact[]) => ({ enquiries: fs.length, contacted: fs.filter((f) => f.contacted || furthestStep(f) >= 1).length, booked: fs.filter((f) => furthestStep(f) >= 1).length, noShows: fs.filter((f) => f.noShow).length });
     alert = buildAlert(snap(facts), snap(prev), period.days);
   }
 
@@ -139,18 +178,19 @@ export async function getPerformanceDashboard(db: Db, tenantId: string, filters:
     funnel,
     kpis: {
       enquiries: step("enquiries"),
-      contacted: step("contacted"),
       booked: step("booked"),
       attended: step("attended"),
       consulted: step("consulted"),
       noShows: facts.filter((f) => f.noShow).length,
       advised: step("advised"),
       scheduled: step("scheduled"),
+      done: step("done"),
       attendanceRate: pct(step("attended"), step("booked")),
       consultationCompletionRate: pct(step("consulted"), step("attended")),
-      conversionRate: pct(step("scheduled"), step("enquiries")),
+      conversionRate: pct(step("done"), step("enquiries")),
     },
     insights,
+    demographics: await loadDemographics(db, tenantId, facts.map((f) => f.id), now),
     alert,
     sources: buildBreakdown(facts, (f) => ({ key: f.sourceKey ?? "unknown", label: f.sourceLabel })),
     services: buildBreakdown(facts, (f) => ({ key: f.journeyType, label: f.journeyType })),
@@ -181,8 +221,8 @@ async function loadStaff(db: Db, tenantId: string, facts: PerfJourneyFact[], per
       name: p.name,
       role: p.role,
       owned: mine.length,
-      contacted: mine.filter((f) => furthestStep(f) >= 1).length,
-      booked: mine.filter((f) => furthestStep(f) >= 2).length,
+      contacted: mine.filter((f) => f.contacted || furthestStep(f) >= 1).length,
+      booked: mine.filter((f) => furthestStep(f) >= 1).length,
       callsLogged: callsBy.get(p.id) ?? 0,
       followUpsDone: doneBy.get(p.id) ?? 0,
       overdueNow: overdueBy.get(p.id) ?? 0,

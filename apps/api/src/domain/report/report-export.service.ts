@@ -19,8 +19,8 @@ const STATUS_LABEL: Record<string, string> = {
   completed: "Completed", no_show: "No-show", cancelled: "Cancelled", pending: "Open", in_progress: "In progress",
 };
 const STAGE_LABEL: Record<string, string> = {
-  enquiry: "Enquiry", contacted: "Contacted", booked: "Appointment booked", attended: "Attended", consulted: "Consulted",
-  treatment_advised: "Treatment advised", scheduled: "Procedure scheduled", completed: "Completed", lost: "Lost",
+  enquiry: "Enquiry", contacted: "Contacted", booked: "Appointment booked", attended: "Visit attended", consulted: "Consultation completed",
+  treatment_advised: "Procedure advised", scheduled: "Procedure scheduled", completed: "Procedure done", lost: "Lost",
 };
 const TASK_TYPE_LABEL: Record<string, string> = {
   CALLBACK: "Callback", FOLLOW_UP: "Follow-up", APPOINTMENT_CONFIRMATION: "Appointment confirmation", NO_SHOW_RECOVERY: "No-show recovery",

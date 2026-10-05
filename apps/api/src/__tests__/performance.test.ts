@@ -6,18 +6,20 @@ import { buildAlert, buildBreakdown, buildFunnel, buildInsights, furthestStep, t
 
 const fact = (over: Partial<PerfJourneyFact> = {}): PerfJourneyFact => ({
   id: Math.random().toString(36).slice(2), sourceKey: "google", sourceLabel: "Google", journeyType: "Cataract", ownerId: null,
-  contacted: false, booked: false, attended: false, consulted: false, noShow: false, advised: false, scheduled: false, lost: false, ...over,
+  contacted: false, booked: false, attended: false, consulted: false, noShow: false, advised: false, scheduled: false, done: false, lost: false, ...over,
 });
 
 describe("furthestStep", () => {
   it("is the highest step reached, whatever earlier flags say", () => {
     expect(furthestStep(fact())).toBe(0);
-    expect(furthestStep(fact({ contacted: true }))).toBe(1);
-    expect(furthestStep(fact({ booked: true }))).toBe(2);
-    expect(furthestStep(fact({ attended: true }))).toBe(3); // a walk-in: never "contacted", still at the clinic
-    expect(furthestStep(fact({ consulted: true }))).toBe(4);
-    expect(furthestStep(fact({ advised: true }))).toBe(5);
-    expect(furthestStep(fact({ scheduled: true }))).toBe(6);
+    expect(furthestStep(fact({ contacted: true }))).toBe(0); // a phone contact is not a funnel step
+    expect(furthestStep(fact({ booked: true }))).toBe(1);
+    expect(furthestStep(fact({ attended: true }))).toBe(2); // a walk-in: never phoned, still at the clinic
+    expect(furthestStep(fact({ consulted: true }))).toBe(3);
+    expect(furthestStep(fact({ advised: true }))).toBe(4);
+    expect(furthestStep(fact({ scheduled: true }))).toBe(5);
+    expect(furthestStep(fact({ scheduled: true, done: true }))).toBe(6);
+    expect(furthestStep(fact({ scheduled: true }))).not.toBe(furthestStep(fact({ scheduled: true, done: true }))); // scheduled is not done
   });
 });
 
@@ -30,13 +32,14 @@ describe("buildFunnel", () => {
     fact({ booked: true, attended: true, consulted: true }),
     fact({ booked: true, attended: true, consulted: true, advised: true }),
     fact({ booked: true, attended: true, consulted: true, advised: true, scheduled: true }),
+    fact({ booked: true, attended: true, consulted: true, advised: true, scheduled: true, done: true }),
     fact({ attended: true }), // walk-in
   ];
 
   it("counts journeys that reached AT LEAST each step, so it never grows to the right", () => {
     const f = buildFunnel(facts);
     expect(f.map((s) => [s.key, s.count])).toEqual([
-      ["enquiries", 12], ["contacted", 9], ["booked", 7], ["attended", 5], ["consulted", 3], ["advised", 2], ["scheduled", 1],
+      ["enquiries", 13], ["booked", 8], ["attended", 6], ["consulted", 4], ["advised", 3], ["scheduled", 2], ["done", 1],
     ]);
     for (let i = 1; i < f.length; i++) expect(f[i]!.count).toBeLessThanOrEqual(f[i - 1]!.count);
   });
@@ -44,8 +47,8 @@ describe("buildFunnel", () => {
   it("says how many dropped at each step and the conversion from the step before", () => {
     const f = buildFunnel(facts);
     expect(f[0]).toMatchObject({ droppedBefore: 0, conversionFromPrevious: null });
-    expect(f[1]).toMatchObject({ droppedBefore: 3, conversionFromPrevious: 75 });
-    expect(f[2]).toMatchObject({ droppedBefore: 2, conversionFromPrevious: 78 });
+    expect(f[1]).toMatchObject({ droppedBefore: 5, conversionFromPrevious: 62 });
+    expect(f[2]).toMatchObject({ droppedBefore: 2, conversionFromPrevious: 75 });
     expect(f[6]).toMatchObject({ droppedBefore: 1, conversionFromPrevious: 50 });
   });
 
@@ -63,8 +66,8 @@ describe("buildBreakdown", () => {
       (f) => ({ key: f.sourceKey ?? "unknown", label: f.sourceLabel }),
     );
     expect(rows).toEqual([
-      { key: "google", label: "Google", enquiries: 2, contacted: 1, booked: 1, attended: 0, consulted: 0, advised: 0, scheduled: 0 },
-      { key: "instagram", label: "Instagram", enquiries: 1, contacted: 1, booked: 1, attended: 1, consulted: 1, advised: 0, scheduled: 0 },
+      { key: "google", label: "Google", enquiries: 2, booked: 1, attended: 0, consulted: 0, advised: 0, scheduled: 0, done: 0 },
+      { key: "instagram", label: "Instagram", enquiries: 1, booked: 1, attended: 1, consulted: 1, advised: 0, scheduled: 0, done: 0 },
     ]);
   });
 

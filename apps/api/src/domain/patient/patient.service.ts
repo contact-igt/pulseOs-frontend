@@ -1,4 +1,4 @@
-import { and, desc, eq, ilike, inArray, or } from "drizzle-orm";
+import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { loadOperationalStatuses } from "../journey/operational-status.service.js";
 import { displayAge } from "../../lib/age.js";
 import { dayKeyIn } from "../../lib/hospital-time.js";
@@ -63,6 +63,19 @@ export async function createPatient(db: Db, tenantId: string, actorId: string, i
  * only what a result row needs: name, phone, and (cheaply, since the result
  * set is already capped to `limit`) each match's most recent journey type.
  */
+/**
+ * A hospital's own patient identifier (e.g. Namokar UID) is an ordinary CRM text field marked "filterable" and visible to everyone.
+ * Typing it in search finds the person it was recorded for, so an existing patient is recognised by their UID as well as by name or
+ * phone. Same hospital only (the tenant is on every row); clinical-only fields never take part, so search cannot reveal them.
+ */
+const matchesIdentifierField = (tenantId: string, text: string) => sql`exists (
+  select 1 from journeys j
+  join custom_field_values v on v.journey_id = j.id
+  join custom_field_definitions d on d.id = v.field_definition_id
+  where j.patient_id = ${patients.id} and j.tenant_id = ${tenantId} and d.tenant_id = ${tenantId}
+    and d.field_type = 'TEXT' and d.filterable = true and d.visible_to = 'everyone'
+    and (v.value #>> '{}') ilike ${`%${text}%`})`;
+
 export async function searchPatients(db: Db, tenantId: string, query: string, limit = 8): Promise<PatientSearchRow[]> {
   const trimmed = query.trim();
   if (trimmed.length < 2) return [];
@@ -70,7 +83,7 @@ export async function searchPatients(db: Db, tenantId: string, query: string, li
   const rows = await db
     .select({ id: patients.id, name: patientNameSql, phone: patients.phone })
     .from(patients)
-    .where(and(eq(patients.tenantId, tenantId), or(ilike(patients.name, `%${trimmed}%`), ilike(patients.phone, `%${trimmed}%`))))
+    .where(and(eq(patients.tenantId, tenantId), or(ilike(patients.name, `%${trimmed}%`), ilike(patients.phone, `%${trimmed}%`), matchesIdentifierField(tenantId, trimmed))))
     .orderBy(patients.name)
     .limit(limit);
 
@@ -118,7 +131,7 @@ export async function listPatients(db: Db, tenantId: string, filters: PatientLis
       and(
         eq(patients.tenantId, tenantId),
         filters.branchId ? eq(patients.branchId, filters.branchId) : undefined,
-        filters.search ? or(ilike(patients.name, `%${filters.search}%`), ilike(patients.phone, `%${filters.search}%`)) : undefined,
+        filters.search ? or(ilike(patients.name, `%${filters.search}%`), ilike(patients.phone, `%${filters.search}%`), matchesIdentifierField(tenantId, filters.search)) : undefined,
       ),
     )
     .orderBy(patients.name);

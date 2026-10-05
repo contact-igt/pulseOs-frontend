@@ -156,15 +156,17 @@ export async function getExecutiveStrip(db: Db, tenantId: string, filters: Dashb
   };
 }
 
-const CONVERSION_STAGES: { key: ConversionStage["key"]; label: string }[] = [
-  { key: "enquiry", label: "Enquiry" },
-  { key: "contacted", label: "Contacted" },
-  { key: "booked", label: "Booked" },
-  { key: "attended", label: "Attended" },
-  { key: "consulted", label: "Consulted" },
-  { key: "treatment_advised", label: "Treatment Advised" },
-  { key: "scheduled", label: "Scheduled" },
-  { key: "completed", label: "Completed" },
+// The journey's stage order (a journey is "reached at least" a stage). "Contacted" is a real stage, but it is only a phone
+// contact, so it stays out of the funnel people read: every funnel row is a fact about the patient's journey, in clinic words.
+const CONVERSION_STAGES: { key: ConversionStage["key"]; label: string; shown: boolean }[] = [
+  { key: "enquiry", label: "Enquiry", shown: true },
+  { key: "contacted", label: "Contacted", shown: false },
+  { key: "booked", label: "Appointment booked", shown: true },
+  { key: "attended", label: "Visit attended", shown: true },
+  { key: "consulted", label: "Consultation completed", shown: true },
+  { key: "treatment_advised", label: "Procedure advised", shown: true },
+  { key: "scheduled", label: "Procedure scheduled", shown: true },
+  { key: "completed", label: "Procedure done", shown: true },
 ];
 
 // Stages that get a "cost per outcome" figure — the ones a hospital admin
@@ -198,18 +200,17 @@ async function getStageReachedCounts(db: Db, tenantId: string, filters: Dashboar
 export async function getConversionFunnel(db: Db, tenantId: string, filters: DashboardFilters = {}): Promise<ConversionStage[]> {
   const reached = await getStageReachedCounts(db, tenantId, filters);
   const totalSpend = await getTotalSpend(db, tenantId, filters.period);
-  return CONVERSION_STAGES.map((s) => {
+  return CONVERSION_STAGES.filter((s) => s.shown).map((s) => {
     const c = reached.get(s.key) ?? 0;
     return { key: s.key, label: s.label, count: c, costPerOutcome: COST_TRACKED_STAGES.has(s.key) ? costPer(totalSpend, c) : null };
   });
 }
 
 const JOURNEY_HEALTH_STAGES: { key: JourneyHealthKey; label: string }[] = [
-  { key: "contacted", label: "Contacted" },
-  { key: "booked", label: "Appointment Booked" },
-  { key: "attended", label: "Attended" },
-  { key: "consulted", label: "Consulted" },
-  { key: "treatment_advised", label: "Treatment Converted" },
+  { key: "booked", label: "Appointment booked" },
+  { key: "attended", label: "Visit attended" },
+  { key: "consulted", label: "Consultation completed" },
+  { key: "treatment_advised", label: "Procedure advised" },
 ];
 
 export async function getJourneyHealth(db: Db, tenantId: string, filters: DashboardFilters = {}): Promise<JourneyHealth> {

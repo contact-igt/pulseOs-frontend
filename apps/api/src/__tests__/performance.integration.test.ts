@@ -57,6 +57,14 @@ describe.skipIf(!DEMO_PASSWORD)("owner performance dashboard (integration)", () 
     const gAppt = await visit(g, "completed", { checkedInAt: now, completedAt: now });
     await db.insert(consultationOutcomes).values({ tenantId: t.tenantId, patientId: g.patientId, journeyId: g.journeyId, appointmentId: gAppt.id, outcome: "DECISION_PENDING", recordedBy: t.userIds.DOCTOR! });
     await db.insert(treatmentOpportunities).values({ tenantId: t.tenantId, patientId: g.patientId, journeyId: g.journeyId, treatmentLabel: "LASIK", status: "DECISION_PENDING", estimatedValue: 0, createdAt: new Date(Date.now() - 9 * 86_400_000) });
+    // H - the whole way: seen, advised, and the procedure is DONE (not merely scheduled).
+    const h = await journey(t, "H Done", { stage: "completed", contactedAt: now, ownerUserId: null });
+    const hAppt = await visit(h, "completed", { checkedInAt: now, completedAt: now });
+    const [hOutcome] = await db.insert(consultationOutcomes).values({ tenantId: t.tenantId, patientId: h.patientId, journeyId: h.journeyId, appointmentId: hAppt.id, outcome: "TREATMENT_ADVISED", recordedBy: t.userIds.DOCTOR! }).returning();
+    await db.insert(treatmentOpportunities).values({ tenantId: t.tenantId, patientId: h.patientId, journeyId: h.journeyId, consultationOutcomeId: hOutcome!.id, treatmentLabel: "Cataract Surgery", status: "COMPLETED", estimatedValue: 0 });
+    // I - the phone call was ANSWERED but the patient never came: a connected call is not a visit.
+    const i = await journey(t, "I Call only", { stage: "contacted", contactedAt: now });
+    await db.insert(calls).values({ tenantId: t.tenantId, origin: "MANUAL", patientId: i.patientId, journeyId: i.journeyId, phone: "+91 90000 00000", direction: "inbound", status: "completed", durationSeconds: 90, loggedByUserId: t.userIds.FRONT_DESK!, startedAt: now, endedAt: now });
     // An overdue follow-up for the coordinator, and a call logged by the front desk.
     await db.insert(tasks).values({ tenantId: t.tenantId, patientId: d.patientId, journeyId: d.journeyId, assignedTo: t.userIds.PATIENT_COORDINATOR!, type: "FOLLOW_UP", status: "pending", reason: "manual_task", dueAt: new Date(Date.now() - 86_400_000) });
     await db.insert(calls).values({ tenantId: t.tenantId, origin: "MANUAL", patientId: a.patientId, journeyId: a.journeyId, phone: "+91 90000 00000", direction: "outbound", status: "completed", durationSeconds: 60, loggedByUserId: t.userIds.FRONT_DESK!, startedAt: now, endedAt: now });
@@ -76,9 +84,19 @@ describe.skipIf(!DEMO_PASSWORD)("owner performance dashboard (integration)", () 
   it("counts the funnel from the journeys opened in the period, each at the furthest step it reached", async () => {
     const p = await perf();
     expect(p.funnel.map((s) => [s.key, s.count])).toEqual([
-      ["enquiries", 7], ["contacted", 5], ["booked", 4], ["attended", 3], ["consulted", 3], ["advised", 2], ["scheduled", 1],
+      ["enquiries", 9], ["booked", 5], ["attended", 4], ["consulted", 4], ["advised", 3], ["scheduled", 2], ["done", 1],
     ]);
-    expect(p.kpis).toMatchObject({ enquiries: 7, noShows: 1, advised: 2, scheduled: 1, attendanceRate: 75, consultationCompletionRate: 100, conversionRate: 14 });
+    // No "Contacted" stage anywhere in the funnel.
+    expect(p.funnel.some((s) => /contact/i.test(s.key) || /contact/i.test(s.label))).toBe(false);
+    expect(p.kpis).toMatchObject({ enquiries: 9, noShows: 1, advised: 3, scheduled: 2, done: 1, attendanceRate: 80, consultationCompletionRate: 100, conversionRate: 11 });
+  });
+
+  it("a SCHEDULED procedure is never counted as done, and an answered call is never counted as a visit", async () => {
+    const p = await perf();
+    const by = Object.fromEntries(p.funnel.map((s) => [s.key, s.count]));
+    expect(by.scheduled).toBeGreaterThan(by.done!); // A is only scheduled
+    expect(by.done).toBe(1); // only H, whose treatment is COMPLETED
+    expect(by.attended).toBe(4); // journey I had a connected call but never arrived: not a visit
   });
 
   it("states rule-based findings in plain words, each with where to act", async () => {
@@ -95,11 +113,11 @@ describe.skipIf(!DEMO_PASSWORD)("owner performance dashboard (integration)", () 
 
   it("breaks it down by original source, by service and by team member", async () => {
     const p = await perf();
-    expect(p.sources.find((s) => s.label === "Google")).toMatchObject({ enquiries: 4, scheduled: 1 });
+    expect(p.sources.find((s) => s.label === "Google")).toMatchObject({ enquiries: 6, scheduled: 2, done: 1 });
     expect(p.sources.find((s) => s.label === "Walk-in")).toMatchObject({ enquiries: 1, attended: 1, consulted: 1 });
-    expect(p.services.map((s) => [s.label, s.enquiries])).toEqual([["Cataract", 6], ["Oculoplasty", 1]]);
+    expect(p.services.map((s) => [s.label, s.enquiries])).toEqual([["Cataract", 8], ["Oculoplasty", 1]]);
     const fd = p.staff.find((s) => s.userId === t.userIds.FRONT_DESK)!;
-    expect(fd).toMatchObject({ owned: 2, contacted: 2, callsLogged: 1 });
+    expect(fd).toMatchObject({ owned: 2, contacted: 2, callsLogged: 2 });
     const co = p.staff.find((s) => s.userId === t.userIds.PATIENT_COORDINATOR)!;
     expect(co).toMatchObject({ owned: 1, booked: 1, overdueNow: 1 });
   });

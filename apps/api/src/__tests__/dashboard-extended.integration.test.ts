@@ -42,7 +42,7 @@ describe.skipIf(!DEMO_PASSWORD)("extended dashboard aggregations (integration)",
     const res = await app.inject({ method: "GET", url: "/dashboard/journey-health", cookies: { pulseos_session: cookie } });
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body.segments).toHaveLength(5);
+    expect(body.segments.map((s: { key: string }) => s.key)).toEqual(["booked", "attended", "consulted", "treatment_advised"]); // no "Contacted" segment
     for (let i = 1; i < body.segments.length; i++) {
       expect(body.segments[i].count).toBeLessThanOrEqual(body.segments[i - 1].count);
     }

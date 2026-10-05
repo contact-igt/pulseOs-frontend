@@ -145,9 +145,40 @@ export const SURFACE_STYLE_LABEL: Record<SurfaceStyle, { label: string; hint: st
   solid: { label: "Solid", hint: "Crisp, almost opaque surfaces everywhere." },
 };
 
+/**
+ * Personal readability, chosen by each signed-in person for themselves (never a hospital setting, never shared). Two independent,
+ * bounded choices: how roomy the interface is (control heights, row density, spacing) and how large the text is.
+ */
+export const INTERFACE_SIZES = ["compact", "comfortable", "large"] as const;
+export type InterfaceSize = (typeof INTERFACE_SIZES)[number];
+export const DEFAULT_INTERFACE_SIZE: InterfaceSize = "comfortable";
+export const INTERFACE_SIZE_LABEL: Record<InterfaceSize, { label: string; hint: string }> = {
+  compact: { label: "Compact", hint: "Tighter spacing, more on screen. Phones keep full-size touch targets." },
+  comfortable: { label: "Comfortable", hint: "The standard size." },
+  large: { label: "Large", hint: "Roomier controls and spacing." },
+};
+export const TEXT_SIZES = ["small", "default", "large", "xlarge"] as const;
+export type TextSize = (typeof TEXT_SIZES)[number];
+export const DEFAULT_TEXT_SIZE: TextSize = "default";
+export const TEXT_SIZE_LABEL: Record<TextSize, { label: string; hint: string }> = {
+  small: { label: "Small", hint: "A little smaller than standard." },
+  default: { label: "Default", hint: "The standard text size." },
+  large: { label: "Large", hint: "Easier to read." },
+  xlarge: { label: "Extra large", hint: "The largest, for the easiest reading." },
+};
+/** A person's saved display preferences (users.interface_size / users.text_size); null = never chosen = the standard. */
+export interface DisplayPreferences {
+  interfaceSize: InterfaceSize;
+  textSize: TextSize;
+}
+
 export interface SessionUser {
   /** The hospital's interface style (tenants.surface_style); hospitals that never chose one read as Balanced. */
   surfaceStyle?: SurfaceStyle;
+  /** THIS person's interface size (users.interface_size): personal, not the hospital's. Never chosen reads as Comfortable. */
+  interfaceSize?: InterfaceSize;
+  /** THIS person's text size (users.text_size): personal, independent of the interface size. Never chosen reads as Default. */
+  textSize?: TextSize;
   id: string;
   tenantId: string;
   /** The hospital's name (tenants.name). */
@@ -3084,14 +3115,17 @@ export function deriveOperationalStatus(i: OperationalStatusInput): OperationalS
 // and the alert are RULES over those counts (a threshold and a comparison), labelled as such; nothing here is AI or a forecast.
 // ---------------------------------------------------------------------------
 
+// Every step is a fact about the patient's journey, never about a phone call: "Visit attended" means the patient ARRIVED for an
+// appointment (checked in, waiting, with the doctor or done); a call being answered is a Calls metric, not a funnel stage.
+// "Procedure scheduled" and "Procedure done" are different things: a scheduled procedure is not counted as done.
 export const PERFORMANCE_FUNNEL_STEPS = [
   { key: "enquiries", label: "Enquiries" },
-  { key: "contacted", label: "Contacted" },
   { key: "booked", label: "Appointment booked" },
-  { key: "attended", label: "Attended" },
+  { key: "attended", label: "Visit attended" },
   { key: "consulted", label: "Consultation completed" },
   { key: "advised", label: "Procedure advised" },
   { key: "scheduled", label: "Procedure scheduled" },
+  { key: "done", label: "Procedure done" },
 ] as const;
 export type PerformanceStepKey = (typeof PERFORMANCE_FUNNEL_STEPS)[number]["key"];
 
@@ -3110,12 +3144,27 @@ export interface PerformanceBreakdownRow {
   key: string;
   label: string;
   enquiries: number;
-  contacted: number;
   booked: number;
   attended: number;
   consulted: number;
   advised: number;
   scheduled: number;
+  done: number;
+}
+
+export interface DemographicRow {
+  label: string;
+  count: number;
+  /** Share of the people who answered this question, 0-100. */
+  pct: number;
+}
+/** One "who is enquiring" breakdown: the age group, or one of the hospital's own filterable fields. Only exists when real answers do. */
+export interface DemographicDimension {
+  key: string;
+  label: string;
+  /** How many enquiries have an answer (the rest are simply not counted, never shown as a group). */
+  answered: number;
+  rows: DemographicRow[];
 }
 
 export interface PerformanceStaffRow {
@@ -3158,21 +3207,24 @@ export interface PerformanceDashboard {
   funnel: PerformanceFunnelStep[];
   kpis: {
     enquiries: number;
-    contacted: number;
     booked: number;
     attended: number;
     consulted: number;
     noShows: number;
     advised: number;
     scheduled: number;
+    /** Procedures actually completed (not merely scheduled). */
+    done: number;
     /** attended / booked, 0-100 (null with nothing booked). */
     attendanceRate: number | null;
     /** consulted / attended, 0-100. */
     consultationCompletionRate: number | null;
-    /** scheduled / enquiries, 0-100. */
+    /** done / enquiries, 0-100: enquiries that ended in a completed procedure. */
     conversionRate: number | null;
   };
   insights: PerformanceInsight[];
+  /** Age group plus the hospital's filterable fields (area, gender ...), for the same enquiries. Empty when nothing has been recorded. */
+  demographics: DemographicDimension[];
   alert: PerformanceAlert | null;
   sources: PerformanceBreakdownRow[];
   services: PerformanceBreakdownRow[];

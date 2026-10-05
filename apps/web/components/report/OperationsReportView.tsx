@@ -51,7 +51,7 @@ function KpiGroups({ r }: { r: OperationsReport }) {
       title: "Appointments",
       metrics: [
         { key: "booked", label: "Booked", value: n(k.appointmentsBooked), hint: "Appointments created in the period, whenever the visit is" },
-        { key: "attended", label: "Attended", value: `${n(k.appointmentsAttended)}/${n(k.appointmentsScheduled)}`, hint: "Visits in the period the patient attended, of all visits scheduled in it" },
+        { key: "attended", label: "Visits attended", value: `${n(k.appointmentsAttended)}/${n(k.appointmentsScheduled)}`, hint: "Visits in the period the patient attended, of all visits scheduled in it" },
         { key: "noshow", label: "No-show", value: n(k.appointmentsNoShow), hint: "Visits in the period marked no-show", attention: k.appointmentsNoShow > 0 },
         { key: "cancelled", label: "Cancelled", value: n(k.appointmentsCancelled), hint: "Visits in the period that were cancelled" },
       ],
@@ -94,7 +94,7 @@ function KpiGroups({ r }: { r: OperationsReport }) {
 const SERIES = [
   { key: "enquiries", label: "Enquiries", color: CHART_INK.accent },
   { key: "appointmentsScheduled", label: "Appointments", color: "#72b5f2" },
-  { key: "attended", label: "Attended", color: "#2158a7" },
+  { key: "attended", label: "Visited", color: "#2158a7" },
 ] as const;
 
 function DailyChart({ r }: { r: OperationsReport }) {
@@ -125,7 +125,7 @@ function DailyChart({ r }: { r: OperationsReport }) {
 
 function DailyTable({ r }: { r: OperationsReport }) {
   const cols = [
-    ["enquiries", "Enquiries"], ["appointmentsScheduled", "Appts"], ["attended", "Attended"], ["noShow", "No-show"], ["cancelled", "Cancelled"], ["followUpsDue", "F/U due"], ["followUpsCompleted", "F/U done"],
+    ["enquiries", "Enquiries"], ["appointmentsScheduled", "Appts"], ["attended", "Visited"], ["noShow", "No-show"], ["cancelled", "Cancelled"], ["followUpsDue", "F/U due"], ["followUpsCompleted", "F/U done"],
   ] as const;
   return (
     <div className="max-h-80 overflow-auto rounded-control border border-line" data-testid="report-daily-table">
@@ -162,7 +162,7 @@ function SourceTable({ r }: { r: OperationsReport }) {
         <thead>
           <tr className="border-b border-line">
             <th scope="col" className={`${TH} text-left`}>Source</th>
-            {["Enquiries", "Contacted", "Booked", "Attended", "Converted", "Conv."].map((h) => <th key={h} scope="col" className={`${TH} text-right`}>{h}</th>)}
+            {["Enquiries", "Contacted", "Booked", "Visited", "Converted", "Conv."].map((h) => <th key={h} scope="col" className={`${TH} text-right`}>{h}</th>)}
           </tr>
         </thead>
         <tbody>

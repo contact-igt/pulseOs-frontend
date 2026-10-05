@@ -22,19 +22,21 @@ export interface PerfJourneyFact {
   noShow: boolean;
   /** A procedure was advised (any treatment record). */
   advised: boolean;
-  /** A procedure is scheduled or done. */
+  /** A procedure is scheduled or already done (the journey reached scheduling). */
   scheduled: boolean;
+  /** A procedure was completed. Scheduled alone never sets this. */
+  done: boolean;
   lost: boolean;
 }
 
-/** 0 = enquiry only ... 6 = procedure scheduled: the highest step any of the journey's facts reaches. */
+/** 0 = enquiry only ... 6 = procedure done: the highest step any of the journey's facts reaches (a phone contact is not a step). */
 export function furthestStep(f: PerfJourneyFact): number {
-  if (f.scheduled) return 6;
-  if (f.advised) return 5;
-  if (f.consulted) return 4;
-  if (f.attended) return 3;
-  if (f.booked) return 2;
-  if (f.contacted) return 1;
+  if (f.done) return 6;
+  if (f.scheduled) return 5;
+  if (f.advised) return 4;
+  if (f.consulted) return 3;
+  if (f.attended) return 2;
+  if (f.booked) return 1;
   return 0;
 }
 
@@ -56,15 +58,15 @@ export function buildBreakdown(facts: PerfJourneyFact[], group: (f: PerfJourneyF
   const rows = new Map<string, PerformanceBreakdownRow>();
   for (const f of facts) {
     const g = group(f);
-    const row = rows.get(g.key) ?? { key: g.key, label: g.label, enquiries: 0, contacted: 0, booked: 0, attended: 0, consulted: 0, advised: 0, scheduled: 0 };
+    const row = rows.get(g.key) ?? { key: g.key, label: g.label, enquiries: 0, booked: 0, attended: 0, consulted: 0, advised: 0, scheduled: 0, done: 0 };
     const step = furthestStep(f);
     row.enquiries++;
-    if (step >= 1) row.contacted++;
-    if (step >= 2) row.booked++;
-    if (step >= 3) row.attended++;
-    if (step >= 4) row.consulted++;
-    if (step >= 5) row.advised++;
-    if (step >= 6) row.scheduled++;
+    if (step >= 1) row.booked++;
+    if (step >= 2) row.attended++;
+    if (step >= 3) row.consulted++;
+    if (step >= 4) row.advised++;
+    if (step >= 5) row.scheduled++;
+    if (step >= 6) row.done++;
     rows.set(g.key, row);
   }
   return [...rows.values()].sort((a, b) => b.enquiries - a.enquiries || a.label.localeCompare(b.label));

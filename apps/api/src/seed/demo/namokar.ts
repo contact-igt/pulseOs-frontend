@@ -1,5 +1,6 @@
 import { and, eq, gt, sql } from "drizzle-orm";
-import type { ClinicHours } from "@pulseos/types";
+import type { ClinicHours, CreateCrmFieldInput } from "@pulseos/types";
+import { createCrmField } from "../../domain/crm/crm-field.service.js";
 import { db } from "../../db/client.js";
 import { appointments, customFieldDefinitions, followUpTypes, notificationRules, notifications, tenantCapabilities, timelineEvents, treatmentOpportunities } from "../../db/schema.js";
 import { ensureNotificationDefaults, planForSubject } from "../../domain/notification/notification.service.js";
@@ -301,6 +302,31 @@ async function seedFlagshipTrail(i: { tenantId: string; journeyId: string; patie
  * patient record, where they are captured progressively and can be edited later. A hospital that wants one back on Add Lead switches
  * it on in Settings → CRM Fields ("Add Lead"); nothing is deleted.
  */
+/**
+ * The registration facts Namokar's front desk talked about, as ordinary CRM fields (the same engine every hospital configures in
+ * Settings → CRM Fields - nothing hospital-specific in the code):
+ *   Patient type (New / Existing) - asked on Add Lead, because it decides what to ask next;
+ *   Namokar UID - appears ONLY for an Existing patient (a New patient gets theirs later, at registration; nothing is invented);
+ *   Address, PIN code, Area / Locality, Gender - available on the journey and the patient record, NOT on Add Lead and never
+ *   required: the Super Admin switches "On Add Lead" or "Required" on when the clinic wants them at first contact.
+ * Area and Gender are filterable, so they can also drive the demographic view in Performance.
+ */
+async function installPatientIdentityFields(tenantId: string) {
+  const here = ["journey_detail", "patient_360"] as const;
+  const fields: CreateCrmFieldInput[] = [
+    { specialtyKey: "*", key: "patient_type", label: "Patient type", fieldType: "SELECT", options: ["New Patient", "Existing Patient"], groupKey: "patient_information", placements: ["add_lead", ...here], filterable: true },
+    { specialtyKey: "*", key: "namokar_uid", label: "Namokar UID", fieldType: "TEXT", groupKey: "patient_information", placements: ["add_lead", ...here], filterable: true, rules: [{ when: { field: "patient_type", equals: ["Existing Patient"] }, then: "show" }] },
+    { specialtyKey: "*", key: "address", label: "Address", fieldType: "LONG_TEXT", groupKey: "patient_information", placements: [...here] },
+    { specialtyKey: "*", key: "pin_code", label: "PIN code", fieldType: "TEXT", groupKey: "patient_information", placements: [...here] },
+    { specialtyKey: "*", key: "area_locality", label: "Area / Locality", fieldType: "TEXT", groupKey: "patient_information", placements: [...here], filterable: true },
+    { specialtyKey: "*", key: "gender", label: "Gender", fieldType: "SELECT", options: ["Female", "Male", "Other"], groupKey: "patient_information", placements: [...here], filterable: true },
+  ];
+  for (const f of fields) {
+    const made = await createCrmField(db, tenantId, f);
+    if (!made.ok) throw new Error(`Namokar identity field ${f.key} could not be created: ${made.reason}`);
+  }
+}
+
 async function keepAddLeadSimple(tenantId: string) {
   await db
     .update(customFieldDefinitions)
@@ -322,6 +348,7 @@ export async function seedNamokarTenant(passwordHash: string) {
   await db.insert(tenantCapabilities).values({ tenantId: tenant.id, capability: "REVENUE_TRACKING", enabled: false });
   await installDepartmentTemplate(db, tenant.id, "ophthalmology");
   await keepAddLeadSimple(tenant.id);
+  await installPatientIdentityFields(tenant.id);
 
   const branchByKey = await createDemoBranches(tenant.id, [
     { name: "Namokar Eye & Oculoplasty Centre", city: "Ashok Vihar, New Delhi" },
@@ -413,6 +440,7 @@ export async function seedNamokarV2Tenant(passwordHash: string) {
   await db.insert(tenantCapabilities).values({ tenantId: tenant.id, capability: "REVENUE_TRACKING", enabled: false });
   await installDepartmentTemplate(db, tenant.id, "ophthalmology");
   await keepAddLeadSimple(tenant.id);
+  await installPatientIdentityFields(tenant.id);
   const branchByKey = await createDemoBranches(tenant.id, [{ name: "Namokar Eye & Oculoplasty Centre", city: "Ashok Vihar, New Delhi" }]);
   await createDemoUsers("namokar-v2", tenant.id, passwordHash, branchByKey, [
     { slug: "superadmin", name: "Namokar Owner (placeholder)", role: "SUPER_ADMIN", branch: "a" },
