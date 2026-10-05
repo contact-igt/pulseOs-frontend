@@ -7,7 +7,7 @@ const TZ = "Asia/Kolkata";
 const NOW = new Date("2026-10-01T12:00:00.000Z"); // 17:30 IST, a Thursday
 const day: [string, string] = ["09:00", "16:00"];
 const HOURS: ClinicHours = { mon: day, tue: day, wed: day, thu: day, fri: day, sat: day, sun: null };
-const interested = { id: "o1", key: "interested", label: "Interested", stage: "contacted", requiresFollowUp: false, allowsAppointment: true, asksReason: false, followUpType: "FOLLOW_UP", sortOrder: 1, archived: false } as CrmOutcomeVm;
+const interested = { id: "o1", key: "interested", label: "Interested", stage: "contacted", requiresFollowUp: false, allowsAppointment: true, asksReason: false, invalid: false, followUpType: "FOLLOW_UP", sortOrder: 1, archived: false } as CrmOutcomeVm;
 const needsReports = { ...interested, id: "o2", key: "needs_reports", requiresFollowUp: true, allowsAppointment: true } as CrmOutcomeVm;
 const price = { ...interested, id: "o3", key: "price_enquiry", allowsAppointment: false } as CrmOutcomeVm;
 

@@ -4,7 +4,7 @@ import { buildFeedbackInput, buildLogCallInput, initialCallForm } from "../callF
 
 const TZ = "Asia/Kolkata";
 const NOW = new Date("2026-10-01T12:00:00.000Z"); // 17:30 IST
-const needsCallback = { id: "o1", key: "needs_callback", label: "Needs callback", stage: "contacted", requiresFollowUp: true, allowsAppointment: false, asksReason: false, followUpType: "CALLBACK", sortOrder: 1, archived: false } as CrmOutcomeVm;
+const needsCallback = { id: "o1", key: "needs_callback", label: "Needs callback", stage: "contacted", requiresFollowUp: true, allowsAppointment: false, asksReason: false, invalid: false, followUpType: "CALLBACK", sortOrder: 1, archived: false } as CrmOutcomeVm;
 const interested = { ...needsCallback, id: "o2", key: "interested", label: "Interested", requiresFollowUp: false } as CrmOutcomeVm;
 
 describe("Log Call form", () => {

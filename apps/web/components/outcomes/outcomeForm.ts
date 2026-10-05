@@ -15,13 +15,14 @@ export interface OutcomeForm {
   requiresFollowUp: boolean;
   allowsAppointment: boolean;
   asksReason: boolean;
+  invalid: boolean;
   followUpType: TaskType;
   key: string | null;
 }
 
-export const blankOutcome = (): OutcomeForm => ({ label: "", stage: "contacted", requiresFollowUp: false, allowsAppointment: false, asksReason: false, followUpType: "FOLLOW_UP", key: null });
+export const blankOutcome = (): OutcomeForm => ({ label: "", stage: "contacted", requiresFollowUp: false, allowsAppointment: false, asksReason: false, invalid: false, followUpType: "FOLLOW_UP", key: null });
 
-export const outcomeToForm = (o: CrmOutcomeVm): OutcomeForm => ({ label: o.label, stage: o.stage, requiresFollowUp: o.requiresFollowUp, allowsAppointment: o.allowsAppointment, asksReason: o.asksReason, followUpType: o.followUpType, key: o.key });
+export const outcomeToForm = (o: CrmOutcomeVm): OutcomeForm => ({ label: o.label, stage: o.stage, requiresFollowUp: o.requiresFollowUp, allowsAppointment: o.allowsAppointment, asksReason: o.asksReason, invalid: o.invalid, followUpType: o.followUpType, key: o.key });
 
 export const formToCreateInput = (f: OutcomeForm): CreateCrmOutcomeInput => ({
   key: f.key ?? slugifyKey(f.label),
@@ -30,6 +31,7 @@ export const formToCreateInput = (f: OutcomeForm): CreateCrmOutcomeInput => ({
   requiresFollowUp: f.requiresFollowUp,
   allowsAppointment: f.allowsAppointment,
   asksReason: f.asksReason,
+  invalid: f.invalid,
   followUpType: f.followUpType,
 });
 
@@ -40,6 +42,7 @@ export const formToUpdateInput = (f: OutcomeForm): UpdateCrmOutcomeInput => ({
   requiresFollowUp: f.requiresFollowUp,
   allowsAppointment: f.allowsAppointment,
   asksReason: f.asksReason,
+  invalid: f.invalid,
   followUpType: f.followUpType,
 });
 
@@ -55,6 +58,7 @@ export function outcomeHint(o: CrmOutcomeVm): string {
   if (o.requiresFollowUp) parts.push("Needs a follow-up date and time");
   if (o.stage === "lost") parts.push("Closes the journey as lost");
   if (o.asksReason) parts.push("asks why");
+  if (o.invalid) parts.push("Counted as junk, not as a real enquiry");
   if (o.allowsAppointment) parts.push("Offers to book an appointment");
   // "Closes the journey as lost · asks why" reads as one sentence; keep the capitalised lead item.
   return parts.join(" · ");

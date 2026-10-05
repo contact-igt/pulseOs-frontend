@@ -6,7 +6,7 @@ import { buildAlert, buildBreakdown, buildFunnel, buildInsights, furthestStep, t
 
 const fact = (over: Partial<PerfJourneyFact> = {}): PerfJourneyFact => ({
   id: Math.random().toString(36).slice(2), sourceKey: "google", sourceLabel: "Google", journeyType: "Cataract", ownerId: null,
-  contacted: false, booked: false, attended: false, consulted: false, noShow: false, advised: false, scheduled: false, done: false, lost: false, ...over,
+  contacted: false, booked: false, attended: false, consulted: false, noShow: false, advised: false, scheduled: false, done: false, lost: false, junk: false, ...over,
 });
 
 describe("furthestStep", () => {
@@ -78,7 +78,7 @@ describe("buildBreakdown", () => {
 });
 
 describe("buildInsights", () => {
-  const base = { uncontacted: 0, overdueFollowUps: 0, noShows: 0, noOutcome: 0, undecided: 0, lost: 0 };
+  const base = { uncontacted: 0, overdueFollowUps: 0, noShows: 0, noOutcome: 0, undecided: 0, lost: 0, junk: 0 };
 
   it("says nothing when there is nothing to say", () => {
     expect(buildInsights(base)).toEqual([]);
@@ -137,5 +137,15 @@ describe("buildAlert", () => {
   it("reports the most serious rule first when several apply", () => {
     const a = buildAlert({ enquiries: 12, contacted: 4, booked: 12, noShows: 6 }, { ...prev, enquiries: 20 }, 14);
     expect(a!.kind).toBe("enquiries_down");
+  });
+});
+
+describe("junk / invalid is reported apart from 'not interested'", () => {
+  const base = { uncontacted: 0, overdueFollowUps: 0, noShows: 0, noOutcome: 0, undecided: 0, lost: 0, junk: 0 };
+  it("says each in its own words, and nothing when there is none", () => {
+    const out = buildInsights({ ...base, lost: 2, junk: 3 });
+    expect(out.find((i) => i.key === "lost")!.message).toBe("2 enquiries were closed as lost");
+    expect(out.find((i) => i.key === "junk")!.message).toBe("3 enquiries were junk or invalid (not real patient enquiries)");
+    expect(buildInsights({ ...base, lost: 1 }).some((i) => i.key === "junk")).toBe(false);
   });
 });

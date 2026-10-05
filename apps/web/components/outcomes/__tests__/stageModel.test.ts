@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { JOURNEY_STAGES, type CrmOutcomeVm } from "@pulseos/types";
 import { CONFIGURABLE_STAGES, SYSTEM_STAGES, outcomesForStage } from "../stageModel";
 
-const o = (key: string, stage: "contacted" | "lost", sortOrder: number, archived = false): CrmOutcomeVm => ({ id: key, key, label: key, stage, requiresFollowUp: false, allowsAppointment: false, asksReason: false, followUpType: "FOLLOW_UP", sortOrder, archived });
+const o = (key: string, stage: "contacted" | "lost", sortOrder: number, archived = false): CrmOutcomeVm => ({ id: key, key, label: key, stage, requiresFollowUp: false, allowsAppointment: false, asksReason: false, invalid: false, followUpType: "FOLLOW_UP", sortOrder, archived });
 
 describe("system stages vs configurable outcomes", () => {
   it("lists every canonical journey stage exactly once, in lifecycle order — no stage is invented or dropped", () => {

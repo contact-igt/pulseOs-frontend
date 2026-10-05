@@ -1,0 +1,1 @@
+ALTER TABLE "crm_outcomes" ADD COLUMN "invalid" boolean DEFAULT false NOT NULL;

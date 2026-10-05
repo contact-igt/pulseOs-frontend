@@ -1734,6 +1734,8 @@ export interface CrmOutcomeVm {
   allowsAppointment: boolean;
   /** The logging form asks (optionally) why. */
   asksReason: boolean;
+  /** Junk / invalid: never a real patient enquiry. Counted apart from a genuine enquiry that was "not interested". */
+  invalid: boolean;
   /** Task type of the follow-up this outcome creates. */
   followUpType: TaskType;
   sortOrder: number;
@@ -1747,6 +1749,7 @@ export interface CreateCrmOutcomeInput {
   requiresFollowUp?: boolean;
   allowsAppointment?: boolean;
   asksReason?: boolean;
+  invalid?: boolean;
   followUpType?: TaskType;
 }
 
@@ -1756,6 +1759,7 @@ export interface UpdateCrmOutcomeInput {
   requiresFollowUp?: boolean;
   allowsAppointment?: boolean;
   asksReason?: boolean;
+  invalid?: boolean;
   followUpType?: TaskType;
   archived?: boolean;
 }
@@ -3181,7 +3185,7 @@ export interface PerformanceStaffRow {
   overdueNow: number;
 }
 
-export type PerformanceInsightKey = "uncontacted" | "overdue_followups" | "no_shows" | "no_outcome" | "undecided" | "lost";
+export type PerformanceInsightKey = "uncontacted" | "overdue_followups" | "no_shows" | "no_outcome" | "undecided" | "lost" | "junk";
 export interface PerformanceInsight {
   key: PerformanceInsightKey;
   /** A plain sentence, e.g. "14 enquiries have not yet been contacted". */

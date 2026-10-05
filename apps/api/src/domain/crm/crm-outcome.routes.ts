@@ -15,6 +15,7 @@ const createBody = z.object({
   requiresFollowUp: z.boolean().optional(),
   allowsAppointment: z.boolean().optional(),
   asksReason: z.boolean().optional(),
+  invalid: z.boolean().optional(),
   followUpType: taskType.optional(),
 });
 // Strict: the key can never change once created.
@@ -25,6 +26,7 @@ const updateBody = z
     requiresFollowUp: z.boolean().optional(),
     allowsAppointment: z.boolean().optional(),
     asksReason: z.boolean().optional(),
+    invalid: z.boolean().optional(),
     followUpType: taskType.optional(),
     archived: z.boolean().optional(),
   })

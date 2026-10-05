@@ -218,6 +218,9 @@ export const crmOutcomes = pgTable("crm_outcomes", {
   requiresFollowUp: boolean("requires_follow_up").notNull().default(false),
   allowsAppointment: boolean("allows_appointment").notNull().default(false),
   asksReason: boolean("asks_reason").notNull().default(false),
+  // Junk / invalid: the enquiry was never a real patient enquiry (spam, a random click, the wrong person). Reported separately
+  // from "Not interested", which IS a real enquiry that did not go ahead.
+  invalid: boolean("invalid").notNull().default(false),
   followUpType: text("follow_up_type").notNull().default("FOLLOW_UP"),
   sortOrder: integer("sort_order").notNull().default(0),
   archived: boolean("archived").notNull().default(false),

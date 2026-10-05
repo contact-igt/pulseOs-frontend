@@ -8,7 +8,8 @@ import { installDepartmentTemplate } from "../../domain/specialty/department.ser
 import { OPHTHALMOLOGY_TREATMENTS } from "../../domain/specialty/ophthalmology.templates.js";
 import { createFollowUpType, ensureFollowUpTypes } from "../../domain/task/followup-type.service.js";
 import { createFollowUp, createTask } from "../../domain/task/task.service.js";
-import { ensureDefaultOutcomes } from "../../domain/crm/crm-outcome.service.js";
+import { createOutcome, ensureDefaultOutcomes } from "../../domain/crm/crm-outcome.service.js";
+import { createLeadSource, ensureLeadSources } from "../../domain/lead/lead-source.service.js";
 import { assertJourneyConfigsConsistent } from "./consistency.js";
 import {
   createDemoBranches,
@@ -338,6 +339,22 @@ async function addPhotoRequestFollowUp(tenantId: string) {
   if (!made.ok) throw new Error(`photo request follow-up type could not be created: ${made.reason}`);
 }
 
+/**
+ * What Namokar's old follow-up sheet showed it needs, as ordinary hospital configuration (nothing special in the code):
+ *   - "Junk / invalid lead": spam, a random click, the wrong person. A separate outcome from "Not interested" (a real enquiry that did
+ *     not go ahead) and counted apart from it in Performance.
+ *   - A lead source "Unknown / not recorded", so a lead whose origin nobody knows is said to be unknown instead of being given a
+ *     made-up source, and analytics show it as such.
+ */
+async function addRealWorldIntakeConfig(tenantId: string) {
+  await ensureDefaultOutcomes(db, tenantId);
+  const junk = await createOutcome(db, tenantId, { key: "junk_invalid", label: "Junk / invalid lead", stage: "lost", asksReason: true, invalid: true });
+  if (!junk.ok) throw new Error(`junk outcome could not be created: ${junk.reason}`);
+  await ensureLeadSources(db, tenantId);
+  const unknown = await createLeadSource(db, tenantId, { label: "Unknown / not recorded", bucket: "other" });
+  if (!unknown.ok) throw new Error(`unknown source could not be created: ${unknown.reason}`);
+}
+
 async function keepAddLeadSimple(tenantId: string) {
   await db
     .update(customFieldDefinitions)
@@ -410,6 +427,7 @@ export async function seedNamokarTenant(passwordHash: string) {
   const TZ = "Asia/Kolkata";
   await ensureFollowUpTypes(db, tenant.id);
   await addPhotoRequestFollowUp(tenant.id);
+  await addRealWorldIntakeConfig(tenant.id);
   const typeId = async (key: string) => (await db.select({ id: followUpTypes.id }).from(followUpTypes).where(and(eq(followUpTypes.tenantId, tenant.id), eq(followUpTypes.key, key))))[0]!.id;
   const must = (label: string, r: { ok: boolean; reason?: string }) => {
     if (!r.ok) throw new Error(`seed: ${label} failed (${String(r.reason)})`);
@@ -465,6 +483,7 @@ export async function seedNamokarV2Tenant(passwordHash: string) {
   await ensureDefaultOutcomes(db, tenant.id);
   await ensureFollowUpTypes(db, tenant.id);
   await addPhotoRequestFollowUp(tenant.id);
+  await addRealWorldIntakeConfig(tenant.id);
   // Same reminder policy as V1: ONE reminder, 1 hour before a confirmed visit (the 1-day reminder is off).
   await ensureNotificationDefaults(db, tenant.id);
   await db.update(notificationRules).set({ enabled: false }).where(and(eq(notificationRules.tenantId, tenant.id), eq(notificationRules.subject, "APPOINTMENT"), eq(notificationRules.kind, "REMINDER"), eq(notificationRules.offsetUnit, "days")));

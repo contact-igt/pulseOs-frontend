@@ -68,10 +68,11 @@ test.describe("Namokar feedback: display settings, add service, clearer funnel",
       await expect(sheet.getByTestId("display-save")).toBeDisabled(); // nothing changed yet
       await sheet.getByTestId("display-interface-large").check();
       await sheet.getByTestId("display-text-large").check();
-      // The preview shows it at once; the real interface does not change until Save.
+      // LIVE: the page itself follows the choice at once (nothing is stored yet); the preview in the panel shows it too.
       await expect(sheet.getByTestId("appearance-preview")).toHaveAttribute("data-ui-size", "large");
       await expect(sheet.getByTestId("appearance-preview")).toHaveAttribute("data-text-size", "large");
-      expect(await measure(fd.page)).toMatchObject({ ui: "comfortable", text: "default" });
+      expect(await measure(fd.page)).toMatchObject({ ui: "large", text: "large" });
+      expect(sql(`SELECT coalesce(interface_size, 'none') FROM users WHERE email = 'namokarv2.frontdesk@pulseos.local'`)).toBe("none");
       await sheet.getByTestId("display-save").click();
       await expect(sheet).toHaveCount(0);
 
@@ -85,8 +86,9 @@ test.describe("Namokar feedback: display settings, add service, clearer funnel",
       await fd.page.getByTestId("profile-menu-trigger").click();
       await fd.page.getByTestId("display-settings-item").click();
       await fd.page.getByTestId("display-text-small").check();
+      expect((await measure(fd.page)).text).toBe("small"); // live
       await fd.page.getByTestId("display-cancel").click();
-      expect(await measure(fd.page)).toMatchObject({ ui: "large", text: "large" });
+      expect(await measure(fd.page)).toMatchObject({ ui: "large", text: "large" }); // back to what was saved
 
       // Survives a reload and a fresh sign-in (it belongs to the person, not the browser).
       await fd.page.reload();

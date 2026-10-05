@@ -19,14 +19,14 @@ const isTaskType = (v: unknown): v is TaskType => typeof v === "string" && TASK_
 
 /** Recommended starting set, installed the first time a tenant has none. Tenants edit freely afterwards. */
 export const DEFAULT_OUTCOMES: Omit<CrmOutcomeVm, "id" | "sortOrder" | "archived">[] = [
-  { key: "interested", label: "Interested", stage: "contacted", requiresFollowUp: false, allowsAppointment: true, asksReason: false, followUpType: "FOLLOW_UP" },
-  { key: "needs_callback", label: "Needs callback", stage: "contacted", requiresFollowUp: true, allowsAppointment: false, asksReason: false, followUpType: "CALLBACK" },
-  { key: "price_enquiry", label: "Price enquiry", stage: "contacted", requiresFollowUp: false, allowsAppointment: false, asksReason: false, followUpType: "FOLLOW_UP" },
-  { key: "needs_reports", label: "Needs reports", stage: "contacted", requiresFollowUp: true, allowsAppointment: false, asksReason: false, followUpType: "FOLLOW_UP" },
-  { key: "discussing_with_family", label: "Discussing with family", stage: "contacted", requiresFollowUp: true, allowsAppointment: false, asksReason: false, followUpType: "FOLLOW_UP" },
-  { key: "appointment_booked", label: "Appointment booked", stage: "contacted", requiresFollowUp: false, allowsAppointment: true, asksReason: false, followUpType: "FOLLOW_UP" },
-  { key: "no_answer", label: "No answer", stage: "contacted", requiresFollowUp: true, allowsAppointment: false, asksReason: false, followUpType: "CALLBACK" },
-  { key: "not_interested", label: "Not interested", stage: "lost", requiresFollowUp: false, allowsAppointment: false, asksReason: true, followUpType: "FOLLOW_UP" },
+  { key: "interested", label: "Interested", stage: "contacted", requiresFollowUp: false, allowsAppointment: true, asksReason: false, invalid: false, followUpType: "FOLLOW_UP" },
+  { key: "needs_callback", label: "Needs callback", stage: "contacted", requiresFollowUp: true, allowsAppointment: false, asksReason: false, invalid: false, followUpType: "CALLBACK" },
+  { key: "price_enquiry", label: "Price enquiry", stage: "contacted", requiresFollowUp: false, allowsAppointment: false, asksReason: false, invalid: false, followUpType: "FOLLOW_UP" },
+  { key: "needs_reports", label: "Needs reports", stage: "contacted", requiresFollowUp: true, allowsAppointment: false, asksReason: false, invalid: false, followUpType: "FOLLOW_UP" },
+  { key: "discussing_with_family", label: "Discussing with family", stage: "contacted", requiresFollowUp: true, allowsAppointment: false, asksReason: false, invalid: false, followUpType: "FOLLOW_UP" },
+  { key: "appointment_booked", label: "Appointment booked", stage: "contacted", requiresFollowUp: false, allowsAppointment: true, asksReason: false, invalid: false, followUpType: "FOLLOW_UP" },
+  { key: "no_answer", label: "No answer", stage: "contacted", requiresFollowUp: true, allowsAppointment: false, asksReason: false, invalid: false, followUpType: "CALLBACK" },
+  { key: "not_interested", label: "Not interested", stage: "lost", requiresFollowUp: false, allowsAppointment: false, asksReason: true, invalid: false, followUpType: "FOLLOW_UP" },
 ];
 
 type Row = typeof crmOutcomes.$inferSelect;
@@ -38,6 +38,7 @@ const toVm = (r: Row): CrmOutcomeVm => ({
   requiresFollowUp: r.requiresFollowUp,
   allowsAppointment: r.allowsAppointment,
   asksReason: r.asksReason,
+  invalid: r.invalid,
   followUpType: (isTaskType(r.followUpType) ? r.followUpType : "FOLLOW_UP") as TaskType,
   sortOrder: r.sortOrder,
   archived: r.archived,
@@ -76,6 +77,7 @@ export async function createOutcome(db: Db, tenantId: string, input: CreateCrmOu
       requiresFollowUp: input.requiresFollowUp ?? false,
       allowsAppointment: input.allowsAppointment ?? false,
       asksReason: input.asksReason ?? false,
+      invalid: input.invalid ?? false,
       followUpType: input.followUpType ?? "FOLLOW_UP",
       sortOrder: siblings.reduce((m, s) => Math.max(m, s.sortOrder), -1) + 1,
     })
@@ -102,6 +104,7 @@ export async function updateOutcome(db: Db, tenantId: string, id: string, input:
       ...(input.requiresFollowUp !== undefined ? { requiresFollowUp: input.requiresFollowUp } : {}),
       ...(input.allowsAppointment !== undefined ? { allowsAppointment: input.allowsAppointment } : {}),
       ...(input.asksReason !== undefined ? { asksReason: input.asksReason } : {}),
+      ...(input.invalid !== undefined ? { invalid: input.invalid } : {}),
       ...(input.followUpType !== undefined ? { followUpType: input.followUpType } : {}),
       ...(input.archived !== undefined ? { archived: input.archived } : {}),
     })

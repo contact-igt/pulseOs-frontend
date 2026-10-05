@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, isNotNull, lt, sql, type SQL } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
-import { appointments, calls, consultationOutcomes, customFieldDefinitions, customFieldValues, journeys, leadSources, patients, tasks, tenants, treatmentOpportunities, users } from "../../db/schema.js";
+import { appointments, calls, consultationOutcomes, crmOutcomes, customFieldDefinitions, customFieldValues, journeys, leadSources, patients, tasks, tenants, treatmentOpportunities, users } from "../../db/schema.js";
 import { displayAge } from "../../lib/age.js";
 import { dayKeyIn } from "../../lib/hospital-time.js";
 import { buildAgeDimension, buildFieldDimension } from "./demographics.js";
@@ -39,10 +39,12 @@ async function loadFacts(db: Db, tenantId: string, filters: PerformanceFilters, 
       sourceLabel: leadSources.label,
       journeyType: journeys.journeyType,
       ownerId: journeys.ownerUserId,
+      lastOutcomeInvalid: crmOutcomes.invalid,
     })
     .from(journeys)
     .innerJoin(patients, eq(patients.id, journeys.patientId))
     .leftJoin(leadSources, eq(leadSources.id, journeys.sourceId))
+    .leftJoin(crmOutcomes, eq(crmOutcomes.id, journeys.lastOutcomeId))
     .where(and(...cohort));
   if (rows.length === 0) return [];
 
@@ -80,7 +82,8 @@ async function loadFacts(db: Db, tenantId: string, filters: PerformanceFilters, 
     journeyType: r.journeyType,
     ownerId: r.ownerId,
     contacted: r.contactedAt !== null,
-    lost: r.stage === "lost",
+    lost: r.stage === "lost" && !r.lastOutcomeInvalid,
+    junk: r.stage === "lost" && r.lastOutcomeInvalid === true,
     booked: false, attended: false, consulted: false, noShow: false, advised: false, scheduled: false, done: false,
     ...flags.get(r.id),
   }));
@@ -163,6 +166,7 @@ export async function getPerformanceDashboard(db: Db, tenantId: string, filters:
     noOutcome: noOutcomeRows[0]?.n ?? 0,
     undecided: undecided[0]?.n ?? 0,
     lost: facts.filter((f) => f.lost).length,
+    junk: facts.filter((f) => f.junk).length,
   });
 
   // The alert compares with the period just before, of the same length.

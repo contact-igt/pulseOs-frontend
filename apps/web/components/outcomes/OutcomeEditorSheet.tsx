@@ -67,6 +67,7 @@ export function OutcomeEditorSheet({ mode, initial, outcomeId, onClose, onSaved 
         <div className="space-y-0.5">
           <CheckRow label="Needs a follow-up date and time" hint="Staff must choose when to follow up, and a follow-up task is created." checked={form.requiresFollowUp} onChange={(v) => set("requiresFollowUp", v)} testId="outcome-requires-follow-up" />
           <CheckRow label="Offers to book an appointment" hint="After saving, staff are offered to book one." checked={form.allowsAppointment} onChange={(v) => set("allowsAppointment", v)} testId="outcome-allows-appointment" />
+          <CheckRow label="Junk / invalid enquiry" hint="Spam, a random click or the wrong person - never a real patient enquiry. Reported separately from 'Not interested'." checked={form.invalid} onChange={(v) => set("invalid", v)} testId="outcome-invalid" />
           <CheckRow label="Asks why (optional)" hint="Shows a reason box, for example when the patient is not interested." checked={form.asksReason} onChange={(v) => set("asksReason", v)} testId="outcome-asks-reason" />
         </div>
         <SelectInput label="Follow-up task is a" value={form.followUpType} onChange={(e) => set("followUpType", e.target.value as TaskType)} data-testid="outcome-follow-up-type" hint="Used when a follow-up is scheduled.">

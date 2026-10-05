@@ -26,7 +26,10 @@ export interface PerfJourneyFact {
   scheduled: boolean;
   /** A procedure was completed. Scheduled alone never sets this. */
   done: boolean;
+  /** Closed as lost for a real reason (e.g. not interested). Junk is counted apart. */
   lost: boolean;
+  /** Closed as junk / invalid: never a real patient enquiry (spam, a random click, the wrong person). */
+  junk: boolean;
 }
 
 /** 0 = enquiry only ... 6 = procedure done: the highest step any of the journey's facts reaches (a phone contact is not a step). */
@@ -83,8 +86,10 @@ export interface InsightCounts {
   noOutcome: number;
   /** Advised procedures still undecided after 7 days. */
   undecided: number;
-  /** Enquiries closed as lost (in the period). */
+  /** Real enquiries closed as lost (in the period), e.g. not interested. */
   lost: number;
+  /** Enquiries closed as junk / invalid (in the period): reported apart from the lost ones above. */
+  junk: number;
 }
 
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
@@ -99,10 +104,11 @@ export function buildInsights(c: InsightCounts): PerformanceInsight[] {
   add({ key: "no_outcome", count: c.noOutcome, severity: "attention", href: "/appointments?status=completed", message: `${c.noOutcome} completed ${plural(c.noOutcome, "consultation has", "consultations have")} no outcome recorded` });
   add({ key: "undecided", count: c.undecided, severity: "info", href: "/treatments?status=DECISION_PENDING", message: `${c.undecided} advised ${plural(c.undecided, "procedure is", "procedures are")} still undecided after 7 days` });
   add({ key: "lost", count: c.lost, severity: "info", href: "/leads?view=lost", message: `${c.lost} ${plural(c.lost, "enquiry was", "enquiries were")} closed as lost` });
+  add({ key: "junk", count: c.junk, severity: "info", href: "/leads?view=lost", message: `${c.junk} ${plural(c.junk, "enquiry was", "enquiries were")} junk or invalid (not real patient enquiries)` });
   return out;
 }
 
-const KEY_COUNT = { uncontacted: "uncontacted", overdue_followups: "overdueFollowUps", no_shows: "noShows", no_outcome: "noOutcome", undecided: "undecided", lost: "lost" } as const satisfies Record<PerformanceInsight["key"], keyof InsightCounts>;
+const KEY_COUNT = { uncontacted: "uncontacted", overdue_followups: "overdueFollowUps", no_shows: "noShows", no_outcome: "noOutcome", undecided: "undecided", lost: "lost", junk: "junk" } as const satisfies Record<PerformanceInsight["key"], keyof InsightCounts>;
 
 export interface AlertSnapshot {
   enquiries: number;

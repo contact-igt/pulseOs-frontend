@@ -2,20 +2,20 @@ import { describe, expect, it } from "vitest";
 import type { CrmOutcomeVm, CustomFieldDefinitionVm } from "@pulseos/types";
 import { blankOutcome, buildLogInput, defaultFollowUpLocal, formToCreateInput, formToUpdateInput, outcomeHint, outcomeToForm, validateOutcomeForm } from "../outcomeForm";
 
-const callback: CrmOutcomeVm = { id: "o1", key: "needs_callback", label: "Needs callback", stage: "contacted", requiresFollowUp: true, allowsAppointment: false, asksReason: false, followUpType: "CALLBACK", sortOrder: 1, archived: false };
-const notInterested: CrmOutcomeVm = { ...callback, id: "o2", key: "not_interested", label: "Not interested", stage: "lost", requiresFollowUp: false, asksReason: true, followUpType: "FOLLOW_UP" };
+const callback: CrmOutcomeVm = { id: "o1", key: "needs_callback", label: "Needs callback", stage: "contacted", requiresFollowUp: true, allowsAppointment: false, asksReason: false, invalid: false, followUpType: "CALLBACK", sortOrder: 1, archived: false };
+const notInterested: CrmOutcomeVm = { ...callback, id: "o2", key: "not_interested", label: "Not interested", stage: "lost", requiresFollowUp: false, asksReason: true, invalid: false, followUpType: "FOLLOW_UP" };
 const interested: CrmOutcomeVm = { ...callback, id: "o3", key: "interested", label: "Interested", requiresFollowUp: false, allowsAppointment: true, followUpType: "FOLLOW_UP" };
 const NOW = new Date("2026-10-01T10:00:00Z");
 
 describe("outcome editor form", () => {
   it("a new outcome moves the Journey to Contacted and has no rules switched on", () => {
-    expect(blankOutcome()).toMatchObject({ stage: "contacted", requiresFollowUp: false, allowsAppointment: false, asksReason: false, followUpType: "FOLLOW_UP", key: null });
+    expect(blankOutcome()).toMatchObject({ stage: "contacted", requiresFollowUp: false, allowsAppointment: false, asksReason: false, invalid: false, followUpType: "FOLLOW_UP", key: null });
   });
   it("create builds a key from the label; edit never sends the key", () => {
     const f = { ...blankOutcome(), label: " Waiting for family ", requiresFollowUp: true };
     expect(formToCreateInput(f)).toMatchObject({ key: "waiting_for_family", label: "Waiting for family", stage: "contacted", requiresFollowUp: true });
     const edit = formToUpdateInput({ ...outcomeToForm(callback), label: "Call me back" });
-    expect(edit).toEqual({ label: "Call me back", stage: "contacted", requiresFollowUp: true, allowsAppointment: false, asksReason: false, followUpType: "CALLBACK" });
+    expect(edit).toEqual({ label: "Call me back", stage: "contacted", requiresFollowUp: true, allowsAppointment: false, asksReason: false, invalid: false, followUpType: "CALLBACK" });
     expect(edit).not.toHaveProperty("key");
   });
   it("needs a label that can become a key", () => {

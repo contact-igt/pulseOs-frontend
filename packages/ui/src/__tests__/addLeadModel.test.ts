@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CrmOutcomeVm } from "@pulseos/types";
 import { LEAD_ERROR_COPY, LEAD_CHANNEL_OPTIONS, nextStepAvailability, reconcileNextStep, saveReadiness, toCreateLeadInput, type LeadFormValues } from "../addLeadModel";
 
-const outcome = (over: Partial<CrmOutcomeVm>): CrmOutcomeVm => ({ id: "o1", key: "interested", label: "Interested", stage: "contacted", requiresFollowUp: false, allowsAppointment: true, asksReason: false, followUpType: "FOLLOW_UP", sortOrder: 0, archived: false, ...over });
+const outcome = (over: Partial<CrmOutcomeVm>): CrmOutcomeVm => ({ id: "o1", key: "interested", label: "Interested", stage: "contacted", requiresFollowUp: false, allowsAppointment: true, asksReason: false, invalid: false, followUpType: "FOLLOW_UP", sortOrder: 0, archived: false, ...over });
 const NOW = "2026-10-02T15:00"; // hospital wall time
 
 const form = (over: Partial<LeadFormValues> = {}): LeadFormValues => ({
