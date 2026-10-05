@@ -93,7 +93,7 @@ test.describe("Namokar pilot", () => {
     await page.goto("/login/namokar-v1");
     await expect(page.getByTestId("tenant-login")).toBeVisible();
     await expect(page.getByTestId("tenant-login-workspace")).toContainText(/You are signing into Namokar['’]s PulseOS workspace/);
-    await expect(page.getByTestId("tenant-login-pilot")).toHaveText("V1 Pilot");
+    await expect(page.getByTestId("tenant-login-pilot")).toHaveText("V1 Demo");
     await expect(page.getByText("Namokar Eye & Oculoplasty Centre").first()).toBeVisible();
     // Nothing a developer or a stranger could use here: no Developer access, no create account, no hospital picker.
     for (const hidden of ["dev-login-block", "dev-login-toggle", "signup-link", "signup-prompt"]) await expect(page.getByTestId(hidden)).toHaveCount(0);
@@ -107,7 +107,7 @@ test.describe("Namokar pilot", () => {
     await page.getByLabel("Password", { exact: true }).fill(DEMO_PASSWORD);
     await page.getByRole("button", { name: "Sign in" }).click();
     await expect(page.locator('form [role="alert"]')).toHaveText("Incorrect email or password.");
-    await expect(page).toHaveURL(/\/login\/namokar$/);
+    await expect(page).toHaveURL(/\/login\/namokar-v1$/);
 
     // An unknown address is a plain dead end, not a hospital list.
     await page.goto("/login/no-such-hospital");
@@ -122,7 +122,7 @@ test.describe("Namokar pilot", () => {
     expect(session.body.user).toMatchObject({ tenantName: "Namokar Eye & Oculoplasty Centre", role: "SUPER_ADMIN", loginSlug: "namokar-v1" });
     await owner.getByRole("button", { name: /Dr\. Rajesh Shah/ }).click();
     await owner.getByRole("button", { name: /log ?out|sign ?out/i }).click();
-    await owner.waitForURL(/\/login\/namokar$/);
+    await owner.waitForURL(/\/login\/namokar-v1$/);
     await context.close();
   });
 
