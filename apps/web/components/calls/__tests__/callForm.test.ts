@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { CrmOutcomeVm } from "@pulseos/types";
+import type { ClinicHours, CrmOutcomeVm } from "@pulseos/types";
 import { buildFeedbackInput, buildLogCallInput, initialCallForm } from "../callForm";
 
 const TZ = "Asia/Kolkata";
@@ -21,7 +21,7 @@ describe("Log Call form", () => {
   it("an outcome that needs a follow-up always asks for one; an optional outcome only if the person turns it on", () => {
     const base = initialCallForm(NOW, TZ);
     expect("input" in buildLogCallInput(base, interested, TZ, NOW, "k-12345678") && (buildLogCallInput(base, interested, TZ, NOW, "k-12345678") as { input: { callback?: unknown } }).input.callback).toBeUndefined();
-    const withCallback = buildLogCallInput({ ...base, callbackOn: true }, interested, TZ, NOW, "k-12345678");
+    const withCallback = buildLogCallInput({ ...base, nextAction: "callback" as const }, interested, TZ, NOW, "k-12345678");
     expect("input" in withCallback && withCallback.input.callback).toBeTruthy();
     const required = buildLogCallInput({ ...base, callbackDate: "2026-10-01", callbackTime: "09:00" }, needsCallback, TZ, NOW, "k-12345678");
     expect(required).toEqual({ error: "Pick a callback time in the future." });
@@ -39,5 +39,36 @@ describe("Log Call form", () => {
     const base = initialCallForm(NOW, TZ);
     expect(buildFeedbackInput(base, null, TZ, NOW)).toHaveProperty("error");
     expect(buildFeedbackInput({ ...base, feedback: "Spoke to her." }, null, TZ, NOW)).toEqual({ input: { staffFeedback: "Spoke to her.", outcomeKey: undefined, callback: undefined } });
+  });
+});
+
+describe("Log Call: book the appointment in the same save", () => {
+  const HOURS: ClinicHours = { mon: ["09:00", "16:00"], tue: ["09:00", "16:00"], wed: ["09:00", "16:00"], thu: ["09:00", "16:00"], fri: ["09:00", "16:00"], sat: ["09:00", "16:00"], sun: null };
+  const booking = { ...initialCallForm(NOW, TZ), nextAction: "appointment" as const, apptDate: "2026-10-07", apptTime: "10:30" }; // a Wednesday
+
+  it("sends the visit as an instant in the hospital's clock, confirmed by default, with no callback", () => {
+    const built = buildLogCallInput(booking, interested, TZ, NOW, "k-12345678", HOURS);
+    expect(built).toMatchObject({ input: { appointment: { scheduledAt: "2026-10-07T05:00:00.000Z", confirmed: true }, callback: undefined } });
+  });
+
+  it("'not confirmed' books only; a chosen doctor and branch are passed, a blank one is left for the server (the hospital's only one)", () => {
+    const built = buildLogCallInput({ ...booking, apptConfirmed: false, apptDoctorId: "d1" }, interested, TZ, NOW, "k-12345678", HOURS) as unknown as { input: { appointment: Record<string, unknown> } };
+    expect(built.input.appointment).toEqual({ scheduledAt: "2026-10-07T05:00:00.000Z", confirmed: false, doctorId: "d1" });
+  });
+
+  it("asks for the date and time, and refuses a closed day, outside hours and the past before anything is sent", () => {
+    expect(buildLogCallInput({ ...booking, apptTime: "" }, null, TZ, NOW, "k-12345678", HOURS)).toEqual({ error: "Choose the appointment date and time." });
+    expect(buildLogCallInput({ ...booking, apptDate: "2026-10-04" }, null, TZ, NOW, "k-12345678", HOURS)).toHaveProperty("error", expect.stringContaining("closed on Sundays"));
+    expect(buildLogCallInput({ ...booking, apptTime: "17:00" }, null, TZ, NOW, "k-12345678", HOURS)).toHaveProperty("error", expect.stringContaining("09:00 and 16:00"));
+    expect(buildLogCallInput({ ...booking, apptDate: "2026-10-01", apptTime: "10:00" }, null, TZ, NOW, "k-12345678", undefined)).toEqual({ error: "That time has already passed. Choose a later time." });
+  });
+
+  it("an outcome that needs a follow-up is satisfied by a booked visit; on 'None' it still means a callback", () => {
+    const viaVisit = buildLogCallInput({ ...booking, outcomeKey: "needs_callback" }, needsCallback, TZ, NOW, "k-12345678", HOURS) as { input: { callback?: unknown; appointment?: unknown } };
+    expect(viaVisit.input.appointment).toBeTruthy();
+    expect(viaVisit.input.callback).toBeUndefined();
+    const none = buildLogCallInput({ ...initialCallForm(NOW, TZ), outcomeKey: "needs_callback" }, needsCallback, TZ, NOW, "k-12345678") as { input: { callback?: unknown; appointment?: unknown } };
+    expect(none.input.callback).toBeTruthy();
+    expect(none.input.appointment).toBeUndefined();
   });
 });

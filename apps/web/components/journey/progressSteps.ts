@@ -77,6 +77,7 @@ export function buildJourneyProgress(d: ProgressInput): ProgressStep[] {
   // Next action: straight from the open tasks.
   const next = d.journey.nextAction;
   if (next) steps.push({ key: "next_action", label: "Next action", state: "current", detail: `${next.label} · ${fmtDate(next.dueAt)}`, ...(d.journey.nextTaskBucket === "overdue" ? { tone: "danger" as const } : {}) });
+  else if (pending) steps.push({ key: "next_action", label: "Next action", state: "current", detail: `Patient visit · ${fmtDateTime(pending.scheduledAt)}` });
   else steps.push({ key: "next_action", label: "Next action", state: "pending", detail: "None scheduled" });
 
   return steps;

@@ -234,7 +234,7 @@ export default function JourneyDetailPage() {
 
       {/* What to do next, and the visit it leads to — right under the actions. */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.5fr_1fr]">
-        <NextActionCard journey={journey} canManage={canAddFollowUp} onAdd={() => setAddingFollowUp(true)} />
+        <NextActionCard journey={journey} canManage={canAddFollowUp} onAdd={() => setAddingFollowUp(true)} upcomingVisit={appointments.filter((a) => a.status === "requested" || a.status === "scheduled" || a.status === "confirmed").sort((a, b) => Date.parse(a.scheduledAt) - Date.parse(b.scheduledAt))[0] ?? null} />
         <AppointmentContext
           appointments={appointments}
           canBook={canBook}

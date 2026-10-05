@@ -4,8 +4,8 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { CalendarClock, MessageCircle, Plus } from "lucide-react";
 import { api, ApiError } from "@pulseos/api-client";
-import { Badge, Button, Card, fmtSmartDateTime } from "@pulseos/ui";
-import { FOLLOW_UP_KEYS, type JourneyDetailVm, type TaskRow } from "@pulseos/types";
+import { APPOINTMENT_STATUS_LABEL, Badge, Button, Card, fmtSmartDateTime } from "@pulseos/ui";
+import { FOLLOW_UP_KEYS, type AppointmentRow, type JourneyDetailVm, type TaskRow } from "@pulseos/types";
 import { invalidateFollowUpQueries } from "./AddFollowUpSheet";
 import { ReassignSheet, RescheduleSheet } from "./TaskActionSheets";
 import { SendWhatsAppSheet } from "./SendWhatsAppSheet";
@@ -22,7 +22,7 @@ const BUCKET: Record<NonNullable<JourneyDetailVm["journey"]["nextTaskBucket"]>, 
  * first, then today, then the earliest upcoming. Complete / Reschedule / Reassign use the existing task actions; when
  * the task is done the next one takes its place on the refresh. With nothing scheduled it says so and offers to add one.
  */
-export function NextActionCard({ journey, canManage, onAdd }: { journey: JourneyDetailVm["journey"]; canManage: boolean; onAdd: () => void }) {
+export function NextActionCard({ journey, canManage, onAdd, upcomingVisit = null }: { journey: JourneyDetailVm["journey"]; canManage: boolean; onAdd: () => void; /** The earliest visit still ahead: with no follow-up task, the visit IS what happens next. */ upcomingVisit?: AppointmentRow | null }) {
   const queryClient = useQueryClient();
   const task: TaskRow | null = journey.nextTask;
   const [sheet, setSheet] = useState<"reschedule" | "reassign" | "whatsapp" | null>(null);
@@ -52,6 +52,23 @@ export function NextActionCard({ journey, canManage, onAdd }: { journey: Journey
         <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-2">Next action</p>
         <p className="mt-1 text-sm font-semibold text-ink">{journey.nextAction.label}</p>
         <p className="text-xs text-ink-2">Due {fmtSmartDateTime(journey.nextAction.dueAt)}</p>
+      </Card>
+    );
+  }
+
+  if (!task && upcomingVisit) {
+    return (
+      <Card className="flex flex-wrap items-center justify-between gap-3 p-4" data-testid="next-action">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-2">Next action</p>
+          <p className="mt-1 text-sm font-semibold text-ink" data-testid="next-action-visit">Patient visit · {fmtSmartDateTime(upcomingVisit.scheduledAt)}</p>
+          <p className="text-xs text-ink-2">{APPOINTMENT_STATUS_LABEL[upcomingVisit.status]}{upcomingVisit.doctorName ? ` · ${upcomingVisit.doctorName}` : ""}</p>
+        </div>
+        {canManage && (
+          <Button variant="secondary" className="min-h-11 sm:min-h-0" onClick={onAdd} data-testid="next-action-add">
+            <Plus size={14} aria-hidden="true" /> Add follow-up
+          </Button>
+        )}
       </Card>
     );
   }
