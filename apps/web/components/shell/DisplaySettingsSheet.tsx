@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
 import { Button, SideSheet } from "@pulseos/ui";
@@ -43,6 +44,14 @@ function Choice<K extends string>({ name, legend, options, value, onChange, labe
  * only on Save (stored on the person's account, so it follows them), and Cancel discards. A failed save keeps what was picked.
  */
 export function DisplaySettingsSheet({ onClose }: { onClose: () => void }) {
+  // The top bar is a frosted-glass element (backdrop-filter), and a fixed-position child of such an element is sized and placed
+  // against THAT element, not the screen - which squashed this sheet into the top bar. It is drawn on <body> instead, like every
+  // other sheet in the app, so it is a real full-height panel.
+  if (typeof document === "undefined") return null;
+  return createPortal(<DisplaySettingsPanel onClose={onClose} />, document.body);
+}
+
+function DisplaySettingsPanel({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
   const session = useQuery({ queryKey: ["session"], queryFn: api.session, staleTime: 60_000 });
   const savedUi: InterfaceSize = session.data?.user.interfaceSize ?? DEFAULT_INTERFACE_SIZE;
@@ -54,6 +63,22 @@ export function DisplaySettingsSheet({ onClose }: { onClose: () => void }) {
   const uiChoice = ui ?? savedUi;
   const textChoice = text ?? savedText;
   const changed = uiChoice !== savedUi || textChoice !== savedText;
+
+  // LIVE: the choice is applied to the whole page you are looking at, at once, so the effect is obvious without saving.
+  // This is temporary: the saved values are put back whenever the panel closes without a save (Cancel, Escape, outside click),
+  // and nothing is stored until Save.
+  useEffect(() => {
+    document.documentElement.dataset.uiSize = uiChoice;
+    document.documentElement.dataset.textSize = textChoice;
+  }, [uiChoice, textChoice]);
+  useEffect(
+    () => () => {
+      const saved = queryClient.getQueryData<{ user: { interfaceSize?: InterfaceSize; textSize?: TextSize } }>(["session"])?.user;
+      document.documentElement.dataset.uiSize = saved?.interfaceSize ?? DEFAULT_INTERFACE_SIZE;
+      document.documentElement.dataset.textSize = saved?.textSize ?? DEFAULT_TEXT_SIZE;
+    },
+    [queryClient],
+  );
 
   async function save() {
     setSaving(true);
@@ -76,17 +101,30 @@ export function DisplaySettingsSheet({ onClose }: { onClose: () => void }) {
       testId="display-settings"
       footer={
         <>
+          <Button
+            variant="ghost"
+            className="mr-auto min-h-11 sm:min-h-0"
+            onClick={() => {
+              setUi(DEFAULT_INTERFACE_SIZE);
+              setText(DEFAULT_TEXT_SIZE);
+            }}
+            disabled={saving || (uiChoice === DEFAULT_INTERFACE_SIZE && textChoice === DEFAULT_TEXT_SIZE)}
+            data-testid="display-reset"
+          >
+            Reset to default
+          </Button>
           <Button variant="secondary" className="min-h-11 sm:min-h-0" onClick={onClose} disabled={saving} data-testid="display-cancel">
             Cancel
           </Button>
           <Button variant="primary" className="min-h-11 sm:min-h-0" onClick={save} disabled={!changed || saving} data-testid="display-save">
-            {saving ? "Saving…" : "Save"}
+            {saving ? "Saving…" : "Save changes"}
           </Button>
         </>
       }
     >
       <div className="space-y-5">
         <FormError message={error} testId="display-error" />
+        <p className="text-xs text-ink-2">Your choice shows on this page straight away. Press Save changes to keep it; Cancel puts things back.</p>
         <Choice name="interface-size" legend="Interface size" options={INTERFACE_SIZES} value={uiChoice} onChange={setUi} labels={INTERFACE_SIZE_LABEL} defaultKey={DEFAULT_INTERFACE_SIZE} testPrefix="display-interface" />
         <Choice name="text-size" legend="Text size" options={TEXT_SIZES} value={textChoice} onChange={setText} labels={TEXT_SIZE_LABEL} defaultKey={DEFAULT_TEXT_SIZE} testPrefix="display-text" />
         <div>

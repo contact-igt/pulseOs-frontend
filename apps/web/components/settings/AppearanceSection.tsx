@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
 import { MetricStrip } from "@pulseos/ui";
@@ -23,6 +23,19 @@ export function AppearanceSection() {
   const [notice, setNotice] = useState<string | null>(null);
   const choice = picked ?? saved;
   const changed = choice !== saved;
+
+  // LIVE for the person choosing: while this screen is open the whole page they are looking at shows the style they picked, so
+  // the effect is obvious before Save. It affects only this browser tab until Save; no one else sees anything. Leaving the screen
+  // (or Cancel) puts the saved hospital style back.
+  useEffect(() => {
+    document.documentElement.dataset.surface = choice;
+  }, [choice]);
+  useEffect(
+    () => () => {
+      document.documentElement.dataset.surface = queryClient.getQueryData<{ user: { surfaceStyle?: SurfaceStyle } }>(["session"])?.user.surfaceStyle ?? DEFAULT_SURFACE_STYLE;
+    },
+    [queryClient],
+  );
 
   async function save() {
     setSaving(true);
