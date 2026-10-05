@@ -1,21 +1,18 @@
-import { CONTAINER, SecondaryCta } from "./ui";
+import { CONTAINER } from "./ui";
 import { DemoRequestForm } from "./DemoRequestForm";
 
 export function FinalCta() {
   return (
-    <section id="demo" aria-labelledby="demo-title" className="mk-anchor app-shell border-t border-line py-16 sm:py-24">
+    <section id="demo" aria-labelledby="demo-title" className="mk-anchor mk-hero-bg py-20 sm:py-28">
       <div className={CONTAINER}>
-        <div className="grid grid-cols-1 gap-10 lg:grid-cols-[1fr_1fr] lg:items-center">
+        <div className="grid grid-cols-1 gap-10 lg:grid-cols-2 lg:items-center lg:gap-16">
           <div>
-            <h2 id="demo-title" className="text-balance text-[34px] font-semibold leading-[1.08] tracking-tight text-ink sm:text-[46px] lg:text-[54px]">
-              See every patient journey clearly.
+            <h2 id="demo-title" className="text-balance text-[38px] font-semibold leading-[1.04] tracking-[-0.03em] text-ink sm:text-[54px] lg:text-[64px]">
+              See what happens after the enquiry.
             </h2>
-            <p className="mt-5 max-w-lg text-[18px] leading-relaxed text-ink-2">
-              We&apos;ll show you how PulseOS can fit your hospital&apos;s enquiry, follow-up and appointment workflow.
+            <p className="mt-6 max-w-[560px] text-[18px] leading-relaxed text-ink-2 sm:text-[20px]">
+              Walk us through how your hospital handles enquiries, follow-ups and appointments. We&apos;ll show you how PulseOS fits.
             </p>
-            <div className="mt-8">
-              <SecondaryCta href="#product">See the Product</SecondaryCta>
-            </div>
           </div>
           <div className="rounded-panel border border-line bg-white p-5 shadow-glass sm:p-7">
             <h3 className="mb-4 text-lg font-semibold text-ink">Book a live demo</h3>

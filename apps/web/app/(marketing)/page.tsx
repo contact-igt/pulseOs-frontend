@@ -1,15 +1,14 @@
 import { Hero } from "../../components/marketing/Hero";
-import { ProblemSection } from "../../components/marketing/ProblemSection";
-import { PainGrid } from "../../components/marketing/PainGrid";
-import { JourneyDemo } from "../../components/marketing/JourneyDemo";
-import { TimelineSection } from "../../components/marketing/TimelineSection";
-import { OwnerSection } from "../../components/marketing/OwnerSection";
-import { AnalyticsSection } from "../../components/marketing/AnalyticsSection";
-import { RoleSwitcher } from "../../components/marketing/RoleSwitcher";
-import { AppointmentSection } from "../../components/marketing/AppointmentSection";
-import { ConfigurableSection } from "../../components/marketing/ConfigurableSection";
-import { ArchitectureSection } from "../../components/marketing/ArchitectureSection";
-import { TrustSection } from "../../components/marketing/TrustSection";
+import { HookStory } from "../../components/marketing/HookStory";
+import { PatientJourneyDemo } from "../../components/marketing/PatientJourneyDemo";
+import { OldWayStory } from "../../components/marketing/OldWayStory";
+import { OwnerStory } from "../../components/marketing/OwnerStory";
+import { RoleStory } from "../../components/marketing/RoleStory";
+import { InlineAppointmentStory } from "../../components/marketing/InlineAppointmentStory";
+import { WorkflowConfigurator } from "../../components/marketing/WorkflowConfigurator";
+import { SystemMap } from "../../components/marketing/SystemMap";
+import { AttributionStory } from "../../components/marketing/AttributionStory";
+import { OperationsProof } from "../../components/marketing/OperationsProof";
 import { FinalCta } from "../../components/marketing/FinalCta";
 
 // Structured data: describes the product and the organisation only. No ratings, reviews, prices or customer counts.
@@ -21,7 +20,7 @@ const jsonLd = {
       name: "PulseOS",
       applicationCategory: "BusinessApplication",
       operatingSystem: "Web",
-      description: "Patient engagement and revenue intelligence platform for hospitals and clinics: enquiries, calls, follow-ups, appointments, consultations and treatment journeys in one connected view.",
+      description: "Patient engagement and hospital operations platform: enquiries, calls, follow-ups, appointments, consultations and procedures in one connected patient journey.",
     },
     { "@type": "Organization", name: "PulseOS" },
   ],
@@ -32,17 +31,16 @@ export default function LandingPage() {
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }} />
       <Hero />
-      <ProblemSection />
-      <PainGrid />
-      <JourneyDemo />
-      <TimelineSection />
-      <OwnerSection />
-      <AnalyticsSection />
-      <RoleSwitcher />
-      <AppointmentSection />
-      <ConfigurableSection />
-      <ArchitectureSection />
-      <TrustSection />
+      <HookStory />
+      <PatientJourneyDemo />
+      <OldWayStory />
+      <OwnerStory />
+      <RoleStory />
+      <InlineAppointmentStory />
+      <WorkflowConfigurator />
+      <SystemMap />
+      <AttributionStory />
+      <OperationsProof />
       <FinalCta />
     </>
   );

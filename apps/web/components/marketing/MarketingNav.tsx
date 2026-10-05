@@ -43,7 +43,7 @@ export function MarketingNav() {
             Sign in
           </Link>
           <a href={DEMO_HREF} className="inline-flex h-10 items-center rounded-control bg-brand px-4 text-[15px] font-semibold text-white transition hover:bg-primary-700">
-            Book a Demo
+            Book demo
           </a>
           <button
             ref={buttonRef}

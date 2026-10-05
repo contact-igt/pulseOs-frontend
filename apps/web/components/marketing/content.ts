@@ -1,18 +1,28 @@
-// Public landing page content. All patient/hospital data here is SYNTHETIC and fictional (no real hospital, patient or
-// phone number). Product claims are limited to what the app does today; provider-dependent behaviour (WhatsApp, calling,
-// ad reporting) is always worded as "when your provider is connected".
+// Public site content. Every patient, hospital and number here is SYNTHETIC. Product claims are limited to what the app
+// does today (docs/marketing/PULSEOS_PUBLIC_CLAIMS.md); provider-dependent behaviour is always worded "when your provider is connected".
 
 export const NAV_LINKS = [
   { label: "Product", href: "#product" },
-  { label: "How it Works", href: "#how-it-works" },
-  { label: "For Hospitals", href: "#for-hospitals" },
+  { label: "How it works", href: "#journey" },
+  { label: "For hospitals", href: "#roles" },
   { label: "Integrations", href: "#integrations" },
-  { label: "Resources", href: "#resources" },
 ] as const;
 
-/** Where a visitor sends demo requests. Nothing is invented: unset means the form says so instead of dropping the request. */
+/** Where demo requests go. Unset means the form says so instead of dropping the request. */
 export const DEMO_REQUEST_EMAIL = process.env.NEXT_PUBLIC_DEMO_REQUEST_EMAIL?.trim() || "";
 
+/** The hook: "your report says 42 enquiries". Synthetic, labelled as such on the page. */
+export const HOOK_STAGES = [
+  { label: "Enquiries", count: 42 },
+  { label: "Appointments booked", count: 27 },
+  { label: "Visits attended", count: 21 },
+  { label: "Consultations completed", count: 18 },
+  { label: "Procedures advised", count: 9 },
+  { label: "Procedures scheduled", count: 6 },
+  { label: "Procedures done", count: 4 },
+] as const;
+
+/** Hero + owner dashboard funnel (a 30-day hospital view). */
 export const FUNNEL_STAGES = [
   { key: "enquiries", label: "Enquiries", count: 143 },
   { key: "booked", label: "Appointments booked", count: 91 },
@@ -23,18 +33,24 @@ export const FUNNEL_STAGES = [
   { key: "done", label: "Procedures done", count: 14 },
 ] as const;
 
-export const SOURCE_OUTCOMES = [
-  { source: "Google", enquiries: 40, visits: 18, consultations: 11, procedures: 5 },
-  { source: "Instagram", enquiries: 35, visits: 12, consultations: 6, procedures: 1 },
-  { source: "Website", enquiries: 18, visits: 9, consultations: 7, procedures: 3 },
-  { source: "Phone", enquiries: 31, visits: 22, consultations: 20, procedures: 4 },
+export const SOURCE_ROWS = [
+  { source: "Google", enquiries: 52, visits: 31, consultations: 24, procedures: 6 },
+  { source: "Meta", enquiries: 38, visits: 17, consultations: 12, procedures: 2 },
+  { source: "Website", enquiries: 21, visits: 13, consultations: 11, procedures: 3 },
+  { source: "Phone", enquiries: 32, visits: 24, consultations: 21, procedures: 3 },
 ] as const;
 
-export const SERVICE_OUTCOMES = [
+export const SERVICE_ROWS = [
   { service: "Cataract", enquiries: 52, advised: 14 },
   { service: "Oculoplasty", enquiries: 31, advised: 8 },
   { service: "Laser vision correction", enquiries: 27, advised: 7 },
   { service: "Squint", enquiries: 19, advised: 5 },
+] as const;
+
+export const DEMOGRAPHICS = [
+  { dimension: "Age group", rows: [["18–30", 24], ["31–45", 38], ["46–60", 46], ["60+", 35]] },
+  { dimension: "Area", rows: [["Whitefield", 33], ["Jayanagar", 28], ["HSR Layout", 24], ["Hebbal", 19]] },
+  { dimension: "Gender", rows: [["Female", 78], ["Male", 65]] },
 ] as const;
 
 export const TEAM_ROWS = [
@@ -43,179 +59,130 @@ export const TEAM_ROWS = [
   { name: "Arun", enquiries: 35, followUps: "Up to date" },
 ] as const;
 
-export const SOURCES = ["Meta Ads", "Google", "Website", "Phone", "WhatsApp", "Walk-in", "Referral"] as const;
-export const ARTIFACTS = ["Spreadsheet", "Notebook", "Call log", "WhatsApp chats", "Appointment book"] as const;
-
-export const JOURNEY_STAGES = [
-  {
-    key: "enquiry",
-    label: "Enquiry",
-    title: "Google · Cataract",
-    lines: ["Enquiry created from Google", "Assigned to Shivani", "Source and service saved on the journey"],
-    tone: "primary",
-    status: "New",
-  },
-  {
-    key: "followup",
-    label: "Follow-up",
-    title: "Call logged",
-    lines: ["Patient asked about timings", "Next action: call tomorrow · 11:00 AM", "Owner: Shivani"],
-    tone: "warning",
-    status: "Next action set",
-  },
-  {
-    key: "appointment",
-    label: "Appointment",
-    title: "Confirmed · 10 Oct · 10:30 AM",
-    lines: ["Cataract consultation with Dr. Menon", "Booked while on the call", "Confirmation and reminder planned*"],
-    tone: "primary",
-    status: "Confirmed",
-  },
-  {
-    key: "visit",
-    label: "Visit",
-    title: "Waiting · 8 min",
-    lines: ["Checked in at 10:22 AM", "Front desk and doctor see the same status", "Next step: send to doctor"],
-    tone: "warning",
-    status: "Waiting",
-  },
-  {
-    key: "consultation",
-    label: "Consultation",
-    title: "Completed",
-    lines: ["Seen by Dr. Menon at 10:41 AM", "Outcome recorded on the journey", "Operational view only. Clinical notes stay in your EMR"],
-    tone: "success",
-    status: "Completed",
-  },
-  {
-    key: "procedure",
-    label: "Procedure",
-    title: "Cataract surgery advised",
-    lines: ["Decision pending with the patient", "Source Google stays attached", "Marketing can finally see this conversion"],
-    tone: "primary",
-    status: "Advised",
-  },
-  {
-    key: "recall",
-    label: "Follow-up",
-    title: "Coordinator follow-up due tomorrow",
-    lines: ["Task owner: Shivani", "Due tomorrow · 11:00 AM", "Full history one tap away"],
-    tone: "warning",
-    status: "Due tomorrow",
-  },
+/** "What a lead report shows" vs what PulseOS shows. Illustrative data. */
+export const ATTRIBUTION = [
+  { source: "Google", leads: 40, appointments: 24, consultations: 18, procedures: 6 },
+  { source: "Instagram", leads: 32, appointments: 12, consultations: 7, procedures: 1 },
+  { source: "Website", leads: 18, appointments: 11, consultations: 9, procedures: 3 },
 ] as const;
 
-export const TIMELINE_EVENTS = [
-  { time: "09:42", title: "Lead created", detail: "Google · Oculoplasty", kind: "lead" },
-  { time: "09:48", title: "Incoming call", detail: "Patient asked about eye-bag treatment", kind: "call" },
-  { time: "09:50", title: "Appointment confirmed", detail: "Tomorrow · 11:30 AM", kind: "appt" },
-  { time: "Next day 11:26", title: "Patient checked in", detail: "Waiting", kind: "visit" },
-  { time: "11:38", title: "Sent to doctor", detail: "With doctor", kind: "visit" },
-  { time: "12:02", title: "Consultation completed", detail: "Dr. Bhat", kind: "consult" },
-  { time: "12:05", title: "Procedure advised", detail: "Upper eyelid surgery · decision pending", kind: "proc" },
-] as const;
+export const SPREADSHEET = {
+  columns: ["Name", "Phone", "Day 1", "Day 2", "Feedback Day 1", "Follow-up Date", "Final Feedback"],
+  rows: [
+    ["Savitha M.", "98xxx 10234", "Called", "Called", "No response", "—", "No response"],
+    ["Ravi K.", "90xxx 55871", "Called", "—", "Call tomorrow", "07 Oct", "Booked"],
+    ["Pooja N.", "97xxx 22418", "Called", "Called", "Interested", "08 Oct", "Visited"],
+    ["Imran S.", "99xxx 70352", "Called", "—", "No response", "—", "—"],
+    ["Latha R.", "88xxx 41096", "Called", "Called", "Call tomorrow", "09 Oct", "Booked"],
+  ],
+} as const;
 
-export const PAIN_POINTS = [
-  { key: "followups", title: "Leads come in. Follow-ups disappear.", body: "A callback promised on Monday is nobody's job by Wednesday." },
-  { key: "showed", title: "Appointments are booked, but nobody knows who actually showed up.", body: "Booked is not the same as arrived." },
-  { key: "report", title: "Your marketing report stops at leads.", body: "Lead counts say nothing about consultations or procedures." },
-  { key: "phones", title: "Patient conversations live inside different phones.", body: "Calls, chats and walk-ins end up in five places." },
-  { key: "coordinator", title: "One coordinator knows the history. The rest of the team doesn't.", body: "When they are absent, the context is gone." },
-  { key: "conversion", title: "Procedure advice happens in consultation, but marketing never sees the conversion.", body: "The source that actually fills your OT stays invisible." },
+export const OLD_WAY_TIMELINE = [
+  { time: "10:12", title: "Enquiry · Google", detail: "Cataract · assigned to Shivani" },
+  { time: "10:20", title: "Call connected", detail: "No response → call tomorrow 11:00 AM" },
+  { time: "Next day", title: "Call connected", detail: "Interested → appointment booked" },
+  { time: "Tue 10:30", title: "Visited", detail: "Consultation completed" },
+  { time: "Tue 11:05", title: "Procedure advised", detail: "Next action: coordinator follow-up" },
 ] as const;
 
 export const ROLES = [
   {
     key: "owner",
     tab: "Owner",
-    eyebrow: "For the owner",
-    headline: "Stop asking your team for updates. See the hospital journey yourself.",
-    benefits: ["Which source creates consultations, not just leads", "Which service creates procedures", "Where patients drop off, and which follow-ups are overdue"],
+    headline: "See the hospital journey without chasing updates.",
+    body: "From the source of an enquiry to the procedure that followed, on one screen.",
+    points: ["Source → procedure, not just source → lead", "Services that turn into procedures", "Follow-ups that are overdue, and who owns them"],
   },
   {
     key: "frontdesk",
-    tab: "Front Desk",
-    eyebrow: "For your front desk",
-    headline: "Less clicking. Less writing. A clearer clinic day.",
-    benefits: ["Check in puts the patient in the waiting queue automatically", "Send to doctor in one tap", "No paper queue. Everyone sees the same patient state"],
+    tab: "Front desk",
+    headline: "Run today's patient flow without paper queues.",
+    body: "Everyone sees the same state for the same patient.",
+    points: ["Check in puts the patient in the waiting queue", "Send to doctor in one tap", "No-shows surface for recovery"],
   },
   {
     key: "coordinator",
     tab: "Coordinator",
-    eyebrow: "For patient coordinators",
-    headline: "Every follow-up has an owner and a next action.",
-    benefits: ["Log the call, set the next action, book the appointment in one place", "Follow-up is a task with an owner, a date, a time and history", "No more spreadsheet columns to maintain"],
+    headline: "Every patient has an owner. Every follow-up has a next action.",
+    body: "Log the call, set the next step, book the appointment. In one place.",
+    points: ["No answer → call tomorrow at 11 AM", "Book the appointment directly from the call", "The full history is one tap away"],
   },
   {
     key: "doctor",
     tab: "Doctor",
-    eyebrow: "For the doctor",
-    headline: "See who's coming. Who's waiting. And why they're here.",
-    benefits: ["Time, patient, service and status on one clean planner", "Waiting time visible at a glance", "No marketing dashboard. Not clinical charting either"],
+    headline: "Know who's next and why they're here.",
+    body: "A clean planner of the patients coming to you. No marketing metrics, no charting.",
+    points: ["Time, patient, service, status", "Waiting time at a glance", "Clinical notes stay in your EMR"],
   },
 ] as const;
 
-export const FRONT_DESK_QUEUE = [
-  { time: "10:30", patient: "Anil Joshi", service: "Cataract consultation", status: "Waiting", tone: "warning", wait: "8 min", next: "Send to doctor" },
-  { time: "10:45", patient: "Zoya Khan", service: "Laser vision correction", status: "Checked in", tone: "warning", wait: "2 min", next: "Move to waiting" },
-  { time: "11:00", patient: "Pallavi Nayak", service: "Oculoplasty", status: "With doctor", tone: "primary", wait: "", next: "" },
-  { time: "09:30", patient: "Bhaskar Rao", service: "Cataract consultation", status: "Completed", tone: "success", wait: "", next: "" },
+export const FRONT_DESK_FLOW = ["Check in", "Waiting", "Send to doctor", "Consultation done"] as const;
+
+export const FRONT_DESK_ROWS = [
+  { time: "10:30", patient: "Anil Joshi", service: "Cataract consultation", status: "Waiting · 8 min", tone: "warning", next: "Send to doctor" },
+  { time: "10:45", patient: "Zoya Khan", service: "Laser vision correction", status: "Confirmed", tone: "neutral", next: "Check in" },
+  { time: "11:00", patient: "Pallavi Nayak", service: "Oculoplasty", status: "With doctor", tone: "primary", next: "" },
+  { time: "09:30", patient: "Bhaskar Rao", service: "Cataract consultation", status: "Completed", tone: "success", next: "" },
 ] as const;
 
 export const PLANNER_ROWS = [
   { time: "10:30 AM", patient: "Anil Joshi", service: "Cataract consultation", status: "Waiting · 8 min", tone: "warning" },
-  { time: "10:45 AM", patient: "Zoya Khan", service: "Laser vision correction", status: "Checked in", tone: "warning" },
+  { time: "10:45 AM", patient: "Zoya Khan", service: "Laser vision correction", status: "Confirmed", tone: "neutral" },
   { time: "11:15 AM", patient: "Harish Bhat", service: "Squint review", status: "Confirmed", tone: "neutral" },
-  { time: "11:30 AM", patient: "Meera Pillai", service: "Oculoplasty", status: "Confirmed", tone: "neutral" },
+  { time: "11:30 AM", patient: "Meera Pillai", service: "Oculoplasty", status: "Booked", tone: "neutral" },
   { time: "12:00 PM", patient: "Tanvi Shetty", service: "Cataract follow-up", status: "Booked", tone: "neutral" },
 ] as const;
 
 export const CRM_FIELDS = [
-  { key: "phone", name: "Phone", required: true, filterable: true, usedIn: "Lead, Patient", locked: true },
-  { key: "name", name: "Name", required: false, filterable: true, usedIn: "Lead, Patient", locked: false },
-  { key: "area", name: "Area / Locality", required: false, filterable: true, usedIn: "Lead, Patient", locked: false },
-  { key: "dob", name: "Date of Birth", required: false, filterable: false, usedIn: "Patient", locked: false },
+  { key: "patientType", name: "Patient Type", detail: "New / existing patient", on: true, locked: false },
+  { key: "area", name: "Area", detail: "Locality of the patient", on: true, locked: false },
+  { key: "dob", name: "Date of Birth", detail: "Used for age group", on: false, locked: false },
+  { key: "gender", name: "Gender", detail: "Used in who-is-enquiring", on: false, locked: false },
 ] as const;
 
-export const COMPARISON = [
-  {
-    key: "ivr",
-    name: "Calling / IVR",
-    handles: ["Calls", "Routing", "Recording"],
-    missing: "The full patient journey after the call",
-  },
-  {
-    key: "crm",
-    name: "General CRM",
-    handles: ["Leads", "Tasks", "Pipeline"],
-    missing: "Hospital-specific visit and treatment workflow",
-  },
-  {
-    key: "emr",
-    name: "EMR / HMIS",
-    handles: ["Clinical records", "Prescriptions", "Billing", "Hospital administration"],
-    missing: "The marketing-to-patient engagement journey",
-  },
-  {
-    key: "pulse",
-    name: "PulseOS",
-    handles: ["Enquiry", "Call", "Follow-up", "Appointment", "Visit", "Consultation", "Treatment", "Source attribution"],
-    missing: "",
-  },
+export const FIRST_ENQUIRY_FIELDS = ["Phone", "Name", "New / existing", "Service", "Source"] as const;
+export const LATER_FIELDS = ["UID", "Address", "PIN", "Area", "Service-specific details"] as const;
+
+export const SYSTEM_ROLES = [
+  { name: "Calling / IVR", great: "Receiving and routing calls.", adds: "What happened after the call." },
+  { name: "General CRM", great: "Leads and sales tasks.", adds: "The hospital-specific patient workflow." },
+  { name: "EMR / HMIS", great: "Clinical and hospital records.", adds: "The operational patient journey around care." },
 ] as const;
 
-export const PRINCIPLES = [
-  "One patient, multiple journeys.",
-  "Every interaction has context.",
-  "Every follow-up has a next action.",
-  "Clinical systems stay clinical. PulseOS manages the operational journey.",
+export const ARRIVAL = ["Meta", "Google", "Website", "Phone", "WhatsApp", "Walk-in", "Referral"] as const;
+export const CORE = ["Enquiry", "Patient", "Calls", "Follow-ups", "Appointment", "Visit", "Consultation", "Treatment journey", "Analytics"] as const;
+export const EXISTING_STACK = ["Calling / IVR", "EMR / HMIS", "Billing", "Clinical systems"] as const;
+
+/** Integration states shown publicly. "Connected" is never used: a hospital connects its own providers. */
+export type IntegrationState = "Works today" | "Integration-ready" | "On request";
+export const INTEGRATIONS: { category: string; items: string; state: IntegrationState; note: string }[] = [
+  { category: "Calling", items: "Manual Log Call, Runo", state: "Integration-ready", note: "Log a call by hand today. Call records and missed-call callbacks arrive when your hospital connects its calling provider." },
+  { category: "Messaging", items: "WhatsApp Business", state: "Integration-ready", note: "Confirmations and reminders are planned in PulseOS and sent when your WhatsApp account is connected." },
+  { category: "Website", items: "Website enquiry form", state: "Integration-ready", note: "A protected intake endpoint creates the patient and journey when your website posts to it." },
+  { category: "Ads", items: "Google Ads, Meta Ads", state: "Integration-ready", note: "Read-only spend and campaign reporting. Provider conversions are never counted as PulseOS outcomes." },
+  { category: "EMR / HMIS", items: "Your existing system", state: "On request", note: "PulseOS works alongside your EMR. Integration depends on what your system supports." },
+  { category: "Walk-in & referral", items: "Add Lead", state: "Works today", note: "Enter walk-ins and referrals in seconds with the source attached." },
+];
+
+export const PROOF = [
+  "One patient. Multiple journeys.",
+  "Role-based workflows for owner, front desk, coordinator and doctor.",
+  "Hospital-configurable intake.",
+  "Source-to-procedure visibility.",
+  "Built around real front-desk workflows.",
 ] as const;
 
 export const SECURITY_POINTS = [
-  { title: "Role-based access", body: "Owners, admins, coordinators, front desk and doctors each see only what their role allows. Permissions are enforced on the server, not just hidden in the screen." },
-  { title: "Separate hospital data", body: "Each hospital's workspace is kept apart. Your team's access is always derived from their signed-in session." },
-  { title: "Secure sessions", body: "Passwords are stored as one-way hashes and sign-in uses secure, server-managed session cookies." },
-  { title: "Protected integration credentials", body: "Provider keys are stored on the server and are never shown back in the browser. Sensitive changes are recorded in an activity log." },
+  { title: "Role-based access", body: "Each role sees what it is allowed to. Permissions are enforced on the server, not just hidden on screen." },
+  { title: "Separate hospital data", body: "Every hospital's workspace is kept apart, and access always comes from the signed-in session." },
+  { title: "Secure sessions", body: "Passwords are stored as one-way hashes. Sign-in uses secure, server-managed session cookies." },
+  { title: "Protected credentials", body: "Provider keys live on the server and are never shown back in the browser. Sensitive changes are logged." },
 ] as const;
 
-export const INDIA_REALITIES = ["Phone-first enquiries", "WhatsApp conversations", "Walk-ins", "Referrals and multiple lead sources", "Front desk and patient coordinators", "Single-doctor clinics to larger hospitals", "Services configured per hospital"] as const;
+export const FAQ = [
+  { q: "Do we have to replace our EMR or HMIS?", a: "No. PulseOS handles the patient engagement and operational journey around your clinical systems. Prescriptions, investigations, clinical notes and billing stay where they are." },
+  { q: "Does it work with WhatsApp and our calling provider?", a: "You can log every call and enquiry by hand from day one. WhatsApp confirmations and reminders, and call records from a calling provider, switch on when your hospital connects its own accounts." },
+  { q: "Can we change what the front desk has to fill in?", a: "Yes. Choose which fields appear on Add Lead, which are required and which can be used as filters. Services, lead sources and clinic hours are yours to set." },
+  { q: "Who can see what?", a: "Owners and admins see performance. Coordinators see their follow-ups and journeys. Front desk sees the day's patient flow. Doctors see their planner. This is enforced on the server." },
+  { q: "Is PulseOS a clinical record system?", a: "No, and it does not try to be. It is the operational layer: enquiry, call, follow-up, appointment, visit, consultation outcome and treatment follow-up." },
+] as const;

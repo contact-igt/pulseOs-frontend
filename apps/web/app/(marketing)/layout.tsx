@@ -3,16 +3,16 @@ import { MarketingNav } from "../../components/marketing/MarketingNav";
 import { MarketingFooter } from "../../components/marketing/MarketingFooter";
 
 export const metadata: Metadata = {
-  title: { absolute: "PulseOS — Patient Engagement & Hospital CRM Platform" },
-  description: "Track hospital enquiries, calls, follow-ups, appointments, consultations and treatment journeys in one connected patient engagement platform.",
-  keywords: ["hospital CRM India", "healthcare CRM", "patient engagement platform", "hospital lead management software", "patient journey management", "hospital appointment and follow-up software"],
+  title: { absolute: "PulseOS — Patient Engagement & Hospital Operations Platform" },
+  description: "Track patient enquiries, calls, follow-ups, appointments, consultations and procedures in one connected hospital patient journey.",
+  keywords: ["hospital patient engagement platform", "hospital CRM", "hospital lead management", "patient journey management", "hospital follow-up software", "hospital appointment management", "healthcare CRM India"],
   openGraph: {
     type: "website",
     siteName: "PulseOS",
-    title: "PulseOS — Patient Engagement & Hospital CRM Platform",
-    description: "From first enquiry to final follow-up, one connected patient journey for hospitals and clinics.",
+    title: "PulseOS — Patient Engagement & Hospital Operations Platform",
+    description: "Know what happened after every patient enquiry: one connected operational view for hospitals and clinics.",
   },
-  twitter: { card: "summary", title: "PulseOS — Patient Engagement & Hospital CRM Platform", description: "One connected patient journey for hospitals and clinics." },
+  twitter: { card: "summary", title: "PulseOS — Patient Engagement & Hospital Operations Platform", description: "One connected patient journey for hospitals and clinics." },
 };
 
 /** Public marketing shell: its own nav and footer, none of the signed-in app chrome (sidebar, dev login, internal nav). */

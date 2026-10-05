@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
+import { Badge, Card } from "@pulseos/ui/src/primitives";
 
 /** One content column for the whole marketing site: ~1240px, 16/24/32px gutters. */
 export const CONTAINER = "mx-auto w-full max-w-[1240px] px-4 sm:px-6 lg:px-8";
 
 export const DEMO_HREF = "#demo";
-export const HOW_HREF = "#how-it-works";
+export const HOW_HREF = "#journey";
 
 export function Eyebrow({ children, className = "" }: { children: ReactNode; className?: string }) {
   return <p className={`text-[13px] font-semibold uppercase tracking-[0.12em] text-brand ${className}`}>{children}</p>;
@@ -32,7 +33,7 @@ export function SectionHead({
   );
 }
 
-export function PrimaryCta({ children = "Book a Live Demo", href = DEMO_HREF, className = "" }: { children?: ReactNode; href?: string; className?: string }) {
+export function PrimaryCta({ children = "Book a live demo", href = DEMO_HREF, className = "" }: { children?: ReactNode; href?: string; className?: string }) {
   return (
     <a
       href={href}
@@ -43,7 +44,7 @@ export function PrimaryCta({ children = "Book a Live Demo", href = DEMO_HREF, cl
   );
 }
 
-export function SecondaryCta({ children = "See How PulseOS Works", href = HOW_HREF, className = "" }: { children?: ReactNode; href?: string; className?: string }) {
+export function SecondaryCta({ children = "See how it works", href = HOW_HREF, className = "" }: { children?: ReactNode; href?: string; className?: string }) {
   return (
     <a
       href={href}
@@ -75,7 +76,7 @@ export function BrowserFrame({ screen, children, className = "", label }: { scre
 /** A framed, UI-scale card used inside product screens. */
 export function UiCard({ title, meta, children, className = "" }: { title?: ReactNode; meta?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <div className={`rounded-card border border-line bg-white ${className}`}>
+    <Card className={className}>
       {title && (
         <div className="flex items-baseline justify-between gap-3 border-b border-line px-3.5 py-2.5">
           <div className="text-[13px] font-semibold tracking-tight text-ink">{title}</div>
@@ -83,23 +84,16 @@ export function UiCard({ title, meta, children, className = "" }: { title?: Reac
         </div>
       )}
       {children}
-    </div>
+    </Card>
   );
 }
 
-type Tone = "neutral" | "warning" | "danger" | "primary" | "success";
-const TONES: Record<Tone, string> = {
-  neutral: "bg-neutral-100 text-neutral-700 ring-neutral-200",
-  warning: "bg-warning-100 text-warning-700 ring-warning-500/25",
-  danger: "bg-danger-100 text-danger-700 ring-danger-500/25",
-  primary: "bg-primary-100 text-primary-700 ring-primary-200",
-  success: "bg-accent-100 text-accent-700 ring-accent-500/25",
-};
-
-/** Same status-pill language as the app (text always carries the meaning, colour only reinforces it). */
-export function Pill({ tone = "neutral", children, className = "" }: { tone?: Tone; children: ReactNode; className?: string }) {
+/** The app's own status badge (text carries the meaning, colour only reinforces it). */
+export function Pill({ tone = "neutral", children, className = "" }: { tone?: "neutral" | "warning" | "danger" | "primary" | "success"; children: ReactNode; className?: string }) {
   return (
-    <span className={`inline-flex w-fit shrink-0 items-center whitespace-nowrap rounded-chip px-2 py-0.5 text-[11px] font-medium leading-4 ring-1 ring-inset ${TONES[tone]} ${className}`}>{children}</span>
+    <Badge tone={tone} className={className}>
+      {children}
+    </Badge>
   );
 }
 

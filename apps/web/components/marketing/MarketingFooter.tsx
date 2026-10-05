@@ -4,8 +4,8 @@ import { CONTAINER } from "./ui";
 
 const LINKS = [
   { label: "Product", href: "#product" },
-  { label: "How it Works", href: "#how-it-works" },
-  { label: "For Hospitals", href: "#for-hospitals" },
+  { label: "How it works", href: "#journey" },
+  { label: "For hospitals", href: "#roles" },
   { label: "Security", href: "#security-title" },
   { label: "Contact", href: "#demo" },
 ];
