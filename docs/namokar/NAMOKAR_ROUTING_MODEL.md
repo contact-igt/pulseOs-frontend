@@ -3,10 +3,10 @@
 ## Public
 | URL | What |
 |---|---|
-| `/login/namokar` | Namokar's own sign-in — the **standard tenant-branded login** (`/login/<slug>`, the same page for every hospital; see [tenant-branded-login](../tenant-branded-login.md)). "PulseOS × Namokar", *V1 Pilot*, email / password / Remember me. No hospital choice, no Developer access, no create account. Unknown names (`/login/anything`) are a real 404 with a plain "Workspace not found". |
+| `/login/namokar-v1` / `/login/namokar-v2` | Namokar's own sign-in — the **standard tenant-branded login** (`/login/<slug>`, the same page for every hospital; see [tenant-branded-login](../tenant-branded-login.md)). "PulseOS × Namokar", *V1 Pilot*, email / password / Remember me. No hospital choice, no Developer access, no create account. Unknown names (`/login/anything`) are a real 404 with a plain "Workspace not found". |
 | `/login` | The internal development sign-in (Developer access lives only here). Not used by Namokar. |
 
-Signing out, or an expired session, returns a Namokar user to `/login/namokar` (the session carries the hospital's sign-in slug; the last one is remembered in the browser, and only a plain `[a-z0-9-]` slug is ever followed).
+Signing out, or an expired session, returns a Namokar user to their own workspace's page (`/login/namokar-v1` or `/login/namokar-v2`; the old `/login/namokar` redirects to V1) (the session carries the hospital's sign-in slug; the last one is remembered in the browser, and only a plain `[a-z0-9-]` slug is ever followed).
 
 ## Signed in
 | URL | Roles | Notes |

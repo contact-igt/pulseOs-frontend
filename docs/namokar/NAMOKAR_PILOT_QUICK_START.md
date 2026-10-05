@@ -1,6 +1,6 @@
 # PulseOS × Namokar — Quick start
 
-**Sign in:** open the address your administrator gave you (it ends in `/login/namokar`). Use your email and password. Tick *Remember me* only on your own computer.
+**Sign in:** open the address your administrator gave you (it ends in `/login/namokar-v2` for the real pilot, or `/login/namokar-v1` for the practice demo). Use your email and password. Tick *Remember me* only on your own computer.
 
 ## The five things to know
 1. **One enquiry = one Journey.** Click a name in **Leads** to open it. At the top you see who they are, where they came from (**Original source**), where they are now, who owns it and what happens next.

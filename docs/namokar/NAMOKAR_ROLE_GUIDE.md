@@ -1,6 +1,8 @@
 # Who can do what
 
-All roles are scoped to Namokar only. There is no platform-wide account.
+All roles are scoped to one Namokar workspace only (V1 Demo or V2 Pilot — an account of one cannot open the other). There is no platform-wide account.
+
+**The team:** *Front Desk* = Front Desk role; *Shivani* and *Sushil* = Patient Coordinator role (the same permissions — there is no separate "special coordinator" role); *Dr. Poonam Jain* = Doctor. Whoever is looking after a patient is the **Assigned Team Member**; a patient may be Unassigned.
 
 | | Super Admin (owner) | Admin | Front Desk | Coordinator | Doctor |
 |---|---|---|---|---|---|

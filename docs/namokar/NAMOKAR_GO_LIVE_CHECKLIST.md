@@ -2,6 +2,8 @@
 
 The demo workspace (fictional patients, fixture providers) and the real workspace must stay separate. **Never run `pnpm db:seed` against a real database: it deletes every hospital** (it refuses to run on a non-local database or in production, by design).
 
+**The two workspaces:** *V1 Demo* (`/login/namokar-v1`) holds fictional data for training. *V2 Pilot* (`/login/namokar-v2`) is the clean workspace for real entry — it already exists in the local build with configuration only (see [NAMOKAR_V2_PILOT.md](NAMOKAR_V2_PILOT.md)). On a real server, create it with steps A and B below (the seed is local-only), then confirm the **clinic hours** (Mon–Sat 09:00–16:00, Sunday closed, Asia/Kolkata) with Namokar and set them as an administrator: `PUT /clinic-hours` with `{ "clinicHours": { "mon": ["09:00","16:00"], "tue": ["09:00","16:00"], "wed": ["09:00","16:00"], "thu": ["09:00","16:00"], "fri": ["09:00","16:00"], "sat": ["09:00","16:00"], "sun": null } }` (send `null` to remove the restriction). Until hours are set, any time is accepted.
+
 ## A. Create the real workspace (once, by the administrator)
 1. **Sign up the hospital** at `/signup` (Healthcare → Eye / Ophthalmology, edition V1). This creates a *new, empty* Namokar workspace with its own sign-in page `/login/<name>`, one branch, and the owner account (Super Admin) with the owner's own password. The demo workspace is untouched.
 2. **Turn Revenue Tracking off** (a new V1 workspace has it on): as the owner, `PUT /capabilities/REVENUE_TRACKING` with `{ "enabled": false }`, or the **Settings → Features** switch. WhatsApp Inbox is off in V1 by default; WhatsApp Notifications is on.
@@ -14,7 +16,7 @@ The product has no staff screen yet. Run this once per person on the server (the
     STAFF_PASSWORD='<a long password>' pnpm --filter @pulseos/api staff:add -- \
       --hospital <login slug> --role FRONT_DESK --name "Receptionist name" --email name@clinic.example
 
-Roles: `FRONT_DESK` (Receptionist), `PATIENT_COORDINATOR` (run twice for the two coordinators), `DOCTOR` (Dr. Poonam Jain — she becomes the clinic's only doctor automatically), `HOSPITAL_ADMIN`. The owner is the sign-up account. No demo password, no shared logins. Each person should change their password after the first sign-in.
+Roles: `FRONT_DESK` (Receptionist), `PATIENT_COORDINATOR` (run twice: Shivani and Sushil; "Special Coordinator" is only a job title and has no separate role), `DOCTOR` (Dr. Poonam Jain — she becomes the clinic's only doctor automatically), `HOSPITAL_ADMIN`. The owner is the sign-up account. No demo password, no shared logins. Each person should change their password after the first sign-in.
 
 ## C. Connections (only with the hospital's own credentials)
 5. **WhatsApp Business:** Integrations → WhatsApp: the business account, approved templates, access token. Send one real test confirmation to a staff phone. Until then messages show as fixture/blocked.

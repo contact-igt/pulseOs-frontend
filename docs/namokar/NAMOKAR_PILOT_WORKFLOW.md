@@ -65,7 +65,7 @@ sequenceDiagram
 
 ## No-show
 
-Marked by Front Desk / Coordinator with a reason → exactly **one** *Appointment Risk* follow-up for the journey's owner (a repeat click or a second no-show never doubles it) → it appears in **My Work** → the lead shows *No-show* and is listed under **Leads → Missed Visit** until a new visit is booked.
+Marked by Front Desk / Coordinator with a reason → exactly **one** *Appointment Risk* follow-up for the journey's Assigned Team Member (a repeat click or a second no-show never doubles it) → it appears in **My Work** → the lead shows *No-show* and is listed under **Leads → Missed Visit** until a new visit is booked.
 
 ## Duplicates and original source
 
