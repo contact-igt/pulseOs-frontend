@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
 import { AddLeadDrawer, AddPatientDrawer, AddTaskDrawer, NewAppointmentDrawer } from "@pulseos/ui";
@@ -38,6 +39,7 @@ type DrawerState =
 
 export function QuickCreateProvider({ role, children }: { role: Role; children: ReactNode }) {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const [drawer, setDrawer] = useState<DrawerState>({ kind: "none" });
   const timeZone = useHospitalTimeZone();
 
@@ -95,6 +97,7 @@ export function QuickCreateProvider({ role, children }: { role: Role; children: 
               onCheckSlot={(doctorId, scheduledAt) => api.appointmentSlotCheck(doctorId, scheduledAt)}
               onSubmit={api.createLead}
               onCreated={invalidateAfterCreate}
+              onConfigureFields={role === "SUPER_ADMIN" || role === "HOSPITAL_ADMIN" ? () => { setDrawer({ kind: "none" }); router.push("/settings?section=fields"); } : undefined}
             />
           )}
 

@@ -67,6 +67,7 @@ export function AddLeadDrawer({
   onCheckSlot,
   onSubmit,
   onCreated,
+  onConfigureFields,
 }: {
   open: boolean;
   onClose: () => void;
@@ -86,6 +87,8 @@ export function AddLeadDrawer({
   onCheckSlot?: (doctorId: string, scheduledAt: string) => Promise<{ available: boolean; inPast: boolean; outsideHours?: boolean }>;
   onSubmit: (input: CreateLeadInput) => Promise<CreateLeadResult>;
   onCreated?: (result: CreateLeadResult) => void;
+  /** Only passed to people who may configure the hospital (Super Admin / Admin): a shortcut to Settings → CRM Fields. */
+  onConfigureFields?: () => void;
 }) {
   const [form, setForm] = useState<LeadFormValues>(() => emptyForm((defaultSource && leadSources.find((s) => s.bucket === defaultSource)?.key) || leadSources[0]?.key || "", lookups.branches.length === 1 ? lookups.branches[0]!.id : "", lookups.doctors.length === 1 ? lookups.doctors[0]!.id : ""));
   // One branch / one doctor: nothing to choose, so it is pre-selected above and the field is not shown.
@@ -212,6 +215,11 @@ export function AddLeadDrawer({
           <div>
             <h2 className="text-lg font-semibold text-slate-900">Add Lead</h2>
             <p className="mt-0.5 text-xs text-neutral-500">Who called, what they need, and what happens next.</p>
+            {onConfigureFields && (
+              <button type="button" onClick={onConfigureFields} className="mt-1 min-h-11 text-xs font-medium text-primary-700 hover:underline sm:min-h-0" data-testid="add-lead-configure-fields">
+                Change what this form asks →
+              </button>
+            )}
           </div>
           <button type="button" onClick={onClose} className="flex h-11 w-11 items-center justify-center rounded text-ink-2 hover:bg-neutral-100 hover:text-slate-900 sm:h-8 sm:w-8" aria-label="Close" data-testid="add-lead-drawer-close">
             <X size={16} aria-hidden="true" />

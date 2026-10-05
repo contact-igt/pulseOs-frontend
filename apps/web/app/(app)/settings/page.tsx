@@ -191,7 +191,7 @@ export default function SettingsPage() {
         </Panel>
       )}
       {section === "fields" && canManage && (
-        <Panel title="CRM Fields" subtitle="What you capture about each enquiry, and where it appears">
+        <Panel title="CRM Fields" subtitle="Choose what information your team collects and where each field appears.">
           {specialties.isLoading && <Skeleton className="h-24" />}
           {specialties.isError && <ErrorState message="Could not load services." />}
           {specialties.data && <CrmFieldsSection services={specialties.data} />}
@@ -249,6 +249,24 @@ export default function SettingsPage() {
 
       {section === "services" && (
         <Panel title="Services" subtitle="Which services Add Lead offers">
+          {canManage && (
+            <nav aria-label="Lead intake setup" className="mb-4 rounded-card border border-line bg-surface-info/60 p-3" data-testid="intake-shortcuts">
+              <p className="text-xs font-semibold text-ink">Set up how your team takes in leads</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {[
+                  ["fields", "CRM Fields", "What to ask, and where it appears"],
+                  ["sources", "Lead Sources", "Where patients come from"],
+                  ["hours", "Clinic Hours", "When appointments can be booked"],
+                  ["appearance", "Appearance", "How solid the interface looks"],
+                ].map(([key, label, hint]) => (
+                  <button key={key} type="button" onClick={() => urlFilters.set({ section: key, service: undefined })} className="min-h-11 rounded-control border border-line-strong bg-surface px-3 text-left text-xs transition hover:bg-primary-50 sm:min-h-0 sm:py-1.5" data-testid={`intake-shortcut-${key}`}>
+                    <span className="block font-medium text-primary-700">{label}</span>
+                    <span className="block text-[11px] text-ink-2">{hint}</span>
+                  </button>
+                ))}
+              </div>
+            </nav>
+          )}
           {(specialties.isLoading || session.isLoading) && <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12" />)}</div>}
           {specialties.isError && <ErrorState message="Could not load specialties." />}
           {canManage && (
