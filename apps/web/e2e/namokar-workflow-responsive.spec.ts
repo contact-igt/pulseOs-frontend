@@ -88,6 +88,30 @@ test.describe("Configurable workflow screens: responsive", () => {
         for (const id of ["log-call-appt-date", "log-call-appt-time", "log-call-appt-confirmed", "log-call-save"]) expect((await sheet.getByTestId(id).boundingBox())!.height, id).toBeGreaterThanOrEqual(43.5);
       }
       await shot("log-call");
+      await page.keyboard.press("Escape");
+
+      // Log outcome on a follow-up with the visit booked in the same save.
+      await page.goto(`/journeys/${lead.journeyId}`);
+      await page.getByTestId("journey-log-outcome").click();
+      const outcome = page.getByTestId("log-outcome");
+      await outcome.getByTestId("log-outcome-choice-interested").click();
+      await outcome.getByTestId("log-outcome-book").check();
+      await expect(outcome.getByTestId("log-outcome-appt-time")).toBeVisible();
+      expect(await pageOverflow(page), "Log outcome").toBeLessThanOrEqual(0);
+      expect(await dialogOverflow(page, "log-outcome"), "Log outcome drawer").toBeLessThanOrEqual(0);
+      if (size.width < 768) {
+        for (const id of ["log-outcome-appt-date", "log-outcome-appt-time", "log-outcome-save"]) expect((await outcome.getByTestId(id).boundingBox())!.height, id).toBeGreaterThanOrEqual(43.5);
+      }
+      await shot("log-outcome");
+      await page.keyboard.press("Escape");
+
+      // Settings tab strip: with overflow, the scroll buttons are phone-sized and the page never scrolls sideways.
+      await page.goto("/settings");
+      await expect(page.getByRole("tablist", { name: "Settings sections" })).toBeVisible();
+      expect(await pageOverflow(page), "Settings tabs").toBeLessThanOrEqual(0);
+      const more = page.getByTestId("tabs-scroll-right");
+      if ((await more.count()) > 0 && size.width < 768) expect((await more.first().boundingBox())!.height, "scroll button").toBeGreaterThanOrEqual(43.5);
+      await shot("settings-tabs");
       await context.close();
     });
   }
