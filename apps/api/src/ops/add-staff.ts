@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { fileURLToPath } from "node:url";
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { Db } from "../db/client.js";
 import { branches, tenants, users } from "../db/schema.js";
 import { hashPassword } from "../domain/auth/auth.service.js";
