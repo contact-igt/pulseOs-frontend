@@ -2,11 +2,11 @@ import { emitIntegrationEvent } from "../integration/domain-events.js";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { Db } from "../../db/client.js";
-import { branches, callIntelligence, calls, communicationEndpoints, connectors, crmOutcomes, journeys, patients, scheduleResources, tasks, timelineEvents, users } from "../../db/schema.js";
+import { callIntelligence, calls, communicationEndpoints, connectors, crmOutcomes, journeys, patients, tasks, timelineEvents, users } from "../../db/schema.js";
 import { hasPermission, type CallDirection, type CallFeedbackInput, type CallIntelligenceVm, type CallStatsVm, type CallStatus, type CallVm, type LogCallInput, type LogCallResult, type Role, type SummaryMode } from "@pulseos/types";
 import { findActiveOutcome, nextStage } from "../crm/crm-outcome.service.js";
 import { scheduledEvent } from "../task/task.service.js";
-import { applyAppointmentAction, createAppointment } from "../appointment/appointment.service.js";
+import { applyAppointmentAction, createAppointment, resolveBookingTargets } from "../appointment/appointment.service.js";
 
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 type Result<T = object> = ({ ok: true } & T) | { ok: false; reason: string };
@@ -238,11 +238,9 @@ export async function logManualCall(db: Db, tenantId: string, actor: Actor, jour
   let booking: { doctorId: string; branchId: string; scheduledAt: string; reason: string; confirmed: boolean } | null = null;
   if (wantsAppointment) {
     const a = input.appointment!;
-    const doctorId = a.doctorId ?? (await soleId(db.select({ id: scheduleResources.id }).from(scheduleResources).where(and(eq(scheduleResources.tenantId, tenantId), eq(scheduleResources.isActive, true))).limit(2)));
-    const branchId = a.branchId ?? (await soleId(db.select({ id: branches.id }).from(branches).where(eq(branches.tenantId, tenantId)).limit(2)));
-    if (!doctorId) return { ok: false, reason: "doctor_required" };
-    if (!branchId) return { ok: false, reason: "branch_required" };
-    booking = { doctorId, branchId, scheduledAt: a.scheduledAt.trim(), reason: a.reason?.trim() || "Consultation", confirmed: a.confirmed === true };
+    const targets = await resolveBookingTargets(db, tenantId, a);
+    if (!targets.ok) return targets;
+    booking = { doctorId: targets.doctorId, branchId: targets.branchId, scheduledAt: a.scheduledAt.trim(), reason: a.reason?.trim() || "Consultation", confirmed: a.confirmed === true };
   }
   const [patient] = await db.select({ phone: patients.phone }).from(patients).where(and(eq(patients.tenantId, tenantId), eq(patients.id, journey.patientId))).limit(1);
   if (!patient) return { ok: false, reason: "journey_not_found" };
@@ -330,11 +328,6 @@ export async function logManualCall(db: Db, tenantId: string, actor: Actor, jour
     emitIntegrationEvent({ type: status === "completed" ? "call.completed" : "call.missed", tenantId, eventId: `call.${status}:${out.callId}`, occurredAt: occurredAt, data: { callId: out.callId, journeyId, direction: input.direction, origin: "MANUAL" } });
   }
   return { ok: true, ...out, appointmentStatus };
-}
-
-async function soleId(rows: PromiseLike<{ id: string }[]>): Promise<string | null> {
-  const found = await rows;
-  return found.length === 1 ? found[0]!.id : null;
 }
 
 /**

@@ -327,7 +327,7 @@ export const api = {
   appointments: (filters: { branchId?: string; doctorId?: string; status?: AppointmentStatus; date?: string; search?: string } = {}) =>
     request<AppointmentRow[]>(`/appointments${toQuery({ ...filters })}`),
   frontDesk: (opts: { branchId?: string; date?: string } = {}) => request<FrontDeskDashboard>(`/front-desk${toQuery({ ...opts })}`),
-  appointmentAction: (id: string, action: AppointmentAction, reason?: { reasonCode?: AppointmentReasonCode; note?: string }) =>
+  appointmentAction: (id: string, action: AppointmentAction, reason?: { reasonCode?: AppointmentReasonCode; note?: string; queue?: boolean }) =>
     request<AppointmentActionResult>(`/appointments/${id}/action`, { method: "PATCH", body: JSON.stringify({ action, ...reason }) }),
   completeAppointment: (id: string, input: CompleteAppointmentInput = {}) => request<CompleteAppointmentResult>(`/appointments/${id}/complete`, { method: "PATCH", body: JSON.stringify(input) }),
   rescheduleAppointment: (id: string, input: RescheduleAppointmentInput) =>

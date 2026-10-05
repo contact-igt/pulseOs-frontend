@@ -39,7 +39,7 @@ const ACTION_ERROR: Record<string, string> = {
  */
 export function useAppointmentActions({ refresh, onDone }: { refresh: () => void; onDone: () => void }) {
   const timeZone = useHospitalTimeZone();
-  // "Complete consultation" opens the "What happens next?" sheet instead of completing outright.
+  // "Consultation done" opens the "What happens next?" sheet instead of completing outright.
   const [completing, setCompleting] = useState<AppointmentRow | null>(null);
   // The appointment changed on the server: the drawer closes and this notice explains why.
   const [error, setError] = useState<string | null>(null);
@@ -77,7 +77,7 @@ export function useAppointmentActions({ refresh, onDone }: { refresh: () => void
     clearError: useCallback(() => setError(null), []),
     drawerErrorFor: useCallback((id: string | undefined) => (id && drawerError?.id === id ? drawerError.message : null), [drawerError]),
     clearDrawerError: useCallback(() => setDrawerError(null), []),
-    handleAction: useCallback((row: AppointmentRow, action: AppointmentAction, reason?: { reasonCode?: string; note?: string }) => run(row.id, () => api.appointmentAction(row.id, action, reason as { reasonCode?: AppointmentReasonCode; note?: string } | undefined)), [run]),
+    handleAction: useCallback((row: AppointmentRow, action: AppointmentAction, reason?: { reasonCode?: string; note?: string }) => run(row.id, () => api.appointmentAction(row.id, action, { ...(reason as { reasonCode?: AppointmentReasonCode; note?: string } | undefined), ...(action === "check_in" ? { queue: true } : {}) })), [run]),
     completing,
     handleComplete: useCallback((row: AppointmentRow) => setCompleting(row), []),
     closeCompleting: useCallback(() => setCompleting(null), []),

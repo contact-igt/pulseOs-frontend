@@ -90,16 +90,13 @@ test.describe("M6 — appointment lifecycle, completion, risk and surgery", () =
     await expect(ctx).toContainText("Booked");
     // One obvious next step at a time, in plain words.
     const primary = page.getByTestId("appointment-context-primary");
-    await expect(primary).toHaveText("Check in patient");
-    await primary.click();
-    await expect(ctx).toContainText("Checked in");
-    await expect(primary).toHaveText("Move to waiting");
-    await primary.click();
+    await expect(primary).toHaveText("Check in");
+    await primary.click(); // one click: arrived AND waiting
     await expect(ctx).toContainText("Waiting");
     await expect(primary).toHaveText("Send to doctor");
     await primary.click();
     await expect(ctx).toContainText("With doctor");
-    await expect(primary).toHaveText("Complete consultation");
+    await expect(primary).toHaveText("Consultation done");
 
     // The completion step: "What happens next?", nothing chosen yet, so nothing can be saved by accident.
     await primary.click();

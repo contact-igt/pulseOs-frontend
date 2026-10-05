@@ -120,8 +120,8 @@ test.describe("Namokar pilot", () => {
     await expect(owner.getByText(/Namokar/).first()).toBeVisible();
     const session = await api<{ user: { tenantName: string; role: string; loginSlug: string } }>(owner, "GET", "/auth/session");
     expect(session.body.user).toMatchObject({ tenantName: "Namokar Eye & Oculoplasty Centre", role: "SUPER_ADMIN", loginSlug: "namokar-v1" });
-    await owner.getByRole("button", { name: /Dr\. Rajesh Shah/ }).click();
-    await owner.getByRole("button", { name: /log ?out|sign ?out/i }).click();
+    await owner.getByTestId("profile-menu-trigger").click();
+    await owner.getByTestId("logout-button").click();
     await owner.waitForURL(/\/login\/namokar-v1$/);
     await context.close();
   });
@@ -214,14 +214,12 @@ test.describe("Namokar pilot", () => {
     await desk.page.goto(`/journeys/${lead.journeyId}`);
     const ctx = desk.page.getByTestId("appointment-context");
     const primary = desk.page.getByTestId("appointment-context-primary");
-    await expect(primary).toHaveText("Check in patient");
-    await primary.click();
-    await expect(desk.page.getByTestId("journey-operational-status")).toContainText("Checked in");
-    await desk.page.getByTestId("appointment-context-primary").click();
+    await expect(primary).toHaveText("Check in");
+    await primary.click(); // one click: arrived AND waiting
     await expect(desk.page.getByTestId("journey-operational-status")).toContainText("Waiting");
     await desk.page.getByTestId("appointment-context-primary").click();
     await expect(desk.page.getByTestId("journey-operational-status")).toContainText("With doctor");
-    // The front desk's next step is "Complete consultation" too (authorised staff may), but THIS test completes it as the doctor.
+    // The front desk's next step is "Consultation done" too (authorised staff may), but THIS test completes it as the doctor.
     await expect(ctx).toContainText("With doctor");
     await expect(desk.page.getByTestId("journey-progress-attendance")).toHaveAttribute("data-state", "done");
     await expect(desk.page.getByTestId("journey-progress-consultation")).toHaveAttribute("data-state", "current");
@@ -231,7 +229,7 @@ test.describe("Namokar pilot", () => {
     // THIS patient's row (the seeded clinic day has its own patient with the doctor right now; never touch that one).
     const queueRow = doc.page.getByTestId("doctor-queue").locator("li").filter({ hasText: name });
     await expect(queueRow).toBeVisible();
-    await queueRow.getByRole("button", { name: "Complete consultation" }).click();
+    await queueRow.getByRole("button", { name: "Consultation done" }).click();
     const sheet = doc.page.getByTestId("complete-consultation");
     // A doctor is not offered surgery scheduling while completing.
     await expect(sheet.getByTestId("complete-next-surgery")).toHaveCount(0);
@@ -266,7 +264,7 @@ test.describe("Namokar pilot", () => {
     for (const action of ["check_in", "mark_waiting", "send_to_doctor"]) expect((await api(page, "PATCH", `/appointments/${apptId}/action`, { action })).status).toBe(200);
 
     await page.goto(`/journeys/${lead.journeyId}`);
-    await page.getByTestId("appointment-context-primary").click(); // Complete consultation
+    await page.getByTestId("appointment-context-primary").click(); // Consultation done
     const sheet = page.getByTestId("complete-consultation");
     await sheet.getByTestId("complete-next-surgery").check();
     const procedures = sheet.getByTestId("complete-surgery-procedure");

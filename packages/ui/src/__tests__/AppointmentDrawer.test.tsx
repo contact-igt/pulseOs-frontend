@@ -28,11 +28,11 @@ describe("AppointmentDrawer", () => {
 
   it("offers ONE obvious next step per status, in plain words", () => {
     const expected: [AppointmentStatus, string | null][] = [
-      ["scheduled", "Check in patient"], ["confirmed", "Check in patient"], ["checked_in", "Move to waiting"], ["waiting", "Send to doctor"], ["with_doctor", "Complete consultation"], ["completed", null], ["no_show", null], ["cancelled", null],
+      ["scheduled", "Check in"], ["confirmed", "Check in"], ["checked_in", "Move to waiting"], ["waiting", "Send to doctor"], ["with_doctor", "Consultation done"], ["completed", null], ["no_show", null], ["cancelled", null],
     ];
     for (const [status, label] of expected) {
       const { unmount } = render(<AppointmentDrawer appointment={row(status)} onClose={vi.fn()} onAction={vi.fn()} onComplete={vi.fn()} onReschedule={vi.fn()} />);
-      const primaries = ["Check in patient", "Move to waiting", "Send to doctor", "Complete consultation", "Confirm appointment"].filter((l) => screen.queryByRole("button", { name: l }));
+      const primaries = ["Check in", "Move to waiting", "Send to doctor", "Consultation done", "Confirm appointment"].filter((l) => screen.queryByRole("button", { name: l }));
       expect(primaries).toEqual(label ? [label] : []);
       unmount();
     }
@@ -49,13 +49,13 @@ describe("AppointmentDrawer", () => {
     }
   });
 
-  it("the primary button calls the step; Complete consultation opens the completion step instead", () => {
+  it("the primary button calls the step; Consultation done opens the completion step instead", () => {
     const a = setup("scheduled");
-    fireEvent.click(screen.getByRole("button", { name: "Check in patient" }));
+    fireEvent.click(screen.getByRole("button", { name: "Check in" }));
     expect(a.onAction).toHaveBeenCalledWith(expect.objectContaining({ id: "a1" }), "check_in");
     document.body.innerHTML = "";
     const b = setup("with_doctor");
-    fireEvent.click(screen.getByRole("button", { name: "Complete consultation" }));
+    fireEvent.click(screen.getByRole("button", { name: "Consultation done" }));
     expect(b.onComplete).toHaveBeenCalled();
     expect(b.onAction).not.toHaveBeenCalled();
   });
@@ -121,7 +121,7 @@ describe("AppointmentDrawer", () => {
 
   it("hides every step for a read-only viewer", () => {
     setup("scheduled", { readOnly: true });
-    expect(screen.queryByRole("button", { name: "Check in patient" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Check in" })).toBeNull();
     expect(screen.queryByTestId("drawer-action-cancel")).toBeNull();
   });
 

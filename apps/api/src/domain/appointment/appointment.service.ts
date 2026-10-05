@@ -12,6 +12,7 @@ import {
   type AppointmentReasonCode,
   type AppointmentReasonKind,
   type AppointmentRow,
+  type AppointmentOp,
   type AppointmentStatus,
   type CompleteAppointmentInput,
   type CompleteAppointmentResult,
@@ -48,6 +49,22 @@ async function withinClinicHours(db: DbOrTx, tenantId: string, at: Date, timezon
 }
 
 type Result<T = object> = ({ ok: true } & T) | { ok: false; reason: string };
+
+/**
+ * The doctor and branch for a visit booked from another screen (a call, a logged follow-up): as given, or the hospital's ONLY
+ * active doctor / its only branch. Never guessed when there is a choice - the caller is told which one is missing.
+ */
+export async function resolveBookingTargets(db: DbOrTx, tenantId: string, given: { doctorId?: string; branchId?: string }): Promise<Result<{ doctorId: string; branchId: string }>> {
+  const only = async (rows: PromiseLike<{ id: string }[]>) => {
+    const found = await rows;
+    return found.length === 1 ? found[0]!.id : null;
+  };
+  const doctorId = given.doctorId ?? (await only(db.select({ id: scheduleResources.id }).from(scheduleResources).where(and(eq(scheduleResources.tenantId, tenantId), eq(scheduleResources.isActive, true))).limit(2)));
+  if (!doctorId) return { ok: false, reason: "doctor_required" };
+  const branchId = given.branchId ?? (await only(db.select({ id: branches.id }).from(branches).where(eq(branches.tenantId, tenantId)).limit(2)));
+  if (!branchId) return { ok: false, reason: "branch_required" };
+  return { ok: true, doctorId, branchId };
+}
 
 
 // ---------------------------------------------------------------------------
@@ -319,12 +336,13 @@ const ACTION_EVENT: Record<AppointmentAction, string> = {
 };
 
 /** One meaningful Timeline line per step, in the hospital's clock. */
-function actionLine(action: AppointmentAction, at: Date, timezone: string, reasonLabel: string | null, note: string | null): { title: string; description: string | null } {
+function actionLine(action: AppointmentAction | "queue", at: Date, timezone: string, reasonLabel: string | null, note: string | null): { title: string; description: string | null } {
   const t = clock(at, timezone);
   const why = reasonLabel ? `Reason: ${reasonLabel}${note ? ` · ${note}` : ""}` : null;
   switch (action) {
     case "confirm": return { title: "Appointment confirmed", description: null };
     case "check_in": return { title: `Checked in · ${t}`, description: null };
+    case "queue": return { title: `Patient checked in · Waiting · ${t}`, description: null };
     case "mark_waiting": return { title: `Waiting · ${t}`, description: null };
     case "send_to_doctor": return { title: `Consultation started · ${t}`, description: null };
     case "mark_no_show": return { title: "No-show", description: why };
@@ -362,10 +380,14 @@ export async function applyAppointmentAction(
   if (!action || !(action in ACTION_STATUS)) return { ok: false, reason: "invalid_request" };
   const [existing] = await db.select().from(appointments).where(and(eq(appointments.tenantId, tenantId), eq(appointments.id, appointmentId))).limit(1);
   if (!existing) return { ok: false, reason: "appointment_not_found" };
-  const target = ACTION_STATUS[action];
+  // "Check in" from the desk means arrived AND waiting: one validated step, one transaction (never two requests that could half-apply).
+  // A legacy visit already checked in but not yet queued just joins the queue.
+  const queue = action === "check_in" && input.queue === true;
+  const target: AppointmentStatus = queue ? "waiting" : ACTION_STATUS[action];
   if (existing.status === target) return { ok: true, status: target, alreadyApplied: true };
   if (existing.status === "completed" || (existing.status === "cancelled" && action !== "cancel")) return { ok: false, reason: "appointment_closed" };
-  if (!APPOINTMENT_TRANSITIONS[existing.status].includes(action)) return { ok: false, reason: "invalid_transition" };
+  const allowedOp: AppointmentOp = queue && existing.status === "checked_in" ? "mark_waiting" : action;
+  if (!APPOINTMENT_TRANSITIONS[existing.status].includes(allowedOp)) return { ok: false, reason: "invalid_transition" };
 
   let reason: { code: AppointmentReasonCode; note: string | null; hospitalAction: boolean } | null = null;
   if (action === "cancel") {
@@ -379,8 +401,8 @@ export async function applyAppointmentAction(
   }
 
   const stamp: Partial<typeof appointments.$inferInsert> = {};
-  if (action === "check_in") stamp.checkedInAt = now;
-  if (action === "mark_waiting") stamp.waitingStartedAt = now;
+  if (action === "check_in" && existing.status !== "checked_in") stamp.checkedInAt = now;
+  if (action === "mark_waiting" || queue) stamp.waitingStartedAt = now;
   if (action === "send_to_doctor") stamp.consultationStartedAt = now;
   if (action === "mark_no_show") stamp.noShowAt = now;
   if (action === "cancel") stamp.cancelledAt = now;
@@ -397,10 +419,10 @@ export async function applyAppointmentAction(
       .returning({ id: appointments.id });
     if (!updated) return false;
 
-    const line = actionLine(action, now, timezone, reason ? (REASON_LABEL.get(reason.code) ?? reason.code) : null, reason?.note ?? null);
+    const line = actionLine(queue ? "queue" : action, now, timezone, reason ? (REASON_LABEL.get(reason.code) ?? reason.code) : null, reason?.note ?? null);
     await tx.insert(timelineEvents).values({
       tenantId, patientId: existing.patientId, journeyId: existing.journeyId, actorType: "user", actorId,
-      eventType: ACTION_EVENT[action], relatedEntityType: "appointment", relatedEntityId: appointmentId, ...line,
+      eventType: queue && existing.status === "checked_in" ? ACTION_EVENT.mark_waiting : ACTION_EVENT[action], relatedEntityType: "appointment", relatedEntityId: appointmentId, ...line,
     });
 
     // The risk: a missed visit always needs recovering; a cancellation only when the hospital caused it.

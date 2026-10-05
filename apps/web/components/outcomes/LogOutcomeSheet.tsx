@@ -8,9 +8,13 @@ import type { CrmOutcomeVm, LogInteractionResult } from "@pulseos/types";
 import { useQuickCreate } from "@/components/shell/QuickCreateProvider";
 import { CheckRow, CONTROL, FormError, FormField, TextInput } from "@/components/settings/FormBits";
 import { useHospitalTimeZone } from "@/lib/useHospitalTimeZone";
+import { InlineAppointmentFields } from "@/components/appointments/InlineAppointmentFields";
+import { APPOINTMENT_SERVER_ERRORS, appointmentSaveLabel, initialInlineAppointment } from "@/components/appointments/inlineAppointment";
 import { buildLogInput, defaultFollowUpLocal, outcomeHint, type LogState } from "./outcomeForm";
 
 const SERVER_ERRORS: Record<string, string> = {
+  ...APPOINTMENT_SERVER_ERRORS,
+  follow_up_and_appointment: "A booked visit is the next step - clear the follow-up time or the appointment.",
   follow_up_required: "Choose when to follow up.",
   follow_up_in_past: "Pick a follow-up time in the future.",
   task_closed: "That task was already completed by someone else.",
@@ -46,7 +50,9 @@ export function LogOutcomeSheet({
   const carried = useQuery({ queryKey: ["field-prefill", "followup_outcome", journeyId], queryFn: () => api.fieldPrefill(journeyId, "followup_outcome") });
 
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [state, setState] = useState<LogState>({ note: "", reason: "", scheduleFollowUp: false, followUpLocal: "", fieldValues: {} });
+  // Clinic hours: the hospital's own, shared with every booking form (so a time outside them is caught before saving).
+  const lookups = useQuery({ queryKey: ["lookups"], queryFn: api.lookups });
+  const [state, setState] = useState<LogState>(() => ({ note: "", reason: "", scheduleFollowUp: false, followUpLocal: "", fieldValues: {}, bookAppointment: false, appt: initialInlineAppointment(new Date(), timeZone) }));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<LogInteractionResult | null>(null);
@@ -70,15 +76,17 @@ export function LogOutcomeSheet({
   };
 
   async function save() {
-    const built = buildLogInput(selected, state, fieldList, new Date(), taskId, timeZone);
+    const built = buildLogInput(selected, state, fieldList, new Date(), taskId, timeZone, lookups.data?.clinicHours ?? null);
     if ("error" in built) return setError(built.error);
     setSaving(true);
     setError(null);
     try {
       const result = await api.logInteraction(journeyId, built.input);
-      for (const key of ["tasks", "journey", "journeys", "leads", "leads-summary", "patient360", "dashboard", "timeline"]) queryClient.invalidateQueries({ queryKey: [key] });
+      // A booked visit also lands on the Front Desk day, the planner and the appointment lists: refresh them all, no reload needed.
+      for (const key of ["tasks", "journey", "journeys", "leads", "leads-summary", "patient360", "dashboard", "timeline", "appointments", "front-desk", "patients"]) queryClient.invalidateQueries({ queryKey: [key] });
       onLogged?.(result);
-      if (result.outcome.allowsAppointment) setDone(result);
+      // Booked right here: nothing more to offer. Otherwise an outcome that allows a visit still offers to book one.
+      if (result.outcome.allowsAppointment && !result.appointmentId) setDone(result);
       else onClose();
     } catch (err) {
       setError(SERVER_ERRORS[err instanceof ApiError ? err.message : ""] ?? "Couldn't save this outcome — what you entered is still here. Try again.");
@@ -108,7 +116,8 @@ export function LogOutcomeSheet({
     );
   }
 
-  const wantsFollowUp = !!selected && (selected.requiresFollowUp || state.scheduleFollowUp);
+  const booking = !!selected?.allowsAppointment && !!state.bookAppointment;
+  const wantsFollowUp = !!selected && !booking && (selected.requiresFollowUp || state.scheduleFollowUp);
   return (
     <SideSheet
       title="Log outcome"
@@ -121,7 +130,7 @@ export function LogOutcomeSheet({
             Cancel
           </Button>
           <Button variant="primary" onClick={save} disabled={saving} data-testid="log-outcome-save">
-            {saving ? "Saving…" : "Save outcome"}
+            {saving ? "Saving…" : booking ? appointmentSaveLabel("outcome", state.appt?.apptConfirmed ?? true) : "Save outcome"}
           </Button>
         </>
       }
@@ -167,7 +176,11 @@ export function LogOutcomeSheet({
 
             {selected.asksReason && <TextInput label="Why? (optional)" value={state.reason} onChange={(e) => set("reason", e.target.value)} placeholder="e.g. Chose another hospital" data-testid="log-outcome-reason" />}
 
-            {!selected.requiresFollowUp && <CheckRow label="Schedule a follow-up" checked={state.scheduleFollowUp} onChange={(v) => { set("scheduleFollowUp", v); if (v && !state.followUpLocal) set("followUpLocal", defaultFollowUpLocal(new Date(), timeZone)); }} testId="log-outcome-schedule" />}
+            {selected.allowsAppointment && <CheckRow label="Book the appointment now" hint="Choose the date and time here - no second form." checked={!!state.bookAppointment} onChange={(v) => set("bookAppointment", v)} testId="log-outcome-book" />}
+            {booking && state.appt && (
+              <InlineAppointmentFields state={state.appt} onChange={(patch) => setState((s) => ({ ...s, appt: { ...s.appt!, ...patch } }))} timeZone={timeZone} idPrefix="log-outcome" confirmHint="The patient agreed to this slot. The WhatsApp confirmation and a 1-hour reminder are scheduled." />
+            )}
+            {!booking && !selected.requiresFollowUp && <CheckRow label="Schedule a follow-up" checked={state.scheduleFollowUp} onChange={(v) => { set("scheduleFollowUp", v); if (v && !state.followUpLocal) set("followUpLocal", defaultFollowUpLocal(new Date(), timeZone)); }} testId="log-outcome-schedule" />}
             {wantsFollowUp && <TextInput label="Follow up on" type="datetime-local" value={state.followUpLocal} onChange={(e) => set("followUpLocal", e.target.value)} data-testid="log-outcome-follow-up" hint="A task is created and assigned to the journey's assigned team member." />}
 
             {fieldList.length > 0 && <CustomFieldInputs fields={fieldList} values={state.fieldValues} onChange={(key, value) => setState((s) => ({ ...s, fieldValues: { ...s.fieldValues, [key]: value } }))} idPrefix="outcome-field" testId="log-outcome-fields" />}

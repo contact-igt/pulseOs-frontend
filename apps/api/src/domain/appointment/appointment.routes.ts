@@ -46,6 +46,7 @@ const listAppointmentsQuery = z
 
 const reasonCode = z.enum(["patient_requested", "doctor_unavailable", "hospital_reschedule", "hospital_cancelled", "timing_conflict", "unable_to_reach", "patient_no_show", "other"]);
 const actionBody = z.object({
+  queue: z.boolean().optional(),
   action: z.enum(["confirm", "check_in", "mark_waiting", "send_to_doctor", "mark_no_show", "cancel"]),
   reasonCode: reasonCode.optional(),
   note: z.string().max(500).optional(),

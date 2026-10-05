@@ -134,7 +134,7 @@ export function DoctorTodayList({
   showStatus?: boolean;
   /** Wrap the patient name in a link (the package is router-free, so the page supplies its own Link). */
   renderPatientLink?: PatientLinkRenderer;
-  /** Row-level actions (e.g. "Complete consultation" for a patient who is with the doctor). The package stays router/API-free. */
+  /** Row-level actions (e.g. "Consultation done" for a patient who is with the doctor). The package stays router/API-free. */
   renderActions?: (item: DoctorTodayItem) => ReactNode;
   testId?: string;
 }) {

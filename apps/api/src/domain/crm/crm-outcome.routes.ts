@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { hasPermission } from "@pulseos/types";
 import { auditSettingsChanges } from "../activity/activity.service.js";
 import { requirePermission } from "../auth/permission.middleware.js";
 import { createOutcome, listOutcomes, logInteraction, reorderOutcomes, updateOutcome } from "./crm-outcome.service.js";
@@ -29,7 +30,9 @@ const updateBody = z
   })
   .strict();
 const reorderBody = z.object({ orderedIds: z.array(z.string().uuid()).min(1).max(100) });
+const interactionAppointment = z.object({ scheduledAt: z.string().min(1).max(40), confirmed: z.boolean().optional(), doctorId: z.string().uuid().optional(), branchId: z.string().uuid().optional(), reason: z.string().max(500).optional() }).strict();
 const interactionBody = z.object({
+  appointment: interactionAppointment.optional(),
   outcomeKey: z.string().min(1).max(60),
   note: z.string().max(2000).optional(),
   reason: z.string().max(500).optional(),
@@ -49,6 +52,16 @@ const REASON_STATUS: Record<string, number> = {
   missing_required_fields: 422,
   invalid_field_values: 422,
   field_read_only: 422,
+  // Booking from the same save: the same refusals as booking directly.
+  appointment_time_in_past: 422,
+  outside_clinic_hours: 422,
+  resource_unavailable: 409,
+  doctor_not_found: 404,
+  branch_not_found: 404,
+  doctor_required: 422,
+  branch_required: 422,
+  outcome_disallows_appointment: 422,
+  follow_up_and_appointment: 400,
 };
 
 export async function crmOutcomeRoutes(app: FastifyInstance) {
@@ -97,6 +110,8 @@ export async function crmOutcomeRoutes(app: FastifyInstance) {
     const parsed = interactionBody.safeParse(request.body);
     if (!parsed.success) return reply.status(400).send({ error: "invalid_request" });
     const user = request.sessionUser!;
+    // Booking a visit is its own permission: logging an outcome alone never lets a role book.
+    if (parsed.data.appointment && !hasPermission(user.role, "MANAGE_APPOINTMENTS")) return reply.status(403).send({ error: "forbidden" });
     const result = await logInteraction(app.db, user.tenantId, { id: user.id, role: user.role }, id.data, parsed.data, new Date(), user.timezone);
     if (!result.ok) {
       // An unknown / archived outcome is a bad request body (400); 404 is reserved for the Journey or Task in the path / body that does not exist.

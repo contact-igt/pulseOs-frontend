@@ -7,24 +7,18 @@ import { Button, SideSheet, clinicHoursHint, clinicTimeBounds } from "@pulseos/u
 import type { CrmOutcomeVm } from "@pulseos/types";
 import { CheckRow, CONTROL, FormError, FormField, SelectInput, TextInput } from "@/components/settings/FormBits";
 import { useHospitalTimeZone } from "@/lib/useHospitalTimeZone";
-import { wallTimeToInstant } from "@/lib/hospitalTime";
+import { InlineAppointmentFields } from "@/components/appointments/InlineAppointmentFields";
+import { APPOINTMENT_SERVER_ERRORS } from "@/components/appointments/inlineAppointment";
 import { buildFeedbackInput, buildLogCallInput, effectiveNextAction, initialCallForm, type CallFormState, type NextAction } from "./callForm";
 
 const SERVER_ERRORS: Record<string, string> = {
+  ...APPOINTMENT_SERVER_ERRORS,
   follow_up_required: "This outcome needs a callback — choose when.",
   callback_in_past: "Pick a callback time in the future.",
   occurred_in_future: "That time hasn't happened yet — pick a time that has passed.",
   outcome_not_found: "That outcome is no longer available. Choose another.",
   callback_exists: "This call already has a callback.",
   call_not_linked: "This call isn't linked to a journey yet.",
-  appointment_time_in_past: "That time has already passed. Choose a later time.",
-  outside_clinic_hours: "That time is outside clinic hours. Choose another.",
-  resource_unavailable: "The doctor already has a patient at that time. Choose another time.",
-  doctor_required: "Choose a doctor.",
-  branch_required: "Choose a branch.",
-  doctor_not_found: "That doctor is no longer available. Choose another.",
-  branch_not_found: "That branch is no longer available. Choose another.",
-  forbidden: "You don't have permission to book appointments.",
 };
 
 const NEXT_ACTIONS: { value: NextAction; label: string }[] = [
@@ -65,31 +59,7 @@ export function LogCallSheet({ target, patientName, onClose, onSaved }: { target
   const callbackNeeded = !!outcome?.requiresFollowUp;
   const callbackAllowed = !(target.kind === "feedback" && target.hasCallback);
   const next = effectiveNextAction(state, outcome);
-  const doctors = lookups.data?.doctors ?? [];
-  const branches = lookups.data?.branches ?? [];
   const hours = lookups.data?.clinicHours ?? null;
-  const hoursHint = clinicHoursHint(hours);
-  const bounds = clinicTimeBounds(hours, state.apptDate);
-  const today = new Date().toLocaleDateString("en-CA", { timeZone });
-  // The doctor to ask about: the one chosen, or the hospital's only one.
-  const slotDoctor = state.apptDoctorId || (doctors.length === 1 ? doctors[0]!.id : "");
-  const slotAt = next === "appointment" && state.apptDate && state.apptTime ? wallTimeToInstant(state.apptDate, state.apptTime, timeZone) : null;
-  // Advisory only (debounced): the save itself decides. Tells staff at once that the doctor is taken at that time.
-  // The answer is remembered with the slot it was for, so a changed time never shows the previous time's answer.
-  const slotKey = slotDoctor && slotAt ? `${slotDoctor}|${slotAt.getTime()}` : "";
-  const [slotAnswer, setSlotAnswer] = useState<{ key: string; busy: boolean } | null>(null);
-  const slotBusy = !!slotKey && slotAnswer?.key === slotKey && slotAnswer.busy;
-  useEffect(() => {
-    if (!slotDoctor || !slotAt) return;
-    let live = true;
-    const t = setTimeout(() => {
-      api.appointmentSlotCheck(slotDoctor, slotAt.toISOString()).then((r) => live && setSlotAnswer({ key: slotKey, busy: !r.available && !r.inPast && !r.outsideHours })).catch(() => undefined);
-    }, 350);
-    return () => {
-      live = false;
-      clearTimeout(t);
-    };
-  }, [slotKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function save() {
     if (saving) return;
@@ -209,35 +179,7 @@ export function LogCallSheet({ target, patientName, onClose, onSaved }: { target
         )}
 
         {!feedbackMode && next === "appointment" && (
-          <div className="space-y-3 rounded-card border border-line bg-surface-info/60 p-3.5" data-testid="log-call-appointment-fields">
-            <div className="grid grid-cols-2 gap-3">
-              <TextInput label="Appointment date" type="date" min={today} value={state.apptDate} onChange={(e) => set("apptDate", e.target.value)} data-testid="log-call-appt-date" />
-              <TextInput label="Appointment time" type="time" {...(bounds ? { min: bounds.min, max: bounds.max } : {})} value={state.apptTime} onChange={(e) => set("apptTime", e.target.value)} data-testid="log-call-appt-time" />
-            </div>
-            {hoursHint && <p className="text-[11px] text-ink-2" data-testid="log-call-appt-hours">{hoursHint}</p>}
-            {doctors.length > 1 && (
-              <SelectInput label="Doctor" value={state.apptDoctorId} onChange={(e) => set("apptDoctorId", e.target.value)} data-testid="log-call-appt-doctor">
-                <option value="">Choose a doctor…</option>
-                {doctors.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
-                ))}
-              </SelectInput>
-            )}
-            {branches.length > 1 && (
-              <SelectInput label="Branch" value={state.apptBranchId} onChange={(e) => set("apptBranchId", e.target.value)} data-testid="log-call-appt-branch">
-                <option value="">Choose a branch…</option>
-                {branches.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
-                ))}
-              </SelectInput>
-            )}
-            {slotBusy && <p className="text-xs font-medium text-warning" role="status" data-testid="log-call-appt-busy">The doctor already has a patient at this time. Choose another time.</p>}
-            <CheckRow label="Appointment confirmed with patient" hint={state.apptConfirmed ? "The patient agreed on this call. The WhatsApp confirmation and a 1-hour reminder are scheduled." : "Only booked for now. No message goes to the patient until you confirm the appointment."} checked={state.apptConfirmed} onChange={(v) => set("apptConfirmed", v)} testId="log-call-appt-confirmed" />
-          </div>
+          <InlineAppointmentFields state={state} onChange={(patch) => setState((st) => ({ ...st, ...patch }))} timeZone={timeZone} idPrefix="log-call" confirmHint="The patient agreed on this call. The WhatsApp confirmation and a 1-hour reminder are scheduled." />
         )}
       </div>
     </SideSheet>

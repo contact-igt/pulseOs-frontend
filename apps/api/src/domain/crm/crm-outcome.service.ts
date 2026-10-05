@@ -4,6 +4,7 @@ import type { Db } from "../../db/client.js";
 import { crmOutcomes, customFieldValues, journeys, tasks, timelineEvents } from "../../db/schema.js";
 import type { CreateCrmOutcomeInput, CrmOutcomeVm, JourneyStage, LogInteractionInput, LogInteractionResult, OutcomeStage, Role, TaskType, UpdateCrmOutcomeInput } from "@pulseos/types";
 import { scheduledEvent } from "../task/task.service.js";
+import { applyAppointmentAction, createAppointment, resolveBookingTargets } from "../appointment/appointment.service.js";
 import { listFieldsForEntry, loadJourneyValuesByKey, resolveSubmittedValues, type Result } from "./crm-field.service.js";
 
 // Configurable outcomes. Canonical stages are fixed (enquiry → contacted → booked → ...); an outcome only
@@ -169,7 +170,19 @@ export async function logInteraction(
     if (Number.isNaN(followUpAt.getTime())) return { ok: false, reason: "invalid_request" };
     if (followUpAt.getTime() <= now.getTime()) return { ok: false, reason: "follow_up_in_past" };
   }
-  if (outcome.requiresFollowUp && !followUpAt) return { ok: false, reason: "follow_up_required" };
+  // A booked visit is the next step: it satisfies "requires a follow-up", and it is never combined with a follow-up task.
+  const wantsAppointment = !!input.appointment;
+  if (wantsAppointment) {
+    if (followUpAt || typeof input.appointment!.scheduledAt !== "string" || !input.appointment!.scheduledAt.trim()) return { ok: false, reason: "follow_up_and_appointment" };
+    if (!outcome.allowsAppointment) return { ok: false, reason: "outcome_disallows_appointment" };
+  }
+  if (outcome.requiresFollowUp && !followUpAt && !wantsAppointment) return { ok: false, reason: "follow_up_required" };
+  let booking: { doctorId: string; branchId: string; scheduledAt: string; reason: string; confirmed: boolean } | null = null;
+  if (wantsAppointment) {
+    const targets = await resolveBookingTargets(db, tenantId, input.appointment!);
+    if (!targets.ok) return targets;
+    booking = { doctorId: targets.doctorId, branchId: targets.branchId, scheduledAt: input.appointment!.scheduledAt.trim(), reason: input.appointment!.reason?.trim() || "Consultation", confirmed: input.appointment!.confirmed === true };
+  }
 
   let taskToComplete: typeof tasks.$inferSelect | null = null;
   if (input.taskId) {
@@ -195,6 +208,8 @@ export async function logInteraction(
   const reason = outcome.asksReason ? input.reason?.trim() || null : null;
   const description = [note, reason ? `Reason: ${reason}` : null].filter(Boolean).join(" · ") || null;
 
+  const publishAfterCommit: (() => void)[] = [];
+  let bookingFailure: string | null = null;
   const result = await db.transaction(async (tx) => {
     let completedTaskId: string | null = null;
     if (taskToComplete) {
@@ -255,10 +270,35 @@ export async function logInteraction(
         .onConflictDoUpdate({ target: [customFieldValues.journeyId, customFieldValues.fieldDefinitionId], set: { value } });
     }
 
-    return { completedTaskId, followUpTaskId };
+    // The visit is booked in THIS transaction: if it is refused (outside hours, in the past, the doctor is taken) nothing is kept,
+    // and the form still holds what staff typed.
+    let appointmentId: string | null = null;
+    if (booking) {
+      const booked = await createAppointment(tx as unknown as Db, tenantId, actor.id, { patientId: journey.patientId, journeyId, branchId: booking.branchId, doctorId: booking.doctorId, scheduledAt: booking.scheduledAt, reason: booking.reason }, timezone, now, (publish) => publishAfterCommit.push(publish));
+      if (!booked.ok) {
+        bookingFailure = booked.reason;
+        tx.rollback();
+      } else {
+        appointmentId = booked.appointment.id;
+      }
+    }
+
+    return { completedTaskId, followUpTaskId, appointmentId };
+  }).catch((err: unknown) => {
+    if (bookingFailure) return undefined;
+    throw err;
   });
+  if (result === undefined) return { ok: false, reason: bookingFailure ?? "invalid_request" };
   if (!result) return { ok: false, reason: "task_closed" };
+  for (const publish of publishAfterCommit) publish();
+
+  // Only now (committed) is the visit confirmed: the confirmation and the 1-hour reminder are planned from that event.
+  let appointmentStatus: "scheduled" | "confirmed" | null = result.appointmentId ? "scheduled" : null;
+  if (result.appointmentId && booking?.confirmed) {
+    const confirmed = await applyAppointmentAction(db, tenantId, result.appointmentId, actor.id, { action: "confirm" }, timezone, now);
+    if (confirmed.ok) appointmentStatus = "confirmed";
+  }
 
   emitIntegrationEvent({ type: "interaction.logged", tenantId, eventId: `interaction.logged:${journeyId}:${now.getTime()}:${outcome.key}`, occurredAt: now, data: { journeyId, outcomeKey: outcome.key, stageChanged, stage } });
-  return { ok: true, result: { journeyId, stage, stageChanged, outcome, followUpTaskId: result.followUpTaskId, completedTaskId: result.completedTaskId } };
+  return { ok: true, result: { journeyId, stage, stageChanged, outcome, followUpTaskId: result.followUpTaskId, completedTaskId: result.completedTaskId, appointmentId: result.appointmentId, appointmentStatus } };
 }

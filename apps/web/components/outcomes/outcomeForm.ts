@@ -1,6 +1,7 @@
 import { instantToWallTime, wallTimeToInstant } from "../../lib/hospitalTime";
 import { normalizeFieldValues } from "@pulseos/ui";
-import type { CreateCrmOutcomeInput, CrmOutcomeVm, CustomFieldDefinitionVm, LogInteractionInput, OutcomeStage, TaskType, UpdateCrmOutcomeInput } from "@pulseos/types";
+import { buildInlineAppointment, type InlineAppointmentState } from "@/components/appointments/inlineAppointment";
+import type { ClinicHours, CreateCrmOutcomeInput, CrmOutcomeVm, CustomFieldDefinitionVm, LogInteractionInput, OutcomeStage, TaskType, UpdateCrmOutcomeInput } from "@pulseos/types";
 import { slugifyKey } from "@/components/settings/crmFieldForm";
 
 /** tenants.timezone default — callers pass the session's zone. */
@@ -67,6 +68,9 @@ export interface LogState {
   /** datetime-local value (the hospital clock the person sees). */
   followUpLocal: string;
   fieldValues: Record<string, unknown>;
+  /** Book the visit in this same save (only offered when the outcome allows appointments). It is the next step: no follow-up time. */
+  bookAppointment?: boolean;
+  appt?: InlineAppointmentState;
 }
 
 export function buildLogInput(
@@ -76,9 +80,18 @@ export function buildLogInput(
   now: Date,
   taskId?: string,
   timeZone: string = DEFAULT_TZ,
+  hours?: ClinicHours | null,
 ): { input: LogInteractionInput } | { error: string } {
   if (!outcome) return { error: "Choose what happened." };
-  const wantsFollowUp = outcome.requiresFollowUp || state.scheduleFollowUp;
+  const booking = !!state.bookAppointment && outcome.allowsAppointment && !!state.appt;
+  let appointment: LogInteractionInput["appointment"];
+  if (booking) {
+    const built = buildInlineAppointment(state.appt!, timeZone, now, hours);
+    if ("error" in built) return built;
+    appointment = built.input;
+  }
+  // A booked visit is the next step: no follow-up time is asked for or sent.
+  const wantsFollowUp = !booking && (outcome.requiresFollowUp || state.scheduleFollowUp);
   let followUpAt: string | undefined;
   if (wantsFollowUp) {
     if (!state.followUpLocal) return { error: "Choose when to follow up." };
@@ -101,6 +114,7 @@ export function buildLogInput(
       ...(note ? { note } : {}),
       ...(reason ? { reason } : {}),
       ...(followUpAt ? { followUpAt } : {}),
+      ...(appointment ? { appointment } : {}),
       ...(taskId ? { taskId } : {}),
       ...(fieldValues ? { fieldValues } : {}),
     },

@@ -176,7 +176,7 @@ export default function DoctorHomePage() {
                 renderActions={(item) =>
                   canComplete && item.status === "with_doctor" ? (
                     <Button size="sm" variant="primary" className="min-h-11 sm:min-h-0" onClick={() => setCompleting(item)} data-testid={`complete-consultation-${item.appointmentId}`}>
-                      Complete consultation
+                      Consultation done
                     </Button>
                   ) : null
                 }

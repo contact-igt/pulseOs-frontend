@@ -1099,11 +1099,11 @@ export function allowedAppointmentOps(status: AppointmentStatus): AppointmentOp[
 /** The one obvious next step for Staff at each status, in plain words. */
 export const APPOINTMENT_PRIMARY_OP: Partial<Record<AppointmentStatus, { op: AppointmentOp; label: string }>> = {
   requested: { op: "confirm", label: "Confirm appointment" },
-  scheduled: { op: "check_in", label: "Check in patient" },
-  confirmed: { op: "check_in", label: "Check in patient" },
+  scheduled: { op: "check_in", label: "Check in" },
+  confirmed: { op: "check_in", label: "Check in" },
   checked_in: { op: "mark_waiting", label: "Move to waiting" },
   waiting: { op: "send_to_doctor", label: "Send to doctor" },
-  with_doctor: { op: "complete", label: "Complete consultation" },
+  with_doctor: { op: "complete", label: "Consultation done" },
 };
 
 /** Why an appointment was rescheduled, cancelled or missed. A stable code (tenant customisation comes later) + optional note. */
@@ -1134,6 +1134,11 @@ export function appointmentReasonsFor(kind: AppointmentReasonKind): AppointmentR
 /** PATCH /appointments/:id/action body. Cancel needs a reason; a no-show defaults to "Patient did not arrive". */
 export interface AppointmentActionInput {
   action: AppointmentAction;
+  /**
+   * With "check_in": check the patient in AND put them in the waiting queue as one step (the arrival time and the waiting start
+   * are the same instant). What staff mean by "Check in" - there is no second "move to waiting" click. Ignored for other actions.
+   */
+  queue?: boolean;
   reasonCode?: AppointmentReasonCode;
   note?: string;
 }
@@ -1736,6 +1741,11 @@ export interface LogInteractionInput {
   fieldValues?: Record<string, unknown>;
   /** How this contact happened (phone call, WhatsApp, walk-in…), recorded on the Timeline. */
   channel?: InteractionChannel;
+  /**
+   * Book the visit in the same save (the outcome must allow appointments). Instead of a follow-up time: a booked visit IS the next
+   * step, so no extra follow-up task is created. Confirmed-with-patient confirms it (confirmation + reminder planned).
+   */
+  appointment?: LogCallAppointmentInput;
 }
 
 export interface LogInteractionResult {
@@ -1745,6 +1755,9 @@ export interface LogInteractionResult {
   outcome: CrmOutcomeVm;
   followUpTaskId: string | null;
   completedTaskId: string | null;
+  /** The visit booked from this save, when one was asked for. */
+  appointmentId?: string | null;
+  appointmentStatus?: "scheduled" | "confirmed" | null;
 }
 
 // ---------------------------------------------------------------------------

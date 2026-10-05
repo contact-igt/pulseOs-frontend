@@ -17,7 +17,7 @@ export function lastCompleted(appointments: AppointmentRow[]): AppointmentRow | 
   return appointments.filter((a) => a.status === "completed").sort((a, b) => (b.completedAt ?? b.scheduledAt).localeCompare(a.completedAt ?? a.scheduledAt))[0] ?? null;
 }
 
-const SHORT: Record<string, string> = { confirm: "Confirm appointment", check_in: "Check in patient", mark_waiting: "Move to waiting", send_to_doctor: "Send to doctor", complete: "Complete consultation" };
+const SHORT: Record<string, string> = { confirm: "Confirm appointment", check_in: "Check in", mark_waiting: "Move to waiting", send_to_doctor: "Send to doctor", complete: "Consultation done" };
 
 /**
  * One compact block of appointment context beside the Next Action: the live visit with its one next step (the same

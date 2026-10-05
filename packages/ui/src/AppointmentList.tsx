@@ -141,7 +141,7 @@ export function AppointmentList({
                           )}
                           {onComplete && row.status === "with_doctor" && (
                             <Button size="sm" variant="primary" className="max-sm:min-h-11" onClick={() => onComplete(row)} data-testid={`appointment-complete-${row.id}`}>
-                              Complete consultation
+                              Consultation done
                             </Button>
                           )}
                           {onAction && onRowClick && row.status === "no_show" && (

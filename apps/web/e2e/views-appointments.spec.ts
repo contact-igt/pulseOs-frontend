@@ -184,18 +184,19 @@ test.describe("Appointments views", () => {
     await event.click();
     const drawer = page.getByTestId("appointment-drawer");
     await expect(drawer).toContainText(`P1 View Action ${RUN}`);
-    await drawer.getByRole("button", { name: "Check in patient", exact: true }).click();
+    await drawer.getByRole("button", { name: "Check in", exact: true }).click();
     await expect(drawer).toBeHidden();
-    await expect(event).toHaveAttribute("aria-label", /Checked in/);
-    await expect(event).toContainText("Checked in");
+    await expect(event).toHaveAttribute("aria-label", /Waiting/); // Check in = arrived AND waiting
+    await expect(event).toContainText("Waiting");
 
-    // Stale drawer: someone else moves the patient two steps on; our "Move to waiting" is now invalid server-side (409).
+    // Stale drawer: someone else finishes the visit; our "Send to doctor" is now refused server-side.
     await event.click();
-    await expect(drawer.getByRole("button", { name: "Move to waiting", exact: true })).toBeVisible();
-    for (const action of ["mark_waiting", "send_to_doctor"]) expect((await page.request.patch(`${API}/appointments/${appt.id}/action`, { data: { action } })).ok()).toBeTruthy();
-    await drawer.getByRole("button", { name: "Move to waiting", exact: true }).click();
-    await expect(page.getByTestId("appointments-action-error")).toContainText(/changed|not allowed/i);
-    await expect(event).toHaveAttribute("aria-label", /With doctor/);
+    await expect(drawer.getByRole("button", { name: "Send to doctor", exact: true })).toBeVisible();
+    expect((await page.request.patch(`${API}/appointments/${appt.id}/action`, { data: { action: "send_to_doctor" } })).ok()).toBeTruthy();
+    expect((await page.request.patch(`${API}/appointments/${appt.id}/complete`, { data: { next: { kind: "none" } } })).ok()).toBeTruthy();
+    await drawer.getByRole("button", { name: "Send to doctor", exact: true }).click();
+    await expect(page.getByTestId("appointments-action-error")).toContainText(/changed|not allowed|closed/i);
+    await expect(event).toHaveAttribute("aria-label", /Completed/);
     await expectNoOverlay(page);
     expect(errors).toEqual([]);
 

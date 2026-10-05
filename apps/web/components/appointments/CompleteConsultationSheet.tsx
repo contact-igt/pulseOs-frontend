@@ -101,7 +101,7 @@ export function CompleteConsultationSheet({ appointment, onClose, onDone }: { ap
 
   return (
     <SideSheet
-      title="Complete consultation"
+      title="Consultation done"
       subtitle={appointment.patientName}
       onClose={onClose}
       testId="complete-consultation"
@@ -111,7 +111,7 @@ export function CompleteConsultationSheet({ appointment, onClose, onDone }: { ap
             Cancel
           </Button>
           <Button variant="primary" className="min-h-11 sm:min-h-0" onClick={save} disabled={saving || !choice} data-testid="complete-consultation-save">
-            {saving ? "Saving…" : "Complete consultation"}
+            {saving ? "Saving…" : "Consultation done"}
           </Button>
         </>
       }
