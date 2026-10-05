@@ -55,7 +55,9 @@ test.describe("M4 — Calls on the Interaction Timeline", () => {
     await sheet.getByTestId("log-call-seconds").fill("38");
     await sheet.getByTestId("log-call-feedback").fill("Patient will confirm after speaking with family.");
     await sheet.getByTestId("log-call-outcome").selectOption("needs_callback");
-    await expect(sheet.getByText("Callback needed")).toBeVisible();
+    // This outcome needs a follow-up: the next action is a callback and "None" can't be chosen.
+    await expect(sheet.getByTestId("log-call-next-callback")).toHaveAttribute("aria-checked", "true");
+    await expect(sheet.getByTestId("log-call-next-none")).toBeDisabled();
     await expect(sheet.getByTestId("log-call-callback-time")).toHaveValue("11:00");
     await sheet.getByTestId("log-call-callback-note").fill("Friday 11:00 AM");
 

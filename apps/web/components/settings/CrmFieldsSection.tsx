@@ -8,7 +8,7 @@ import { Badge, Button, ConfirmDialog, EmptyState, ErrorState, Skeleton } from "
 import { ALL_SERVICES_KEY, CUSTOM_FIELD_TYPES, FIELD_GROUPS, FIELD_ORIGIN_LABEL, FIELD_VISIBILITY, type CrmFieldVm, type SpecialtyTemplateVm } from "@pulseos/types";
 import { arrayMove } from "@dnd-kit/sortable";
 import { useUrlFilters } from "@/lib/useUrlFilters";
-import { CheckRow, FormError, SelectInput } from "./FormBits";
+import { CheckRow, FormError, SelectInput, TouchCheckbox } from "./FormBits";
 import { FieldEditorSheet } from "./FieldEditorSheet";
 import { ReorderStatus, RowOrderControls, SortableGroup, useReorder, useSortableRow, type OrderControl, type RowStatus } from "./SortableList";
 import { blankField, fieldToForm, placementSummary, type FieldForm } from "./crmFieldForm";
@@ -53,8 +53,18 @@ function FieldRow({ field, position, total, canMove, locked, status, focusReques
       </div>
       {/* The one switch staff reach for most: does this question appear when a new enquiry is added? Nothing recorded is deleted either way. */}
       {!field.archived && (
-        <label className="flex min-h-11 shrink-0 cursor-pointer items-center gap-1.5 text-xs text-ink sm:min-h-0" title="Ask this when a new enquiry is added">
-          <input type="checkbox" checked={shownAddLead} onChange={(e) => { const on = e.target.checked; setPendingAddLead({ on, wasSaved: savedAddLead }); void onToggleAddLead(on).then((ok) => { if (!ok) setPendingAddLead(null); }); }} className="h-5 w-5 rounded border-line-strong text-primary-600 focus:ring-primary-500 sm:h-4 sm:w-4" data-testid={`field-add-lead-${field.key}`} aria-label={`Show "${field.label}" on Add Lead`} />
+        <label className="flex min-h-11 shrink-0 cursor-pointer items-center gap-0.5 text-xs text-ink sm:min-h-0 sm:gap-1.5" title="Ask this when a new enquiry is added">
+          <TouchCheckbox
+            checked={shownAddLead}
+            onChange={(on) => {
+              setPendingAddLead({ on, wasSaved: savedAddLead });
+              void onToggleAddLead(on).then((ok) => {
+                if (!ok) setPendingAddLead(null);
+              });
+            }}
+            testId={`field-add-lead-${field.key}`}
+            ariaLabel={`Show "${field.label}" on Add Lead`}
+          />
           On Add Lead
         </label>
       )}
