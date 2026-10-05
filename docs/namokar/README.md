@@ -24,7 +24,8 @@ One clinic (Ashok Vihar, New Delhi), one doctor (Dr. Poonam Jain), and **three p
 6. [NAMOKAR_WEBSITE_INTAKE.md](NAMOKAR_WEBSITE_INTAKE.md) — the website form contract.
 7. [NAMOKAR_DECISIONS_AND_SECURITY.md](NAMOKAR_DECISIONS_AND_SECURITY.md) — why things are the way they are.
 8. [NAMOKAR_INTEGRATION_STATUS.md](NAMOKAR_INTEGRATION_STATUS.md) — what is live, fixture or not configured, per provider.
-9. [NAMOKAR_GO_LIVE_CHECKLIST.md](NAMOKAR_GO_LIVE_CHECKLIST.md) — the steps before staff start.
+9. [NAMOKAR_NOTIFICATION_RELIABILITY.md](NAMOKAR_NOTIFICATION_RELIABILITY.md) — when WhatsApp messages are sent and how none are lost.
+10. [NAMOKAR_GO_LIVE_CHECKLIST.md](NAMOKAR_GO_LIVE_CHECKLIST.md) — the steps before staff start.
 
 ## What the pilot proves
 
