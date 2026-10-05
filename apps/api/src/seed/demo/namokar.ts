@@ -6,7 +6,7 @@ import { appointments, customFieldDefinitions, followUpTypes, notificationRules,
 import { ensureNotificationDefaults, planForSubject } from "../../domain/notification/notification.service.js";
 import { installDepartmentTemplate } from "../../domain/specialty/department.service.js";
 import { OPHTHALMOLOGY_TREATMENTS } from "../../domain/specialty/ophthalmology.templates.js";
-import { ensureFollowUpTypes } from "../../domain/task/followup-type.service.js";
+import { createFollowUpType, ensureFollowUpTypes } from "../../domain/task/followup-type.service.js";
 import { createFollowUp, createTask } from "../../domain/task/task.service.js";
 import { ensureDefaultOutcomes } from "../../domain/crm/crm-outcome.service.js";
 import { assertJourneyConfigsConsistent } from "./consistency.js";
@@ -327,6 +327,17 @@ async function installPatientIdentityFields(tenantId: string) {
   }
 }
 
+/**
+ * Oculoplasty enquiries often need a photo first. This is an ordinary follow-up TYPE (Settings → Follow-up Types): the coordinator gets
+ * a "Request photo on WhatsApp" task on the journey - a reminder to do it, recorded when done. It is NOT a sent message: nothing is
+ * claimed as sent, and no WhatsApp provider is needed. Sending a photo request through the provider would need a second approved
+ * message template and a template chooser; that is deliberately left for later (see docs).
+ */
+async function addPhotoRequestFollowUp(tenantId: string) {
+  const made = await createFollowUpType(db, tenantId, { label: "Request photo on WhatsApp", canonicalTaskType: "FOLLOW_UP", defaultPriority: "normal", requiresNote: false });
+  if (!made.ok) throw new Error(`photo request follow-up type could not be created: ${made.reason}`);
+}
+
 async function keepAddLeadSimple(tenantId: string) {
   await db
     .update(customFieldDefinitions)
@@ -398,6 +409,7 @@ export async function seedNamokarTenant(passwordHash: string) {
   const owner = (patientIdx: number) => [frontDesk, coordinator, coordinator2][patientIdx % 3]!;
   const TZ = "Asia/Kolkata";
   await ensureFollowUpTypes(db, tenant.id);
+  await addPhotoRequestFollowUp(tenant.id);
   const typeId = async (key: string) => (await db.select({ id: followUpTypes.id }).from(followUpTypes).where(and(eq(followUpTypes.tenantId, tenant.id), eq(followUpTypes.key, key))))[0]!.id;
   const must = (label: string, r: { ok: boolean; reason?: string }) => {
     if (!r.ok) throw new Error(`seed: ${label} failed (${String(r.reason)})`);
@@ -452,6 +464,7 @@ export async function seedNamokarV2Tenant(passwordHash: string) {
   ]);
   await ensureDefaultOutcomes(db, tenant.id);
   await ensureFollowUpTypes(db, tenant.id);
+  await addPhotoRequestFollowUp(tenant.id);
   // Same reminder policy as V1: ONE reminder, 1 hour before a confirmed visit (the 1-day reminder is off).
   await ensureNotificationDefaults(db, tenant.id);
   await db.update(notificationRules).set({ enabled: false }).where(and(eq(notificationRules.tenantId, tenant.id), eq(notificationRules.subject, "APPOINTMENT"), eq(notificationRules.kind, "REMINDER"), eq(notificationRules.offsetUnit, "days")));

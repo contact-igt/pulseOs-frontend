@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
-import type { PerformanceDashboard, Role } from "@pulseos/types";
+import type { PerformanceDashboard } from "@pulseos/types";
 import { buildApp } from "../app.js";
 import { db, queryClient } from "../db/client.js";
 import { customFieldDefinitions, customFieldValues, journeys, patients } from "../db/schema.js";
