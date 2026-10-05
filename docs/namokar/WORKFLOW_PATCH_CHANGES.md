@@ -135,3 +135,40 @@ Lint and typecheck clean · Web 288 · UI 155 · API 1,457 (1 skipped) · Full P
 | Roles | Super Admin: settings + reports; Front Desk: intake + appointments; Coordinator: follow-ups; Doctor: planner | **DONE** | No permission changed |
 
 Verification: lint/typecheck clean · Web 288 · UI 155 · API 1,486 (1 skipped) · full Playwright 439 passed, 1 skipped, 0 failed.
+
+---
+
+# Update: final local reality QA
+
+## Display settings bug (root cause and fix)
+The Display settings sheet was drawn **inside the top bar**. The top bar is frosted glass (`backdrop-filter`), and a fixed-position child of such an element is sized and placed against *that element*, not the screen, so the panel collapsed into a 62px strip at the top right. It is now drawn on `<body>` (same as every other sheet): a full-height right-hand panel at 1440 / 1024 / 768, full width on a phone, with the buttons always on screen. A browser test measures the panel at all four sizes so this cannot return.
+
+- **Live:** choosing an interface size or text size changes the page behind the panel straight away (nothing is stored). **Cancel, Escape or clicking outside** puts the saved look back exactly; **Save changes** stores it for that person only. **Reset to default** added.
+- **Settings → Appearance** (hospital style) is live the same way for the person choosing, until they Save; nobody else sees the preview.
+
+## Super Admin configuration is easier to find
+Settings → Services opens with shortcuts to CRM Fields, Lead Sources, Clinic Hours and Appearance; CRM Fields says "Choose what information your team collects and where each field appears."; Add Lead shows Super Admin / Admin a "Change what this form asks" link to CRM Fields (hidden from other roles). The tabs and permissions were already correct - nothing was hardcoded for Namokar.
+
+## Old follow-up sheet → PulseOS
+| Old sheet | PulseOS | Status |
+|---|---|---|
+| Day 1-5 / Feedback Day 1-7, Final feedback | Timeline + interactions + tasks + Next Action; no day columns | DONE (not rebuilt) |
+| Reason For Visit | **Service / enquiry** (a real list) and a separate **note**; "Not Responding / Booked / Visited / Surgery booked / Junk" never go into the service | DONE |
+| "Junk lead / random click" | New outcome **Junk / invalid lead** (flag `invalid`, migration 0042), separate from **Not interested**; Performance counts them apart | **ADDED** |
+| "Not interested" | Outcome Not interested: a real enquiry that did not go ahead | DONE |
+| "Not responding" | Call outcome No answer + a follow-up task (My Work) | DONE |
+| "Booked appointment" | A real appointment from Log Call / Log outcome (confirmed, reminders, Front Desk, Planner) | DONE |
+| "Visited on …" | Comes from check-in -> waiting -> doctor -> consultation done; recorded automatically | DONE |
+| "Surgery booked" | Treatments: advised -> decision pending -> accepted -> scheduled -> completed; Scheduled is never Done | DONE |
+| Follow-up date / update | Next Action: date, time, team member, note, then My Work | DONE |
+| Caller | **Assigned Team Member** (owns the journey) vs **Performed by** (who logged this call); a colleague's call never reassigns | DONE (tested) |
+| Source missing | **Unknown / not recorded** source; analytics show it by name | **ADDED** (Namokar seeds) |
+| Unclear service | General Eye Consultation | DONE |
+| Name missing / "IRRELEVANT" | Name is already optional at Add Lead (shown as unknown until added); phone is required | DONE |
+| Duplicate / differently written phones | 9876543210, +91 98765 43210, 98765-43210, 09876543210 are one person | DONE (tested) |
+| Existing patient + UID | Same person, new journey; found by UID | DONE |
+
+Recommendation (not changed): keep **Phone required, Name optional** at raw enquiry; ask for the name before an appointment is confirmed or the patient is checked in.
+
+## Verification
+Lint / typecheck clean · Web 288 · UI 155 · Design tokens 6 · API 1,498 (1 skipped) · full Playwright 447 passed, 1 skipped, 0 failed. Note: right after a re-seed, wait ~20 seconds before running the calls specs: the live job runner fills in the demo call summaries.
