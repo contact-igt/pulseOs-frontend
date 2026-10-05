@@ -1,5 +1,5 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
-import { purgeCrmFields, sql } from "./support/fixtures";
+import { purgeCrmFields, purgePatients, sql } from "./support/fixtures";
 
 // Local-demo reality checks, in a real browser:
 //   - Display settings is a real full-height panel (it was squashed into the top bar), applies LIVE to the page, and Cancel / Escape
@@ -45,6 +45,7 @@ const probe = (page: Page) =>
   });
 const overflow = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 const cleanV2 = () => {
+  purgePatients("QA V2 ");
   purgeCrmFields("preferred_comm");
   sql(`UPDATE users SET interface_size = NULL, text_size = NULL WHERE tenant_id IN (SELECT id FROM tenants WHERE login_slug IN ('${V1.slug}', '${V2.slug}'))`);
   sql(`UPDATE tenants SET surface_style = NULL WHERE login_slug IN ('${V1.slug}', '${V2.slug}')`);
@@ -284,8 +285,7 @@ test.describe("Namokar local demo: display settings, live appearance, Super Admi
       expect(sql(`SELECT count(*) FROM custom_field_definitions WHERE key = '${FIELD_KEY}' AND tenant_id = (SELECT id FROM tenants WHERE login_slug = '${V1.slug}')`)).toBe("0");
     } finally {
       await su.context.close();
-      sql(`DELETE FROM custom_field_values WHERE field_definition_id IN (SELECT id FROM custom_field_definitions WHERE key = '${FIELD_KEY}')`);
-      sql(`DELETE FROM timeline_events WHERE patient_id IN (SELECT id FROM patients WHERE name = 'QA V2 Pref Time')`);
+      purgePatients("QA V2 ");
     }
   });
 
