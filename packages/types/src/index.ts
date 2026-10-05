@@ -1422,7 +1422,13 @@ export interface CampaignOption {
   source: SourceChannel;
 }
 
+/** Weekly clinic hours in the hospital's own timezone: "HH:MM" open (inclusive) and close (exclusive), or null for a closed day. */
+export type ClinicHoursDay = [open: string, close: string] | null;
+export interface ClinicHours { mon: ClinicHoursDay; tue: ClinicHoursDay; wed: ClinicHoursDay; thu: ClinicHoursDay; fri: ClinicHoursDay; sat: ClinicHoursDay; sun: ClinicHoursDay }
+
 export interface Lookups {
+  /** Null/absent = the hospital has set no hours, so any time is allowed. */
+  clinicHours?: ClinicHours | null;
   branches: LookupOption[];
   doctors: LookupOption[];
   owners: LookupOption[];

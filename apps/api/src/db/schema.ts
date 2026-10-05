@@ -21,6 +21,8 @@ export const tenants = pgTable("tenants", {
   // The name a hospital's dedicated sign-in page is reached by (/login/<slug>). Null = no dedicated page (sign-up and demo
   // hospitals). Lower-case words only, unique; the page can sign people into THIS hospital and no other.
   loginSlug: text("login_slug"),
+  // Weekly clinic hours (see ClinicHours in @pulseos/types). Null = no restriction. Appointments are only accepted inside them.
+  clinicHours: jsonb("clinic_hours").$type<import("@pulseos/types").ClinicHours | null>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   loginSlugUnique: uniqueIndex("tenants_login_slug_unique").on(t.loginSlug),

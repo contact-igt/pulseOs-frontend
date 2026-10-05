@@ -274,6 +274,13 @@
       "when": 1791171828406,
       "tag": "0038_appointments_status_scheduled_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1791186862605,
+      "tag": "0039_tenant_clinic_hours",
+      "breakpoints": true
     }
   ]
 }
