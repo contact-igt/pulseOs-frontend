@@ -108,3 +108,30 @@ Branch `integration/pulseos-converged-v1-v2` = the local workflow commits above 
 
 ## Verification (final tree)
 Lint and typecheck clean · Web 288 · UI 155 · API 1,457 (1 skipped) · Full Playwright 425 passed, 2 skipped, 0 failed · Fresh database: 41 migrations, seed ×2 identical.
+
+---
+
+# Update: Oct 5 demo-feedback audit
+
+| Requirement | Before | Status | After |
+|---|---|---|---|
+| Configurable Add Lead (CRM fields, "On Add Lead", order, required, archive, V1/V2 isolation) | Built | **DONE** | Left unchanged, re-verified |
+| Lead Sources (Google, Phone, Instagram, Referral, Walk-in…) | Settings → Lead Sources: add / edit / archive | **DONE** | Left unchanged |
+| Add a **service** | Services could only be enabled / disabled / renamed | **MISSING** | `POST /specialties` + "Add service" form in Settings → Services |
+| Patient type New / Existing, Namokar UID | Not present | **MISSING** | Ordinary CRM fields seeded for Namokar: **Patient type** (on Add Lead) and **Namokar UID** (shown only when Existing, never required). A New patient is never asked for a UID; none is invented |
+| UID helps find the patient | Search was name/phone only | **PARTIAL** | Patient search also matches a hospital's filterable text identifier (e.g. UID); same hospital only; clinical-only fields never searchable. Phone still decides who the person is: a repeat enquiry is the same patient with a new journey |
+| Address, PIN code, Area / Locality, Gender | Not present | **MISSING** | CRM fields on the journey and patient record, not on Add Lead and not required; the Super Admin switches "On Add Lead" / required |
+| Age vs date of birth | Both exist; age is derived from DOB when known | **DONE** | Unchanged; reporting uses DOB first, then reported age |
+| Funnel: remove "Contacted" | Performance funnel started Enquiry → **Contacted** → … | **WRONG** | Removed. Funnel is Enquiries → Appointment booked → Visit attended → Consultation completed → Procedure advised → Procedure scheduled → **Procedure done** |
+| "Attended" vs a call being answered | "Attended" meant a visit, but read like a call | **WRONG** | Renamed "Visit attended" (the patient arrived). An answered call is never a funnel stage; a test proves a connected call alone is not a visit |
+| Scheduled vs Done | "Procedure scheduled" counted scheduled **or done** | **WRONG** | Separate steps; Done = treatment completed only |
+| Main Command Centre funnel and exports | "Contacted", "Attended", "Treatment advised/converted" | **WRONG** | Same clinic wording; Contacted hidden from the funnel; export stage labels follow |
+| Source-wise and service-wise breakdown | Present | **DONE** | Gains a Done column; "Contacted" column removed |
+| Area / Age group / Gender reporting | Not present | **MISSING** | "Who is enquiring" on Performance: age group (derived from DOB or reported age) plus every filterable choice field, and free text that repeats (an area). Unique identifiers (UID), clinical-only and unanswered fields never appear; nothing is shown when nothing is recorded |
+| Lead creation visible in the journey | One "Lead created" line | **DONE** (improved last round) | Unchanged |
+| Photo request on WhatsApp | No such action | **PARTIAL – deferred** | Added the follow-up type **Request photo on WhatsApp** (a task for the coordinator; not a sent message). Sending it through the provider needs a second approved message template and a template chooser; the WhatsApp provider is not connected in this pilot, so nothing is claimed as sent |
+| Per-user **Interface size** and **Text size** | Not present | **MISSING** | **Display settings** in the profile menu for every role: Interface size (Compact / Comfortable / Large) and Text size (Small / Default / Large / Extra large), independent, with a live preview and Save / Cancel. Stored on the person (`users.interface_size`, `users.text_size`, migration 0041), carried in the session. Implemented with design tokens (`--spacing`, the type scale), never zoom or transform; Compact applies from 768px up so phones keep 44px targets; captions have a readable floor |
+| Settings tab navigation when overflowing | Done last round | **DONE** | Verified |
+| Roles | Super Admin: settings + reports; Front Desk: intake + appointments; Coordinator: follow-ups; Doctor: planner | **DONE** | No permission changed |
+
+Verification: lint/typecheck clean · Web 288 · UI 155 · API 1,486 (1 skipped) · full Playwright 439 passed, 1 skipped, 0 failed.
