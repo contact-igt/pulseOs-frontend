@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { AppointmentRow, ClinicHours, JourneyCardVm, PatientListRow } from "@pulseos/types";
-import { clinicHoursError, clinicHoursHint, clinicTimeBounds } from "../clinicHours";
+import { clinicHoursError, clinicHoursHint, clinicHoursOn, clinicTimeBounds } from "../clinicHours";
 import { NewAppointmentDrawer } from "../NewAppointmentDrawer";
 
 const day: [string, string] = ["09:00", "16:00"];
@@ -86,5 +86,16 @@ describe("NewAppointmentDrawer — clinic hours", () => {
     expect(screen.queryByTestId("appt-clinic-hours")).toBeNull();
     pick(`${SUN}T03:00`);
     expect(screen.queryByTestId("appt-time-clinic-hours")).toBeNull();
+  });
+});
+
+describe("clinicHoursOn", () => {
+  const H: ClinicHours = { mon: ["09:00", "16:00"], tue: ["09:00", "16:00"], wed: ["09:00", "16:00"], thu: ["09:00", "16:00"], fri: ["09:00", "16:00"], sat: ["09:00", "13:00"], sun: null } ;
+  it("gives the hours of that date's weekday, 'closed' on a closed day, and null when no hours are set", () => {
+    expect(clinicHoursOn(H, "2026-10-05")).toEqual(["09:00", "16:00"]); // Monday
+    expect(clinicHoursOn(H, "2026-10-10")).toEqual(["09:00", "13:00"]); // Saturday changed by the admin
+    expect(clinicHoursOn(H, "2026-10-04")).toBe("closed"); // Sunday
+    expect(clinicHoursOn(null, "2026-10-05")).toBeNull();
+    expect(clinicHoursOn(H, "nonsense")).toBeNull();
   });
 });

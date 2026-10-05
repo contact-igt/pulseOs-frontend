@@ -52,3 +52,11 @@ export function clinicTimeBounds(hours: ClinicHours | null | undefined, date: st
   const last = h * 60 + m - 1;
   return { min: day[0], max: `${String(Math.floor(last / 60)).padStart(2, "0")}:${String(last % 60).padStart(2, "0")}` };
 }
+
+/** The clinic's hours on one hospital date: `null` = no hours set (no restriction), "closed", or [open, close]. */
+export function clinicHoursOn(hours: ClinicHours | null | undefined, date: string): ClinicHoursDay | "closed" | null {
+  if (!hours) return null;
+  const i = weekdayIndex(date);
+  if (i < 0) return null;
+  return hours[KEYS[i]!] ?? "closed";
+}

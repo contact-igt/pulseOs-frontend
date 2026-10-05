@@ -1,10 +1,18 @@
 "use client";
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { Button, EmptyState, VIEW_MOBILE_BREAKPOINT, formatKey, shiftDate, useContainerWidth } from "@pulseos/ui";
-import type { AppointmentRow } from "@pulseos/types";
+import { Button, EmptyState, VIEW_MOBILE_BREAKPOINT, clinicHoursOn, formatKey, shiftDate, useContainerWidth } from "@pulseos/ui";
+import type { AppointmentRow, ClinicHours } from "@pulseos/types";
 import { AppointmentAgendaRow } from "./AppointmentAgendaRow";
 import { groupByDoctor } from "./appointmentViews";
+
+/** What the visit is for: the service, then the reason unless it already says so ("Cataract consultation" needs no "Cataract" in front). */
+function serviceLine(r: AppointmentRow): string | undefined {
+  const service = r.service ?? null;
+  const reason = r.reason ?? null;
+  if (service && reason) return reason.toLowerCase().includes(service.toLowerCase()) ? reason : `${service} · ${reason}`;
+  return service ?? reason ?? r.branchName ?? undefined;
+}
 
 const NAV_BTN = "min-h-11 min-w-11 sm:min-h-8 sm:min-w-8 pointer-coarse:min-h-11 pointer-coarse:min-w-11";
 
@@ -18,6 +26,7 @@ export function DoctorScheduleView({
   date,
   today,
   timeZone,
+  clinicHours,
   onDateChange,
   onSelect,
 }: {
@@ -25,12 +34,15 @@ export function DoctorScheduleView({
   date: string;
   today: string;
   timeZone: string;
+  /** The hospital's own clinic hours (Settings), so the day shows when the clinic is open - never a hardcoded schedule. */
+  clinicHours?: ClinicHours | null;
   onDateChange: (date: string) => void;
   onSelect: (row: AppointmentRow) => void;
 }) {
   const { ref, width } = useContainerWidth<HTMLDivElement>();
   const stacked = width !== null && width < VIEW_MOBILE_BREAKPOINT;
   const groups = groupByDoctor(rows);
+  const open = clinicHoursOn(clinicHours, date);
   const title = formatKey(date, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 
   return (
@@ -51,10 +63,20 @@ export function DoctorScheduleView({
           {title}
           {date === today && <span className="ml-2 text-xs font-medium text-primary-700">Today</span>}
         </h2>
+        <label className="inline-flex items-center gap-1.5 text-xs text-ink-2">
+          <span className="sr-only sm:not-sr-only">Choose date</span>
+          <input type="date" value={date} onChange={(e) => e.target.value && onDateChange(e.target.value)} aria-label="Choose date" className="min-h-11 rounded-control border border-line-strong bg-white px-2 text-sm text-ink sm:min-h-8" data-testid="doctor-schedule-date" />
+        </label>
         <span className="text-xs text-ink-2">
           {rows.length} {rows.length === 1 ? "appointment" : "appointments"} · {groups.length} {groups.length === 1 ? "doctor" : "doctors"}
         </span>
       </div>
+
+      {open && (
+        <p className={`text-xs ${open === "closed" ? "font-medium text-warning" : "text-ink-2"}`} data-testid="doctor-schedule-hours">
+          {open === "closed" ? "Clinic closed this day" : `Clinic hours ${open[0]}–${open[1]}`}
+        </p>
+      )}
 
       {groups.length === 0 ? (
         <div className="rounded-card border border-line bg-surface">
@@ -76,7 +98,7 @@ export function DoctorScheduleView({
               <ul className="space-y-0.5 p-1.5">
                 {g.rows.map((r) => (
                   <li key={r.id}>
-                    <AppointmentAgendaRow row={r} timeZone={timeZone} context={r.reason ?? r.branchName ?? undefined} onSelect={onSelect} testId={`doctor-schedule-item-${r.id}`} />
+                    <AppointmentAgendaRow row={r} timeZone={timeZone} context={serviceLine(r)} onSelect={onSelect} testId={`doctor-schedule-item-${r.id}`} />
                   </li>
                 ))}
               </ul>

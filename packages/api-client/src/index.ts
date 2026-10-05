@@ -1,4 +1,5 @@
 import type {
+  ClinicHours,
   SetupStatus,
   DevEnvironment,
   SignupInput,
@@ -305,6 +306,7 @@ export const api = {
   recordOutcome: (appointmentId: string, input: Omit<RecordOutcomeInput, "appointmentId">) =>
     request<{ ok: true }>(`/appointments/${appointmentId}/outcome`, { method: "POST", body: JSON.stringify(input) }),
   lookups: () => request<Lookups>("/lookups"),
+  updateClinicHours: (clinicHours: ClinicHours) => request<{ clinicHours: ClinicHours }>("/clinic-hours", { method: "PUT", body: JSON.stringify({ clinicHours }) }),
   tasks: (filters: { view?: TaskView; assignedTo?: string; patientId?: string; reason?: TaskReason; followUpTypeKey?: string; completedFrom?: string; completedTo?: string } = {}) =>
     request<TaskRow[]>(`/tasks${toQuery({ ...filters })}`),
   /** `window` bounds the Completed count to the days tasks were completed on (hospital days), matching the Completed list. */

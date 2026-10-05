@@ -178,7 +178,7 @@ export default function AppointmentsPage() {
             emptyMessage="No appointments match these filters."
           />
         ) : view === "doctors" ? (
-          <DoctorScheduleView rows={visibleRows} date={date} today={today} timeZone={timeZone} onDateChange={setDate} onSelect={setSelected} />
+          <DoctorScheduleView rows={visibleRows} date={date} today={today} timeZone={timeZone} clinicHours={lookups.data?.clinicHours ?? null} onDateChange={setDate} onSelect={setSelected} />
         ) : (
           <CalendarView
             events={events}

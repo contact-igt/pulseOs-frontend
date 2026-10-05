@@ -9,6 +9,7 @@ import { CrmFieldsSection } from "@/components/settings/CrmFieldsSection";
 import { DepartmentsSection } from "@/components/settings/DepartmentsSection";
 import { FollowUpTypesSection } from "@/components/settings/FollowUpTypesSection";
 import { ResourcesSection } from "@/components/settings/ResourcesSection";
+import { ClinicHoursSection } from "@/components/settings/ClinicHoursSection";
 import { LeadSourcesSection } from "@/components/settings/LeadSourcesSection";
 import { OutcomesSection } from "@/components/outcomes/OutcomesSection";
 import { ActivitySection } from "@/components/settings/ActivitySection";
@@ -18,7 +19,7 @@ import { AllocationSection } from "@/components/allocation/AllocationSection";
 import { useUrlFilters } from "@/lib/useUrlFilters";
 import { useCapability } from "@/lib/useEdition";
 
-type Section = "services" | "departments" | "fields" | "sources" | "outcomes" | "followups" | "doctors" | "allocation" | "features" | "reminders" | "activity";
+type Section = "services" | "departments" | "fields" | "sources" | "outcomes" | "followups" | "doctors" | "hours" | "allocation" | "features" | "reminders" | "activity";
 const SECTIONS: { key: Section; label: string; manageOnly: boolean }[] = [
   { key: "services", label: "Services", manageOnly: false },
   { key: "departments", label: "Departments", manageOnly: true },
@@ -27,6 +28,7 @@ const SECTIONS: { key: Section; label: string; manageOnly: boolean }[] = [
   { key: "outcomes", label: "Workflow Outcomes", manageOnly: true },
   { key: "followups", label: "Follow-up Types", manageOnly: true },
   { key: "doctors", label: "Doctors", manageOnly: true },
+  { key: "hours", label: "Clinic Hours", manageOnly: true },
   { key: "allocation", label: "Allocation Rules", manageOnly: true },
   { key: "features", label: "Features", manageOnly: true },
   { key: "reminders", label: "Reminders", manageOnly: true },
@@ -151,6 +153,11 @@ export default function SettingsPage() {
       {section === "doctors" && canManage && (
         <Panel title="Doctors" subtitle="Who appointments and surgeries are scheduled with">
           <ResourcesSection />
+        </Panel>
+      )}
+      {section === "hours" && canManage && (
+        <Panel title="Clinic Hours" subtitle="When appointments can be booked. Booking, the Front Desk and the Doctor Planner all use this">
+          <ClinicHoursSection />
         </Panel>
       )}
       {section === "followups" && canManage && (
