@@ -382,6 +382,8 @@ export const appointments = pgTable("appointments", {
   tenantIdx: index("appointments_tenant_idx").on(t.tenantId),
   doctorIdx: index("appointments_doctor_idx").on(t.doctorUserId),
   resourceIdx: index("appointments_resource_idx").on(t.resourceId),
+  // The notification reconcile pass scans confirmed, upcoming visits across hospitals.
+  statusScheduledIdx: index("appointments_status_scheduled_idx").on(t.status, t.scheduledAt),
 }));
 
 // ---------------------------------------------------------------------------

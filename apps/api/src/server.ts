@@ -7,6 +7,7 @@ import { processDueCallIntelligence } from "./domain/call/call-intelligence.serv
 import { getTranscriber } from "./domain/call/transcriber.js";
 import { deliverDueWebhooks } from "./domain/integration/outbound-webhook.service.js";
 import { processDueNotifications } from "./domain/notification/notification.service.js";
+import { RECONCILE_DEFAULT_INTERVAL_MS, reconcileJob } from "./domain/notification/reconcile.js";
 import { syncDueAds } from "./domain/ads/ads-sync.service.js";
 import { getSummarizer } from "./domain/conversation/summary/index.js";
 
@@ -21,6 +22,8 @@ const jobs: DueJob[] = [
   { name: "conversation-summaries", run: (now) => processDueConversationSummaries(db, now, getSummarizer()) },
   { name: "call-intelligence", run: (now) => processDueCallIntelligence(db, now, { transcriberFor: (mode) => getTranscriber(mode), summarizer: getSummarizer() }) },
   { name: "notifications", run: (now) => processDueNotifications(db, now) },
+  // Safety net: confirmed visits whose confirmation/reminders were never planned (e.g. the process died right after Confirm).
+  reconcileJob(db, (msg, detail) => app.log.info({ detail }, msg), Number(process.env.NOTIFICATION_RECONCILE_INTERVAL_MS) || RECONCILE_DEFAULT_INTERVAL_MS),
   { name: "ads-sync", run: (now) => syncDueAds(db, now) },
   { name: "outbound-webhooks", run: (now) => deliverDueWebhooks(db, now) },
 ];
