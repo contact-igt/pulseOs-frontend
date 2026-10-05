@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { db, queryClient } from "../../../db/client.js";
-import { journeys, patients, tenants } from "../../../db/schema.js";
+import { eq } from "drizzle-orm";
+import { campaignTouchpoints, journeys, patients, tenants } from "../../../db/schema.js";
 import { getAttributionSummary, recordTouchpoint } from "../attribution.service.js";
 
 describe("attribution.service (recordTouchpoint / getAttributionSummary)", () => {
@@ -26,6 +27,10 @@ describe("attribution.service (recordTouchpoint / getAttributionSummary)", () =>
   });
 
   afterAll(async () => {
+    // This test borrows whatever tenant comes first (which can be a demo or pilot workspace): leave nothing behind in it.
+    await db.delete(campaignTouchpoints).where(eq(campaignTouchpoints.journeyId, journeyId));
+    await db.delete(journeys).where(eq(journeys.id, journeyId));
+    await db.delete(patients).where(eq(patients.id, patientId));
     await queryClient.end();
   });
 
