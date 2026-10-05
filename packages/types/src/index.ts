@@ -652,13 +652,32 @@ export interface LogCallInput {
   outcomeKey?: string;
   /** Ask for a callback: due ISO instant, optional note and owner (defaults to the Journey owner, else the person logging). */
   callback?: { dueAt: string; note?: string; assignedTo?: string };
+  /**
+   * Book the visit in the same save (instead of a callback). Doctor and branch may be left out when the hospital has
+   * only one of each. `confirmed`: the patient agreed to this slot during the call → the visit is CONFIRMED (and the
+   * confirmation + reminder messages are planned); otherwise it is only BOOKED and no message goes out.
+   */
+  appointment?: LogCallAppointmentInput;
   /** Client-generated id so a double-tapped Save returns the first call. */
   idempotencyKey?: string;
+}
+
+export interface LogCallAppointmentInput {
+  /** Hospital wall time (no offset) or an ISO instant. */
+  scheduledAt: string;
+  confirmed?: boolean;
+  doctorId?: string;
+  branchId?: string;
+  reason?: string;
 }
 
 export interface LogCallResult {
   callId: string;
   callbackTaskId: string | null;
+  /** The visit booked from this call, when one was asked for. */
+  appointmentId?: string | null;
+  /** "confirmed" only when it was asked for and the confirmation went through; otherwise "scheduled" (booked). */
+  appointmentStatus?: "scheduled" | "confirmed" | null;
   /** True when the idempotency key had already been used and the original call is returned. */
   duplicate: boolean;
 }
@@ -1581,7 +1600,7 @@ export const FIELD_PLACEMENTS: { key: FieldPlacement; label: string; where: stri
   { key: "add_lead", label: "Add Lead", where: "Asked when a new enquiry is added", shown: true },
   { key: "journey_detail", label: "Journey Detail", where: "Shown and editable on the journey", shown: true },
   { key: "patient_360", label: "Patient 360", where: "Shown on the patient's 360 view", shown: true },
-  { key: "followup_outcome", label: "Follow-up outcome", where: "Asked when staff log a call or follow-up outcome", shown: true },
+  { key: "followup_outcome", label: "Call / follow-up", where: "Asked when staff log a call or a follow-up outcome", shown: true },
   { key: "appointment", label: "Appointment", where: "Not shown on any screen yet", shown: false },
   { key: "treatment", label: "Treatment", where: "Not shown on any screen yet", shown: false },
 ];

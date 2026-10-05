@@ -8,6 +8,7 @@ import { streamRecording } from "./recording.js";
 
 const uuid = z.string().uuid();
 const callback = z.object({ dueAt: z.string().min(1), note: z.string().max(500).optional(), assignedTo: uuid.optional() }).strict();
+const appointment = z.object({ scheduledAt: z.string().min(1).max(40), confirmed: z.boolean().optional(), doctorId: uuid.optional(), branchId: uuid.optional(), reason: z.string().max(500).optional() }).strict();
 const logBody = z
   .object({
     direction: z.enum(["inbound", "outbound"]),
@@ -17,6 +18,7 @@ const logBody = z
     staffFeedback: z.string().max(2000).optional(),
     outcomeKey: z.string().min(1).max(60).optional(),
     callback: callback.optional(),
+    appointment: appointment.optional(),
     idempotencyKey: z.string().min(8).max(80).optional(),
   })
   .strict();
@@ -33,6 +35,14 @@ const REASON_STATUS: Record<string, number> = {
   callback_in_past: 422,
   occurred_in_future: 422,
   invalid_request: 400,
+  // Booking from a call: the same refusals as booking directly.
+  appointment_time_in_past: 422,
+  outside_clinic_hours: 422,
+  resource_unavailable: 409,
+  doctor_not_found: 404,
+  branch_not_found: 404,
+  doctor_required: 422,
+  branch_required: 422,
 };
 
 export async function callRoutes(app: FastifyInstance) {
@@ -43,9 +53,11 @@ export async function callRoutes(app: FastifyInstance) {
     const parsed = logBody.safeParse(request.body);
     if (!parsed.success) return reply.status(400).send({ error: "invalid_request" });
     const user = request.sessionUser!;
+    // Booking a visit is its own permission: a call alone never lets a role book.
+    if (parsed.data.appointment && !hasPermission(user.role, "MANAGE_APPOINTMENTS")) return reply.status(403).send({ error: "forbidden" });
     const result = await logManualCall(app.db, user.tenantId, { id: user.id, name: user.name, role: user.role }, id.data, parsed.data, new Date(), user.timezone);
     if (!result.ok) return reply.status(REASON_STATUS[result.reason] ?? 400).send({ error: result.reason });
-    return reply.status(result.duplicate ? 200 : 201).send({ callId: result.callId, callbackTaskId: result.callbackTaskId, duplicate: result.duplicate });
+    return reply.status(result.duplicate ? 200 : 201).send({ callId: result.callId, callbackTaskId: result.callbackTaskId, appointmentId: result.appointmentId ?? null, appointmentStatus: result.appointmentStatus ?? null, duplicate: result.duplicate });
   });
 
   // Staff feedback / outcome / callback on a call that already exists (an IVR call, or editing one's own note).
