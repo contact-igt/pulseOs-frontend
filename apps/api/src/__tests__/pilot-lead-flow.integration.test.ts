@@ -100,7 +100,8 @@ describe.skipIf(!DEMO_PASSWORD)("pilot lead flow (integration)", () => {
       const r = await row(lead.journeyId);
       expect(r).toMatchObject({ source: "walk_in", sourceLabel: "Walk-in" });
       const [first] = await db.select().from(timelineEvents).where(and(eq(timelineEvents.journeyId, lead.journeyId), eq(timelineEvents.eventType, "lead_created")));
-      expect(first).toMatchObject({ channel: "WALK_IN", description: "Walk-in recorded manually" });
+      // One creation line: where they came from, then how it was captured (the channel is never invented from the source).
+      expect(first).toMatchObject({ channel: "WALK_IN", description: "Source: Walk-in · Walk-in recorded manually" });
       // No callback, no follow-up, no call: nobody rang anybody.
       expect(await db.select().from(tasks).where(eq(tasks.journeyId, lead.journeyId))).toHaveLength(0);
       expect((await call("FRONT_DESK", "GET", `/patients/${lead.patientId}/360`)).json().calls).toHaveLength(0);
