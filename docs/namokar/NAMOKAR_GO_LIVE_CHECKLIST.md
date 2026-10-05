@@ -18,6 +18,8 @@ The product has no staff screen yet. Run this once per person on the server (the
 
 Roles: `FRONT_DESK` (Receptionist), `PATIENT_COORDINATOR` (run twice: Shivani and Sushil; "Special Coordinator" is only a job title and has no separate role), `DOCTOR` (Dr. Poonam Jain — she becomes the clinic's only doctor automatically), `HOSPITAL_ADMIN`. The owner is the sign-up account. No demo password, no shared logins. Each person should change their password after the first sign-in.
 
+**Owner and Admin accounts.** The local V2 workspace has two placeholder accounts, *Namokar Owner (placeholder)* and *Namokar Admin (placeholder)*, so someone can reach Settings. On a real server, the owner is the sign-up account (its own name and password) and an Admin is created with `--role HOSPITAL_ADMIN`; use the real person's name. Do not use the local demo password anywhere real; Sushil's "Special Coordinator" is a job title only (PulseOS stores no title and has no separate role).
+
 ## C. Connections (only with the hospital's own credentials)
 5. **WhatsApp Business:** Integrations → WhatsApp: the business account, approved templates, access token. Send one real test confirmation to a staff phone. Until then messages show as fixture/blocked.
 6. **Runo (calls):** Integrations → Runo credentials and webhook; place one test call; check the recording is visible to Owner/Admin only. Until then use **Log call**.
@@ -28,3 +30,6 @@ Roles: `FRONT_DESK` (Receptionist), `PATIENT_COORDINATOR` (run twice: Shivani an
 
 ## Telling demo from real
 Demo patients are the fictional names in the demo workspace only; the real workspace starts empty, so nothing needs deleting there. If a demo workspace is ever shown to staff for training, keep it on its own sign-in page (`/login/namokar`) and tell them it is practice data.
+
+## Deployment status (honest)
+There is no deployment target in this repository today: no CI pipeline, no hosting configuration and no deployment document, and the project rules say PulseOS is hosted locally unless a target is explicitly approved. So the verified build is **READY TO DEPLOY — TARGET REQUIRED**. Before deploying, someone must choose and approve: where the web app and API run, which PostgreSQL database holds the real V2 workspace (never the demo database; `pnpm db:seed` must never touch it), the secrets (`SESSION_SECRET`, `CONNECTOR_ENCRYPTION_KEY`, `DATABASE_URL`) and `ENABLE_DEV_LOGIN` left **off**.

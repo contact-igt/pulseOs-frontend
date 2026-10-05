@@ -71,3 +71,6 @@ Marked by Front Desk / Coordinator with a reason → exactly **one** *Appointmen
 
 * The same phone number — however it is written (`98…`, `+91 98…`, `098…`) — is the same Patient. A new service enquiry creates a new Journey on that Patient.
 * **Original source** is written when the Journey is created and is never overwritten by a later contact (a website form from a known patient adds to the open Journey).
+
+## Exports
+The Excel report uses the same words as the screens: the person looking after a patient is the **Team Member** (journeys) / **Assigned Team Member** (follow-ups), and *By team member* is the workload sheet.

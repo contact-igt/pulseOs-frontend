@@ -400,8 +400,8 @@ export async function seedNamokarV2Tenant(passwordHash: string) {
   await installDepartmentTemplate(db, tenant.id, "ophthalmology");
   const branchByKey = await createDemoBranches(tenant.id, [{ name: "Namokar Eye & Oculoplasty Centre", city: "Ashok Vihar, New Delhi" }]);
   await createDemoUsers("namokar-v2", tenant.id, passwordHash, branchByKey, [
-    { slug: "superadmin", name: "Namokar Owner", role: "SUPER_ADMIN", branch: "a" },
-    { slug: "admin", name: "Namokar Admin", role: "HOSPITAL_ADMIN", branch: "a" },
+    { slug: "superadmin", name: "Namokar Owner (placeholder)", role: "SUPER_ADMIN", branch: "a" },
+    { slug: "admin", name: "Namokar Admin (placeholder)", role: "HOSPITAL_ADMIN", branch: "a" },
     { slug: "doctor", name: "Dr. Poonam Jain", role: "DOCTOR", branch: "a" },
     { slug: "frontdesk", name: "Front Desk", role: "FRONT_DESK", branch: "a" },
     { slug: "shivani", name: "Shivani", role: "PATIENT_COORDINATOR", branch: "a" },

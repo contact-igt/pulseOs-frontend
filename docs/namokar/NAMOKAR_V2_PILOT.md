@@ -7,7 +7,7 @@
 | **Sign-in** | `/login/namokar-v2` |
 | **Label** | Namokar · V2 Pilot |
 | **Clinic** | One branch: Namokar Eye & Oculoplasty Centre, Ashok Vihar, New Delhi. One doctor: Dr. Poonam Jain. |
-| **Team** | Front Desk (receptionist / telecaller), **Shivani** and **Sushil** (Patient Coordinators), Dr. Poonam Jain (Doctor), plus an Admin and an owner (Super Admin) account. If another person joins, add them (see the go-live checklist) — no placeholder people are created. |
+| **Team** | Front Desk (receptionist / telecaller), **Shivani** and **Sushil** (Patient Coordinators), Dr. Poonam Jain (Doctor), plus two clearly-labelled placeholder accounts (*Namokar Owner (placeholder)* and *Namokar Admin (placeholder)*) to be replaced with the real owner and admin. If another person joins, add them (see the go-live checklist) — no placeholder people are created. |
 | **Clinic hours** | Monday–Saturday 09:00–16:00, Sunday closed, Asia/Kolkata. These are settings of the workspace (not code); **confirm with Namokar before launch, and whenever the clinic hours change.** |
 | **Appointments** | Only accepted inside clinic hours. The server refuses a Sunday or an out-of-hours time even if a screen is bypassed. The doctor and branch are filled in automatically. |
 | **Configuration present** | Ophthalmology services and CRM fields, call outcomes, follow-up types, the reminder rule (Confirmation + one reminder 1 hour before; the 1-day reminder is off), Revenue Tracking **off**. |

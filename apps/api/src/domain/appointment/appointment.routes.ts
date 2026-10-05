@@ -117,7 +117,7 @@ export async function appointmentRoutes(app: FastifyInstance) {
     if (!parsed.success) return reply.status(400).send({ error: "invalid_request" });
     const result = await checkSlot(app.db, request.sessionUser!.tenantId, parsed.data.doctorId, parsed.data.scheduledAt, request.sessionUser!.timezone, parsed.data.excludeId);
     if (!result.ok) return reply.status(result.reason === "invalid_request" ? 400 : 404).send({ error: result.reason });
-    return { available: result.available, inPast: result.inPast };
+    return { available: result.available, inPast: result.inPast, outsideHours: result.outsideHours };
   });
 
   app.get("/front-desk", async (request, reply) => {

@@ -83,7 +83,7 @@ export function AddLeadDrawer({
   onPhoneLookup: (phone: string) => Promise<LeadPhoneLookupResult>;
   onLoadCustomFields: (specialtyKey: string) => Promise<CustomFieldDefinitionVm[]>;
   /** Advisory: is this doctor free at this hospital wall time? */
-  onCheckSlot?: (doctorId: string, scheduledAt: string) => Promise<{ available: boolean; inPast: boolean }>;
+  onCheckSlot?: (doctorId: string, scheduledAt: string) => Promise<{ available: boolean; inPast: boolean; outsideHours?: boolean }>;
   onSubmit: (input: CreateLeadInput) => Promise<CreateLeadResult>;
   onCreated?: (result: CreateLeadResult) => void;
 }) {
@@ -131,7 +131,7 @@ export function AddLeadDrawer({
     if (!onCheckSlot || form.nextStep !== "appointment" || !form.apptDoctorId || !apptAt || apptPast || apptHoursError) return;
     let live = true;
     const t = setTimeout(() => {
-      onCheckSlot(form.apptDoctorId, apptAt).then((r) => live && setConflict(!r.available && !r.inPast)).catch(() => undefined);
+      onCheckSlot(form.apptDoctorId, apptAt).then((r) => live && setConflict(!r.available && !r.inPast && !r.outsideHours)).catch(() => undefined);
     }, 350);
     return () => {
       live = false;

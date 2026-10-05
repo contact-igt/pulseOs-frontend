@@ -94,9 +94,23 @@ test.describe("Namokar V2 Pilot (clean workspace)", () => {
     const sh = await as(browser, "shivani");
     await sh.page.goto("/my-work");
     await expect(sh.page.getByText(QA_NAME).first()).toBeVisible();
-    await sh.page.goto(`/journeys/${lead.body.journeyId}`);
+    // Leads -> the patient: the trail reads Leads > Patient > Service, and the record shows where they came from and who has them.
+    await sh.page.goto("/leads?view=all");
+    const row = sh.page.locator('[data-testid^="lead-row-"]').filter({ hasText: QA_NAME });
+    await expect(row).toBeVisible();
+    await row.click({ position: { x: 300, y: 10 } });
+    await expect(sh.page.getByTestId("journey-detail")).toBeVisible();
+    const crumbs = sh.page.getByTestId("breadcrumb");
+    await expect(crumbs).toContainText("Leads");
+    await expect(crumbs.getByTestId("breadcrumb-1")).toHaveText(QA_NAME);
+    await expect(crumbs.getByTestId("breadcrumb-2")).toHaveText("General Eye Consultation");
+    await expect(sh.page.getByTestId("journey-original-source")).toContainText("Phone");
+    await expect(sh.page.getByTestId("journey-owner")).toContainText("Shivani");
     await expect(sh.page.getByText("Assigned Team Member").first()).toBeVisible();
-    await expect(sh.page.getByText("Shivani").first()).toBeVisible();
+    await expect(sh.page.getByTestId("journey-stage")).toBeVisible();
+    await expect(sh.page.getByTestId("next-action-type")).toBeVisible(); // the callback just logged
+    await expect(sh.page.getByTestId("journey-timeline")).toContainText(/call/i);
+    await expect(sh.page.getByText(/revenue|₹/i)).toHaveCount(0);
     await sh.context.close();
 
     const su = await as(browser, "sushil");
@@ -127,6 +141,11 @@ test.describe("Namokar V2 Pilot (clean workspace)", () => {
     expect(ok.status, JSON.stringify(ok.body)).toBe(201);
     const first = await api(fd.page, "PATCH", `/appointments/${ok.body.id}/action`, { action: "confirm" });
     expect(first.status).toBe(200);
+    // No WhatsApp is configured in V2: the visit stays confirmed, and nothing is ever recorded as sent.
+    await expect.poll(() => Number(sql(`SELECT count(*) FROM notifications WHERE subject_id = '${ok.body.id}'`)), { timeout: 20_000 }).toBeGreaterThan(0);
+    await expect.poll(() => sql(`SELECT string_agg(DISTINCT status::text, ',') FROM notifications WHERE subject_id = '${ok.body.id}'`), { timeout: 60_000 }).toMatch(/BLOCKED/);
+    expect(sql(`SELECT count(*) FROM notifications WHERE subject_id = '${ok.body.id}' AND status IN ('SENT','DELIVERED','READ')`)).toBe("0");
+    expect(sql(`SELECT status FROM appointments WHERE id = '${ok.body.id}'`)).toBe("confirmed");
     await fd.context.close();
     purgePatients(MARKER);
     expect(v2Count("appointments")).toBe(0);

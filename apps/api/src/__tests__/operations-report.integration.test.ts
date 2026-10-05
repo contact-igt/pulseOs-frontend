@@ -250,7 +250,7 @@ describe.skipIf(!DEMO_PASSWORD)("operations report + Excel export (integration)"
     expect(disposition).toMatch(new RegExp(`attachment; filename="pulseos-enquiries-.*-${D1}_to_${D2}\\.xlsx"`));
     const ws = wb.getWorksheet("Enquiries")!;
     const [header, ...body] = rows(ws);
-    expect(header).toEqual(["Created", "Patient", "Phone", "Service", "Source", "Branch", "Owner", "Stage", "Latest outcome", "Contacted", "Appointment booked", "Attended", "Converted"]);
+    expect(header).toEqual(["Created", "Patient", "Phone", "Service", "Source", "Branch", "Team Member", "Stage", "Latest outcome", "Contacted", "Appointment booked", "Attended", "Converted"]);
     expect(body.map((r) => r[1]).sort()).toEqual(["Report Converted", "Report Midnight", "Report NoAnswer"]);
     const midnight = body.find((r) => r[1] === "Report Midnight")!;
     expect(midnight[0]).toMatch(/00:15/); // hospital time, not 18:45 UTC

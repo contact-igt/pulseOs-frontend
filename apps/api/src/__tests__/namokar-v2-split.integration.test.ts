@@ -65,7 +65,7 @@ describe.skipIf(!DEMO_PASSWORD)("Namokar V1 Demo and V2 Pilot (seeded)", () => {
       const staff = await sql`select role, count(*)::int as n from users where tenant_id = ${v2} group by role`;
       expect(Object.fromEntries(staff.map((r) => [r.role, r.n]))).toEqual({ SUPER_ADMIN: 1, HOSPITAL_ADMIN: 1, DOCTOR: 1, FRONT_DESK: 1, PATIENT_COORDINATOR: 2 });
       expect((await sql`select name, role from users where tenant_id = ${v2}`).map((r) => `${r.name}|${r.role}`).sort()).toEqual([
-        "Dr. Poonam Jain|DOCTOR", "Front Desk|FRONT_DESK", "Namokar Admin|HOSPITAL_ADMIN", "Namokar Owner|SUPER_ADMIN", "Shivani|PATIENT_COORDINATOR", "Sushil|PATIENT_COORDINATOR",
+        "Dr. Poonam Jain|DOCTOR", "Front Desk|FRONT_DESK", "Namokar Admin (placeholder)|HOSPITAL_ADMIN", "Namokar Owner (placeholder)|SUPER_ADMIN", "Shivani|PATIENT_COORDINATOR", "Sushil|PATIENT_COORDINATOR",
       ]);
       expect(await one(sql`select enabled from tenant_capabilities where tenant_id = ${v2} and capability = 'REVENUE_TRACKING'`)).toEqual([{ enabled: false }]);
       expect(await sql`select 1 from connectors where tenant_id = ${v2}`).toHaveLength(0);

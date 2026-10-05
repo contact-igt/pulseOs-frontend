@@ -111,6 +111,20 @@ describe("NewAppointmentDrawer — time and doctor rules", () => {
     expect(screen.queryByTestId("new-appointment-error")).toBeNull();
   });
 
+  it("the server's own 'outside clinic hours' answer (same rule as booking) is shown as such - not as 'doctor busy' - and blocks saving", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const onCheckSlot = vi.fn().mockResolvedValue({ available: false, inPast: false, outsideHours: true });
+    const { onSubmit } = setup({ onCheckSlot }); // no clinicHours prop: only the server knows
+    await fillRequired();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    expect((await screen.findByTestId("appt-time-clinic-hours")).textContent).toBe("That time is outside the clinic's hours. Choose a time inside them.");
+    expect(screen.queryByText(/already has another appointment/)).toBeNull();
+    expect((screen.getByTestId("new-appointment-submit") as HTMLButtonElement).disabled).toBe(true);
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
   it("if the availability check itself fails, no stale warning is left behind (the booking will still check)", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const onCheckSlot = vi.fn().mockResolvedValueOnce({ available: false, inPast: false }).mockRejectedValue(new Error("offline"));

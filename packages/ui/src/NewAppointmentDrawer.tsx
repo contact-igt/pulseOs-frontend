@@ -20,8 +20,10 @@ function defaultDateTime(): string {
 
 // What the person should do next — never a status code, never who holds the other slot.
 const PAST_COPY = "Choose a future appointment time.";
+const OUTSIDE_COPY = "That time is outside the clinic's hours. Choose a time inside them.";
 const BOOKING_ERROR: Record<string, string> = {
   appointment_time_in_past: PAST_COPY,
+  outside_clinic_hours: OUTSIDE_COPY,
   resource_unavailable: "This doctor already has another appointment at this time. Choose a different time or doctor.",
   invalid_request: "Check the date and time, then try again.",
 };
@@ -55,7 +57,7 @@ export function NewAppointmentDrawer({
   onLoadPatientJourneys: (patientId: string) => Promise<JourneyCardVm[]>;
   onSubmit: (input: CreateAppointmentInput) => Promise<AppointmentRow>;
   /** Advisory "is this doctor free then?" as the doctor and time are picked. The server re-checks on booking. */
-  onCheckSlot?: (doctorId: string, instant: string) => Promise<{ available: boolean; inPast: boolean }>;
+  onCheckSlot?: (doctorId: string, instant: string) => Promise<{ available: boolean; inPast: boolean; outsideHours?: boolean }>;
   onCreated?: (row: AppointmentRow) => void;
   onCreateLeadInstead?: () => void;
   /** The hospital's weekly hours (Lookups.clinicHours). Null/absent = no restriction. */
@@ -79,6 +81,8 @@ export function NewAppointmentDrawer({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [slotBusy, setSlotBusy] = useState(false);
+  // The server's own answer (same rule as booking), for when the form has no clinic hours of its own to check.
+  const [outside, setOutside] = useState(false);
   // The advisory "doctor is busy then" warning is its own state, so it can never outlive the doctor/time it was about.
   const [conflict, setConflict] = useState(false);
 
@@ -94,6 +98,7 @@ export function NewAppointmentDrawer({
   // ask is silent — the booking itself still checks.
   useEffect(() => {
     setConflict(false);
+    setOutside(false);
     if (!onCheckSlot || !doctorId || !scheduledAt || pastPicked || hoursError) {
       setSlotBusy(false);
       return;
@@ -102,7 +107,7 @@ export function NewAppointmentDrawer({
     let live = true;
     const t = setTimeout(() => {
       onCheckSlot(doctorId, instant(scheduledAt))
-        .then((r) => live && setConflict(!r.available && !r.inPast))
+        .then((r) => { if (!live) return; setConflict(!r.available && !r.inPast && !r.outsideHours); setOutside(!!r.outsideHours); })
         .catch(() => undefined)
         .finally(() => live && setSlotBusy(false));
     }, 350);
@@ -150,7 +155,7 @@ export function NewAppointmentDrawer({
     setJourneyId(rows[0]?.id ?? "");
   }
 
-  const canSubmit = patient && journeyId && branchId && doctorId && scheduledAt && !submitting && !pastPicked && !hoursError;
+  const canSubmit = patient && journeyId && branchId && doctorId && scheduledAt && !submitting && !pastPicked && !hoursError && !outside;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -300,11 +305,11 @@ export function NewAppointmentDrawer({
             <label className={labelClass} htmlFor="appt-time">
               Date &amp; time <span className="text-danger-500">*</span>
             </label>
-            <input id="appt-time" type="datetime-local" required value={scheduledAt} min={nowLocal} onChange={(e) => { setScheduledAt(e.target.value); setError(null); }} aria-invalid={pastPicked || !!hoursError || undefined} aria-describedby={[pastPicked || hoursError ? "appt-time-error" : "", hoursHint ? "appt-time-hint" : ""].filter(Boolean).join(" ") || undefined} className={inputClass} data-testid="appt-time" />
+            <input id="appt-time" type="datetime-local" required value={scheduledAt} min={nowLocal} onChange={(e) => { setScheduledAt(e.target.value); setError(null); }} aria-invalid={pastPicked || !!hoursError || outside || undefined} aria-describedby={[pastPicked || hoursError || outside ? "appt-time-error" : "", hoursHint ? "appt-time-hint" : ""].filter(Boolean).join(" ") || undefined} className={inputClass} data-testid="appt-time" />
             {hoursHint && <p id="appt-time-hint" className="mt-1 text-xs text-ink-2" data-testid="appt-clinic-hours">{hoursHint}</p>}
-            {(pastPicked || hoursError) && (
+            {(pastPicked || hoursError || outside) && (
               <p id="appt-time-error" role="alert" className="mt-1 text-xs text-danger-700" data-testid={pastPicked ? "appt-time-past" : "appt-time-clinic-hours"}>
-                {pastPicked ? PAST_COPY : hoursError}
+                {pastPicked ? PAST_COPY : hoursError ?? OUTSIDE_COPY}
               </p>
             )}
           </div>

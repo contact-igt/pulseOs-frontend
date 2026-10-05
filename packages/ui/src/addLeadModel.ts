@@ -165,6 +165,7 @@ export function toCreateLeadInput(f: LeadFormValues, ctx: { normalizeFields: (v:
 /** What the person should do next — a sentence, never a status code, never who holds the other slot. */
 export const LEAD_ERROR_COPY: Record<string, string> = {
   appointment_time_in_past: "Choose a future appointment time.",
+  outside_clinic_hours: "That time is outside the clinic's hours. Choose a time inside them.",
   resource_unavailable: "This doctor already has another appointment at this time. Choose a different time or doctor.",
   doctor_not_found: "Choose a doctor for the appointment.",
   branch_not_found: "Choose a valid branch for the appointment.",

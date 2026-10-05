@@ -85,13 +85,15 @@ async function resourceSlotTaken(tx: DbOrTx, tenantId: string, resourceId: strin
  * Advisory pre-check for the booking form: is this doctor free at this time? Says nothing about WHO holds a taken slot.
  * The authoritative check is still the booking itself (create/reschedule), under the resource lock.
  */
-export async function checkSlot(db: Db, tenantId: string, doctorId: string, scheduledAt: unknown, timezone: string, excludeAppointmentId?: string, now: Date = new Date()): Promise<Result<{ available: boolean; inPast: boolean }>> {
+export async function checkSlot(db: Db, tenantId: string, doctorId: string, scheduledAt: unknown, timezone: string, excludeAppointmentId?: string, now: Date = new Date()): Promise<Result<{ available: boolean; inPast: boolean; outsideHours: boolean }>> {
   const at = parseInstant(scheduledAt, timezone);
   if (!at) return { ok: false, reason: "invalid_request" };
   const resource = await findActiveResource(db, tenantId, doctorId);
   if (!resource) return { ok: false, reason: "doctor_not_found" };
   const inPast = at.getTime() < now.getTime() - PAST_SLACK_MS;
-  return { ok: true, inPast, available: !inPast && !(await resourceSlotTaken(db, tenantId, resource.id, at, excludeAppointmentId)) };
+  // The same clinic-hours rule booking enforces, so the form never calls a time "available" that booking would refuse.
+  const outsideHours = !inPast && !(await withinClinicHours(db, tenantId, at, timezone));
+  return { ok: true, inPast, outsideHours, available: !inPast && !outsideHours && !(await resourceSlotTaken(db, tenantId, resource.id, at, excludeAppointmentId)) };
 }
 
 /** The hospital's IANA zone and its current local day - what "today" means for every appointment view. */

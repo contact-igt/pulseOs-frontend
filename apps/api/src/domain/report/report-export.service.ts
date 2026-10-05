@@ -119,7 +119,7 @@ function summarySheets(wb: ExcelJS.Workbook, facts: ReportFacts) {
     wb,
     "By team member",
     [
-      { header: "Team member", key: "name", width: 26 }, { header: "Enquiries owned", key: "enquiries", width: 16 }, { header: "Not yet contacted", key: "uncontacted", width: 18 },
+      { header: "Team member", key: "name", width: 26 }, { header: "Enquiries assigned", key: "enquiries", width: 16 }, { header: "Not yet contacted", key: "uncontacted", width: 18 },
       { header: "Follow-ups due", key: "followUpsDue", width: 15 }, { header: "Overdue now", key: "followUpsOverdue", width: 13 }, { header: "Completed", key: "followUpsCompleted", width: 11 },
     ],
     r.byOwner,
@@ -134,7 +134,7 @@ function enquiriesSheet(wb: ExcelJS.Workbook, facts: ReportFacts) {
     [
       { header: "Created", key: "created", width: 20 }, { header: "Patient", key: "patient", width: 24 }, { header: "Phone", key: "phone", width: 16 },
       { header: "Service", key: "service", width: 20 }, { header: "Source", key: "source", width: 22 }, { header: "Branch", key: "branch", width: 18 },
-      { header: "Owner", key: "owner", width: 20 }, { header: "Stage", key: "stage", width: 20 }, { header: "Latest outcome", key: "outcome", width: 22 },
+      { header: "Team Member", key: "owner", width: 20 }, { header: "Stage", key: "stage", width: 20 }, { header: "Latest outcome", key: "outcome", width: 22 },
       { header: "Contacted", key: "contacted", width: 11 }, { header: "Appointment booked", key: "booked", width: 19 }, { header: "Attended", key: "attended", width: 10 },
       { header: "Converted", key: "converted", width: 11 },
     ],
@@ -174,7 +174,7 @@ function followUpsSheet(wb: ExcelJS.Workbook, facts: ReportFacts) {
     [
       { header: "Due", key: "due", width: 20 }, { header: "Type", key: "type", width: 22 }, { header: "Priority", key: "priority", width: 10 },
       { header: "Status", key: "status", width: 12 }, { header: "Overdue now", key: "overdue", width: 12 }, { header: "Patient", key: "patient", width: 24 },
-      { header: "Phone", key: "phone", width: 16 }, { header: "Service", key: "service", width: 20 }, { header: "Assigned to", key: "assignee", width: 20 },
+      { header: "Phone", key: "phone", width: 16 }, { header: "Service", key: "service", width: 20 }, { header: "Assigned Team Member", key: "assignee", width: 24 },
       { header: "Completed", key: "completed", width: 20 }, { header: "Note", key: "notes", width: 40 },
     ],
     facts.followUps

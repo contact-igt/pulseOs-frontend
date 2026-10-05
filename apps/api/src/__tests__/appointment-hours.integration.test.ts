@@ -57,6 +57,21 @@ describe.skipIf(!DEMO_PASSWORD)("appointments: clinic hours enforced server-side
   describe("hours set: Mon-Sat 09:00-16:00, Sunday closed, Asia/Kolkata", () => {
     beforeAll(() => setHours(HOURS));
 
+    describe("the slot pre-check agrees with booking (never 'available' for a time booking refuses)", () => {
+      const check = async (local: string) => (await call("GET", `/appointments/slot-check?doctorId=${doctorId}&scheduledAt=${encodeURIComponent(local)}`)).json() as { available: boolean; inPast: boolean; outsideHours: boolean };
+      it("Sunday, 08:59, 16:00 and after closing: not available, flagged outsideHours", async () => {
+        for (const local of [`${nextDay(0)}T10:00`, `${nextDay(2)}T08:59`, `${nextDay(3)}T16:00`, `${nextDay(4)}T18:30`]) expect(await check(local), local).toEqual({ available: false, inPast: false, outsideHours: true });
+      });
+      it("09:00 and 15:59 on an open day: available", async () => {
+        for (const local of [`${nextDay(2)}T09:00`, `${nextDay(5)}T15:59`]) expect((await check(local)).available, local).toBe(true);
+      });
+      it("a busy doctor is 'not available' but NOT outsideHours", async () => {
+        const local = `${nextDay(2)}T13:00`;
+        expect((await book(local)).statusCode).toBe(201);
+        expect(await check(local)).toEqual({ available: false, inPast: false, outsideHours: false });
+      });
+    });
+
     it("accepts a Monday 09:30 visit", async () => expect((await book(`${nextDay(1)}T09:30`)).statusCode).toBe(201));
     it("accepts a Saturday visit inside hours", async () => expect((await book(`${nextDay(6)}T11:00`)).statusCode).toBe(201));
     it("refuses a Sunday visit (closed day)", async () => refused(await book(`${nextDay(0)}T10:00`)));
