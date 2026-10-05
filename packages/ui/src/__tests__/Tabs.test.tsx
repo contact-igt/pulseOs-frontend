@@ -71,3 +71,39 @@ describe("Tabs", () => {
     expect(onChange).toHaveBeenCalledWith("c");
   });
 });
+
+describe("Tabs: scroll buttons for a mouse (no trackpad needed)", () => {
+  it("no buttons while everything fits; ‹ appears only when there is more on the left, › only when there is more on the right", () => {
+    render(<Tabs variant="underline" value="a" onChange={() => {}} items={items} />);
+    const strip = screen.getByRole("tablist");
+    overflow(strip, { client: 400, scroll: 400, left: 0 });
+    expect(screen.queryByTestId("tabs-scroll-left")).toBeNull();
+    expect(screen.queryByTestId("tabs-scroll-right")).toBeNull();
+    overflow(strip, { client: 300, scroll: 700, left: 0 });
+    expect(screen.queryByTestId("tabs-scroll-left")).toBeNull();
+    expect(screen.getByRole("button", { name: "Scroll tabs right" })).toBeTruthy();
+    overflow(strip, { client: 300, scroll: 700, left: 150 });
+    expect(screen.getByRole("button", { name: "Scroll tabs left" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Scroll tabs right" })).toBeTruthy();
+    overflow(strip, { client: 300, scroll: 700, left: 400 });
+    expect(screen.queryByTestId("tabs-scroll-right")).toBeNull();
+  });
+
+  it("clicking a button scrolls the strip by most of its width in that direction", () => {
+    render(<Tabs variant="underline" value="a" onChange={() => {}} items={items} />);
+    const strip = screen.getByRole("tablist");
+    const scrollBy = vi.fn();
+    strip.scrollBy = scrollBy as unknown as typeof strip.scrollBy;
+    overflow(strip, { client: 300, scroll: 700, left: 150 });
+    fireEvent.click(screen.getByRole("button", { name: "Scroll tabs right" }));
+    expect(scrollBy).toHaveBeenLastCalledWith(expect.objectContaining({ left: 210 }));
+    fireEvent.click(screen.getByRole("button", { name: "Scroll tabs left" }));
+    expect(scrollBy).toHaveBeenLastCalledWith(expect.objectContaining({ left: -210 }));
+  });
+
+  it("the buttons are not extra tab stops (the tabs keep their arrow-key navigation)", () => {
+    render(<Tabs variant="underline" value="a" onChange={() => {}} items={items} />);
+    overflow(screen.getByRole("tablist"), { client: 300, scroll: 700, left: 150 });
+    expect(screen.getByRole("button", { name: "Scroll tabs right" }).getAttribute("tabindex")).toBe("-1");
+  });
+});

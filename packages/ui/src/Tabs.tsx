@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 
 export interface TabItem {
@@ -20,6 +21,10 @@ const FADE_START = `linear-gradient(to right, transparent 0, #000 ${EDGE_PX}px)`
  * an inset shadow, not a negative margin that would overhang the scroll box). An edge fade tells
  * the user there are more tabs off-screen. `segmented` is a pill group, `underline` a flat tab row
  * for page-level sections. Arrow keys / Home / End move between tabs (roving tabindex).
+ *
+ * When the tabs do not all fit, a ‹ / › button appears on the side that has more (only there): a plain mouse user
+ * has no trackpad or shift-wheel, so the hidden tabs must be reachable by clicking. Trackpad, touch and keyboard
+ * keep working exactly as before. The buttons float over the edge fade, so they never change the layout.
  */
 export function Tabs({
   items,
@@ -46,6 +51,12 @@ export function Tabs({
     const next = { start: max > 1 && el.scrollLeft > 1, end: max > 1 && el.scrollLeft < max - 1 };
     setFade((prev) => (prev.start === next.start && prev.end === next.end ? prev : next));
   }, []);
+
+  const scrollByPage = (dir: -1 | 1) => {
+    const el = stripRef.current;
+    if (!el) return;
+    el.scrollBy({ left: dir * Math.max(120, Math.round(el.clientWidth * 0.7)), behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  };
 
   useLayoutEffect(measure, [measure, items.length]);
   useEffect(() => {
@@ -83,7 +94,19 @@ export function Tabs({
       : "flex max-w-full gap-5 border-b border-line";
   const mask = fade.start && fade.end ? FADE_BOTH : fade.end ? FADE_END : fade.start ? FADE_START : undefined;
 
+  const arrow = "absolute top-0 z-10 flex h-full min-h-11 w-9 items-center justify-center rounded-control text-ink-2 hover:text-ink focus-visible:outline-offset-[-2px] sm:w-7";
   return (
+    <div className={`relative max-w-full min-w-0 ${variant === "segmented" ? "inline-block align-top" : "block"}`}>
+    {fade.start && (
+      <button type="button" aria-label="Scroll tabs left" tabIndex={-1} onClick={() => scrollByPage(-1)} className={`${arrow} left-0 bg-white/90`} data-testid="tabs-scroll-left">
+        <ChevronLeft size={16} aria-hidden="true" />
+      </button>
+    )}
+    {fade.end && (
+      <button type="button" aria-label="Scroll tabs right" tabIndex={-1} onClick={() => scrollByPage(1)} className={`${arrow} right-0 bg-white/90`} data-testid="tabs-scroll-right">
+        <ChevronRight size={16} aria-hidden="true" />
+      </button>
+    )}
     <div
       ref={stripRef}
       role="tablist"
@@ -118,6 +141,7 @@ export function Tabs({
           </button>
         );
       })}
+    </div>
     </div>
   );
 }
