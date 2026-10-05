@@ -16,7 +16,11 @@ import { blankField, fieldToForm, placementSummary, type FieldForm } from "./crm
 const TYPE_LABEL = new Map(CUSTOM_FIELD_TYPES.map((t) => [t.key, t.label]));
 const VISIBILITY_LABEL = new Map(FIELD_VISIBILITY.map((v) => [v.key, v.label]));
 
-function FieldRow({ field, position, total, canMove, locked, status, focusRequest, onMove, onEdit, onArchive, onRestore }: { field: CrmFieldVm; position: number; total: number; canMove: boolean; locked: boolean; status: RowStatus; focusRequest: { id: string; control: OrderControl; n: number } | null; onMove: (d: -1 | 1) => void; onEdit: () => void; onArchive: () => void; onRestore: () => void }) {
+function FieldRow({ field, position, total, canMove, locked, status, focusRequest, onMove, onEdit, onArchive, onRestore, onToggleAddLead }: { field: CrmFieldVm; position: number; total: number; canMove: boolean; locked: boolean; status: RowStatus; focusRequest: { id: string; control: OrderControl; n: number } | null; onMove: (d: -1 | 1) => void; onEdit: () => void; onArchive: () => void; onRestore: () => void; onToggleAddLead: (on: boolean) => Promise<boolean> }) {
+  // Shown at once; settles to the saved value when the list refreshes (or snaps back if the save failed).
+  const savedAddLead = field.placements.includes("add_lead");
+  const [pendingAddLead, setPendingAddLead] = useState<{ on: boolean; wasSaved: boolean } | null>(null);
+  const shownAddLead = pendingAddLead && pendingAddLead.wasSaved === savedAddLead ? pendingAddLead.on : savedAddLead;
   // Only the grip starts a drag — the rest of the row keeps its normal click targets (Edit, Archive).
   const { isDragging, rowProps, gripProps } = useSortableRow(field.id, !canMove || locked, { status, archived: field.archived });
   return (
@@ -37,15 +41,23 @@ function FieldRow({ field, position, total, canMove, locked, status, focusReques
       <button type="button" onClick={onEdit} className="min-w-0 flex-1 basis-40 text-left max-md:flex max-md:min-h-11 max-md:flex-col max-md:justify-center" aria-label={`Edit ${field.label}`} data-testid={`field-edit-${field.key}`}>
         <span className="block truncate text-sm font-medium text-ink">{field.label}</span>
         <span className="block truncate text-[11px] text-ink-2">
-          {TYPE_LABEL.get(field.fieldType) ?? field.fieldType} · {placementSummary(field.placements)}
+          {TYPE_LABEL.get(field.fieldType) ?? field.fieldType} · Used in {placementSummary(field.placements)}
         </span>
       </button>
       <div className="flex shrink-0 flex-wrap items-center gap-1.5">
         {field.origin !== "CUSTOM" && <Badge tone={field.origin === "SYSTEM" ? "primary" : "neutral"} data-testid={`field-origin-${field.key}`}>{FIELD_ORIGIN_LABEL[field.origin]}</Badge>}
         {field.required && <Badge tone="primary">Required</Badge>}
+        {field.filterable && <Badge>Filterable</Badge>}
         {field.visibleTo !== "everyone" && <Badge>{VISIBILITY_LABEL.get(field.visibleTo)}</Badge>}
         {field.archived && <Badge tone="warning">Archived</Badge>}
       </div>
+      {/* The one switch staff reach for most: does this question appear when a new enquiry is added? Nothing recorded is deleted either way. */}
+      {!field.archived && (
+        <label className="flex min-h-11 shrink-0 cursor-pointer items-center gap-1.5 text-xs text-ink sm:min-h-0" title="Ask this when a new enquiry is added">
+          <input type="checkbox" checked={shownAddLead} onChange={(e) => { const on = e.target.checked; setPendingAddLead({ on, wasSaved: savedAddLead }); void onToggleAddLead(on).then((ok) => { if (!ok) setPendingAddLead(null); }); }} className="h-5 w-5 rounded border-line-strong text-primary-600 focus:ring-primary-500 sm:h-4 sm:w-4" data-testid={`field-add-lead-${field.key}`} aria-label={`Show "${field.label}" on Add Lead`} />
+          On Add Lead
+        </label>
+      )}
       <div className="flex shrink-0 items-center gap-1">
         <Button size="sm" variant="ghost" className="min-h-11 sm:min-h-0" onClick={onEdit}>
           Edit
@@ -184,6 +196,23 @@ export function CrmFieldsSection({ services }: { services: SpecialtyTemplateVm[]
                   onEdit={() => setEditing({ mode: "edit", form: fieldToForm(f), id: f.id })}
                   onArchive={() => setConfirming(f)}
                   onRestore={() => run(() => api.updateCrmField(f.id, { archived: false }), "Couldn't restore that field — try again.")}
+                  onToggleAddLead={async (on) => {
+                    const placements = on ? [...f.placements, "add_lead" as const] : f.placements.filter((p) => p !== "add_lead");
+                    // A field must be placed somewhere: switching off its last place is archiving, which is a separate, explained step.
+                    if (placements.length === 0) {
+                      setError("This field is only used on Add Lead. Archive it instead, or place it somewhere else first (Edit).");
+                      return false;
+                    }
+                    setError(null);
+                    try {
+                      await api.updateCrmField(f.id, { placements });
+                      await refresh();
+                      return true;
+                    } catch {
+                      setError(`Couldn't change ${f.label} — try again.`);
+                      return false;
+                    }
+                  }}
                 />
                 );
               })}

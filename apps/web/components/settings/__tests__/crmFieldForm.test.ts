@@ -66,7 +66,7 @@ describe("placementSummary", () => {
   it("names up to two places, then counts the rest", () => {
     expect(placementSummary(["add_lead"])).toBe("Add Lead");
     expect(placementSummary(["add_lead", "journey_detail"])).toBe("Add Lead · Journey Detail");
-    expect(placementSummary(["add_lead", "journey_detail", "patient_360", "appointment"])).toBe("Add Lead · Journey Detail · +2");
+    expect(placementSummary(["add_lead", "journey_detail", "patient_360", "appointment"])).toBe("Add Lead · Journey Detail · Patient 360 · Appointment");
     expect(placementSummary([])).toBe("Nowhere");
   });
 });

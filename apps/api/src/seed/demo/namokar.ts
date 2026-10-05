@@ -1,7 +1,7 @@
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, sql } from "drizzle-orm";
 import type { ClinicHours } from "@pulseos/types";
 import { db } from "../../db/client.js";
-import { appointments, followUpTypes, notificationRules, notifications, tenantCapabilities, timelineEvents, treatmentOpportunities } from "../../db/schema.js";
+import { appointments, customFieldDefinitions, followUpTypes, notificationRules, notifications, tenantCapabilities, timelineEvents, treatmentOpportunities } from "../../db/schema.js";
 import { ensureNotificationDefaults, planForSubject } from "../../domain/notification/notification.service.js";
 import { installDepartmentTemplate } from "../../domain/specialty/department.service.js";
 import { OPHTHALMOLOGY_TREATMENTS } from "../../domain/specialty/ophthalmology.templates.js";
@@ -295,6 +295,19 @@ async function seedFlagshipTrail(i: { tenantId: string; journeyId: string; patie
   ]);
 }
 
+/**
+ * Namokar's first lead entry stays short: name, phone, how they reached us, the service, and who looks after it. The ophthalmology
+ * template's clinical questions (eye concern, laterality, diabetes ...) are NOT asked on Add Lead - they remain on the journey and the
+ * patient record, where they are captured progressively and can be edited later. A hospital that wants one back on Add Lead switches
+ * it on in Settings → CRM Fields ("Add Lead"); nothing is deleted.
+ */
+async function keepAddLeadSimple(tenantId: string) {
+  await db
+    .update(customFieldDefinitions)
+    .set({ placements: sql`coalesce((select jsonb_agg(p) from jsonb_array_elements(${customFieldDefinitions.placements}) p where p <> '"add_lead"'::jsonb), '[]'::jsonb)` })
+    .where(eq(customFieldDefinitions.tenantId, tenantId));
+}
+
 export async function seedNamokarTenant(passwordHash: string) {
   assertJourneyConfigsConsistent("namokar", NAMOKAR_JOURNEYS, NAMOKAR_PATIENT_NAMES, new Set(OPHTHALMOLOGY_TREATMENTS.map((t) => t.key)));
   const tenant = await createDemoTenant(NAMOKAR_TENANT_NAME, "BETA_V1_CORE", {
@@ -308,6 +321,7 @@ export async function seedNamokarTenant(passwordHash: string) {
   // can never turn it back on: no revenue figures, no payments, no revenue-based ROAS anywhere.
   await db.insert(tenantCapabilities).values({ tenantId: tenant.id, capability: "REVENUE_TRACKING", enabled: false });
   await installDepartmentTemplate(db, tenant.id, "ophthalmology");
+  await keepAddLeadSimple(tenant.id);
 
   const branchByKey = await createDemoBranches(tenant.id, [
     { name: "Namokar Eye & Oculoplasty Centre", city: "Ashok Vihar, New Delhi" },
@@ -398,6 +412,7 @@ export async function seedNamokarV2Tenant(passwordHash: string) {
   });
   await db.insert(tenantCapabilities).values({ tenantId: tenant.id, capability: "REVENUE_TRACKING", enabled: false });
   await installDepartmentTemplate(db, tenant.id, "ophthalmology");
+  await keepAddLeadSimple(tenant.id);
   const branchByKey = await createDemoBranches(tenant.id, [{ name: "Namokar Eye & Oculoplasty Centre", city: "Ashok Vihar, New Delhi" }]);
   await createDemoUsers("namokar-v2", tenant.id, passwordHash, branchByKey, [
     { slug: "superadmin", name: "Namokar Owner (placeholder)", role: "SUPER_ADMIN", branch: "a" },

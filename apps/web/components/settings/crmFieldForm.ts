@@ -146,5 +146,5 @@ const PLACEMENT_LABEL = new Map(FIELD_PLACEMENTS.map((p) => [p.key, p.label]));
 export function placementSummary(placements: FieldPlacement[]): string {
   if (placements.length === 0) return "Nowhere";
   const names = placements.map((p) => PLACEMENT_LABEL.get(p) ?? p);
-  return names.length <= 2 ? names.join(" · ") : `${names.slice(0, 2).join(" · ")} · +${names.length - 2}`;
+  return names.join(" · ");
 }
