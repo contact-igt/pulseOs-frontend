@@ -57,6 +57,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (data) rememberLoginPage(loginSlug);
   }, [data, loginSlug]);
 
+  // The hospital's interface style (Settings > Appearance) comes from the server with the session; it is applied as a data
+  // attribute that selects one of three bounded sets of surface tokens (see globals.css). Nothing is kept in the browser:
+  // another hospital signing in on the same machine gets its own.
+  const surfaceStyle = data?.user.surfaceStyle;
+  useEffect(() => {
+    document.documentElement.dataset.surface = surfaceStyle ?? "balanced";
+    return () => {
+      delete document.documentElement.dataset.surface;
+    };
+  }, [surfaceStyle]);
+
   // A role's sidebar only ever links to pages it's meant to use (see nav.ts)
   // — but nothing previously stopped a direct URL, stale bookmark, or back
   // button from landing a role on a page outside that set. The API already

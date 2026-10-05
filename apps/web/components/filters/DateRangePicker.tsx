@@ -8,7 +8,7 @@ import { PulseCalendar } from "./PulseCalendar";
 import { clickRangeDay, monthOf, type DraftRange } from "./calendarGrid";
 
 export const POPOVER_SURFACE =
-  "z-50 w-[19rem] max-w-[calc(100vw-1.5rem)] rounded-[14px] border border-line bg-white p-3 text-ink shadow-[0_10px_30px_rgba(16,42,67,0.14)] outline-none";
+  "floating z-(--z-popover) w-[19rem] max-w-[calc(100vw-1.5rem)] rounded-[14px] p-3 text-ink outline-none";
 
 const short = (day: string) => formatKey(day, { day: "numeric", month: "short", year: "numeric" });
 

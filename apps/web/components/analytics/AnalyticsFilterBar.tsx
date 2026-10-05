@@ -141,7 +141,7 @@ export function AnalyticsFilterBar(props: BarProps) {
       <Chips {...props} />
 
       {sheetOpen && (
-        <div className="fixed inset-0 z-40 md:hidden" data-testid="filters-sheet-root">
+        <div className="fixed inset-0 z-(--z-sheet) md:hidden" data-testid="filters-sheet-root">
           <div className="drawer-backdrop absolute inset-0 bg-slate-900/30" onClick={() => setSheetOpen(false)} aria-hidden="true" />
           <div
             ref={sheetRef}

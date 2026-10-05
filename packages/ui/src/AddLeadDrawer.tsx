@@ -205,7 +205,7 @@ export function AddLeadDrawer({
   const stepHint = avail.hint;
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true" aria-label="Add Lead">
+    <div className="fixed inset-0 z-(--z-sheet) flex justify-end" role="dialog" aria-modal="true" aria-label="Add Lead">
       <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 drawer-backdrop bg-slate-900/30" />
       <form ref={dialogRef} tabIndex={-1} onSubmit={handleSubmit} className="relative flex h-full w-full max-w-lg flex-col overflow-hidden drawer-panel focus:outline-none" data-testid="add-lead-drawer">
         <div className="flex items-start justify-between gap-2 border-b border-line p-5">
@@ -609,7 +609,7 @@ export function AddLeadDrawer({
           )}
         </div>
 
-        <div className="sticky bottom-0 flex gap-2 border-t border-line bg-white/90 p-4">
+        <div className="sticky bottom-0 flex gap-2 border-t border-line bg-surface p-4">
           <button type="button" onClick={onClose} className="flex-1 rounded-control border border-line-strong px-3 py-2.5 text-sm font-medium text-neutral-600 transition hover:bg-neutral-50 max-md:min-h-11">
             Cancel
           </button>

@@ -121,6 +121,7 @@ import type {
   PatientSearchRow,
   Role,
   SessionUser,
+  SurfaceStyle,
   SourcePerformanceRow,
   SpecialtyDetailVm,
   SpecialtyTemplateVm,
@@ -251,6 +252,8 @@ export const api = {
     request<{ user: SessionUser }>(`/auth/login/tenant/${encodeURIComponent(slug)}`, { method: "POST", body: JSON.stringify({ email, password, remember }) }),
   logout: () => request<{ ok: true }>("/auth/logout", { method: "POST" }),
   session: () => request<{ user: SessionUser }>("/auth/session"),
+  /** Settings > Appearance: the hospital's interface style (admin only; one of three named styles). */
+  setAppearance: (surfaceStyle: SurfaceStyle) => request<{ surfaceStyle: SurfaceStyle }>("/appearance", { method: "PUT", body: JSON.stringify({ surfaceStyle }) }),
   capabilities: () => request<{ edition: Edition; capabilities: CapabilityState[] }>("/capabilities"),
   setCapability: (key: string, enabled: boolean | null) =>
     request<{ ok: true; capabilities: Record<string, boolean> }>(`/capabilities/${key}`, { method: "PUT", body: JSON.stringify({ enabled }) }),

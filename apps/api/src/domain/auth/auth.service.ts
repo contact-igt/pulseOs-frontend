@@ -3,7 +3,7 @@ import { hash, verify } from "@node-rs/argon2";
 import { and, eq } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { users, sessions, tenants, branches, tenantLoginConfigs, tenantProfiles } from "../../db/schema.js";
-import { DEFAULT_EDITION, DEFAULT_LOGIN_SUPPORT_TEXT, DEFAULT_LOGIN_TAGLINE, LOGIN_LOGO_PATH_PATTERN, type DevEnvironment, type Role, type TenantLoginBranding } from "@pulseos/types";
+import { DEFAULT_EDITION, DEFAULT_SURFACE_STYLE, SURFACE_STYLES, type SurfaceStyle, DEFAULT_LOGIN_SUPPORT_TEXT, DEFAULT_LOGIN_TAGLINE, LOGIN_LOGO_PATH_PATTERN, type DevEnvironment, type Role, type TenantLoginBranding } from "@pulseos/types";
 import { DEFAULT_DEMO_ENVIRONMENT, DEMO_ENVIRONMENTS, DEMO_LOGIN_ROLES, demoEmailForRole, type DemoEnvironmentKey } from "./demo-environments.js";
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 12;
@@ -16,6 +16,11 @@ const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 
 export async function hashPassword(plain: string): Promise<string> {
   return hash(plain, { memoryCost: 19456, timeCost: 2, parallelism: 1 });
+}
+
+/** A hospital that never chose an interface style (null) reads as the default. */
+function toSurfaceStyle(v: string | null | undefined): SurfaceStyle {
+  return (SURFACE_STYLES as readonly string[]).includes(v ?? "") ? (v as SurfaceStyle) : DEFAULT_SURFACE_STYLE;
 }
 
 export async function verifyPassword(hashValue: string, plain: string): Promise<boolean> {
@@ -47,6 +52,7 @@ async function createSessionFor(db: Db, user: typeof users.$inferSelect, remembe
       tenantName: tenant?.name ?? "",
       loginSlug: tenant?.loginSlug ?? null,
       timezone: tenant?.timezone ?? "Asia/Kolkata",
+      surfaceStyle: toSurfaceStyle(tenant?.surfaceStyle),
       edition: tenant?.edition ?? DEFAULT_EDITION,
       capabilities,
       branchId: user.branchId,
@@ -202,7 +208,7 @@ async function loginToDevTenant(db: Db, role: Role, tenantId: string) {
 export async function resolveSession(db: Db, sessionId: string) {
   if (!SESSION_ID.test(sessionId)) return null;
   const [row] = await db
-    .select({ session: sessions, user: users, branch: branches, tenantName: tenants.name, loginSlug: tenants.loginSlug, timezone: tenants.timezone, edition: tenants.edition })
+    .select({ session: sessions, user: users, branch: branches, tenantName: tenants.name, loginSlug: tenants.loginSlug, timezone: tenants.timezone, edition: tenants.edition, surfaceStyle: tenants.surfaceStyle })
     .from(sessions)
     .innerJoin(users, eq(sessions.userId, users.id))
     .innerJoin(tenants, eq(users.tenantId, tenants.id))
@@ -224,6 +230,7 @@ export async function resolveSession(db: Db, sessionId: string) {
     email: row.user.email,
     role: row.user.role,
     timezone: row.timezone,
+    surfaceStyle: toSurfaceStyle(row.surfaceStyle),
     edition: row.edition,
     // Resolved on every request: a Super Admin's switch takes effect immediately, in the API and in the next UI refresh.
     capabilities: await resolveTenantCapabilities(db, row.user.tenantId, row.edition),

@@ -460,7 +460,7 @@ export default function InboxPage() {
 
       {/* Same content as a slide-over drawer everywhere narrower than 2xl. */}
       {contextOpen && (
-        <div className="fixed inset-0 z-40 flex justify-end 2xl:hidden" role="dialog" aria-modal="true" aria-label="Patient context">
+        <div className="fixed inset-0 z-(--z-sheet) flex justify-end 2xl:hidden" role="dialog" aria-modal="true" aria-label="Patient context">
           <button type="button" aria-label="Close" onClick={() => setContextOpen(false)} className="absolute inset-0 bg-slate-900/30 transition-opacity duration-200 motion-reduce:transition-none" />
           <div
             ref={contextDialogRef}

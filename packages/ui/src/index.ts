@@ -45,3 +45,4 @@ export { inProgressIndex, splitInProgress } from "./trend";
 export * from "./SideSheet";
 export * from "./CustomFieldInputs";
 export * from "./CustomFieldValueGrid";
+export * from "./useFloatingMenu";

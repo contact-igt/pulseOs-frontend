@@ -14,7 +14,7 @@ import type { ButtonHTMLAttributes, ComponentPropsWithoutRef, HTMLAttributes, Re
 export type CardTone = "white" | "info" | "emphasis" | "glass";
 
 const CARD_TONE: Record<CardTone, string> = {
-  white: "rounded-card border border-line bg-surface shadow-panel",
+  white: "rounded-card border border-line surface-content shadow-panel",
   info: "rounded-card border border-line bg-surface-info",
   emphasis: "rounded-card border border-primary-700 bg-primary-700 text-white shadow-panel",
   glass: "glass rounded-panel",

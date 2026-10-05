@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, ChevronDown, LogOut, Menu, Search } from "lucide-react";
-import { QuickCreateMenu, JOURNEY_STAGE_LABEL, type QuickCreateItem } from "@pulseos/ui";
+import { QuickCreateMenu, JOURNEY_STAGE_LABEL, useExclusiveMenu, useFloatingMenu, type QuickCreateItem } from "@pulseos/ui";
 import { roleGroupLabel, type SessionUser } from "@pulseos/types";
 import { api, ApiError } from "@pulseos/api-client";
 import { useQuickCreate } from "./QuickCreateProvider";
@@ -25,6 +25,7 @@ export function TopBar({
   const router = useRouter();
   const queryClient = useQueryClient();
   const [profileOpen, setProfileOpen] = useState(false);
+  const { containerRef: profileRef, triggerRef: profileTriggerRef, onMenuKeyDown: onProfileKeyDown } = useFloatingMenu("profile", profileOpen, setProfileOpen);
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
   const quickCreate = useQuickCreate();
@@ -57,7 +58,7 @@ export function TopBar({
   }
 
   return (
-    <header className="glass-strong absolute inset-x-0 top-0 z-20 flex h-16 items-center justify-between gap-3 px-3 max-lg:rounded-none max-lg:border-x-0 max-lg:border-t-0 sm:gap-4 sm:px-5 lg:right-3 lg:top-3 lg:rounded-panel">
+    <header className="glass-strong absolute inset-x-0 top-0 z-(--z-sticky) flex h-16 items-center justify-between gap-3 px-3 max-lg:rounded-none max-lg:border-x-0 max-lg:border-t-0 sm:gap-4 sm:px-5 lg:right-3 lg:top-3 lg:rounded-panel">
       <div className="flex min-w-0 items-center gap-2">
         <button
           type="button"
@@ -95,9 +96,12 @@ export function TopBar({
           <Bell size={16} />
         </button>
 
-        <div className="relative">
+        <div className="relative" ref={profileRef}>
           <button
+            ref={profileTriggerRef}
             type="button"
+            aria-haspopup="menu"
+            aria-expanded={profileOpen}
             onClick={() => setProfileOpen((v) => !v)}
             className="glass-control flex h-9 items-center gap-1.5 rounded-control px-1.5 text-left transition hover:bg-white"
             data-testid="profile-menu-trigger"
@@ -111,17 +115,18 @@ export function TopBar({
             <ChevronDown size={14} className="text-neutral-400" />
           </button>
           {profileOpen && (
-            <div className="glass-strong absolute right-0 top-full z-10 mt-1.5 w-52 rounded-card py-1">
+            <div className="floating absolute right-0 top-full z-(--z-dropdown) mt-1.5 w-52 rounded-card py-1" role="menu" aria-label="Account" onKeyDown={onProfileKeyDown} data-testid="profile-menu">
               <div className="border-b border-neutral-100 px-3 py-2">
                 <p className="text-xs font-medium text-slate-900">{roleGroupLabel(user.role)}</p>
                 {user.branchName && <p className="text-xs text-neutral-500">{user.branchName}</p>}
               </div>
               <button
                 type="button"
+                role="menuitem"
                 onClick={logout}
                 disabled={loggingOut}
                 aria-busy={loggingOut}
-                className="flex min-h-11 w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-600 transition hover:bg-neutral-100 hover:text-slate-900 disabled:cursor-wait disabled:opacity-60 lg:min-h-0"
+                className="flex min-h-11 w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-600 transition hover:bg-primary-50 hover:text-ink focus-visible:bg-primary-50 disabled:cursor-wait disabled:opacity-60 lg:min-h-0"
                 data-testid="logout-button"
               >
                 <LogOut size={14} />
@@ -189,6 +194,8 @@ function GlobalPatientSearch() {
 
   const rows = results.data ?? [];
   const showDropdown = open && trimmed.length >= 2;
+  // Opening the account or Create menu closes this list (and the other way round).
+  useExclusiveMenu("search", showDropdown, () => setOpen(false));
 
   function selectRow(id: string) {
     setOpen(false);
@@ -245,7 +252,7 @@ function GlobalPatientSearch() {
         <ul
           id="global-patient-search-results"
           role="listbox"
-          className="glass-strong absolute right-0 top-full z-30 mt-1.5 max-h-80 w-72 overflow-y-auto rounded-card py-1 sm:w-80"
+          className="floating absolute right-0 top-full z-(--z-dropdown) mt-1.5 max-h-80 w-72 overflow-y-auto rounded-card py-1 sm:w-80"
           data-testid="global-patient-search-results"
         >
           {results.isFetching && rows.length === 0 && (
