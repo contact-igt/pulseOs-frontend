@@ -1,4 +1,5 @@
 import { and, eq, gt } from "drizzle-orm";
+import type { ClinicHours } from "@pulseos/types";
 import { db } from "../../db/client.js";
 import { appointments, followUpTypes, notificationRules, notifications, tenantCapabilities, timelineEvents, treatmentOpportunities } from "../../db/schema.js";
 import { ensureNotificationDefaults, planForSubject } from "../../domain/notification/notification.service.js";
@@ -6,6 +7,7 @@ import { installDepartmentTemplate } from "../../domain/specialty/department.ser
 import { OPHTHALMOLOGY_TREATMENTS } from "../../domain/specialty/ophthalmology.templates.js";
 import { ensureFollowUpTypes } from "../../domain/task/followup-type.service.js";
 import { createFollowUp, createTask } from "../../domain/task/task.service.js";
+import { ensureDefaultOutcomes } from "../../domain/crm/crm-outcome.service.js";
 import { assertJourneyConfigsConsistent } from "./consistency.js";
 import {
   createDemoBranches,
@@ -30,8 +32,15 @@ import {
 // WhatsApp notifications run as FIXTURES.
 
 export const NAMOKAR_TENANT_NAME = "Namokar Eye & Oculoplasty Centre";
-/** The address of the hospital's own sign-in page: /login/namokar. */
-export const NAMOKAR_LOGIN_SLUG = "namokar";
+/** The address of the hospital's own sign-in page: /login/namokar-v1. */
+export const NAMOKAR_LOGIN_SLUG = "namokar-v1";
+/** The clean pilot workspace (configuration only): /login/namokar-v2. */
+export const NAMOKAR_V2_TENANT_NAME = "Namokar Eye & Oculoplasty Centre (Pilot)";
+export const NAMOKAR_V2_LOGIN_SLUG = "namokar-v2";
+/** Namokar's clinic week (both tenants): Monday to Saturday 09:00-16:00, closed Sunday. */
+export const NAMOKAR_CLINIC_HOURS: ClinicHours = {
+  mon: ["09:00", "16:00"], tue: ["09:00", "16:00"], wed: ["09:00", "16:00"], thu: ["09:00", "16:00"], fri: ["09:00", "16:00"], sat: ["09:00", "16:00"], sun: null,
+};
 
 export const NAMOKAR_PATIENT_NAMES = [
   "Suresh Kulkarni", "Rajan Pillai", "Anjali Deshmukh", "Tanvi Rao", "Mahesh Reddy", "Kamala Bai Jadhav", "Sunita Patil", "Neelam Gupta",
@@ -46,7 +55,7 @@ export const NAMOKAR_FLAGSHIP_PATIENT_IDX = 1;
 
 const call = (c: Omit<Extract<DemoInteraction, { kind: "call" }>, "kind" | "endpoint">): DemoInteraction => ({ kind: "call", endpoint: "main", ...c });
 
-// Journeys are spread over the three telecallers: Front Desk (Rohan Desai), Coordinator A (Priya Nambiar), Coordinator B (Neha Arora).
+// Journeys are spread over the three telecallers: Front Desk, Shivani and Sushil.
 // The only doctor is Dr. Poonam Jain ("poonam").
 export const NAMOKAR_JOURNEYS: DemoJourneyConfig[] = [
   // A - Cataract. Incoming call -> interested -> booked -> attended -> consultation completed (surgery advised).
@@ -56,7 +65,7 @@ export const NAMOKAR_JOURNEYS: DemoJourneyConfig[] = [
     appt: { status: "completed", offsetDays: 0, doctor: "poonam", reason: "Cataract consultation" },
     outcome: { value: "TREATMENT_ADVISED", notes: "Cataract surgery advised for the right eye; the patient will discuss it with family." },
     treatment: { definitionKey: "CATARACT_SURGERY", label: "Cataract Surgery — Right Eye", status: "ADVISED", estimatedValue: 42_000 },
-    interactions: [call({ direction: "inbound", status: "completed", durationSeconds: 238, daysAgo: 0, hour: 8, minute: 0, agent: "Rohan Desai", summary: "Caller asked about cataract surgery and whether a consultation is needed first.", outcome: "Consultation booked for today." })],
+    interactions: [call({ direction: "inbound", status: "completed", durationSeconds: 238, daysAgo: 0, hour: 8, minute: 0, agent: "Front Desk", summary: "Caller asked about cataract surgery and whether a consultation is needed first.", outcome: "Consultation booked for today." })],
   },
   // FLAGSHIP - Cataract. Google enquiry -> phoned and contacted -> consultation booked -> WhatsApp confirmation (fixture) -> arrived,
   // checked in, waited, seen by the doctor -> consultation completed -> cataract surgery advised -> procedure scheduled -> a
@@ -67,19 +76,19 @@ export const NAMOKAR_JOURNEYS: DemoJourneyConfig[] = [
     appt: { status: "completed", offsetDays: -3, hour: 11, doctor: "poonam", reason: "Cataract consultation" },
     outcome: { value: "TREATMENT_ADVISED", notes: "Cataract surgery advised for the left eye; the patient agreed and a date was fixed." },
     treatment: { definitionKey: "CATARACT_SURGERY", label: "Cataract Surgery — Left Eye", status: "SCHEDULED", estimatedValue: 42_000, decisionOffsetDays: -3, plannedOffsetDays: 5 },
-    interactions: [call({ direction: "outbound", status: "completed", durationSeconds: 215, daysAgo: 9, hour: 10, minute: 40, agent: "Rohan Desai", summary: "Replied to the Google enquiry by phone; the patient has blurred vision in the left eye and wants it checked.", outcome: "Consultation booked." })],
+    interactions: [call({ direction: "outbound", status: "completed", durationSeconds: 215, daysAgo: 9, hour: 10, minute: 40, agent: "Front Desk", summary: "Replied to the Google enquiry by phone; the patient has blurred vision in the left eye and wants it checked.", outcome: "Consultation booked." })],
   },
   // B - LASIK. Instagram enquiry -> outgoing follow-up -> booked -> currently Waiting.
   {
     patientIdx: 2, journeyType: "Laser Vision Correction", specialtyKey: "LASER_VISION_CORRECTION", source: "meta", campaignKey: null, stage: "attended",
     contactedOffsetDays: 0, createdOffsetDays: 0, createdHour: 8,
     appt: { status: "waiting", offsetDays: 0, doctor: "poonam", reason: "LASIK screening" },
-    interactions: [call({ direction: "outbound", status: "completed", durationSeconds: 192, daysAgo: 0, hour: 8, minute: 20, agent: "Priya Nambiar", summary: "Followed up on the Instagram enquiry; the patient wants to know whether LASIK suits a -5 power.", outcome: "Screening booked for today." })],
+    interactions: [call({ direction: "outbound", status: "completed", durationSeconds: 192, daysAgo: 0, hour: 8, minute: 20, agent: "Shivani", summary: "Followed up on the Instagram enquiry; the patient wants to know whether LASIK suits a -5 power.", outcome: "Screening booked for today." })],
   },
   {
     patientIdx: 3, journeyType: "Laser Vision Correction", specialtyKey: "LASER_VISION_CORRECTION", source: "meta", campaignKey: null, stage: "contacted",
     contactedOffsetDays: 0, createdOffsetDays: 0, createdHour: 9,
-    interactions: [call({ direction: "inbound", status: "completed", durationSeconds: 156, daysAgo: 0, hour: 9, minute: 40, agent: "Rohan Desai", summary: "Asked about LASIK vs SMILE cost and who is eligible.", outcome: "Screening booking pending." })],
+    interactions: [call({ direction: "inbound", status: "completed", durationSeconds: 156, daysAgo: 0, hour: 9, minute: 40, agent: "Front Desk", summary: "Asked about LASIK vs SMILE cost and who is eligible.", outcome: "Screening booking pending." })],
   },
   // E - General eye consultation, walk-in, Checked In.
   {
@@ -91,14 +100,14 @@ export const NAMOKAR_JOURNEYS: DemoJourneyConfig[] = [
   {
     patientIdx: 5, journeyType: "Cataract", specialtyKey: "CATARACT", source: "phone", campaignKey: null, stage: "contacted",
     contactedOffsetDays: 0, createdOffsetDays: 0, createdHour: 9,
-    interactions: [call({ direction: "inbound", status: "completed", durationSeconds: 301, daysAgo: 0, hour: 9, minute: 20, agent: "Rohan Desai", summary: "An elderly caller wants a cataract check but asked us to ring tomorrow morning, when her son is home.", outcome: "Callback requested for tomorrow 11:00." })],
+    interactions: [call({ direction: "inbound", status: "completed", durationSeconds: 301, daysAgo: 0, hour: 9, minute: 20, agent: "Front Desk", summary: "An elderly caller wants a cataract check but asked us to ring tomorrow morning, when her son is home.", outcome: "Callback requested for tomorrow 11:00." })],
   },
   // D - Ptosis (oculoplasty). Booked yesterday, did not show up today (an Appointment Risk follow-up is created below).
   {
     patientIdx: 6, journeyType: "Oculoplasty", specialtyKey: "OCULOPLASTY", source: "meta", campaignKey: null, stage: "booked",
     contactedOffsetDays: -1, createdOffsetDays: -1,
     appt: { status: "no_show", offsetDays: 0, doctor: "poonam", reason: "Ptosis consultation" },
-    interactions: [call({ direction: "outbound", status: "completed", durationSeconds: 168, daysAgo: 1, hour: 12, minute: 10, agent: "Priya Nambiar", summary: "Drooping upper eyelid enquiry; booked a consultation for this morning.", outcome: "Consultation booked." })],
+    interactions: [call({ direction: "outbound", status: "completed", durationSeconds: 168, daysAgo: 1, hour: 12, minute: 10, agent: "Shivani", summary: "Drooping upper eyelid enquiry; booked a consultation for this morning.", outcome: "Consultation booked." })],
   },
   // H - Oculoplasty. Consultation completed today, ptosis correction accepted; a Surgery Follow-up is created below.
   {
@@ -107,7 +116,7 @@ export const NAMOKAR_JOURNEYS: DemoJourneyConfig[] = [
     appt: { status: "completed", offsetDays: 0, doctor: "poonam", reason: "Oculoplasty consultation" },
     outcome: { value: "TREATMENT_ADVISED", notes: "Ptosis correction advised for the left eyelid; the patient agreed to proceed." },
     treatment: { definitionKey: "PTOSIS_CORRECTION", label: "Ptosis Correction — Left Eyelid", status: "ACCEPTED", estimatedValue: 55_000, decisionOffsetDays: 0 },
-    interactions: [call({ direction: "inbound", status: "completed", durationSeconds: 214, daysAgo: 3, hour: 11, minute: 30, agent: "Rohan Desai", summary: "Asked about eyelid surgery for a drooping lid.", outcome: "Consultation booked." })],
+    interactions: [call({ direction: "inbound", status: "completed", durationSeconds: 214, daysAgo: 3, hour: 11, minute: 30, agent: "Front Desk", summary: "Asked about eyelid surgery for a drooping lid.", outcome: "Consultation booked." })],
   },
   // C - Oculoplasty. Missed IVR call this morning; the callback is due today and nobody has contacted the patient yet.
   {
@@ -128,9 +137,9 @@ export const NAMOKAR_JOURNEYS: DemoJourneyConfig[] = [
     contactedOffsetDays: null, createdOffsetDays: -1, createdHour: 16,
     task: { reason: "missed_follow_up", dueOffsetDays: 0, type: "FOLLOW_UP", notes: "Three attempts, no answer - try WhatsApp or a different time of day" },
     interactions: [
-      call({ direction: "outbound", status: "no_answer", durationSeconds: 0, daysAgo: 1, hour: 17, minute: 10, agent: "Priya Nambiar", summary: "No answer.", outcome: "Will retry." }),
-      call({ direction: "outbound", status: "no_answer", durationSeconds: 0, daysAgo: 0, hour: 9, minute: 30, agent: "Priya Nambiar", summary: "No answer.", outcome: "Will retry." }),
-      call({ direction: "outbound", status: "no_answer", durationSeconds: 0, daysAgo: 0, hour: 11, minute: 15, agent: "Priya Nambiar", summary: "Rang out again.", outcome: "Try WhatsApp." }),
+      call({ direction: "outbound", status: "no_answer", durationSeconds: 0, daysAgo: 1, hour: 17, minute: 10, agent: "Shivani", summary: "No answer.", outcome: "Will retry." }),
+      call({ direction: "outbound", status: "no_answer", durationSeconds: 0, daysAgo: 0, hour: 9, minute: 30, agent: "Shivani", summary: "No answer.", outcome: "Will retry." }),
+      call({ direction: "outbound", status: "no_answer", durationSeconds: 0, daysAgo: 0, hour: 11, minute: 15, agent: "Shivani", summary: "Rang out again.", outcome: "Try WhatsApp." }),
     ],
   },
   // Booked for today, not yet arrived (Confirmed).
@@ -142,16 +151,16 @@ export const NAMOKAR_JOURNEYS: DemoJourneyConfig[] = [
   {
     patientIdx: 12, journeyType: "Cataract", specialtyKey: "CATARACT", source: "whatsapp", campaignKey: null, stage: "contacted",
     contactedOffsetDays: 0, createdOffsetDays: 0, createdHour: 10,
-    interactions: [call({ direction: "outbound", status: "completed", durationSeconds: 205, daysAgo: 0, hour: 10, minute: 40, agent: "Priya Nambiar", summary: "Replied to the WhatsApp enquiry by phone; wants to bring a family member.", outcome: "Will confirm a slot." })],
+    interactions: [call({ direction: "outbound", status: "completed", durationSeconds: 205, daysAgo: 0, hour: 10, minute: 40, agent: "Shivani", summary: "Replied to the WhatsApp enquiry by phone; wants to bring a family member.", outcome: "Will confirm a slot." })],
   },
   {
     patientIdx: 13, journeyType: "Laser Vision Correction", specialtyKey: "LASER_VISION_CORRECTION", source: "google", campaignKey: null, stage: "booked",
     contactedOffsetDays: -2, createdOffsetDays: -2,
     appt: { status: "confirmed", offsetDays: 0, doctor: "poonam", reason: "LASIK screening" },
   },
-  // A new enquiry nobody has contacted yet.
+  // A new enquiry nobody has contacted yet (Unassigned).
   {
-    patientIdx: 14, journeyType: "Oculoplasty", specialtyKey: "OCULOPLASTY", source: "meta", campaignKey: null, stage: "enquiry",
+    patientIdx: 14, unassigned: true, journeyType: "Oculoplasty", specialtyKey: "OCULOPLASTY", source: "meta", campaignKey: null, stage: "enquiry",
     contactedOffsetDays: null, createdOffsetDays: 0, createdHour: 10,
   },
   // Treatment decision pending: counselling call due today.
@@ -166,7 +175,7 @@ export const NAMOKAR_JOURNEYS: DemoJourneyConfig[] = [
   {
     patientIdx: 16, journeyType: "General Eye Consultation", specialtyKey: "GENERAL_EYE_CONSULTATION", source: "referral", campaignKey: null, stage: "contacted",
     contactedOffsetDays: 0, createdOffsetDays: 0, createdHour: 9,
-    interactions: [call({ direction: "outbound", status: "completed", durationSeconds: 140, daysAgo: 0, hour: 9, minute: 45, agent: "Priya Nambiar", summary: "Referred by a family friend; asked about check-up timings.", outcome: "Will visit this week." })],
+    interactions: [call({ direction: "outbound", status: "completed", durationSeconds: 140, daysAgo: 0, hour: 9, minute: 45, agent: "Shivani", summary: "Referred by a family friend; asked about check-up timings.", outcome: "Will visit this week." })],
   },
   // Converted: surgery done and paid.
   {
@@ -176,16 +185,17 @@ export const NAMOKAR_JOURNEYS: DemoJourneyConfig[] = [
     outcome: { value: "TREATMENT_ADVISED", notes: "Cataract surgery advised for the right eye." },
     treatment: { definitionKey: "CATARACT_SURGERY", label: "Cataract Surgery — Right Eye", status: "COMPLETED", estimatedValue: 42_000, decisionOffsetDays: -12, plannedOffsetDays: -9 },
   },
-  // A new enquiry, uncontacted.
+  // A new enquiry, uncontacted (Unassigned, with an unassigned first-call task).
   {
-    patientIdx: 18, journeyType: "Cataract", specialtyKey: "CATARACT", source: "google", campaignKey: null, stage: "enquiry",
+    patientIdx: 18, unassigned: true, journeyType: "Cataract", specialtyKey: "CATARACT", source: "google", campaignKey: null, stage: "enquiry",
     contactedOffsetDays: null, createdOffsetDays: 0, createdHour: 11,
+    task: { reason: "high_intent_uncontacted", dueOffsetDays: 0, type: "CALLBACK", notes: "New enquiry nobody owns yet - assign it and make the first call" },
   },
   // Lost: not interested.
   {
     patientIdx: 19, journeyType: "Oculoplasty", specialtyKey: "OCULOPLASTY", source: "referral", campaignKey: null, stage: "lost",
     contactedOffsetDays: -6, createdOffsetDays: -8,
-    interactions: [call({ direction: "outbound", status: "completed", durationSeconds: 96, daysAgo: 6, hour: 12, minute: 0, agent: "Priya Nambiar", summary: "The patient decided not to go ahead for now (cost).", outcome: "Not interested." })],
+    interactions: [call({ direction: "outbound", status: "completed", durationSeconds: 96, daysAgo: 6, hour: 12, minute: 0, agent: "Shivani", summary: "The patient decided not to go ahead for now (cost).", outcome: "Not interested." })],
   },
   // Booked for the next two days.
   {
@@ -221,9 +231,9 @@ export const NAMOKAR_JOURNEYS: DemoJourneyConfig[] = [
     patientIdx: 25, journeyType: "Laser Vision Correction", specialtyKey: "LASER_VISION_CORRECTION", source: "meta", campaignKey: null, stage: "contacted",
     contactedOffsetDays: -1, createdOffsetDays: -1,
   },
-  // A website "I am interested" enquiry from yesterday evening that nobody has contacted yet (uncontacted, not new today).
+  // A website "I am interested" enquiry from yesterday evening that nobody has contacted yet (uncontacted, not new today, Unassigned).
   {
-    patientIdx: 26, journeyType: "Cataract", specialtyKey: "CATARACT", source: "website", campaignKey: null, stage: "enquiry",
+    patientIdx: 26, unassigned: true, journeyType: "Cataract", specialtyKey: "CATARACT", source: "website", campaignKey: null, stage: "enquiry",
     contactedOffsetDays: null, createdOffsetDays: -1, createdHour: 18,
   },
   // Consultation completed today; the doctor has not recorded an outcome yet (shows under "awaiting outcome").
@@ -272,7 +282,7 @@ async function seedFlagshipTrail(i: { tenantId: string; journeyId: string; patie
   const [treatment] = await db.select().from(treatmentOpportunities).where(eq(treatmentOpportunities.journeyId, i.journeyId)).limit(1);
   if (!treatment?.plannedDate) throw new Error("seed: the flagship procedure must be scheduled");
   await db.insert(timelineEvents).values([
-    step("appointment_created", `Appointment booked · ${dayLabel(visit.scheduledAt)}, ${clockIn(visit.scheduledAt)}`, bookedAt, { actorId: i.frontDeskId, description: "Booked by Rohan Desai" }),
+    step("appointment_created", `Appointment booked · ${dayLabel(visit.scheduledAt)}, ${clockIn(visit.scheduledAt)}`, bookedAt, { actorId: i.frontDeskId, description: "Booked by Front Desk" }),
     step("whatsapp_sent", "WhatsApp confirmation sent (fixture)", sentAt, { actorType: "system", channel: "WHATSAPP", description: text, relatedEntityType: "notification", relatedEntityId: sent!.id }),
     step("appointment_confirmed", "Appointment confirmed", new Date(sentAt.getTime() + 9 * 60_000), { actorType: "system", description: "The patient replied YES on WhatsApp" }),
     step("appointment_checked_in", `Checked in · ${clockIn(visit.checkedInAt)}`, visit.checkedInAt, { actorId: i.frontDeskId }),
@@ -289,9 +299,10 @@ export async function seedNamokarTenant(passwordHash: string) {
   assertJourneyConfigsConsistent("namokar", NAMOKAR_JOURNEYS, NAMOKAR_PATIENT_NAMES, new Set(OPHTHALMOLOGY_TREATMENTS.map((t) => t.key)));
   const tenant = await createDemoTenant(NAMOKAR_TENANT_NAME, "BETA_V1_CORE", {
     loginSlug: NAMOKAR_LOGIN_SLUG,
-    // The approved Namokar sign-in: "PulseOS × Namokar", the full name, one operational line, the V1 Pilot badge. No logo yet (none is approved):
+    // The approved Namokar sign-in: "PulseOS × Namokar", the full name, one operational line, the V1 Demo badge. No logo yet (none is approved):
     // the page uses the typographic fallback. Add an approved mark as /brand/<file> and set logo_path - nothing else changes.
-    login: { shortName: "Namokar", tagline: "Every enquiry, call, appointment and follow-up for your patients, in one place.", badgeLabel: "V1 Pilot" },
+    login: { shortName: "Namokar", tagline: "Every enquiry, call, appointment and follow-up for your patients, in one place.", badgeLabel: "V1 Demo" },
+    clinicHours: NAMOKAR_CLINIC_HOURS,
   });
   // Namokar does not run a revenue workflow. This is the hospital's own switch (not an edition default), so the V1 defaults
   // can never turn it back on: no revenue figures, no payments, no revenue-based ROAS anywhere.
@@ -323,16 +334,16 @@ export async function seedNamokarTenant(passwordHash: string) {
     { slug: "superadmin", name: "Dr. Rajesh Shah", role: "SUPER_ADMIN", branch: "a" },
     { slug: "admin", name: "Kavita Shah", role: "HOSPITAL_ADMIN", branch: "a" },
     { slug: "doctor", name: "Dr. Poonam Jain", role: "DOCTOR", branch: "a" },
-    { slug: "frontdesk", name: "Rohan Desai", role: "FRONT_DESK", branch: "a" },
-    { slug: "coordinator", name: "Priya Nambiar", role: "PATIENT_COORDINATOR", branch: "a" },
-    { slug: "coordinator2", name: "Neha Arora", role: "PATIENT_COORDINATOR", branch: "a" },
+    { slug: "frontdesk", name: "Front Desk", role: "FRONT_DESK", branch: "a" },
+    { slug: "coordinator", name: "Shivani", role: "PATIENT_COORDINATOR", branch: "a" },
+    { slug: "coordinator2", name: "Sushil", role: "PATIENT_COORDINATOR", branch: "a" },
   ]);
   const { admin, coordinator, coordinator2, frontdesk: frontDesk } = staff;
 
   const patientRows = await createDemoPatients(tenant.id, branchByKey, NAMOKAR_PATIENT_NAMES, 720_000_000, ["Marathi", "Hindi", "English"]);
   const ctx: DemoContext = {
     tenantId: tenant.id, branches: branchByKey, admin, coordinator, coordinator2, frontDesk,
-    doctors: { poonam: staff.doctor }, campaigns: {}, patients: patientRows,
+    doctors: { poonam: staff.doctor }, campaigns: {}, patients: patientRows, skipSundays: true,
     runoConnectorId: runoConnector.id, whatsappConnectorId: whatsappConnector.id, endpoints,
   };
 
@@ -372,5 +383,35 @@ export async function seedNamokarTenant(passwordHash: string) {
   for (const a of upcoming) await planForSubject(db, tenant.id, "APPOINTMENT", a.id);
 
   console.log(`Namokar tenant: ${tenant.name} (${tenant.id}) - ${NAMOKAR_JOURNEYS.length} journeys, ${patientRows.length} patients`);
+  return { tenantId: tenant.id };
+}
+
+/**
+ * NAMOKAR V2 PILOT - a clean tenant: configuration and staff ONLY. No patients, journeys, calls, tasks, appointments, treatments,
+ * notifications, revenue or conversations, and NO connectors (every provider reads NOT CONFIGURED until the hospital sets it up).
+ */
+export async function seedNamokarV2Tenant(passwordHash: string) {
+  const tenant = await createDemoTenant(NAMOKAR_V2_TENANT_NAME, "BETA_V1_CORE", {
+    loginSlug: NAMOKAR_V2_LOGIN_SLUG,
+    login: { shortName: "Namokar", tagline: "Every enquiry, call, appointment and follow-up for your patients, in one place.", badgeLabel: "V2 Pilot" },
+    clinicHours: NAMOKAR_CLINIC_HOURS,
+  });
+  await db.insert(tenantCapabilities).values({ tenantId: tenant.id, capability: "REVENUE_TRACKING", enabled: false });
+  await installDepartmentTemplate(db, tenant.id, "ophthalmology");
+  const branchByKey = await createDemoBranches(tenant.id, [{ name: "Namokar Eye & Oculoplasty Centre", city: "Ashok Vihar, New Delhi" }]);
+  await createDemoUsers("namokar-v2", tenant.id, passwordHash, branchByKey, [
+    { slug: "superadmin", name: "Namokar Owner", role: "SUPER_ADMIN", branch: "a" },
+    { slug: "admin", name: "Namokar Admin", role: "HOSPITAL_ADMIN", branch: "a" },
+    { slug: "doctor", name: "Dr. Poonam Jain", role: "DOCTOR", branch: "a" },
+    { slug: "frontdesk", name: "Front Desk", role: "FRONT_DESK", branch: "a" },
+    { slug: "shivani", name: "Shivani", role: "PATIENT_COORDINATOR", branch: "a" },
+    { slug: "sushil", name: "Sushil", role: "PATIENT_COORDINATOR", branch: "a" },
+  ]);
+  await ensureDefaultOutcomes(db, tenant.id);
+  await ensureFollowUpTypes(db, tenant.id);
+  // Same reminder policy as V1: ONE reminder, 1 hour before a confirmed visit (the 1-day reminder is off).
+  await ensureNotificationDefaults(db, tenant.id);
+  await db.update(notificationRules).set({ enabled: false }).where(and(eq(notificationRules.tenantId, tenant.id), eq(notificationRules.subject, "APPOINTMENT"), eq(notificationRules.kind, "REMINDER"), eq(notificationRules.offsetUnit, "days")));
+  console.log(`Namokar V2 tenant: ${tenant.name} (${tenant.id}) - configuration only`);
   return { tenantId: tenant.id };
 }

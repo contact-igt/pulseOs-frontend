@@ -1,7 +1,7 @@
 "use client";
 
 import type { FollowUpTypeVm, LookupOption } from "@pulseos/types";
-import { FOLLOW_UP_OWNER_LABEL } from "@pulseos/types";
+import { FOLLOW_UP_DEFAULT_LABEL } from "@/lib/followUpLabels";
 import { CONTROL, FormField, TextInput } from "@/components/settings/FormBits";
 import { NO_OWNER, type FollowUpFormState } from "./followUpForm";
 
@@ -26,7 +26,7 @@ export function FollowUpFields({
   testPrefix?: string;
 }) {
   const type = types.find((t) => t.id === form.typeId) ?? null;
-  const ownerHint = type ? `Default: ${type.defaultOwner === "JOURNEY_OWNER" ? (ownerName === undefined ? "the journey owner" : ownerName ? `${ownerName} (journey owner)` : "the person adding it — this journey has no owner") : FOLLOW_UP_OWNER_LABEL[type.defaultOwner].toLowerCase()}` : undefined;
+  const ownerHint = type ? `Default: ${type.defaultOwner === "JOURNEY_OWNER" ? (ownerName === undefined ? "the journey's assigned team member" : ownerName ? `${ownerName} (journey's team member)` : "the person adding it — this journey is unassigned") : FOLLOW_UP_DEFAULT_LABEL[type.defaultOwner].toLowerCase()}` : undefined;
   return (
     <>
       <FormField label="Type">
@@ -44,7 +44,7 @@ export function FollowUpFields({
         <TextInput label="Due time" type="time" value={form.time} onChange={(e) => onChange("time", e.target.value)} data-testid={`${testPrefix}-time`} />
       </div>
 
-      <FormField label="Owner" hint={ownerHint}>
+      <FormField label="Assigned Team Member" hint={ownerHint}>
         <select className={CONTROL} value={form.ownerId} onChange={(e) => onChange("ownerId", e.target.value)} data-testid={`${testPrefix}-owner`}>
           <option value="">Use the default</option>
           {owners.map((o) => (

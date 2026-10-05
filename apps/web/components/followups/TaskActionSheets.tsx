@@ -13,7 +13,7 @@ import { buildReschedule, rescheduleDefaults } from "./followUpForm";
 const ERRORS: Record<string, string> = {
   due_in_past: "Pick a time in the future.",
   already_completed: "This follow-up was already completed.",
-  assignee_invalid: "That person isn't available for this hospital. Choose someone else.",
+  assignee_invalid: "That team member isn't available for this hospital. Choose someone else.",
   task_not_found: "This follow-up no longer exists.",
 };
 const message = (err: unknown) => ERRORS[err instanceof ApiError ? err.message : ""] ?? "Couldn't save — what you entered is still here. Try again.";
@@ -96,7 +96,7 @@ export function ReassignSheet({ task, onClose }: { task: TaskRow; onClose: () =>
 
   return (
     <SideSheet
-      title="Reassign follow-up"
+      title="Reassign Team Member"
       subtitle={`${task.typeLabel} · ${task.patientName}`}
       onClose={onClose}
       testId="reassign-followup"
@@ -106,14 +106,14 @@ export function ReassignSheet({ task, onClose }: { task: TaskRow; onClose: () =>
             Cancel
           </Button>
           <Button variant="primary" className="min-h-11 sm:min-h-0" onClick={save} disabled={saving} data-testid="reassign-save">
-            {saving ? "Saving…" : "Reassign"}
+            {saving ? "Saving…" : "Reassign Team Member"}
           </Button>
         </>
       }
     >
       <div className="space-y-5">
         <FormError message={error} testId="reassign-error" />
-        <FormField label="Who should do this?" hint="Only this follow-up moves. The journey keeps its owner.">
+        <FormField label="Assigned Team Member" hint="Only this follow-up moves. The journey keeps its assigned team member.">
           <select className={CONTROL} value={assignee} onChange={(e) => setAssignee(e.target.value)} data-testid="reassign-owner">
             <option value="">Choose a person…</option>
             {(lookups.data?.owners ?? []).map((o) => (

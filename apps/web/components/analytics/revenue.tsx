@@ -167,7 +167,7 @@ export function TeamAnalytics({ data }: { data: AnalyticsTeam }) {
   return (
     <div className="space-y-4" data-testid="team-analytics">
       <RankedBars
-        ariaLabel="Journeys assigned per owner"
+        ariaLabel="Journeys assigned per team member"
         labelWidth="w-32 sm:w-40"
         rows={rows.map((r) => ({
           key: r.userId ?? "unassigned",
@@ -182,7 +182,7 @@ export function TeamAnalytics({ data }: { data: AnalyticsTeam }) {
         <Table>
           <TableHead>
             <tr>
-              <Th leading>Owner</Th>
+              <Th leading>Team Member</Th>
               <Th align="right">Assigned</Th>
               <Th align="right" title="Assigned journeys that reached an appointment">Appointments</Th>
               <Th align="right">Conversion</Th>

@@ -90,7 +90,7 @@ export default function JourneysPage() {
                 <Th>Source / Campaign</Th>
                 <Th>Stage</Th>
                 {multiDoctor && <Th>Doctor</Th>}
-                <Th>Owner</Th>
+                <Th>Team Member</Th>
                 <Th>Last Activity</Th>
                 <Th>Next Action</Th>
                 {showSpend && <Th align="right">Acq. Cost</Th>}

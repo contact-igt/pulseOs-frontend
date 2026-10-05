@@ -75,6 +75,6 @@ describe("toWorkspaceQuery / chips", () => {
 
   it("chips name each narrowing filter in plain words, using the catalogue labels", () => {
     const chips = activeLeadChips(read("view=follow_up_due&due=overdue&owner=unassigned&source=instagram&service=Cataract"), { sources: [{ key: "instagram", label: "Instagram" }], owners: [] });
-    expect(chips.map((c) => c.label)).toEqual(["Overdue only", "Owner: Unassigned", "Source: Instagram", "Service: Cataract"]);
+    expect(chips.map((c) => c.label)).toEqual(["Overdue only", "Team Member: Unassigned", "Source: Instagram", "Service: Cataract"]);
   });
 });

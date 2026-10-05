@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { AppointmentRow, CreateAppointmentInput, JourneyCardVm, LookupOption, PatientListRow } from "@pulseos/types";
+import type { AppointmentRow, ClinicHours, CreateAppointmentInput, JourneyCardVm, LookupOption, PatientListRow } from "@pulseos/types";
+import { clinicHoursError, clinicHoursHint } from "./clinicHours";
 import { hospitalLocalInput } from "./format";
 import { JOURNEY_STAGE_LABEL } from "./status";
 import { useDialogFocus } from "./useDialogFocus";
@@ -39,6 +40,7 @@ export function NewAppointmentDrawer({
   onCheckSlot,
   onCreated,
   onCreateLeadInstead,
+  clinicHours,
 }: {
   open: boolean;
   onClose: () => void;
@@ -56,6 +58,8 @@ export function NewAppointmentDrawer({
   onCheckSlot?: (doctorId: string, instant: string) => Promise<{ available: boolean; inPast: boolean }>;
   onCreated?: (row: AppointmentRow) => void;
   onCreateLeadInstead?: () => void;
+  /** The hospital's weekly hours (Lookups.clinicHours). Null/absent = no restriction. */
+  clinicHours?: ClinicHours | null;
 }) {
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<PatientListRow[] | null>(null);
@@ -82,12 +86,15 @@ export function NewAppointmentDrawer({
   const nowLocal = hospitalLocalInput();
   // The picked time has already passed (compared as hospital wall time strings; the server decides for real).
   const pastPicked = !!scheduledAt && scheduledAt < nowLocal;
+  const [pickedDate = "", pickedTime = ""] = scheduledAt.split("T");
+  const hoursError = pastPicked ? null : clinicHoursError(clinicHours, pickedDate, pickedTime);
+  const hoursHint = clinicHoursHint(clinicHours);
 
   // Doctor + time picked: ask whether the slot is free (debounced). Any change drops the old answer at once; failing to
   // ask is silent — the booking itself still checks.
   useEffect(() => {
     setConflict(false);
-    if (!onCheckSlot || !doctorId || !scheduledAt || pastPicked) {
+    if (!onCheckSlot || !doctorId || !scheduledAt || pastPicked || hoursError) {
       setSlotBusy(false);
       return;
     }
@@ -104,7 +111,7 @@ export function NewAppointmentDrawer({
       clearTimeout(t);
     };
     // `instant` only wraps `toInstant`, which does not change while the drawer is open.
-  }, [doctorId, scheduledAt, pastPicked, onCheckSlot]);
+  }, [doctorId, scheduledAt, pastPicked, hoursError, onCheckSlot]);
 
   // initialPatient's active journeys aren't known synchronously at mount
   // (they're fetched), so this fetch still needs an effect — unlike the
@@ -143,7 +150,7 @@ export function NewAppointmentDrawer({
     setJourneyId(rows[0]?.id ?? "");
   }
 
-  const canSubmit = patient && journeyId && branchId && doctorId && scheduledAt && !submitting && !pastPicked;
+  const canSubmit = patient && journeyId && branchId && doctorId && scheduledAt && !submitting && !pastPicked && !hoursError;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -293,10 +300,11 @@ export function NewAppointmentDrawer({
             <label className={labelClass} htmlFor="appt-time">
               Date &amp; time <span className="text-danger-500">*</span>
             </label>
-            <input id="appt-time" type="datetime-local" required value={scheduledAt} min={nowLocal} onChange={(e) => { setScheduledAt(e.target.value); setError(null); }} aria-invalid={pastPicked || undefined} aria-describedby={pastPicked ? "appt-time-error" : undefined} className={inputClass} data-testid="appt-time" />
-            {pastPicked && (
-              <p id="appt-time-error" role="alert" className="mt-1 text-xs text-danger-700" data-testid="appt-time-past">
-                {PAST_COPY}
+            <input id="appt-time" type="datetime-local" required value={scheduledAt} min={nowLocal} onChange={(e) => { setScheduledAt(e.target.value); setError(null); }} aria-invalid={pastPicked || !!hoursError || undefined} aria-describedby={[pastPicked || hoursError ? "appt-time-error" : "", hoursHint ? "appt-time-hint" : ""].filter(Boolean).join(" ") || undefined} className={inputClass} data-testid="appt-time" />
+            {hoursHint && <p id="appt-time-hint" className="mt-1 text-xs text-ink-2" data-testid="appt-clinic-hours">{hoursHint}</p>}
+            {(pastPicked || hoursError) && (
+              <p id="appt-time-error" role="alert" className="mt-1 text-xs text-danger-700" data-testid={pastPicked ? "appt-time-past" : "appt-time-clinic-hours"}>
+                {pastPicked ? PAST_COPY : hoursError}
               </p>
             )}
           </div>

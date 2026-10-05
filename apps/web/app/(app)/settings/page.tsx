@@ -159,7 +159,7 @@ export default function SettingsPage() {
         </Panel>
       )}
       {section === "allocation" && canManage && (
-        <Panel title="Allocation Rules" subtitle="Who owns a new enquiry">
+        <Panel title="Allocation Rules" subtitle="Which team member a new enquiry is assigned to">
           {specialties.data ? <AllocationSection services={specialties.data} /> : <Skeleton className="h-24" />}
         </Panel>
       )}

@@ -14,7 +14,7 @@ const SERVER_ERRORS: Record<string, string> = {
   due_in_past: "Pick a time in the future.",
   note_required: "This type needs a note — say what's happening.",
   type_invalid: "That follow-up type is no longer available. Choose another.",
-  assignee_invalid: "That person isn't available for this hospital. Choose someone else.",
+  assignee_invalid: "That team member isn't available for this hospital. Choose someone else.",
   journey_not_found: "This journey no longer exists.",
 };
 

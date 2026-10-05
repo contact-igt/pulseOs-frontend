@@ -16,7 +16,7 @@ const WIDTHS = [
 ];
 
 async function login(page: Page, who: string) {
-  await page.goto("/login/namokar");
+  await page.goto("/login/namokar-v1");
   await page.getByLabel("Email address").fill(`namokar.${who}@pulseos.local`);
   await page.getByLabel("Password", { exact: true }).fill(DEMO_PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
@@ -82,7 +82,7 @@ test.describe("Namokar pilot: responsive", () => {
 
   test("390: the Namokar sign-in page fits and its fields are tappable", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto("/login/namokar");
+    await page.goto("/login/namokar-v1");
     expect(await overflow(page)).toBeLessThanOrEqual(0);
     for (const l of ["Email address"]) expect((await page.getByLabel(l).boundingBox())!.height).toBeGreaterThanOrEqual(40);
     await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();

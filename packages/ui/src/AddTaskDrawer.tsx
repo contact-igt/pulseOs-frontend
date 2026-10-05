@@ -186,7 +186,7 @@ export function AddTaskDrawer({
 
           <div>
             <label className={labelClass} htmlFor="task-assignee">
-              Assignee
+              Assigned Team Member
             </label>
             <select id="task-assignee" value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)} className={inputClass}>
               <option value="">Unassigned</option>

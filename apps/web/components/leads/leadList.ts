@@ -48,7 +48,7 @@ export const LEAD_COLUMNS: { key: LeadColumn; label: string }[] = [
   { key: "source", label: "Original source" },
   { key: "status", label: "Journey status" },
   { key: "outcome", label: "Outcome" },
-  { key: "owner", label: "Owner" },
+  { key: "owner", label: "Team Member" },
   { key: "created", label: "Created" },
   { key: "appointment", label: "Appointment" },
   { key: "lastInteraction", label: "Last interaction" },

@@ -10,7 +10,7 @@ import { formToInput, validateRuleForm, type RuleForm } from "./allocationForm";
 
 const SAVE_ERRORS: Record<string, string> = {
   condition_required: "Choose when this rule applies.",
-  pool_invalid: "Choose at least one person who can own enquiries (front desk, coordinator or admin).",
+  pool_invalid: "Choose at least one team member to assign enquiries to (front desk, coordinator or admin).",
   branch_invalid: "That branch no longer exists.",
   specialty_invalid: "That service no longer exists.",
 };
@@ -78,20 +78,22 @@ export function AllocationRuleSheet({ mode, initial, ruleId, services, onClose, 
             ))}
           </SelectInput>
           <TextInput label="Has the journey type" value={form.journeyType} onChange={(e) => set("journeyType", e.target.value)} placeholder="Any (e.g. LASIK)" data-testid="allocation-journey-type" />
-          <SelectInput label="At the branch" value={form.branchId} onChange={(e) => set("branchId", e.target.value)} data-testid="allocation-branch">
-            <option value="">Any branch</option>
-            {(lookups.data?.branches ?? []).map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </SelectInput>
+          {(lookups.data?.branches.length ?? 0) > 1 && (
+            <SelectInput label="At the branch" value={form.branchId} onChange={(e) => set("branchId", e.target.value)} data-testid="allocation-branch">
+              <option value="">Any branch</option>
+              {(lookups.data?.branches ?? []).map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </SelectInput>
+          )}
           <p className="text-[11px] text-ink-2">Every choice you make must match. Leave a choice on “Any” to ignore it.</p>
         </fieldset>
 
-        <FormField label="…goes to" hint="With more than one person, enquiries are shared in turn. Anyone can still be assigned by hand afterwards.">
+        <FormField label="Assign to Team Member" hint="With more than one team member, enquiries are shared in turn. A journey can still be reassigned by hand afterwards.">
           <div className="space-y-0.5" data-testid="allocation-people">
-            {owners.length === 0 && <p className="text-xs text-ink-2">No staff to choose from yet.</p>}
+            {owners.length === 0 && <p className="text-xs text-ink-2">No team members to choose from yet.</p>}
             {owners.map((o) => (
               <CheckRow key={o.id} label={o.name} checked={form.userIds.includes(o.id)} onChange={(on) => set("userIds", on ? [...form.userIds, o.id] : form.userIds.filter((x) => x !== o.id))} testId={`allocation-person-${o.id}`} />
             ))}

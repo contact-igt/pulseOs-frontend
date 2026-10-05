@@ -1,6 +1,7 @@
 export * from "./primitives";
 export * from "./Brand";
 export * from "./format";
+export * from "./clinicHours";
 export * from "./status";
 export * from "./MetricStrip";
 export * from "./KpiStrip";

@@ -40,7 +40,7 @@ export function AssignOwnerDialog({
     try {
       await onSubmit(value === "" ? null : value);
     } catch {
-      setError("Could not update the owner. Please try again.");
+      setError("Could not update the team member. Please try again.");
       setBusy(false);
     }
   }
@@ -49,9 +49,9 @@ export function AssignOwnerDialog({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="assign-owner-title">
       <button type="button" aria-label="Cancel" tabIndex={-1} onClick={onClose} className="drawer-backdrop absolute inset-0 bg-slate-900/40" />
       <div ref={dialogRef} tabIndex={-1} className="dialog-panel relative w-full max-w-sm rounded-panel p-5 focus:outline-none" data-testid="assign-owner-dialog">
-        <h2 id="assign-owner-title" className="text-sm font-semibold text-ink">Assign owner</h2>
+        <h2 id="assign-owner-title" className="text-sm font-semibold text-ink">Assign Team Member</h2>
         <p className="mt-1 text-xs text-ink-2">Choose who follows up {subject}.</p>
-        <label htmlFor="assign-owner-select" className="mt-3 block text-[11px] font-medium uppercase tracking-wide text-ink-2">Owner</label>
+        <label htmlFor="assign-owner-select" className="mt-3 block text-[11px] font-medium uppercase tracking-wide text-ink-2">Team Member</label>
         <select
           id="assign-owner-select"
           value={value}

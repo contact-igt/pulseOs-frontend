@@ -5,7 +5,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { api, ApiError } from "@pulseos/api-client";
 import { Badge, Button, EmptyState, ErrorState, SideSheet, Skeleton } from "@pulseos/ui";
-import { FOLLOW_UP_BEHAVIOURS, FOLLOW_UP_OWNER_LABEL, type FollowUpDefaultOwner, type FollowUpTypeVm, type TaskPriority, type TaskType } from "@pulseos/types";
+import { FOLLOW_UP_BEHAVIOURS, type FollowUpDefaultOwner, type FollowUpTypeVm, type TaskPriority, type TaskType } from "@pulseos/types";
+import { FOLLOW_UP_DEFAULT_LABEL } from "@/lib/followUpLabels";
 import { CheckRow, FormError, SelectInput, TextInput } from "./FormBits";
 import { ReorderStatus, RowOrderControls, SortableGroup, useReorder, useSortableRow, type OrderControl, type RowStatus } from "./SortableList";
 
@@ -83,10 +84,10 @@ function TypeSheet({ existing, onClose, onSaved }: { existing: FollowUpTypeVm | 
             <option value="normal">Normal</option>
             <option value="high">High</option>
           </SelectInput>
-          <SelectInput label="Default owner" value={form.defaultOwner} onChange={(e) => set("defaultOwner", e.target.value as FollowUpDefaultOwner)} data-testid="followup-type-owner">
-            {(Object.keys(FOLLOW_UP_OWNER_LABEL) as FollowUpDefaultOwner[]).map((k) => (
+          <SelectInput label="Default Team Member" value={form.defaultOwner} onChange={(e) => set("defaultOwner", e.target.value as FollowUpDefaultOwner)} data-testid="followup-type-owner">
+            {(Object.keys(FOLLOW_UP_DEFAULT_LABEL) as FollowUpDefaultOwner[]).map((k) => (
               <option key={k} value={k}>
-                {FOLLOW_UP_OWNER_LABEL[k]}
+                {FOLLOW_UP_DEFAULT_LABEL[k]}
               </option>
             ))}
           </SelectInput>

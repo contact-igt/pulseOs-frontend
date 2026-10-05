@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import type { Edition } from "@pulseos/types";
+import type { ClinicHours, Edition } from "@pulseos/types";
 import { db } from "../../db/client.js";
 import {
   appointments,
@@ -49,6 +49,8 @@ import type { DemoEnvironmentKey } from "../../domain/auth/demo-environments.js"
 export function daysFromNow(days: number, hour = 10, minute = 0, now: Date = new Date()) {
   return zonedWallTime(addDays(dayKeyIn(now, DEMO_TIMEZONE), days), hour, minute, DEMO_TIMEZONE);
 }
+
+const isSunday = (d: Date) => d.toLocaleDateString("en-US", { weekday: "short", timeZone: DEMO_TIMEZONE }) === "Sun";
 
 /**
  * When a seeded follow-up is due. Past days: 09:00. Future days: 19:00. TODAY: 19:00, or - when the seed is run in the evening -
@@ -139,6 +141,8 @@ export type DemoInteraction =
 
 export interface DemoJourneyConfig {
   patientIdx: number;
+  /** No owner: the journey (and its task) shows up as Unassigned. */
+  unassigned?: boolean;
   journeyType: string;
   specialtyKey?: string;
   source: SourceChannelDb;
@@ -180,6 +184,8 @@ export interface DemoContext {
   runoConnectorId: string;
   whatsappConnectorId: string;
   endpoints: Record<string, EndpointRow>;
+  /** Clinic closed on Sundays: appointments on other days that would fall on a Sunday move one day away from today. */
+  skipSundays?: boolean;
 }
 
 /**
@@ -225,8 +231,8 @@ export interface DemoLoginConfig {
   supportText?: string;
 }
 
-export async function createDemoTenant(name: string, edition: Edition = "BETA_V2_GROWTH", opts: { loginSlug?: string; login?: DemoLoginConfig } = {}) {
-  const [tenant] = await db.insert(tenants).values({ name, timezone: "Asia/Kolkata", edition, loginSlug: opts.loginSlug ?? null }).returning();
+export async function createDemoTenant(name: string, edition: Edition = "BETA_V2_GROWTH", opts: { loginSlug?: string; login?: DemoLoginConfig; clinicHours?: ClinicHours } = {}) {
+  const [tenant] = await db.insert(tenants).values({ name, timezone: "Asia/Kolkata", edition, loginSlug: opts.loginSlug ?? null, clinicHours: opts.clinicHours ?? null }).returning();
   if (opts.loginSlug) await db.insert(tenantLoginConfigs).values({ tenantId: tenant.id, ...opts.login });
   return tenant;
 }
@@ -498,7 +504,7 @@ export async function seedJourneys(ctx: DemoContext, configs: DemoJourneyConfig[
 
   for (const config of configs) {
     const patient = ctx.patients[config.patientIdx];
-    const owner = ctx.coordinator2 ? [ctx.frontDesk, ctx.coordinator, ctx.coordinator2][config.patientIdx % 3] : config.patientIdx % 2 === 0 ? ctx.coordinator : ctx.frontDesk;
+    const owner = config.unassigned ? null : ctx.coordinator2 ? [ctx.frontDesk, ctx.coordinator, ctx.coordinator2][config.patientIdx % 3] : config.patientIdx % 2 === 0 ? ctx.coordinator : ctx.frontDesk;
     const branch = config.patientIdx % 2 === 0 ? ctx.branches.a : ctx.branches.b;
     const doctor = config.appt ? ctx.doctors[config.appt.doctor] : null;
 
@@ -512,19 +518,20 @@ export async function seedJourneys(ctx: DemoContext, configs: DemoJourneyConfig[
         todayOrdinals.set(config.appt.status, ordinal + 1);
         scheduledAt = todaySlot(config.appt.status, ordinal);
       } else {
-        scheduledAt = daysFromNow(config.appt.offsetDays, config.appt.hour ?? 9 + (config.patientIdx % 8));
+        let offsetDays = config.appt.offsetDays;
+        if (ctx.skipSundays && isSunday(daysFromNow(offsetDays, 12))) offsetDays += offsetDays > 0 ? 1 : -1;
+        scheduledAt = daysFromNow(offsetDays, config.appt.hour ?? 9 + (config.patientIdx % 8));
       }
     }
 
     // A journey opened the same day as its appointment must be opened before it.
     let createdAt = daysFromNow(config.createdOffsetDays, config.createdHour ?? 10);
-    if (scheduledAt && config.appt!.offsetDays === config.createdOffsetDays) {
-      createdAt = new Date(Math.min(createdAt.getTime(), scheduledAt.getTime() - 45 * 60_000));
-    }
-    const contactedAt =
+    if (scheduledAt) createdAt = new Date(Math.min(createdAt.getTime(), scheduledAt.getTime() - 45 * 60_000));
+    let contactedAt =
       config.contactedOffsetDays === null ? null
       : config.contactedOffsetDays === config.createdOffsetDays ? new Date(createdAt.getTime() + 10 * 60_000)
       : daysFromNow(config.contactedOffsetDays);
+    if (contactedAt && scheduledAt && contactedAt.getTime() > scheduledAt.getTime() - 30 * 60_000) contactedAt = new Date(scheduledAt.getTime() - 30 * 60_000);
 
     const [journey] = await db
       .insert(journeys)
@@ -537,7 +544,7 @@ export async function seedJourneys(ctx: DemoContext, configs: DemoJourneyConfig[
         source: config.source,
         sourceId: sourceByKey.get(sourceKeyFor(config.source, config.patientIdx)) ?? null,
         departmentId: (config.specialtyKey && departmentByService.get(config.specialtyKey)) || null,
-        ownerUserId: owner.id,
+        ownerUserId: owner?.id ?? null,
         contactedAt,
         createdAt,
       })
@@ -619,7 +626,7 @@ export async function seedJourneys(ctx: DemoContext, configs: DemoJourneyConfig[
         .insert(treatmentOpportunities)
         .values({
           ...base, consultationOutcomeId: outcomeId, treatmentLabel, treatmentDefinitionId: definition.id, status: config.treatment.status,
-          estimatedValue: config.treatment.estimatedValue, ownerUserId: owner.id,
+          estimatedValue: config.treatment.estimatedValue, ownerUserId: owner?.id ?? null,
           decisionDate: config.treatment.decisionOffsetDays !== undefined ? daysFromNow(config.treatment.decisionOffsetDays) : null,
           plannedDate: config.treatment.plannedOffsetDays !== undefined ? daysFromNow(config.treatment.plannedOffsetDays) : null,
           completedAt: config.treatment.status === "COMPLETED" ? treatmentAt : null,
@@ -646,7 +653,7 @@ export async function seedJourneys(ctx: DemoContext, configs: DemoJourneyConfig[
 
     if (config.task) {
       await db.insert(tasks).values({
-        ...base, assignedTo: owner.id, reason: config.task.reason, status: "pending", dueAt: taskDueAt(config.task.dueOffsetDays), // "due today" means later today, not already overdue
+        ...base, assignedTo: owner?.id ?? null, reason: config.task.reason, status: "pending", dueAt: taskDueAt(config.task.dueOffsetDays), // "due today" means later today, not already overdue
         type: config.task.type ?? TASK_TYPE_BY_REASON[config.task.reason], priority: TASK_PRIORITY_BY_REASON[config.task.reason],
         notes: config.task.notes, createdBy: ctx.admin.id,
       });

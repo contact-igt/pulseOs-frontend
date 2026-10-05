@@ -334,7 +334,7 @@ export default function InboxPage() {
                   <OverflowMenu
                     testId="conversation-more-actions"
                     items={[
-                      { key: "assign", label: "Assign to…", onClick: () => setAssigning(true) },
+                      { key: "assign", label: "Assign Team Member", onClick: () => setAssigning(true) },
                       { key: "schedule-ai", label: "Schedule AI…", onClick: () => setSchedulingAi(true) },
                       { key: "close", label: "Close conversation", danger: true, onClick: () => setConfirmingClose(true) },
                     ]}
@@ -355,7 +355,7 @@ export default function InboxPage() {
 
             {assigning && (
               <div className="flex flex-wrap items-center gap-1.5 border-b border-line bg-surface-muted px-4 py-2">
-                <span className="text-xs text-ink-2">Assign to</span>
+                <span className="text-xs text-ink-2">Assign Team Member</span>
                 <select
                   value={assignTarget}
                   onChange={(e) => setAssignTarget(e.target.value)}
@@ -613,7 +613,7 @@ function PatientContextPanel({
         <dl className="space-y-2 text-xs">
           <Row label="Journey" value={detail.patientContext.journeyType} />
           <Row label="Stage" value={detail.patientContext.stage ? (JOURNEY_STAGE_LABEL[detail.patientContext.stage] ?? detail.patientContext.stage) : null} />
-          <Row label="Owner" value={detail.patientContext.ownerName} />
+          <Row label="Assigned Team Member" value={detail.patientContext.ownerName} />
           <Row label="Next appointment" value={detail.patientContext.appointmentTime ? fmtDateTime(detail.patientContext.appointmentTime) : null} />
           <Row label="Next action due" value={detail.patientContext.nextActionDueAt ? fmtDate(detail.patientContext.nextActionDueAt) : null} />
           <Row label="Last interaction" value={detail.patientContext.lastInteractionAt ? relativeTime(detail.patientContext.lastInteractionAt) : null} />

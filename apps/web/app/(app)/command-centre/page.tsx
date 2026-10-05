@@ -30,7 +30,7 @@ import {
 } from "@pulseos/ui";
 import { OperationsReportView } from "@/components/report/OperationsReportView";
 import { PerformanceView } from "@/components/command-centre/PerformanceView";
-import { WorkspaceWelcome } from "@/components/command-centre/WorkspaceWelcome";
+import { WorkspaceWelcome, shouldShowWorkspaceWelcome } from "@/components/command-centre/WorkspaceWelcome";
 import { useUrlFilters } from "@/lib/useUrlFilters";
 import { withFrom } from "@/components/shell/BackLink";
 import { useCapability } from "@/lib/useEdition";
@@ -75,10 +75,10 @@ export default function CommandCentrePage() {
       />
       {tab === "report" ? (
         session.data && <OperationsReportView role={session.data.user.role} />
+      ) : shouldShowWorkspaceWelcome(setup.data) ? (
+        <WorkspaceWelcome status={setup.data} hospitalName={session.data?.user.tenantName} role={session.data?.user.role} />
       ) : tab === "performance" ? (
         <PerformanceView />
-      ) : setup.data && !setup.data.hasJourneys ? (
-        <WorkspaceWelcome status={setup.data} hospitalName={session.data?.user.tenantName} />
       ) : (
         <CommandCentreOverview />
       )}

@@ -1,8 +1,8 @@
 import { and, asc, eq, ne, notInArray, or, sql } from "drizzle-orm";
 import { patientNameSql } from "../../lib/patient-name.js";
 import type { Db, DbOrTx, Tx } from "../../db/client.js";
-import { inLocalRange, localToday, parseInstant, tenantTimezone } from "../../lib/hospital-time.js";
-import { appointments, branches, journeys, patients, scheduleResources, timelineEvents } from "../../db/schema.js";
+import { inLocalRange, localToday, minutesOfDayIn, parseInstant, tenantTimezone } from "../../lib/hospital-time.js";
+import { appointments, branches, journeys, patients, scheduleResources, tenants, timelineEvents } from "../../db/schema.js";
 import {
   APPOINTMENT_REASONS,
   APPOINTMENT_TRANSITIONS,
@@ -29,6 +29,23 @@ import { emitAppointmentEvent } from "./appointment-events.js";
 export const MAX_APPOINTMENT_RANGE_DAYS = 62;
 const MAX_NOTE = 500;
 const PAST_SLACK_MS = 60_000;
+
+type Weekday = "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat";
+const toMinutes = (hhmm: string) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3, 5));
+
+/**
+ * Is `at` inside the hospital's clinic hours (tenants.clinicHours), judged on the hospital's LOCAL weekday and clock?
+ * Open is inclusive, close exclusive; a null day is closed; no hours set (null) means no restriction.
+ */
+async function withinClinicHours(db: DbOrTx, tenantId: string, at: Date, timezone: string): Promise<boolean> {
+  const [row] = await db.select({ clinicHours: tenants.clinicHours }).from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+  if (!row?.clinicHours) return true;
+  const weekday = new Intl.DateTimeFormat("en-US", { timeZone: timezone, weekday: "short" }).format(at).slice(0, 3).toLowerCase() as Weekday;
+  const day = row.clinicHours[weekday];
+  if (!day) return false;
+  const minutes = minutesOfDayIn(at, timezone);
+  return minutes >= toMinutes(day[0]) && minutes < toMinutes(day[1]);
+}
 
 type Result<T = object> = ({ ok: true } & T) | { ok: false; reason: string };
 
@@ -222,6 +239,7 @@ export async function createAppointment(
   const scheduledAt = parseInstant(input.scheduledAt, timezone);
   if (!scheduledAt) return { ok: false, reason: "invalid_request" };
   if (scheduledAt.getTime() < now.getTime() - PAST_SLACK_MS) return { ok: false, reason: "appointment_time_in_past" };
+  if (!(await withinClinicHours(db, tenantId, scheduledAt, timezone))) return { ok: false, reason: "outside_clinic_hours" };
   const [journey] = await db.select({ id: journeys.id }).from(journeys).where(and(eq(journeys.tenantId, tenantId), eq(journeys.id, input.journeyId), eq(journeys.patientId, input.patientId))).limit(1);
   if (!journey) return { ok: false, reason: "journey_not_found" };
   const [branch] = await db.select({ id: branches.id }).from(branches).where(and(eq(branches.tenantId, tenantId), eq(branches.id, input.branchId))).limit(1);
@@ -504,6 +522,7 @@ export async function rescheduleAppointment(
   if (existing.status === "scheduled" && existing.scheduledAt.getTime() === newAt.getTime()) return { ok: true, alreadyApplied: true };
   if (!APPOINTMENT_TRANSITIONS[existing.status].includes("reschedule")) return { ok: false, reason: "invalid_transition" };
   if (newAt.getTime() < now.getTime() - PAST_SLACK_MS) return { ok: false, reason: "scheduled_in_past" };
+  if (!(await withinClinicHours(db, tenantId, newAt, timezone))) return { ok: false, reason: "outside_clinic_hours" };
   const reason = validReason("reschedule", input.reasonCode, input.note);
   if (!reason.ok) return reason;
 

@@ -126,7 +126,7 @@ export function activeLeadChips(f: LeadFilters, o: { sources: { key: string; lab
   if (f.q) chips.push({ key: "q", label: `Search: ${f.q}` });
   if (f.fieldKey) chips.push({ key: "field", label: `${o.fields?.find((x) => x.key === f.fieldKey)?.label ?? f.fieldKey}: ${f.fieldValue === "true" ? "Yes" : f.fieldValue === "false" ? "No" : f.fieldValue}` });
   if (f.due) chips.push({ key: "due", label: "Overdue only" });
-  if (f.owner) chips.push({ key: "owner", label: `Owner: ${f.owner === "mine" ? "Mine" : f.owner === "unassigned" ? "Unassigned" : (o.owners.find((x) => x.id === f.owner)?.name ?? "…")}` });
+  if (f.owner) chips.push({ key: "owner", label: `Team Member: ${f.owner === "mine" ? "Mine" : f.owner === "unassigned" ? "Unassigned" : (o.owners.find((x) => x.id === f.owner)?.name ?? "…")}` });
   if (f.source) chips.push({ key: "source", label: `Source: ${o.sources.find((s) => s.key === f.source)?.label ?? f.source}` });
   if (f.service) chips.push({ key: "service", label: `Service: ${f.service}` });
   if (f.status) chips.push({ key: "status", label: `Status: ${STATUS_WORDS[f.status]}` });

@@ -168,7 +168,7 @@ test.describe("M6.6 — Leads operational views", () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await login(page, "eyev1.coordinator@pulseos.local");
     await page.goto("/leads");
-    await expect(page.getByTestId("owner-scope-all")).toHaveText(/All owners \(\d+\)/);
+    await expect(page.getByTestId("owner-scope-all")).toHaveText(/All Team \(\d+\)/);
     const allLabel = (await page.getByTestId("owner-scope-all").textContent())!;
     await page.getByTestId("owner-scope-unassigned").click();
     await expect(page).toHaveURL(/owner=unassigned/);
@@ -185,7 +185,7 @@ test.describe("M6.6 — Leads operational views", () => {
     await page.getByTestId("leads-source").selectOption("instagram");
     await expect(page).toHaveURL(/source=instagram/);
     await expect(page.getByTestId("leads-chips")).toContainText("Source: Instagram");
-    await expect.poll(async () => Number(/All owners \((\d+)\)/.exec((await page.getByTestId("owner-scope-all").textContent())!)![1])).toBeLessThanOrEqual(Number(/(\d+)/.exec(allLabel)![1]));
+    await expect.poll(async () => Number(/All Team \((\d+)\)/.exec((await page.getByTestId("owner-scope-all").textContent())!)![1])).toBeLessThanOrEqual(Number(/(\d+)/.exec(allLabel)![1]));
     await page.getByTestId("leads-reset").click();
     await expect(page).not.toHaveURL(/source=/);
   });
@@ -194,7 +194,7 @@ test.describe("M6.6 — Leads operational views", () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await login(page, "eyev1.coordinator@pulseos.local");
     await page.goto("/leads?range=30d");
-    for (const h of ["Patient", "Enquiry", "Original source", "Journey status", "Outcome", "Owner", "Created", "Appointment", "Last interaction", "Next action"]) await expect(page.getByRole("columnheader", { name: h, exact: true })).toBeVisible();
+    for (const h of ["Patient", "Enquiry", "Original source", "Journey status", "Outcome", "Team Member", "Created", "Appointment", "Last interaction", "Next action"]) await expect(page.getByRole("columnheader", { name: h, exact: true })).toBeVisible();
     const overdue = page.getByTestId(`lead-row-${ids["Overdue"]!.journeyId}`);
     await expect(overdue.getByTestId(`lead-next-${ids["Overdue"]!.journeyId}`)).toContainText("Callback");
     await expect(overdue.getByTestId(`lead-next-${ids["Overdue"]!.journeyId}`)).toContainText(/overdue|ago/i);

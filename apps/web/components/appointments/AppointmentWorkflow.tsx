@@ -21,6 +21,7 @@ export function useAppointmentWorkflow(opts: { onDone?: () => void } = {}) {
   const session = useQuery({ queryKey: ["session"], queryFn: api.session });
   // Mirrors the server's MANAGE_APPOINTMENTS — only to avoid dead controls, never the authorization boundary.
   const canManage = !!session.data && hasPermission(session.data.user.role, "MANAGE_APPOINTMENTS");
+  const lookups = useQuery({ queryKey: ["lookups"], queryFn: api.lookups, staleTime: 60_000 });
   const timeline = useQuery({ queryKey: ["timeline", selected?.patientId, selected?.journeyId], queryFn: () => api.patientTimeline(selected!.patientId, selected!.journeyId), enabled: !!selected });
 
   const refresh = useCallback(() => {
@@ -36,6 +37,7 @@ export function useAppointmentWorkflow(opts: { onDone?: () => void } = {}) {
         appointment={selected}
         recentEvents={timeline.data}
         timeZone={timeZone}
+        clinicHours={lookups.data?.clinicHours}
         onClose={() => {
           actions.clearDrawerError();
           close();

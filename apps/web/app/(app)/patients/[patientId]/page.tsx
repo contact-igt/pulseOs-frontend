@@ -128,7 +128,7 @@ function OperationalStatus({ journey }: { journey: JourneyCardVm }) {
     },
     { key: "appointment", label: "Appointment", value: apptText(journey) },
     { key: "treatment", label: "Treatment", value: treatmentText(journey) },
-    { key: "owner", label: "Owner", value: journey.ownerName ?? "Unassigned" },
+    { key: "owner", label: "Assigned Team Member", value: journey.ownerName ?? "Unassigned" },
     { key: "doctor", label: "Doctor", value: journey.doctorName ?? "—" },
   ];
   return (

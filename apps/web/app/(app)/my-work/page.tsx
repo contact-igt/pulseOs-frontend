@@ -341,7 +341,7 @@ export default function MyWorkPage() {
               <span>Reason / Next Action</span>
               <span>Due</span>
               <span>Source</span>
-              <span>Owner</span>
+              <span>Team Member</span>
               <span className="text-right">Actions</span>
             </div>
             <ul className="divide-y divide-line" data-testid="my-work-task-list">
@@ -393,7 +393,7 @@ export default function MyWorkPage() {
                       </div>
 
                       <div className="min-w-0 truncate text-xs text-ink">
-                        <span className="text-ink-2 xl:hidden">Owner · </span>
+                        <span className="text-ink-2 xl:hidden">Team Member · </span>
                         {task.assignedToName ?? <span className="text-ink-2">Unassigned</span>}
                       </div>
                     </div>

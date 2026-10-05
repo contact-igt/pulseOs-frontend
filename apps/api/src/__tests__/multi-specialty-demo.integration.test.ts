@@ -414,7 +414,8 @@ describe.skipIf(!DEMO_PASSWORD)("Dev Login demo environments (integration)", () 
       { key: "gynecology", label: "Gynecology V2" },
       { key: "ophthalmology", label: "Ophthalmology V2" },
       { key: "ophthalmology-v1", label: "Ophthalmology V1" },
-      { key: "namokar", label: "Namokar Pilot (V1)" },
+      { key: "namokar", label: "Namokar V1 Demo" },
+      { key: "namokar-v2", label: "Namokar V2 Pilot" },
     ]);
     for (const e of seeded) expect(e.roles.length).toBeGreaterThan(0);
     // Namokar's owner is a (tenant-scoped) Super Admin, like every other demo hospital's.

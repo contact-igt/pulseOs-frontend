@@ -97,7 +97,7 @@ export function NextActionCard({ journey, canManage, onAdd }: { journey: Journey
           <span className="font-medium text-ink" data-testid="next-action-due">{fmtSmartDateTime(task.dueAt)}</span>
           <span>·</span>
           <span data-testid="next-action-owner">{task.assignedToName ?? "Unassigned"}</span>
-          {ownersDiffer && journey.owner && <span data-testid="next-action-journey-owner">· journey owner {journey.owner.name}</span>}
+          {ownersDiffer && journey.owner && <span data-testid="next-action-journey-owner">· journey team member {journey.owner.name}</span>}
         </p>
         {task.notes && <p className="mt-1.5 line-clamp-2 break-words text-xs leading-5 text-ink" data-testid="next-action-note">{task.notes}</p>}
       </div>
@@ -117,7 +117,7 @@ export function NextActionCard({ journey, canManage, onAdd }: { journey: Journey
             Reschedule
           </Button>
           <Button variant="secondary" size="sm" className="min-h-11 sm:min-h-0" onClick={() => setSheet("reassign")} disabled={busy} data-testid="next-action-reassign">
-            Reassign
+            Reassign Team Member
           </Button>
           {canWhatsApp && (
             <Button variant="secondary" size="sm" className="min-h-11 sm:min-h-0" onClick={() => setSheet("whatsapp")} disabled={busy} data-testid="next-action-whatsapp">

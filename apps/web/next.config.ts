@@ -38,6 +38,10 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   agentRules: false,
+  // The old Namokar sign-in address keeps working: it is a safe alias of the V1 Demo page (V2 Pilot lives at /login/namokar-v2).
+  async redirects() {
+    return [{ source: "/login/namokar", destination: "/login/namokar-v1", permanent: false }];
+  },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

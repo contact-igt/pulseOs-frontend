@@ -34,7 +34,7 @@ export function LeadCards({ rows, onOpen }: { rows: LeadRow[]; onOpen: (lead: Le
               </p>
             )}
             {lead.nextAppointment && <p className="text-xs text-primary-700">Visit {fmtDateTime(lead.nextAppointment.at)}</p>}
-            <p className="text-xs text-ink-2">Owner: {lead.ownerName ?? "Unassigned"}</p>
+            <p className="text-xs text-ink-2">Team Member: {lead.ownerName ?? "Unassigned"}</p>
             <div className="flex gap-2 pt-1">
               <a href={telHref(lead.phone)} className="inline-flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-control border border-line-strong bg-surface text-sm font-medium text-primary-700" data-testid={`lead-card-call-${lead.id}`}>
                 <Phone size={15} aria-hidden="true" /> Call

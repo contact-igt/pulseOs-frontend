@@ -10,7 +10,7 @@ import { createTestTenant, destroyTestTenant, type TestTenant } from "./helpers/
 
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD;
 
-// The dedicated pilot login (/login/namokar -> POST /auth/login/tenant/:slug) signs people into ONE hospital and nothing else:
+// The dedicated pilot login (/login/namokar-v1 -> POST /auth/login/tenant/:slug) signs people into ONE hospital and nothing else:
 // the tenant comes from the route's slug on the server, never from anything the person can choose or the body can carry.
 describe.skipIf(!DEMO_PASSWORD)("tenant-branded login (integration)", () => {
   let app: FastifyInstance;

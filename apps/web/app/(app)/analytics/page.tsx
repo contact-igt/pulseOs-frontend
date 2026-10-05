@@ -216,7 +216,7 @@ function MarketingAnalytics() {
       )}
 
       {tab === "team" && (
-        <AnalyticsPanel title="Team workload and follow-through" question="How are journeys spread across owners, and who is converting them?" testId="panel-team">
+        <AnalyticsPanel title="Team workload and follow-through" question="How are journeys spread across team members, and who is converting them?" testId="panel-team">
           <Async query={team} height={260} error="Could not load team analytics.">
             {(d) => <TeamAnalytics data={d} />}
           </Async>

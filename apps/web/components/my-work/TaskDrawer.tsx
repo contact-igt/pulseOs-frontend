@@ -74,7 +74,7 @@ export function TaskDrawer({
               <dd className="mt-0.5 font-medium tabular-nums text-ink">{formatDueInZone(task.dueAt, timeZone)}</dd>
             </div>
             <div>
-              <dt className="text-[11px] font-medium uppercase tracking-wide text-ink-2">Owner</dt>
+              <dt className="text-[11px] font-medium uppercase tracking-wide text-ink-2">Assigned Team Member</dt>
               <dd className="mt-0.5 font-medium text-ink">{task.assignedToName ?? "Unassigned"}</dd>
             </div>
             <div className="col-span-2">

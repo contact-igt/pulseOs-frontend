@@ -74,6 +74,7 @@ const REASON_STATUS: Record<string, number> = {
   reason_invalid: 422,
   scheduled_in_past: 422,
   appointment_time_in_past: 422,
+  outside_clinic_hours: 422,
   resource_unavailable: 409,
   // completion's embedded follow-up / surgery
   type_invalid: 422,
@@ -90,7 +91,7 @@ const REASON_STATUS: Record<string, number> = {
 };
 
 // create: bad input 400, the time rules 422, a taken slot 409, an unknown patient/journey/branch/doctor 404.
-const CREATE_STATUS: Record<string, number> = { invalid_request: 400, appointment_time_in_past: 422, resource_unavailable: 409 };
+const CREATE_STATUS: Record<string, number> = { invalid_request: 400, appointment_time_in_past: 422, outside_clinic_hours: 422, resource_unavailable: 409 };
 
 const uuid = z.string().uuid();
 

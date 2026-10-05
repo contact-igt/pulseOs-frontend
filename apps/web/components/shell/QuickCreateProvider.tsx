@@ -86,6 +86,7 @@ export function QuickCreateProvider({ role, children }: { role: Role; children: 
               onClose={() => setDrawer({ kind: "none" })}
               specialties={specialties.data}
               lookups={lookups.data}
+              clinicHours={lookups.data.clinicHours}
               leadSources={leadSources.data}
               outcomes={outcomes.data ?? []}
               defaultSource={drawer.source}
@@ -107,6 +108,7 @@ export function QuickCreateProvider({ role, children }: { role: Role; children: 
               onClose={() => setDrawer({ kind: "none" })}
               branches={lookups.data.branches}
               doctors={lookups.data.doctors}
+              clinicHours={lookups.data.clinicHours}
               initialPatient={drawer.patient}
               initialJourneyId={drawer.journeyId}
               toInstant={(local) => (wallTimeToInstant(local.slice(0, 10), local.slice(11, 16), timeZone) ?? new Date(local)).toISOString()}

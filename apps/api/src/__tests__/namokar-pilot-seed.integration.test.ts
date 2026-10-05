@@ -42,12 +42,12 @@ describe.skipIf(!DEMO_PASSWORD)("Namokar pilot seed: consistency and coverage", 
   describe("the pilot workspace itself", () => {
     it("is its own tenant with its own sign-in page, a tenant-scoped owner and the five pilot roles", async () => {
       const [t] = await sql`select edition, login_slug from tenants where id = ${tenantId}`;
-      expect(t).toMatchObject({ edition: "BETA_V1_CORE", login_slug: "namokar" });
+      expect(t).toMatchObject({ edition: "BETA_V1_CORE", login_slug: "namokar-v1" });
       const roles = (await sql`select distinct role from users where tenant_id = ${tenantId}`).map((r) => r.role as string).sort();
       expect(roles).toEqual(["DOCTOR", "FRONT_DESK", "HOSPITAL_ADMIN", "PATIENT_COORDINATOR", "SUPER_ADMIN"]);
       // Every account signs in through the hospital's own page (and lands in this hospital).
       for (const who of ["superadmin", "admin", "doctor", "frontdesk", "coordinator"]) {
-        const res = await app.inject({ method: "POST", url: "/auth/login/tenant/namokar", payload: { email: `namokar.${who}@pulseos.local`, password: DEMO_PASSWORD } });
+        const res = await app.inject({ method: "POST", url: "/auth/login/tenant/namokar-v1", payload: { email: `namokar.${who}@pulseos.local`, password: DEMO_PASSWORD } });
         expect(res.statusCode, who).toBe(200);
         expect(res.json().user.tenantId).toBe(tenantId);
       }
@@ -144,8 +144,8 @@ describe.skipIf(!DEMO_PASSWORD)("Namokar pilot seed: consistency and coverage", 
       expect(bad).toHaveLength(0);
     });
 
-    it("every open follow-up belongs to a journey of this hospital with a real owner", async () => {
-      const bad = await sql`select t.id from tasks t left join journeys j on j.id = t.journey_id where t.tenant_id = ${tenantId} and t.status in ('pending','in_progress') and (j.id is null or j.tenant_id <> t.tenant_id or t.assigned_to is null)`;
+    it("every open follow-up belongs to a journey of this hospital, with a real owner or deliberately Unassigned", async () => {
+      const bad = await sql`select t.id from tasks t left join journeys j on j.id = t.journey_id where t.tenant_id = ${tenantId} and t.status in ('pending','in_progress') and (j.id is null or j.tenant_id <> t.tenant_id or (t.assigned_to is not null and not exists (select 1 from users u where u.id = t.assigned_to and u.tenant_id = t.tenant_id)))`;
       expect(bad).toHaveLength(0);
     });
   });

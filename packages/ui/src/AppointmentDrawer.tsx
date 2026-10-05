@@ -10,11 +10,13 @@ import {
   type AppointmentReasonCode,
   type AppointmentReasonKind,
   type AppointmentRow,
+  type ClinicHours,
 } from "@pulseos/types";
 import { Badge, Button } from "./primitives";
 import type { TimelineEventVm } from "./Timeline";
 import { SideSheet } from "./SideSheet";
 import { APPOINTMENT_STATUS_LABEL as STATUS_LABEL, APPOINTMENT_STATUS_TONE as STATUS_TONE } from "./status";
+import { clinicHoursError, clinicHoursHint, clinicTimeBounds } from "./clinicHours";
 import { fmtTime } from "./format";
 
 const CONTROL = "h-11 w-full rounded-control border border-line-strong bg-surface px-3 text-sm text-ink outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/25 sm:h-9";
@@ -76,6 +78,7 @@ export function AppointmentDrawer({
   readOnly = false,
   error = null,
   timeZone,
+  clinicHours,
 }: {
   appointment: AppointmentRow | null;
   recentEvents?: TimelineEventVm[];
@@ -90,6 +93,8 @@ export function AppointmentDrawer({
   error?: string | null;
   /** The hospital's IANA zone, so times read the same wherever the laptop is. */
   timeZone?: string;
+  /** The hospital's weekly hours (Lookups.clinicHours). Null/absent = no restriction. */
+  clinicHours?: ClinicHours | null;
 }) {
   const [panel, setPanel] = useState<Panel>(null);
   const [date, setDate] = useState("");
@@ -136,6 +141,8 @@ export function AppointmentDrawer({
   function submit() {
     if (panel === "reschedule") {
       if (!date || !time) return setFormError("Choose the new date and time.");
+      const hoursError = clinicHoursError(clinicHours, date, time);
+      if (hoursError) return setFormError(hoursError);
       if (!reason) return setFormError("Choose why it is being rescheduled.");
       return onReschedule(row, { date, time, reasonCode: reason as AppointmentReasonCode, ...(note.trim() ? { note: note.trim() } : {}) });
     }
@@ -178,13 +185,13 @@ export function AppointmentDrawer({
                     </div>
                     <div className="space-y-1">
                       <label htmlFor="appt-resched-time" className="block text-xs font-medium text-ink">New time</label>
-                      <input id="appt-resched-time" type="time" className={CONTROL} value={time} onChange={(e) => setTime(e.target.value)} data-testid="drawer-reschedule-time" />
+                      <input id="appt-resched-time" type="time" className={CONTROL} value={time} onChange={(e) => setTime(e.target.value)} min={clinicTimeBounds(clinicHours, date)?.min} max={clinicTimeBounds(clinicHours, date)?.max} data-testid="drawer-reschedule-time" />
                     </div>
                   </div>
                 )}
                 <ReasonFields kind={panel} reason={reason} onReason={setReason} note={note} onNote={setNote} error={formError} prefix="drawer-reason" />
                 {panel === "cancel" && <p className="text-[11px] leading-snug text-ink-2">This frees {fmtWhen(row.scheduledAt, timeZone)} on {row.doctorName ? `${row.doctorName}’s` : "the doctor’s"} schedule. PulseOS does not notify the patient automatically — let them know separately if they haven’t already.</p>}
-                {panel === "reschedule" && <p className="text-[11px] leading-snug text-ink-2">Times are in the hospital’s clock.</p>}
+                {panel === "reschedule" && <p className="text-[11px] leading-snug text-ink-2" data-testid="drawer-reschedule-hint">Times are in the hospital’s clock.{clinicHoursHint(clinicHours) ? ` ${clinicHoursHint(clinicHours)}.` : ""}</p>}
                 <div className="flex gap-2">
                   <Button variant={panel === "reschedule" ? "primary" : "danger"} className="min-h-11 flex-1 sm:min-h-0" onClick={submit} data-testid="drawer-reason-confirm">
                     {panelConfirm}

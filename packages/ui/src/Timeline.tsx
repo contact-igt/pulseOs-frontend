@@ -25,7 +25,7 @@ const CATEGORY_LABEL: Record<Category, string> = {
   communication: "Communication",
   appointments: "Appointments",
   clinical: "Consultation & treatment",
-  tasks: "Tasks & ownership",
+  tasks: "Tasks & assignment",
   other: "Other",
 };
 
@@ -67,7 +67,7 @@ const FILTERS: { key: "all" | Category; label: string }[] = [
   { key: "communication", label: "Communication" },
   { key: "appointments", label: "Appointments" },
   { key: "clinical", label: "Consultation & treatment" },
-  { key: "tasks", label: "Tasks & ownership" },
+  { key: "tasks", label: "Tasks & assignment" },
 ];
 
 interface DayGroup {

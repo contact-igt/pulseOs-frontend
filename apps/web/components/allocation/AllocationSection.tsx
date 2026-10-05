@@ -45,7 +45,7 @@ export function AllocationSection({ services }: { services: SpecialtyTemplateVm[
   return (
     <div className="space-y-4" data-testid="allocation-section">
       <p className="max-w-2xl text-xs leading-relaxed text-ink-2">
-        Decide who owns a new enquiry. Rules are tried from the top; the first one that matches picks the owner. If none match, the enquiry stays unassigned until someone takes it. You can always assign or reassign a journey by hand.
+        Decide which team member a new enquiry is assigned to. Rules are tried from the top; the first one that matches picks the team member. If none match, the enquiry stays unassigned until someone takes it. You can always assign or reassign a journey by hand.
       </p>
       <div className="flex justify-end">
         <Button variant="primary" onClick={() => setEditing({ mode: "create", form: blankRule() })} data-testid="allocation-add">
@@ -104,7 +104,7 @@ export function AllocationSection({ services }: { services: SpecialtyTemplateVm[
       <ConfirmDialog
         open={!!deleting}
         title={deleting ? `Delete "${deleting.name}"?` : ""}
-        description="New enquiries will no longer be assigned by this rule. Journeys already assigned keep their owner."
+        description="New enquiries will no longer be assigned by this rule. Journeys already assigned keep their assigned team member."
         confirmLabel="Delete rule"
         onConfirm={() => {
           const d = deleting;

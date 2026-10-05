@@ -149,7 +149,7 @@ export function LogCallSheet({ target, patientName, onClose, onSaved }: { target
                   <TextInput label="Callback date" type="date" value={state.callbackDate} onChange={(e) => set("callbackDate", e.target.value)} data-testid="log-call-callback-date" />
                   <TextInput label="Callback time" type="time" value={state.callbackTime} onChange={(e) => set("callbackTime", e.target.value)} data-testid="log-call-callback-time" />
                 </div>
-                <TextInput label="Note" value={state.callbackNote} maxLength={500} onChange={(e) => set("callbackNote", e.target.value)} placeholder="e.g. Call before noon" hint="Assigned to the journey's owner (or you, if it has none)." data-testid="log-call-callback-note" />
+                <TextInput label="Note" value={state.callbackNote} maxLength={500} onChange={(e) => set("callbackNote", e.target.value)} placeholder="e.g. Call before noon" hint="Assigned to the journey's assigned team member (or you, if it has none)." data-testid="log-call-callback-note" />
               </>
             )}
           </div>

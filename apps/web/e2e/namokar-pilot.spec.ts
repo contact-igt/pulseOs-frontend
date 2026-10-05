@@ -15,7 +15,7 @@ const dayInHospital = (offset: number) => new Date(Date.now() + offset * 86_400_
 const phone = () => `9${Math.floor(100000000 + Math.random() * 899999999)}`;
 
 async function loginNamokar(page: Page, who: "superadmin" | "admin" | "frontdesk" | "coordinator" | "doctor") {
-  await page.goto("/login/namokar");
+  await page.goto("/login/namokar-v1");
   await page.getByLabel("Email address").fill(`namokar.${who}@pulseos.local`);
   await page.getByLabel("Password", { exact: true }).fill(DEMO_PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
@@ -70,11 +70,27 @@ async function bookToday(page: Page, lead: { journeyId: string; patientId: strin
 
 test.describe("Namokar pilot", () => {
   test.skip(!DEMO_PASSWORD, "DEMO_PASSWORD must be set to run this suite");
+
+  // The server only accepts appointments inside the clinic hours (Mon-Sat 09:00-16:00). These flows book "now", at any hour of any day,
+  // so the hours are lifted for this run (through the admin endpoint) and put back afterwards. The hours themselves are tested in
+  // namokar-v2-pilot.spec.ts and appointment-hours.integration.test.ts.
+  let savedHours: unknown = null;
+  test.beforeAll(async ({ browser }) => {
+    const admin = await as(browser, "admin");
+    savedHours = ((await lookups(admin.page)) as Lookups & { clinicHours?: unknown }).clinicHours ?? null;
+    expect((await api(admin.page, "PUT", "/clinic-hours", { clinicHours: null })).status).toBe(200);
+    await admin.context.close();
+  });
+  test.afterAll(async ({ browser }) => {
+    const admin = await as(browser, "admin");
+    await api(admin.page, "PUT", "/clinic-hours", { clinicHours: savedHours });
+    await admin.context.close();
+  });
   test.afterAll(() => purgePatients(MARKER));
 
-  test("9. /login/namokar is Namokar's workspace only: branded, no developer tools, no tenant choice, no foreign accounts", async ({ page, browser }) => {
+  test("9. /login/namokar-v1 is Namokar's workspace only: branded, no developer tools, no tenant choice, no foreign accounts", async ({ page, browser }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto("/login/namokar");
+    await page.goto("/login/namokar-v1");
     await expect(page.getByTestId("tenant-login")).toBeVisible();
     await expect(page.getByTestId("tenant-login-workspace")).toContainText(/You are signing into Namokar['’]s PulseOS workspace/);
     await expect(page.getByTestId("tenant-login-pilot")).toHaveText("V1 Pilot");
@@ -103,7 +119,7 @@ test.describe("Namokar pilot", () => {
     await expect(owner.getByText("Dr. Rajesh Shah").first()).toBeVisible();
     await expect(owner.getByText(/Namokar/).first()).toBeVisible();
     const session = await api<{ user: { tenantName: string; role: string; loginSlug: string } }>(owner, "GET", "/auth/session");
-    expect(session.body.user).toMatchObject({ tenantName: "Namokar Eye & Oculoplasty Centre", role: "SUPER_ADMIN", loginSlug: "namokar" });
+    expect(session.body.user).toMatchObject({ tenantName: "Namokar Eye & Oculoplasty Centre", role: "SUPER_ADMIN", loginSlug: "namokar-v1" });
     await owner.getByRole("button", { name: /Dr\. Rajesh Shah/ }).click();
     await owner.getByRole("button", { name: /log ?out|sign ?out/i }).click();
     await owner.waitForURL(/\/login\/namokar$/);

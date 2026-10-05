@@ -169,7 +169,7 @@ export const LEAD_ERROR_COPY: Record<string, string> = {
   doctor_not_found: "Choose a doctor for the appointment.",
   branch_not_found: "Choose a valid branch for the appointment.",
   due_in_past: "Choose a future time for the follow-up.",
-  assignee_invalid: "Choose a valid person to own this follow-up.",
+  assignee_invalid: "Choose a valid team member for this follow-up.",
   follow_up_required: "This outcome needs a follow-up: add when to call back.",
   outcome_closes_journey: "A lost outcome has no next step. Choose “No follow-up”.",
   outcome_disallows_appointment: "This outcome can't have an appointment. Choose another next step or outcome.",

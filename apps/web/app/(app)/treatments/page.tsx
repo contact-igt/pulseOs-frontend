@@ -216,8 +216,8 @@ export default function TreatmentPage() {
               onChange={(next) => void replaceUrlParams(periodPatch(next, { prefix: "t", defaultRange: "" }))}
             />
           )}
-          <FilterSelect className={FILTER_CLASS} aria-label="Owner" value={ownerId} onChange={(e) => setFilters({ ownerId: e.target.value })} data-testid="treatment-filter-owner">
-            <option value="">All owners</option>
+          <FilterSelect className={FILTER_CLASS} aria-label="Team Member" value={ownerId} onChange={(e) => setFilters({ ownerId: e.target.value })} data-testid="treatment-filter-owner">
+            <option value="">All team members</option>
             {(lookups.data?.owners ?? []).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
           </FilterSelect>
           {filtersActive && (
@@ -298,7 +298,7 @@ export default function TreatmentPage() {
                 <Th>Treatment</Th>
                 {showValue && <Th align="right">Value</Th>}
                 <Th>Doctor</Th>
-                <Th>Owner</Th>
+                <Th>Team Member</Th>
                 <Th>State</Th>
                 <Th>Next action</Th>
                 <Th>Actions</Th>

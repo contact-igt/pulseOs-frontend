@@ -67,9 +67,9 @@ test.describe("M7 Leads refinements + CRM field behaviour", () => {
     await page.getByTestId("leads-column-owner").uncheck();
     await page.getByTestId("leads-column-lastInteraction").uncheck();
     await page.keyboard.press("Escape");
-    await expect(page.getByRole("columnheader", { name: "Owner", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("columnheader", { name: "Team Member", exact: true })).toHaveCount(0);
     await page.reload();
-    await expect(page.getByRole("columnheader", { name: "Owner", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("columnheader", { name: "Team Member", exact: true })).toHaveCount(0);
     await expect(page.getByRole("columnheader", { name: "Journey status", exact: true })).toBeVisible();
     // The CRM field itself is unchanged by a view choice.
     expect((await api<{ filterable: boolean }[]>(page, "GET", "/crm/fields?specialtyKey=*")).body.find((f) => (f as unknown as { id: string }).id === fieldId)?.filterable).toBe(true);

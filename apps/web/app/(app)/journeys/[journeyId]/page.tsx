@@ -197,19 +197,19 @@ export default function JourneyDetailPage() {
           <Fact label="Original source" testId="journey-original-source">{journey.sourceLabel ?? SOURCE_LABEL[journey.source] ?? journey.source}</Fact>
           {journey.departmentName && <Fact label="Department" testId="journey-department">{journey.departmentName}</Fact>}
           <Fact label="Campaign">{journey.campaign?.name ?? "Organic / no campaign"}</Fact>
-          <Fact label="Owner" testId="journey-owner">
+          <Fact label="Assigned Team Member" testId="journey-owner">
             <span className="flex items-center gap-1.5">
               <span className={`truncate ${journey.owner ? "" : "text-ink-2"}`}>{journey.owner?.name ?? "Unassigned"}</span>
               {canAssign && (
                 <button
                   type="button"
                   onClick={() => setAssigning(true)}
-                  aria-label={journey.owner ? "Change owner" : "Assign owner"}
+                  aria-label={journey.owner ? "Reassign Team Member" : "Assign Team Member"}
                   className="inline-flex shrink-0 items-center gap-1 rounded-chip px-1.5 py-0.5 text-[11px] font-medium text-primary-700 hover:bg-primary-50"
                   data-testid="journey-assign-owner"
                 >
                   <UserRoundCog size={12} aria-hidden="true" />
-                  {journey.owner ? "Change" : "Assign"}
+                  {journey.owner ? "Reassign" : "Assign"}
                 </button>
               )}
             </span>

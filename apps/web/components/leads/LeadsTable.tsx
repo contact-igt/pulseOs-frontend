@@ -70,7 +70,7 @@ export function LeadsTable({
           {show("source") && <Th>Original source</Th>}
           {show("status") && <Th>Journey status</Th>}
           {show("outcome") && <Th>Outcome</Th>}
-          {show("owner") && <Th>Owner</Th>}
+          {show("owner") && <Th>Team Member</Th>}
           {show("created") && <Th>Created</Th>}
           {show("appointment") && <Th>Appointment</Th>}
           {show("lastInteraction") && <Th>Last interaction</Th>}
@@ -133,7 +133,7 @@ export function LeadsTable({
                           e.stopPropagation();
                           onAssign(lead);
                         }}
-                        aria-label={`${lead.ownerName ? "Change" : "Assign"} owner for ${lead.patientName}`}
+                        aria-label={`${lead.ownerName ? "Change" : "Assign"} team member for ${lead.patientName}`}
                         className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-chip text-primary-700 hover:bg-primary-50 max-md:h-11 max-md:w-11"
                         data-testid={`assign-owner-${lead.id}`}
                       >

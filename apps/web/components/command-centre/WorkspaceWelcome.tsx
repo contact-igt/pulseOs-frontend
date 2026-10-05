@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { ArrowRight, Check } from "lucide-react";
-import type { SetupStatus } from "@pulseos/types";
+import { hasPermission, type Permission, type Role, type SetupStatus } from "@pulseos/types";
 import { Button } from "@pulseos/ui";
 import { useQuickCreate } from "@/components/shell/QuickCreateProvider";
 
-interface Step {
+export interface Step {
   key: string;
   title: string;
   detail: string;
@@ -14,27 +14,38 @@ interface Step {
   cta: { label: string; href?: string; onClick?: () => void };
 }
 
+/** A workspace with no journey yet (a journey always has a patient, so this is also "no patients"). Demo workspaces have journeys and never match. */
+export function shouldShowWorkspaceWelcome(status: SetupStatus | undefined): status is SetupStatus {
+  return !!status && !status.hasJourneys;
+}
+
+/** The first things to do, minus the ones this role cannot use (the same permissions the API and the nav enforce). */
+export function welcomeSteps(status: SetupStatus, role: Role | undefined, openAddLead: () => void): Step[] {
+  const can = (p: Permission) => !!role && hasPermission(role, p);
+  const all: (Step & { allowed: boolean })[] = [
+    { key: "lead", allowed: can("MANAGE_LEADS"), title: "Add your first lead", detail: "Record an enquiry from a call, WhatsApp, walk-in or your website. It becomes a patient journey.", done: status.hasJourneys, cta: { label: "Add first lead", onClick: openAddLead } },
+    { key: "crm", allowed: can("MANAGE_SPECIALTIES"), title: "Review CRM fields", detail: "Choose the services you offer and the questions your team asks at enquiry.", done: status.crmConfigured, cta: { label: "Review CRM fields", href: "/settings?section=fields" } },
+    { key: "doctors", allowed: can("MANAGE_SPECIALTIES"), title: "Check appointment settings", detail: "Add doctors and clinic hours so appointments can be booked against real schedules.", done: status.hasDoctors, cta: { label: "Open settings", href: "/settings?section=doctors" } },
+    { key: "calling", allowed: can("VIEW_INTEGRATIONS"), title: "Connect calling", detail: "Bring call logs, missed calls and recordings into each patient's journey.", done: status.callingConnected, cta: { label: "Connect calling", href: "/integrations" } },
+    { key: "whatsapp", allowed: can("VIEW_INTEGRATIONS"), title: "Configure WhatsApp", detail: "Confirm appointments and remind patients automatically.", done: status.whatsappConnected, cta: { label: "Configure WhatsApp", href: "/integrations" } },
+  ];
+  return all.filter((s) => s.allowed).map(({ allowed: _allowed, ...step }) => step);
+}
+
 /**
  * What a brand-new hospital sees instead of a dashboard full of zeros: how PulseOS works, and the few things to do
  * first. As soon as the first lead exists the normal Command Centre takes over.
  */
-export function WorkspaceWelcome({ status, hospitalName }: { status: SetupStatus; hospitalName?: string }) {
+export function WorkspaceWelcome({ status, hospitalName, role }: { status: SetupStatus; hospitalName?: string; role?: Role }) {
   const quickCreate = useQuickCreate();
-  const steps: Step[] = [
-    { key: "lead", title: "Add your first lead", detail: "Record an enquiry from a call, WhatsApp, walk-in or your website. It becomes a patient journey.", done: status.hasJourneys, cta: { label: "Add lead", onClick: () => quickCreate.openAddLead() } },
-    { key: "crm", title: "Configure your CRM fields", detail: "Choose the services you offer and the questions your team asks at enquiry.", done: status.crmConfigured, cta: { label: "Open CRM settings", href: "/settings?section=fields" } },
-    { key: "doctors", title: "Add your doctors", detail: "So appointments can be booked against real schedules.", done: status.hasDoctors, cta: { label: "Add doctors", href: "/settings?section=doctors" } },
-    { key: "calling", title: "Connect calling / IVR", detail: "Bring call logs, missed calls and recordings into each patient's journey.", done: status.callingConnected, cta: { label: "Connect calling", href: "/integrations" } },
-    { key: "whatsapp", title: "Set up WhatsApp reminders", detail: "Confirm appointments and remind patients automatically.", done: status.whatsappConnected, cta: { label: "Connect WhatsApp", href: "/integrations" } },
-    { key: "staff", title: "Invite your staff", detail: "Give front desk, coordinators and doctors their own sign-in.", done: status.hasStaff, cta: { label: "Manage staff", href: "/settings" } },
-  ];
+  const steps = welcomeSteps(status, role, () => quickCreate.openAddLead());
   const doneCount = steps.filter((s) => s.done).length;
 
   return (
     <div className="mx-auto max-w-4xl space-y-5" data-testid="workspace-welcome">
       <section className="rounded-panel border border-line bg-white p-5 shadow-glass sm:p-7">
-        <p className="text-xs font-semibold uppercase tracking-wide text-primary-700">Welcome to PulseOS</p>
-        <h1 className="mt-1 text-xl font-semibold tracking-tight text-ink sm:text-2xl">{hospitalName ? `${hospitalName} is ready.` : "Your workspace is ready."}</h1>
+        <p className="text-xs font-semibold uppercase tracking-wide text-primary-700">{hospitalName ? `Welcome to PulseOS · ${hospitalName}` : "Welcome to PulseOS"}</p>
+        <h1 className="mt-1 text-xl font-semibold tracking-tight text-ink sm:text-2xl">Your workspace is ready</h1>
         <p className="mt-2 max-w-2xl text-sm text-ink-2">
           PulseOS follows every patient from the first enquiry to treatment and follow-up, so your team always knows where each patient came from, what happened next and what needs attention.
         </p>

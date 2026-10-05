@@ -22,13 +22,13 @@ test.describe("Tenant-branded login (shared PulseOS system)", () => {
 
   test("1+2+3. Namokar and another seeded hospital use the SAME component with different words; no logo = typographic name", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    expect(await open(page, "namokar")).toBe(200);
-    await expect(page.getByTestId("tenant-login")).toHaveAttribute("data-workspace", "namokar");
+    expect(await open(page, "namokar-v1")).toBe(200);
+    await expect(page.getByTestId("tenant-login")).toHaveAttribute("data-workspace", "namokar-v1");
     await expect(page.getByTestId("login-lockup")).toContainText("PulseOS");
     await expect(page.getByTestId("login-client-name")).toHaveText("Namokar");
     await expect(page.getByTestId("login-headline")).toHaveText("Namokar Eye & Oculoplasty Centre");
     await expect(page.getByTestId("login-tagline")).toHaveText("Every enquiry, call, appointment and follow-up for your patients, in one place.");
-    await expect(page.getByTestId("tenant-login-pilot")).toHaveText("V1 Pilot");
+    await expect(page.getByTestId("tenant-login-pilot")).toHaveText("V1 Demo");
     await expect(page.getByTestId("tenant-login-workspace")).toContainText(/Namokar[’']s PulseOS workspace/);
     await expect(page.getByTestId("login-support")).toHaveText("Need help? Contact your administrator.");
     await expect(page.getByTestId("login-client-logo")).toHaveCount(0);
@@ -68,7 +68,7 @@ test.describe("Tenant-branded login (shared PulseOS system)", () => {
   });
 
   test("5. an unknown workspace is a generic 404 that reveals nothing", async ({ page }) => {
-    for (const slug of ["invalid-company", "NAMOKAR", "x", "namokar-not"]) {
+    for (const slug of ["invalid-company", "NAMOKAR-V1", "x", "namokar-not"]) {
       expect(await open(page, slug), slug).toBe(404);
       await expect(page.getByTestId("tenant-login-missing")).toContainText("Workspace not found");
       const text = (await page.locator("body").innerText()).toLowerCase();
@@ -97,9 +97,9 @@ test.describe("Tenant-branded login (shared PulseOS system)", () => {
     for (const remember of [true, false]) {
       const context = await browser.newContext();
       const page = await context.newPage();
-      await open(page, "namokar");
+      await open(page, "namokar-v1");
       const bodies: string[] = [];
-      page.on("request", (r) => r.url().includes("/auth/login/tenant/namokar") && bodies.push(r.postData() ?? ""));
+      page.on("request", (r) => r.url().includes("/auth/login/tenant/namokar-v1") && bodies.push(r.postData() ?? ""));
       await page.getByLabel("Email address").fill("namokar.frontdesk@pulseos.local");
       await page.getByLabel("Password", { exact: true }).fill(DEMO_PASSWORD);
       if (remember) await page.getByTestId("remember-me").check();
@@ -148,7 +148,7 @@ test.describe("Tenant-branded login (shared PulseOS system)", () => {
 
   test("11. the public configuration exposes display words only: no ids, secrets, users, edition or integrations", async ({ page }) => {
     await page.goto("/login");
-    const body = await page.evaluate(async (api) => (await fetch(`${api}/auth/tenants/namokar`)).json(), API);
+    const body = await page.evaluate(async (api) => (await fetch(`${api}/auth/tenants/namokar-v1`)).json(), API);
     expect(Object.keys(body).sort()).toEqual(["badgeLabel", "displayName", "headline", "logoPath", "shortName", "slug", "supportText", "tagline"]);
     const text = JSON.stringify(body);
     expect(text).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}|edition|BETA_|secret|token|password|connector|capabilit|@pulseos\.local/i);
@@ -158,7 +158,7 @@ test.describe("Tenant-branded login (shared PulseOS system)", () => {
 
   test("accessibility: real labels, a named and pressed password toggle, Remember me tied to its label, errors linked to the fields, keyboard order, Enter submits", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await open(page, "namokar");
+    await open(page, "namokar-v1");
     const email = page.getByLabel("Email address");
     const password = page.getByLabel("Password", { exact: true });
     await expect(email).toHaveAttribute("type", "email");
@@ -205,7 +205,7 @@ test.describe("Tenant-branded login (shared PulseOS system)", () => {
   for (const w of [{ n: 1440, h: 900 }, { n: 1280, h: 800 }, { n: 1024, h: 768 }, { n: 768, h: 1024 }, { n: 390, h: 844 }]) {
     test(`12. responsive at ${w.n}: no horizontal overflow, the form is reachable, fields and button are practical touch targets`, async ({ page }) => {
       await page.setViewportSize({ width: w.n, height: w.h });
-      for (const slug of ["namokar", "eye-demo"]) {
+      for (const slug of ["namokar-v1", "namokar-v2", "eye-demo"]) {
         await open(page, slug);
         expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth), `${slug} overflows`).toBeLessThanOrEqual(0);
         for (const target of [page.getByLabel("Email address"), page.getByLabel("Password", { exact: true }), page.getByRole("button", { name: "Sign in" })]) {

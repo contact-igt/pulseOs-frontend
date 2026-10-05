@@ -899,7 +899,7 @@ export const TASK_TYPE_LABEL: Record<TaskType, string> = {
 };
 
 export type FollowUpDefaultOwner = "JOURNEY_OWNER" | "ACTOR" | "UNASSIGNED";
-export const FOLLOW_UP_OWNER_LABEL: Record<FollowUpDefaultOwner, string> = { JOURNEY_OWNER: "Journey owner", ACTOR: "The person adding it", UNASSIGNED: "Unassigned" };
+export const FOLLOW_UP_OWNER_LABEL: Record<FollowUpDefaultOwner, string> = { JOURNEY_OWNER: "Assigned Team Member", ACTOR: "The person adding it", UNASSIGNED: "Unassigned" };
 
 /** What a follow-up type behaves like to the system. Shown to Admins in plain words, never as an internal name. */
 export const FOLLOW_UP_BEHAVIOURS: { key: TaskType; label: string; hint: string }[] = [

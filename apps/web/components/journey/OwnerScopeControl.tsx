@@ -25,18 +25,18 @@ export function OwnerScopeControl({ value, onChange, owners, counts }: { value: 
   return (
     <FilterBar data-testid="owner-scope">
       <Tabs
-        ariaLabel="Owner scope"
+        ariaLabel="Team member scope"
         value={segment}
         onChange={(k) => onChange(k === "all" ? "" : k)}
         items={[
-          { key: "all", label: `All owners${n(counts?.all)}`, testId: "owner-scope-all" },
+          { key: "all", label: `All Team${n(counts?.all)}`, testId: "owner-scope-all" },
           { key: "mine", label: `Mine${n(counts?.mine)}`, testId: "owner-scope-mine" },
           { key: "unassigned", label: `Unassigned${n(counts?.unassigned)}`, testId: "owner-scope-unassigned" },
         ]}
       />
       {owners.length > 0 && (
-        <FilterSelect aria-label="Filter by owner" value={owners.some((o) => o.id === value) ? value : ""} onChange={(e) => onChange(e.target.value)} data-testid="owner-scope-select">
-          <option value="">Any owner</option>
+        <FilterSelect aria-label="Filter by team member" value={owners.some((o) => o.id === value) ? value : ""} onChange={(e) => onChange(e.target.value)} data-testid="owner-scope-select">
+          <option value="">Any team member</option>
           {owners.map((o) => (
             <option key={o.id} value={o.id}>{o.name}{n(counts?.byOwner[o.id] ?? 0)}</option>
           ))}

@@ -107,7 +107,7 @@ export default function PatientsPage() {
                 <Th>Stage</Th>
                 <Th align="center">Journeys</Th>
                 <Th>Source</Th>
-                <Th>Owner</Th>
+                <Th>Team Member</Th>
                 <Th>Next action</Th>
                 <Th>Last interaction</Th>
                 <Th>Branch</Th>

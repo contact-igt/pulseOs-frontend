@@ -168,7 +168,7 @@ export function LogOutcomeSheet({
             {selected.asksReason && <TextInput label="Why? (optional)" value={state.reason} onChange={(e) => set("reason", e.target.value)} placeholder="e.g. Chose another hospital" data-testid="log-outcome-reason" />}
 
             {!selected.requiresFollowUp && <CheckRow label="Schedule a follow-up" checked={state.scheduleFollowUp} onChange={(v) => { set("scheduleFollowUp", v); if (v && !state.followUpLocal) set("followUpLocal", defaultFollowUpLocal(new Date(), timeZone)); }} testId="log-outcome-schedule" />}
-            {wantsFollowUp && <TextInput label="Follow up on" type="datetime-local" value={state.followUpLocal} onChange={(e) => set("followUpLocal", e.target.value)} data-testid="log-outcome-follow-up" hint="A task is created and assigned to the journey's owner." />}
+            {wantsFollowUp && <TextInput label="Follow up on" type="datetime-local" value={state.followUpLocal} onChange={(e) => set("followUpLocal", e.target.value)} data-testid="log-outcome-follow-up" hint="A task is created and assigned to the journey's assigned team member." />}
 
             {fieldList.length > 0 && <CustomFieldInputs fields={fieldList} values={state.fieldValues} onChange={(key, value) => setState((s) => ({ ...s, fieldValues: { ...s.fieldValues, [key]: value } }))} idPrefix="outcome-field" testId="log-outcome-fields" />}
           </>

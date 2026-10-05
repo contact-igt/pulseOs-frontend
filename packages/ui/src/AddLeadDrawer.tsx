@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   UNKNOWN_PATIENT_NAME,
+  type ClinicHours,
   type CreateLeadInput,
   type CreateLeadResult,
   type CrmOutcomeVm,
@@ -17,6 +18,7 @@ import {
 import { X } from "lucide-react";
 import { useDialogFocus } from "./useDialogFocus";
 import { CustomFieldInputs, applyFieldRules, defaultsFor, normalizeFieldValues } from "./CustomFieldInputs";
+import { clinicHoursError, clinicHoursHint, clinicTimeBounds } from "./clinicHours";
 import { hospitalLocalInput } from "./format";
 import { LEAD_CHANNEL_OPTIONS, LEAD_ERROR_COPY, nextStepAvailability, reconcileNextStep, saveReadiness, toCreateLeadInput, type LeadFormValues, type NextStepKind } from "./addLeadModel";
 
@@ -56,6 +58,7 @@ export function AddLeadDrawer({
   onClose,
   specialties,
   lookups,
+  clinicHours,
   leadSources,
   outcomes = [],
   defaultSource,
@@ -69,6 +72,8 @@ export function AddLeadDrawer({
   onClose: () => void;
   specialties: SpecialtyTemplateVm[];
   lookups: Lookups;
+  /** Overrides lookups.clinicHours; null = no restriction. */
+  clinicHours?: ClinicHours | null;
   /** The sources the hospital offers for a new lead (non-archived). */
   leadSources: LeadSourceVm[];
   /** The hospital's configured outcomes (active), in their configured order. */
@@ -110,6 +115,10 @@ export function AddLeadDrawer({
   const nowLocal = hospitalLocalInput();
   const apptAt = form.apptDate && form.apptTime ? `${form.apptDate}T${form.apptTime}` : "";
   const apptPast = form.nextStep === "appointment" && !!apptAt && apptAt < nowLocal;
+  const hours = clinicHours === undefined ? lookups.clinicHours : clinicHours;
+  const apptHoursError = form.nextStep === "appointment" && !apptPast ? clinicHoursError(hours, form.apptDate, form.apptTime) : null;
+  const apptHoursHint = clinicHoursHint(hours);
+  const apptBounds = clinicTimeBounds(hours, form.apptDate);
   const callbackPast = form.nextStep === "callback" && !!form.callbackDate && !!form.callbackTime && `${form.callbackDate}T${form.callbackTime}` < nowLocal;
   const followUpPast = form.nextStep === "follow_up" && !!form.followUpDate && !!form.followUpTime && `${form.followUpDate}T${form.followUpTime}` < nowLocal;
   const selectedService = specialties.find((s) => s.key === form.specialtyKey);
@@ -119,7 +128,7 @@ export function AddLeadDrawer({
   // Appointment: ask whether the doctor is free then (debounced, advisory — the save itself decides).
   useEffect(() => {
     setConflict(false);
-    if (!onCheckSlot || form.nextStep !== "appointment" || !form.apptDoctorId || !apptAt || apptPast) return;
+    if (!onCheckSlot || form.nextStep !== "appointment" || !form.apptDoctorId || !apptAt || apptPast || apptHoursError) return;
     let live = true;
     const t = setTimeout(() => {
       onCheckSlot(form.apptDoctorId, apptAt).then((r) => live && setConflict(!r.available && !r.inPast)).catch(() => undefined);
@@ -128,7 +137,7 @@ export function AddLeadDrawer({
       live = false;
       clearTimeout(t);
     };
-  }, [onCheckSlot, form.nextStep, form.apptDoctorId, apptAt, apptPast]);
+  }, [onCheckSlot, form.nextStep, form.apptDoctorId, apptAt, apptPast, apptHoursError]);
 
   if (!open) return null;
 
@@ -176,6 +185,7 @@ export function AddLeadDrawer({
     if (submitting) return;
     const readiness = saveReadiness(form, { nowLocal, outcome, requiredFieldKeys: requiredFields.map((f) => f.key), hasAppointmentDoctors: lookups.doctors.length > 0 });
     if (!readiness.ok) return fail("client", readiness.reasons[0]);
+    if (apptHoursError) return fail("client", apptHoursError);
     setSubmitting(true);
     setError(null);
     try {
@@ -438,7 +448,7 @@ export function AddLeadDrawer({
                 <div className="col-span-2">
                   <label className={labelClass} htmlFor="lead-callback-owner">Who calls back</label>
                   <select id="lead-callback-owner" value={form.callbackOwner} onChange={(e) => set("callbackOwner", e.target.value)} className={inputClass} data-testid="lead-callback-owner">
-                    <option value="">Lead owner (default)</option>
+                    <option value="">Assigned Team Member (default)</option>
                     {lookups.owners.map((o) => (
                       <option key={o.id} value={o.id}>
                         {o.name}
@@ -476,11 +486,11 @@ export function AddLeadDrawer({
               <div className="mt-3 grid grid-cols-2 gap-3 rounded-lg border border-neutral-100 bg-neutral-50 p-3" data-testid="lead-appt-fields">
                 <div>
                   <label className={labelClass} htmlFor="lead-appt-date">Date</label>
-                  <input id="lead-appt-date" type="date" required value={form.apptDate} min={nowLocal.slice(0, 10)} onChange={(e) => set("apptDate", e.target.value)} aria-invalid={apptPast || undefined} className={inputClass} data-testid="lead-appt-date" />
+                  <input id="lead-appt-date" type="date" required value={form.apptDate} min={nowLocal.slice(0, 10)} onChange={(e) => set("apptDate", e.target.value)} aria-invalid={apptPast || !!apptHoursError || undefined} aria-describedby={apptHoursHint ? "lead-appt-hours-hint" : undefined} className={inputClass} data-testid="lead-appt-date" />
                 </div>
                 <div>
                   <label className={labelClass} htmlFor="lead-appt-time">Time</label>
-                  <input id="lead-appt-time" type="time" required value={form.apptTime} onChange={(e) => set("apptTime", e.target.value)} aria-invalid={apptPast || undefined} className={inputClass} data-testid="lead-appt-time" />
+                  <input id="lead-appt-time" type="time" required value={form.apptTime} onChange={(e) => set("apptTime", e.target.value)} min={apptBounds?.min} max={apptBounds?.max} aria-invalid={apptPast || !!apptHoursError || undefined} aria-describedby={apptHoursHint ? "lead-appt-hours-hint" : undefined} className={inputClass} data-testid="lead-appt-time" />
                 </div>
                 {!soleDoctor && (<div className="col-span-2 sm:col-span-1">
                   <label className={labelClass} htmlFor="lead-appt-doctor">Doctor <span className="text-danger-500">*</span></label>
@@ -507,6 +517,8 @@ export function AddLeadDrawer({
                   <label className={labelClass} htmlFor="lead-appt-note">Note (optional)</label>
                   <input id="lead-appt-note" type="text" maxLength={500} value={form.apptNote} onChange={(e) => set("apptNote", e.target.value)} className={inputClass} data-testid="lead-appt-note" />
                 </div>
+                {apptHoursHint && <p id="lead-appt-hours-hint" className="col-span-2 -mt-1 text-xs text-ink-2" data-testid="lead-appt-clinic-hours">{apptHoursHint}</p>}
+                {apptHoursError && <p className="col-span-2 text-xs text-danger-700" role="alert" data-testid="lead-appt-clinic-hours-error">{apptHoursError}</p>}
                 {(apptPast || doctorBusy) && (
                   <p className="col-span-2 text-xs text-danger-700" role="status" data-testid="lead-appt-warning">
                     {apptPast ? LEAD_ERROR_COPY.appointment_time_in_past : LEAD_ERROR_COPY.resource_unavailable}
@@ -520,7 +532,7 @@ export function AddLeadDrawer({
           <details ref={additionalRef} className="group rounded-lg border border-neutral-100" data-testid="lead-additional">
             <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 py-2 text-sm font-medium text-slate-700" data-testid="lead-additional-toggle">
               Additional details
-              <span className="text-xs font-normal text-neutral-500 group-open:hidden">Email, owner, notes, more…</span>
+              <span className="text-xs font-normal text-neutral-500 group-open:hidden">Email, team member, notes, more…</span>
             </summary>
             <div className="space-y-3 border-t border-neutral-100 p-3">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -548,7 +560,7 @@ export function AddLeadDrawer({
                   </select>
                 </div>)}
                 <div>
-                  <label className={labelClass} htmlFor="lead-owner">Owner / Coordinator</label>
+                  <label className={labelClass} htmlFor="lead-owner">Assigned Team Member</label>
                   <select id="lead-owner" value={form.ownerId} onChange={(e) => set("ownerId", e.target.value)} className={inputClass}>
                     <option value="">Unassigned</option>
                     {lookups.owners.map((o) => (

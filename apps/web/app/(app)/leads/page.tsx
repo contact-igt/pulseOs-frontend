@@ -100,7 +100,7 @@ export default function LeadsPage() {
     });
   }
 
-  const ownerName = (id: string | null) => (id ? owners.find((o) => o.id === id)?.name ?? "the selected owner" : "Unassigned");
+  const ownerName = (id: string | null) => (id ? owners.find((o) => o.id === id)?.name ?? "the selected team member" : "Unassigned");
 
   async function submitAssignment(ownerId: string | null) {
     if (!assigning) return;
@@ -156,7 +156,7 @@ export default function LeadsPage() {
         <Card tone="info" className="flex flex-wrap items-center gap-3 px-4 py-2" data-testid="bulk-bar" role="region" aria-label="Bulk actions">
           <span className="text-sm font-medium text-ink">{selectedIds.length} selected</span>
           <Button variant="primary" size="sm" onClick={() => { setNotice(null); setAssigning({ kind: "bulk" }); }} data-testid="bulk-assign">
-            Assign to…
+            Assign Team Member
           </Button>
           <button type="button" onClick={() => setSelected(new Set())} className="text-xs text-ink-2 hover:text-ink max-md:min-h-11 max-md:px-2" data-testid="bulk-clear">
             Clear
