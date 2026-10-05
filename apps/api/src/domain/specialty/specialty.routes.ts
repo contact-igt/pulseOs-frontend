@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requirePermission } from "../auth/permission.middleware.js";
 import {
   createCustomField,
+  createSpecialty,
   getSpecialtyDetail,
   listSpecialties,
   updateCustomField,
@@ -40,6 +41,8 @@ const updateFieldBody = z.object({
   options: z.array(z.string()).optional(),
 });
 
+const createSpecialtyBody = z.object({ displayName: z.string().min(1).max(60), defaultJourneyType: z.string().min(1).max(80).optional() }).strict();
+
 export async function specialtyRoutes(app: FastifyInstance) {
   // Every authenticated role may READ specialties/fields (needed to render Add Lead).
   app.get("/specialties", async (request) => {
@@ -61,6 +64,15 @@ export async function specialtyRoutes(app: FastifyInstance) {
     const tenantId = request.sessionUser!.tenantId;
     const { specialtyKey } = request.query as { specialtyKey?: string };
     return listActiveTreatmentDefinitions(app.db, tenantId, specialtyKey || undefined);
+  });
+
+  // Add a service the hospital offers. Configuration: HOSPITAL_ADMIN/SUPER_ADMIN only; the tenant is the session's.
+  app.post("/specialties", { preHandler: requirePermission("MANAGE_SPECIALTIES") }, async (request, reply) => {
+    const parsed = createSpecialtyBody.safeParse(request.body);
+    if (!parsed.success) return reply.status(400).send({ error: "invalid_request" });
+    const result = await createSpecialty(app.db, request.sessionUser!.tenantId, parsed.data);
+    if (!result.ok) return reply.status(result.reason === "service_exists" ? 409 : 400).send({ error: result.reason });
+    return reply.status(201).send(result.service);
   });
 
   // Configuration changes are HOSPITAL_ADMIN/SUPER_ADMIN only.

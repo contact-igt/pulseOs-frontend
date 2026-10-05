@@ -37,6 +37,58 @@ const SECTIONS: { key: Section; label: string; manageOnly: boolean }[] = [
   { key: "activity", label: "Activity", manageOnly: true },
 ];
 
+/** Add a service the hospital offers (e.g. a new kind of enquiry). It appears in Add Lead, filters and reports at once and can get its own CRM fields. */
+function AddServiceForm({ onAdded }: { onAdded: () => void }) {
+  const [name, setName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function add() {
+    const displayName = name.trim();
+    if (!displayName || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await api.createSpecialty({ displayName });
+      setName("");
+      onAdded();
+    } catch (e) {
+      setError((e as { message?: string }).message === "service_exists" ? "That service already exists." : "Could not add the service - what you typed is still here. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <form
+      className="mb-3 flex flex-wrap items-end gap-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void add();
+      }}
+      data-testid="add-service-form"
+    >
+      <label className="min-w-48 flex-1 text-xs font-medium text-ink">
+        Add a service
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          maxLength={60}
+          placeholder="e.g. Glaucoma check"
+          className="mt-1 h-11 w-full rounded-control border border-line-strong bg-surface px-3 text-sm text-ink outline-none focus:border-primary-500 sm:h-9"
+          data-testid="add-service-name"
+        />
+      </label>
+      <button type="submit" disabled={!name.trim() || saving} className="h-11 rounded-control bg-primary-600 px-4 text-xs font-semibold text-white transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:bg-primary-200 sm:h-9" data-testid="add-service-save">
+        {saving ? "Adding…" : "Add service"}
+      </button>
+      {error && (
+        <p role="alert" className="basis-full text-xs text-danger-700" data-testid="add-service-error">
+          {error}
+        </p>
+      )}
+    </form>
+  );
+}
+
 /** A service's name and default Journey type. Its CRM fields live in the CRM Fields section. */
 function ServiceDetail({ specialtyKey, onManageFields }: { specialtyKey: string; onManageFields: () => void }) {
   const queryClient = useQueryClient();
@@ -199,6 +251,14 @@ export default function SettingsPage() {
         <Panel title="Services" subtitle="Which services Add Lead offers">
           {(specialties.isLoading || session.isLoading) && <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12" />)}</div>}
           {specialties.isError && <ErrorState message="Could not load specialties." />}
+          {canManage && (
+            <AddServiceForm
+              onAdded={() => {
+                queryClient.invalidateQueries({ queryKey: ["specialties-admin"] });
+                queryClient.invalidateQueries({ queryKey: ["specialties"] });
+              }}
+            />
+          )}
           {specialties.data && !session.isLoading && (
             <ul className="divide-y divide-line rounded-control border border-line" data-testid="specialty-list">
               {specialties.data.map((s) => (

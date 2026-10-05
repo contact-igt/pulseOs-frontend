@@ -93,6 +93,33 @@ export async function listActiveFields(db: Db, tenantId: string, specialtyKey: s
   return fields.map(toFieldVm);
 }
 
+const SERVICE_NAME_MAX = 60;
+
+/** "Laser Vision Correction" -> LASER_VISION_CORRECTION. The key is permanent (journeys and fields point at it); the name can change. */
+export function serviceKeyFrom(name: string): string {
+  return name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40);
+}
+
+/**
+ * Add a service the hospital offers (what an enquiry is about). Same table the department templates install into, so it appears in
+ * Add Lead, filters and reports like any other, and can have its own CRM fields. Never hard-deleted later: disable it instead.
+ */
+export async function createSpecialty(db: Db, tenantId: string, input: { displayName: string; defaultJourneyType?: string }): Promise<{ ok: true; service: SpecialtyTemplateVm } | { ok: false; reason: string }> {
+  const displayName = input.displayName.trim();
+  if (!displayName || displayName.length > SERVICE_NAME_MAX) return { ok: false, reason: "invalid_request" };
+  const base = serviceKeyFrom(displayName);
+  if (!base) return { ok: false, reason: "invalid_request" };
+  const existing = await db.select({ key: specialtyTemplates.key, displayName: specialtyTemplates.displayName, sortOrder: specialtyTemplates.sortOrder }).from(specialtyTemplates).where(eq(specialtyTemplates.tenantId, tenantId));
+  if (existing.some((s) => s.displayName.trim().toLowerCase() === displayName.toLowerCase())) return { ok: false, reason: "service_exists" };
+  let key = base;
+  for (let i = 2; existing.some((s) => s.key === key); i++) key = `${base.slice(0, 36)}_${i}`;
+  const sortOrder = existing.reduce((m, s) => Math.max(m, s.sortOrder), 0) + 1;
+  const journeyType = input.defaultJourneyType?.trim() || displayName;
+  const [row] = await db.insert(specialtyTemplates).values({ tenantId, key, displayName, defaultJourneyType: journeyType, enabled: true, sortOrder }).onConflictDoNothing().returning();
+  if (!row) return { ok: false, reason: "service_exists" };
+  return { ok: true, service: { key: row.key, displayName: row.displayName, defaultJourneyType: row.defaultJourneyType, departmentName: null, enabled: row.enabled, sortOrder: row.sortOrder, fieldCount: 0 } };
+}
+
 export async function updateSpecialty(db: Db, tenantId: string, key: string, input: UpdateSpecialtyInput): Promise<{ ok: true } | { ok: false; reason: string }> {
   const [existing] = await db
     .select({ id: specialtyTemplates.id })

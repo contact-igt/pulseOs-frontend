@@ -435,6 +435,7 @@ export const api = {
   specialties: (includeDisabled = false) => request<SpecialtyTemplateVm[]>(`/specialties${toQuery({ includeDisabled: includeDisabled ? "true" : undefined })}`),
   specialtyFields: (key: string) => request<CustomFieldDefinitionVm[]>(`/specialties/${key}/fields`),
   specialtyDetail: (key: string) => request<SpecialtyDetailVm>(`/specialties/${key}`),
+  createSpecialty: (input: { displayName: string; defaultJourneyType?: string }) => request<SpecialtyTemplateVm>("/specialties", { method: "POST", body: JSON.stringify(input) }),
   updateSpecialty: (key: string, input: UpdateSpecialtyInput) => request<SpecialtyDetailVm>(`/specialties/${key}`, { method: "PATCH", body: JSON.stringify(input) }),
   // CRM field configuration (Settings → CRM Fields) and the fields an entry form should show.
   crmFields: (opts: { specialtyKey?: string; includeArchived?: boolean } = {}) => request<CrmFieldVm[]>(`/crm/fields${toQuery({ specialtyKey: opts.specialtyKey, includeArchived: opts.includeArchived ? "true" : undefined })}`),
