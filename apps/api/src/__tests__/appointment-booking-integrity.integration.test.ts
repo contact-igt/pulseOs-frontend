@@ -205,9 +205,9 @@ describe.skipIf(!DEMO_PASSWORD)("appointment booking integrity (integration)", (
       const at = slot(14, 10);
       await book(doctorA, at);
       const taken = await check(t, "FRONT_DESK", doctorA, at);
-      expect(taken.json()).toEqual({ available: false, inPast: false });
-      expect((await check(t, "FRONT_DESK", doctorB, at)).json()).toEqual({ available: true, inPast: false });
-      expect((await check(t, "FRONT_DESK", doctorA, new Date(Date.now() - 86_400_000).toISOString())).json()).toEqual({ available: false, inPast: true });
+      expect(taken.json()).toEqual({ available: false, inPast: false, outsideHours: false });
+      expect((await check(t, "FRONT_DESK", doctorB, at)).json()).toEqual({ available: true, inPast: false, outsideHours: false });
+      expect((await check(t, "FRONT_DESK", doctorA, new Date(Date.now() - 86_400_000).toISOString())).json()).toEqual({ available: false, inPast: true, outsideHours: false });
     });
 
     it("needs the appointments permission, refuses junk, and another hospital's doctor is a 404", async () => {
