@@ -237,6 +237,8 @@ async function createLeadIn(db: Db, tenantId: string, actorId: string, input: Cr
     await db.insert(customFieldValues).values({ tenantId, journeyId: journey.id, fieldDefinitionId: field.id, value });
   }
 
+  const ownerId = journey.ownerUserId;
+  const ownerName = ownerId ? ((await db.select({ name: users.name }).from(users).where(and(eq(users.tenantId, tenantId), eq(users.id, ownerId))).limit(1))[0]?.name ?? null) : null;
   await db.insert(timelineEvents).values({
     tenantId,
     patientId,
@@ -245,8 +247,9 @@ async function createLeadIn(db: Db, tenantId: string, actorId: string, input: Cr
     actorId,
     eventType: "lead_created",
     title: `Lead created — ${input.journeyType}`,
-    // Honest: staff typed this in. No provider message, call or conversation is invented from the channel.
-    description: input.channel ? manualCaptureNote(input.channel) : null,
+    // Honest: staff typed this in. No provider message, call or conversation is invented from the channel. The line says what the
+    // journey starts from - where the person came from and who looks after it (the service is already in the title) - so the first event reads as the start.
+    description: [`Source: ${source.label}`, ownerName ? `Assigned to ${ownerName}` : null, input.channel ? manualCaptureNote(input.channel) : null].filter(Boolean).join(" · "),
     sourceChannel: source.key,
     // How this first contact happened, when staff said. Never inferred from the source.
     channel: input.channel ?? null,
