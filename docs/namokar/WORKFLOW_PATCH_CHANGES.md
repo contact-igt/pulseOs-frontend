@@ -75,3 +75,36 @@ Configuration is per hospital. Tested: changing V2's Saturday hours or an Add Le
 - Six commits are local on `claude/wonderful-carson-o7jbjk` (`db2d4f8` … `0ff4e45`).
 - **Not pushed.** GitHub has two newer commits from another session (`dfd7894`, `0402ba0`: shared UI styling and appearance controls). Merging them needs a fresh check before pushing; no force-push, never `main`.
 - This file is also uncommitted.
+
+---
+
+# Update: convergence with the cloud UI, and workflow simplification
+
+Branch `integration/pulseos-converged-v1-v2` = the local workflow commits above + cloud UI commits `dfd7894` (shared MetricStrip, no KPI notch) and `0402ba0` (Settings → Appearance, floating/content surfaces, exclusive top-bar menus), merged with one conflict (the Settings tab list: both **Clinic Hours** and **Appearance** are kept). Migrations 0039 (clinic hours) and 0040 (surface style) are sequential; all 41 apply from an empty database and two seeds give identical counts.
+
+## Appointment day: three staff steps
+- **Check in** now means arrived **and** waiting, in one server-side transaction (`PATCH /appointments/:id/action { action: "check_in", queue: true }`). The arrival time and the waiting start are the same instant; the timeline gets one line ("Patient checked in · Waiting · 10:32 am"). A repeat or simultaneous click changes nothing twice. If recording the timeline line fails, the visit stays untouched (tested with a failing trigger).
+- **Send to doctor** → With doctor. **Consultation done** → Completed (backend enum values unchanged: `waiting`, `with_doctor`, `completed`).
+- Planner/agenda rows show "Waiting · 8 min", derived from the recorded waiting start.
+- The two-step API (`check_in` then `mark_waiting`) still works for integrations and for visits already checked in the old way.
+
+## Log outcome (follow-up) books the visit in the same save
+- Tick **Book the appointment now** on an outcome that allows visits; date, time and **confirmed with patient** appear inline (the same component as Log Call: `InlineAppointmentFields`).
+- Same rules as Log Call: one transaction (refused booking keeps nothing), confirm after commit (confirmation + 1-hour reminder planned once), no extra follow-up task, doctor/branch default to the only one, `MANAGE_APPOINTMENTS` required.
+- Not changed: **Add follow-up** schedules a *future* task; it has no outcome to book from, so the visit is booked at the moment the follow-up is *logged*.
+
+## Lead creation
+- The first timeline line is one "Lead created — <service>" event, now with "Source: Phone · Assigned to Shivani". No duplicate creation events.
+
+## Settings navigation
+- When tabs overflow, ‹ and › buttons appear on the side that has more (phone-sized targets), in addition to trackpad, touch, arrow keys, Home/End and active-tab-into-view. No page-level horizontal scroll.
+
+## Add Lead fields
+- Unchanged mechanics (placement-driven, per hospital). Acceptance covered end to end: a new custom field → "On Add Lead" on → appears in Add Lead at once → off → gone; stored values stay; V1 never sees V2's field.
+- Note: Add Lead already has a built-in **Preferred language** question, so a custom field with that exact name would show twice.
+
+## Test hygiene found on the way
+- `attribution.service.test.ts` borrowed an arbitrary workspace and left a patient behind, which broke the clean-V2 checks once table order changed. It now removes its rows.
+
+## Verification (final tree)
+Lint and typecheck clean · Web 288 · UI 155 · API 1,457 (1 skipped) · Full Playwright 425 passed, 2 skipped, 0 failed · Fresh database: 41 migrations, seed ×2 identical.
