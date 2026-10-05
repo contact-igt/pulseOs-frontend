@@ -68,6 +68,19 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     };
   }, [surfaceStyle]);
 
+  // THIS person's own readability choices (Display settings) also come with the session and are applied as two data attributes
+  // that select bounded token sets (see globals.css). They are personal: another person on the same machine gets their own.
+  const interfaceSize = data?.user.interfaceSize;
+  const textSize = data?.user.textSize;
+  useEffect(() => {
+    document.documentElement.dataset.uiSize = interfaceSize ?? "comfortable";
+    document.documentElement.dataset.textSize = textSize ?? "default";
+    return () => {
+      delete document.documentElement.dataset.uiSize;
+      delete document.documentElement.dataset.textSize;
+    };
+  }, [interfaceSize, textSize]);
+
   // A role's sidebar only ever links to pages it's meant to use (see nav.ts)
   // — but nothing previously stopped a direct URL, stale bookmark, or back
   // button from landing a role on a page outside that set. The API already

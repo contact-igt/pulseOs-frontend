@@ -395,3 +395,51 @@ body {
   --alpha-control: 0.95;
   --blur-floating: none;
 }
+
+/* ---- Personal readability (the signed-in person's own Display settings) -------------------------------------------------
+   Two independent, bounded choices set as data attributes on <html> from the person's saved preferences (the Settings preview
+   puts the same attributes on its own element, so a choice can be tried without changing the page around it). Both work by
+   changing design TOKENS, never by transform/zoom, so layout, popovers, focus and accessibility behave normally:
+   - data-ui-size  scales --spacing, the base unit of every Tailwind size/padding/gap/height utility (control heights, row
+                   density, card and drawer padding). Compact only applies from 768px up: a phone keeps full 44px touch targets.
+   - data-text-size  scales the type tokens (--text-xs ... --text-4xl) by --text-scale, and the few fixed 10-13px captions with
+                   a floor, so even "Small" never drops below a readable size. Icons, logos and charts are not scaled. */
+[data-ui-size="large"] {
+  --spacing: 0.275rem;
+}
+@media (min-width: 768px) {
+  [data-ui-size="compact"] {
+    --spacing: 0.225rem;
+  }
+}
+[data-text-size="small"] {
+  --text-scale: 0.94;
+}
+[data-text-size="default"] {
+  --text-scale: 1;
+}
+[data-text-size="large"] {
+  --text-scale: 1.12;
+}
+[data-text-size="xlarge"] {
+  --text-scale: 1.25;
+}
+[data-text-size] {
+  --text-xs: calc(0.75rem * var(--text-scale));
+  --text-sm: calc(0.875rem * var(--text-scale));
+  --text-base: calc(1rem * var(--text-scale));
+  --text-lg: calc(1.125rem * var(--text-scale));
+  --text-xl: calc(1.25rem * var(--text-scale));
+  --text-2xl: calc(1.5rem * var(--text-scale));
+  --text-3xl: calc(1.875rem * var(--text-scale));
+  --text-4xl: calc(2.25rem * var(--text-scale));
+}
+[data-text-size] [class*="text-[10px]"] {
+  font-size: max(10px, calc(10px * var(--text-scale)));
+}
+[data-text-size] [class*="text-[11px]"] {
+  font-size: max(10.5px, calc(11px * var(--text-scale)));
+}
+[data-text-size] [class*="text-[13px]"] {
+  font-size: max(12.5px, calc(13px * var(--text-scale)));
+}

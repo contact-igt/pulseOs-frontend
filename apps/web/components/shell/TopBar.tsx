@@ -3,13 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, ChevronDown, LogOut, Menu, Search } from "lucide-react";
+import { Bell, ChevronDown, LogOut, Menu, Search, Type } from "lucide-react";
 import { QuickCreateMenu, JOURNEY_STAGE_LABEL, useExclusiveMenu, useFloatingMenu, type QuickCreateItem } from "@pulseos/ui";
 import { roleGroupLabel, type SessionUser } from "@pulseos/types";
 import { api, ApiError } from "@pulseos/api-client";
 import { useQuickCreate } from "./QuickCreateProvider";
 import { initials } from "./nav";
 import { loginPathFor } from "@/lib/loginPage";
+import { DisplaySettingsSheet } from "./DisplaySettingsSheet";
 
 export function TopBar({
   user,
@@ -25,6 +26,7 @@ export function TopBar({
   const router = useRouter();
   const queryClient = useQueryClient();
   const [profileOpen, setProfileOpen] = useState(false);
+  const [displayOpen, setDisplayOpen] = useState(false);
   const { containerRef: profileRef, triggerRef: profileTriggerRef, onMenuKeyDown: onProfileKeyDown } = useFloatingMenu("profile", profileOpen, setProfileOpen);
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutError, setLogoutError] = useState<string | null>(null);
@@ -123,6 +125,19 @@ export function TopBar({
               <button
                 type="button"
                 role="menuitem"
+                onClick={() => {
+                  setProfileOpen(false);
+                  setDisplayOpen(true);
+                }}
+                className="flex min-h-11 w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-neutral-600 transition hover:bg-primary-50 hover:text-ink focus-visible:bg-primary-50 lg:min-h-0"
+                data-testid="display-settings-item"
+              >
+                <Type size={14} />
+                Display settings
+              </button>
+              <button
+                type="button"
+                role="menuitem"
                 onClick={logout}
                 disabled={loggingOut}
                 aria-busy={loggingOut}
@@ -141,6 +156,7 @@ export function TopBar({
           )}
         </div>
       </div>
+      {displayOpen && <DisplaySettingsSheet onClose={() => setDisplayOpen(false)} />}
     </header>
   );
 }

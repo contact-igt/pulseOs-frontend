@@ -1,5 +1,6 @@
 import type {
   ClinicHours,
+  DisplayPreferences,
   SetupStatus,
   DevEnvironment,
   SignupInput,
@@ -254,6 +255,8 @@ export const api = {
   logout: () => request<{ ok: true }>("/auth/logout", { method: "POST" }),
   session: () => request<{ user: SessionUser }>("/auth/session"),
   /** Settings > Appearance: the hospital's interface style (admin only; one of three named styles). */
+  /** My display: the signed-in person's own interface size / text size (never a hospital setting). */
+  setMyPreferences: (prefs: Partial<DisplayPreferences>) => request<DisplayPreferences>("/me/preferences", { method: "PUT", body: JSON.stringify(prefs) }),
   setAppearance: (surfaceStyle: SurfaceStyle) => request<{ surfaceStyle: SurfaceStyle }>("/appearance", { method: "PUT", body: JSON.stringify({ surfaceStyle }) }),
   capabilities: () => request<{ edition: Edition; capabilities: CapabilityState[] }>("/capabilities"),
   setCapability: (key: string, enabled: boolean | null) =>

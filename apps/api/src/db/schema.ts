@@ -107,10 +107,15 @@ export const users = pgTable("users", {
   email: text("email").notNull(),
   passwordHash: text("password_hash").notNull(),
   role: roleEnum("role").notNull(),
+  // Personal display preferences (bounded names, never raw sizes). Null = never chosen = the standard.
+  interfaceSize: text("interface_size"),
+  textSize: text("text_size"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   tenantIdx: index("users_tenant_idx").on(t.tenantId),
   emailTenantUnique: uniqueIndex("users_email_tenant_unique").on(t.tenantId, t.email),
+  interfaceSizeShape: check("users_interface_size_shape", sql`${t.interfaceSize} is null or ${t.interfaceSize} in ('compact', 'comfortable', 'large')`),
+  textSizeShape: check("users_text_size_shape", sql`${t.textSize} is null or ${t.textSize} in ('small', 'default', 'large', 'xlarge')`),
 }));
 
 export const sessions = pgTable("sessions", {

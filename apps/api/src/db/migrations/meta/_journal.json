@@ -288,6 +288,13 @@
       "when": 1791197017419,
       "tag": "0040_tenant_surface_style",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1791204444451,
+      "tag": "0041_user_display_preferences",
+      "breakpoints": true
     }
   ]
 }

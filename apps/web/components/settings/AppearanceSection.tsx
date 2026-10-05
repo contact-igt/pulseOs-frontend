@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@pulseos/api-client";
 import { MetricStrip } from "@pulseos/ui";
-import { DEFAULT_SURFACE_STYLE, SURFACE_STYLES, SURFACE_STYLE_LABEL, type SurfaceStyle } from "@pulseos/types";
+import { DEFAULT_SURFACE_STYLE, SURFACE_STYLES, SURFACE_STYLE_LABEL, type InterfaceSize, type SurfaceStyle, type TextSize } from "@pulseos/types";
 import { ChevronDown, Plus } from "lucide-react";
 
 /**
@@ -131,10 +131,12 @@ export function AppearanceSection() {
  * without changing the page around it. It is inert: no tab stops, hidden from assistive technology (the paragraph above
  * describes it).
  */
-export function AppearancePreview({ style }: { style: SurfaceStyle }) {
+export function AppearancePreview({ style, uiSize, textSize }: { style: SurfaceStyle; uiSize?: InterfaceSize; textSize?: TextSize }) {
   return (
     <div
       data-surface={style}
+      {...(uiSize ? { "data-ui-size": uiSize } : {})}
+      {...(textSize ? { "data-text-size": textSize } : {})}
       data-testid="appearance-preview"
       aria-hidden="true"
       inert

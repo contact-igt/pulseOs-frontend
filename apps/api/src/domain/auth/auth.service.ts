@@ -3,7 +3,7 @@ import { hash, verify } from "@node-rs/argon2";
 import { and, eq } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { users, sessions, tenants, branches, tenantLoginConfigs, tenantProfiles } from "../../db/schema.js";
-import { DEFAULT_EDITION, DEFAULT_SURFACE_STYLE, SURFACE_STYLES, type SurfaceStyle, DEFAULT_LOGIN_SUPPORT_TEXT, DEFAULT_LOGIN_TAGLINE, LOGIN_LOGO_PATH_PATTERN, type DevEnvironment, type Role, type TenantLoginBranding } from "@pulseos/types";
+import { DEFAULT_EDITION, DEFAULT_INTERFACE_SIZE, DEFAULT_SURFACE_STYLE, DEFAULT_TEXT_SIZE, INTERFACE_SIZES, SURFACE_STYLES, TEXT_SIZES, type InterfaceSize, type SurfaceStyle, type TextSize, DEFAULT_LOGIN_SUPPORT_TEXT, DEFAULT_LOGIN_TAGLINE, LOGIN_LOGO_PATH_PATTERN, type DevEnvironment, type Role, type TenantLoginBranding } from "@pulseos/types";
 import { DEFAULT_DEMO_ENVIRONMENT, DEMO_ENVIRONMENTS, DEMO_LOGIN_ROLES, demoEmailForRole, type DemoEnvironmentKey } from "./demo-environments.js";
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 12;
@@ -19,6 +19,12 @@ export async function hashPassword(plain: string): Promise<string> {
 }
 
 /** A hospital that never chose an interface style (null) reads as the default. */
+function toInterfaceSize(v: string | null | undefined): InterfaceSize {
+  return (INTERFACE_SIZES as readonly string[]).includes(v ?? "") ? (v as InterfaceSize) : DEFAULT_INTERFACE_SIZE;
+}
+function toTextSize(v: string | null | undefined): TextSize {
+  return (TEXT_SIZES as readonly string[]).includes(v ?? "") ? (v as TextSize) : DEFAULT_TEXT_SIZE;
+}
 function toSurfaceStyle(v: string | null | undefined): SurfaceStyle {
   return (SURFACE_STYLES as readonly string[]).includes(v ?? "") ? (v as SurfaceStyle) : DEFAULT_SURFACE_STYLE;
 }
@@ -53,6 +59,8 @@ async function createSessionFor(db: Db, user: typeof users.$inferSelect, remembe
       loginSlug: tenant?.loginSlug ?? null,
       timezone: tenant?.timezone ?? "Asia/Kolkata",
       surfaceStyle: toSurfaceStyle(tenant?.surfaceStyle),
+      interfaceSize: toInterfaceSize(user.interfaceSize),
+      textSize: toTextSize(user.textSize),
       edition: tenant?.edition ?? DEFAULT_EDITION,
       capabilities,
       branchId: user.branchId,
@@ -231,6 +239,8 @@ export async function resolveSession(db: Db, sessionId: string) {
     role: row.user.role,
     timezone: row.timezone,
     surfaceStyle: toSurfaceStyle(row.surfaceStyle),
+    interfaceSize: toInterfaceSize(row.user.interfaceSize),
+    textSize: toTextSize(row.user.textSize),
     edition: row.edition,
     // Resolved on every request: a Super Admin's switch takes effect immediately, in the API and in the next UI refresh.
     capabilities: await resolveTenantCapabilities(db, row.user.tenantId, row.edition),
