@@ -26,7 +26,7 @@ export function ColumnPicker({ value, onChange, onReset }: { value: LeadColumn[]
         <Columns3 size={14} aria-hidden="true" /> Columns
       </Button>
       {open && (
-        <div role="dialog" aria-label="Choose columns" className="glass-strong absolute right-0 z-30 mt-1 w-56 rounded-panel p-3 shadow-glass" data-testid="leads-columns-popover">
+        <div role="dialog" aria-label="Choose columns" className="floating absolute right-0 z-(--z-dropdown) mt-1 w-56 rounded-panel p-3" data-testid="leads-columns-popover">
           <p className="mb-1 text-[11px] text-ink-2">Patient is always shown.</p>
           <ul>
             {LEAD_COLUMNS.map((c) => (

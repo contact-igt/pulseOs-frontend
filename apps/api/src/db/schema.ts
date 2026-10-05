@@ -22,10 +22,13 @@ export const tenants = pgTable("tenants", {
   // hospitals). Lower-case words only, unique; the page can sign people into THIS hospital and no other.
   loginSlug: text("login_slug"),
   // Weekly clinic hours (see ClinicHours in @pulseos/types). Null = no restriction. Appointments are only accepted inside them.
+  // Interface style (Settings > Appearance): "airy" | "balanced" | "solid". Null = the default (balanced).
+  surfaceStyle: text("surface_style"),
   clinicHours: jsonb("clinic_hours").$type<import("@pulseos/types").ClinicHours | null>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   loginSlugUnique: uniqueIndex("tenants_login_slug_unique").on(t.loginSlug),
+  surfaceStyleShape: check("tenants_surface_style_shape", sql`${t.surfaceStyle} is null or ${t.surfaceStyle} in ('airy', 'balanced', 'solid')`),
   loginSlugShape: check("tenants_login_slug_shape", sql`${t.loginSlug} is null or ${t.loginSlug} ~ '^[a-z][a-z0-9-]{1,38}[a-z0-9]$'`),
 }));
 

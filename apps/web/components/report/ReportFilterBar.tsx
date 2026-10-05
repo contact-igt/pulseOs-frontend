@@ -108,7 +108,7 @@ function ExportMenu({ q }: { q: ReportQuery }) {
         <span className="sm:hidden">Export</span>
       </Button>
       {open && (
-        <div id="report-export-list" role="group" aria-label="Export to Excel" className="glass-strong absolute right-0 z-30 mt-1 w-72 rounded-panel border border-line p-1 shadow-glass" data-testid="report-export-menu">
+        <div id="report-export-list" role="group" aria-label="Export to Excel" className="floating absolute right-0 z-(--z-dropdown) mt-1 w-72 rounded-panel border border-line p-1 shadow-glass" data-testid="report-export-menu">
           {EXPORTS.map((x) => (
             <button
               key={x.kind}
@@ -126,7 +126,7 @@ function ExportMenu({ q }: { q: ReportQuery }) {
         </div>
       )}
       {error && (
-        <p role="alert" className="absolute right-0 z-30 mt-1 w-64 rounded-control bg-white px-2.5 py-1.5 text-xs text-danger-700 shadow-panel" data-testid="report-export-error">
+        <p role="alert" className="absolute right-0 z-(--z-dropdown) mt-1 w-64 rounded-control bg-white px-2.5 py-1.5 text-xs text-danger-700 shadow-panel" data-testid="report-export-error">
           {error}
         </p>
       )}

@@ -15,11 +15,12 @@ import { OutcomesSection } from "@/components/outcomes/OutcomesSection";
 import { ActivitySection } from "@/components/settings/ActivitySection";
 import { RemindersSection } from "@/components/settings/RemindersSection";
 import { FeaturesSection } from "@/components/settings/FeaturesSection";
+import { AppearanceSection } from "@/components/settings/AppearanceSection";
 import { AllocationSection } from "@/components/allocation/AllocationSection";
 import { useUrlFilters } from "@/lib/useUrlFilters";
 import { useCapability } from "@/lib/useEdition";
 
-type Section = "services" | "departments" | "fields" | "sources" | "outcomes" | "followups" | "doctors" | "hours" | "allocation" | "features" | "reminders" | "activity";
+type Section = "services" | "departments" | "fields" | "sources" | "outcomes" | "followups" | "doctors" | "hours" | "allocation" | "features" | "reminders" | "appearance" | "activity";
 const SECTIONS: { key: Section; label: string; manageOnly: boolean }[] = [
   { key: "services", label: "Services", manageOnly: false },
   { key: "departments", label: "Departments", manageOnly: true },
@@ -32,6 +33,7 @@ const SECTIONS: { key: Section; label: string; manageOnly: boolean }[] = [
   { key: "allocation", label: "Allocation Rules", manageOnly: true },
   { key: "features", label: "Features", manageOnly: true },
   { key: "reminders", label: "Reminders", manageOnly: true },
+  { key: "appearance", label: "Appearance", manageOnly: true },
   { key: "activity", label: "Activity", manageOnly: true },
 ];
 
@@ -180,6 +182,11 @@ export default function SettingsPage() {
       {section === "activity" && canManage && (
         <Panel title="Activity" subtitle="Who changed which setting, and when">
           <ActivitySection />
+        </Panel>
+      )}
+      {section === "appearance" && canManage && (
+        <Panel title="Appearance" subtitle="How solid the interface looks for everyone in this hospital">
+          <AppearanceSection />
         </Panel>
       )}
       {section === "reminders" && canManage && (

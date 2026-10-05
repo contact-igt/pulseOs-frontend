@@ -88,6 +88,31 @@
 :root {
   --glass-blur: blur(18px) saturate(140%);
 
+  /* ---- Surface style (Settings > Appearance) ----------------------------------------------------------------
+     ONE bounded preference per hospital: data-surface="airy" | "balanced" | "solid" on <html> (the preview in Settings
+     sets it on its own container). Never a free-form value. Each family has a floor that keeps text readable, so even the
+     most glassy style cannot make a menu, a card or a form see-through:
+       floating (menus, popovers, date pickers)  92-100 %   - the top interaction layer, always near-opaque
+       content  (cards, panels)                  94-100 %   - dense data stays crisp
+       glass    (top bar, nav, filter dock)      85-97 %    - structural chrome may keep some translucency
+     Blur is subtle and only on structural/floating surfaces; "solid" drops floating blur entirely. */
+  --alpha-floating: 0.96;
+  --alpha-content: 0.98;
+  --alpha-glass: 0.9;
+  --alpha-glass-strong: 0.93;
+  --alpha-control: 0.86;
+  --blur-floating: blur(8px) saturate(120%);
+  --shadow-floating: 0 14px 34px rgb(16 42 67 / 0.16), 0 2px 8px rgb(16 42 67 / 0.08);
+
+  /* ---- Layers. One scale; never a raw z-index in a component. ---------------------------------------------- */
+  --z-sticky: 20; /* top bar, sticky table headers */
+  --z-dropdown: 40; /* in-page menus and listboxes */
+  --z-sheet: 50; /* side sheets / drawers */
+  --z-dialog: 60; /* modal dialogs */
+  --z-popover: 65; /* portalled popovers (they can be opened from inside a sheet or dialog) */
+  --z-toast: 70;
+  --z-overlay: 80; /* critical, blocks everything */
+
   /* ---- Light pale-blue glass navigation over a bright pale-blue canvas ---- */
   /* Ambient environment: pale sky at the top-left, cyan and cobalt diffusion at
      the periphery, an icy near-white centre. CSS gradients only. */
@@ -166,16 +191,29 @@ body {
     backdrop-filter: var(--glass-blur);
   }
   .glass {
-    background-color: var(--color-surface-glass);
+    background-color: rgb(255 255 255 / var(--alpha-glass));
   }
   .glass-strong {
-    background-color: var(--color-surface-glass-strong);
+    background-color: rgb(255 255 255 / var(--alpha-glass-strong));
+  }
+  /* A floating surface: menus, dropdowns, popovers, the date picker, the account menu. The top interaction layer: near-opaque
+     (never see-through enough to read what is underneath), a clear separation shadow and a subtle blue-grey edge. */
+  .floating {
+    background-color: rgb(252 254 255 / var(--alpha-floating));
+    border: 1px solid rgb(63 146 229 / 0.24);
+    box-shadow: var(--shadow-floating);
+    -webkit-backdrop-filter: var(--blur-floating);
+    backdrop-filter: var(--blur-floating);
+  }
+  /* A content surface (cards, panels): near-solid white at every style. */
+  .surface-content {
+    background-color: rgb(255 255 255 / var(--alpha-content));
   }
   /* Small controls (search pill, select, icon buttons): the translucent
      material without a backdrop filter — cheap, and reads as glass on the
      ambient background. */
   .glass-control {
-    background-color: rgb(255 255 255 / 0.72);
+    background-color: rgb(255 255 255 / var(--alpha-control));
     border: 1px solid var(--color-glass-border);
     box-shadow: inset 1px 1px 0 rgb(255 255 255 / 0.7), 0 1px 2px rgb(35 74 113 / 0.06);
   }
@@ -195,6 +233,11 @@ body {
       -webkit-backdrop-filter: none;
       backdrop-filter: none;
       background-color: rgb(250 253 255 / 0.95);
+    }
+    .floating {
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+      background-color: rgb(252 254 255 / 0.99);
     }
   }
 
@@ -269,7 +312,7 @@ body {
   /* ---- Drawer / dialog chrome: glass shell, near-solid body so forms stay crisp ---- */
   .drawer-panel,
   .dialog-panel {
-    background-color: rgb(250 253 255 / 0.97);
+    background-color: rgb(250 253 255 / max(var(--alpha-floating), 0.97));
     border: 1px solid var(--color-glass-border);
     box-shadow: var(--shadow-glass), inset 1px 1px 0 rgb(255 255 255 / 0.7);
     -webkit-backdrop-filter: var(--glass-blur);
@@ -324,4 +367,31 @@ body {
       radial-gradient(60% 50% at 0% 100%, rgb(22 133 248 / 0.3), transparent 70%),
       linear-gradient(155deg, #0873dd 0%, #075fbc 38%, #063b79 100%);
   }
+}
+
+/* The three interface styles. "balanced" is the :root default above. Any element can carry the attribute, so the Settings
+   preview shows a style without changing the page around it. Values stay inside the floors documented at :root. */
+[data-surface="airy"] {
+  --alpha-floating: 0.92;
+  --alpha-content: 0.94;
+  --alpha-glass: 0.85;
+  --alpha-glass-strong: 0.88;
+  --alpha-control: 0.8;
+  --blur-floating: blur(10px) saturate(130%);
+}
+[data-surface="balanced"] {
+  --alpha-floating: 0.96;
+  --alpha-content: 0.98;
+  --alpha-glass: 0.9;
+  --alpha-glass-strong: 0.93;
+  --alpha-control: 0.86;
+  --blur-floating: blur(8px) saturate(120%);
+}
+[data-surface="solid"] {
+  --alpha-floating: 1;
+  --alpha-content: 1;
+  --alpha-glass: 0.97;
+  --alpha-glass-strong: 0.98;
+  --alpha-control: 0.95;
+  --blur-floating: none;
 }

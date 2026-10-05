@@ -135,7 +135,19 @@ export const ROLE_GROUP: Record<Role, RoleGroup> = {
 export const ROLE_GROUP_LABEL: Record<RoleGroup, string> = { SUPER_ADMIN: "Super Admin", ADMIN: "Admin", STAFF: "Staff", DOCTOR: "Doctor" };
 export const roleGroupLabel = (role: Role): string => ROLE_GROUP_LABEL[ROLE_GROUP[role]];
 
+/** How solid the interface surfaces are. One bounded per-hospital preference (Settings > Appearance); never free-form values. */
+export const SURFACE_STYLES = ["airy", "balanced", "solid"] as const;
+export type SurfaceStyle = (typeof SURFACE_STYLES)[number];
+export const DEFAULT_SURFACE_STYLE: SurfaceStyle = "balanced";
+export const SURFACE_STYLE_LABEL: Record<SurfaceStyle, { label: string; hint: string }> = {
+  airy: { label: "Airy Glass", hint: "Softer, lighter panels. Menus stay clearly readable." },
+  balanced: { label: "Balanced", hint: "The recommended mix of depth and clarity." },
+  solid: { label: "Solid", hint: "Crisp, almost opaque surfaces everywhere." },
+};
+
 export interface SessionUser {
+  /** The hospital's interface style (tenants.surface_style); hospitals that never chose one read as Balanced. */
+  surfaceStyle?: SurfaceStyle;
   id: string;
   tenantId: string;
   /** The hospital's name (tenants.name). */

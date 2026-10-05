@@ -58,7 +58,7 @@ export function OverflowMenu({ items, testId }: { items: OverflowMenuItem[]; tes
       </button>
       {open && (
         <div
-          className="absolute right-0 top-full z-20 mt-1 w-44 rounded-lg border border-neutral-200 bg-white py-1 shadow-lg"
+          className="floating absolute right-0 top-full z-(--z-dropdown) mt-1 w-44 rounded-card py-1"
           role="menu"
           onClick={(e) => e.stopPropagation()}
         >

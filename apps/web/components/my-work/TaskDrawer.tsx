@@ -49,7 +49,7 @@ export function TaskDrawer({
   const canAct = canManage && open;
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true" aria-label={`Task for ${task.patientName}`}>
+    <div className="fixed inset-0 z-(--z-sheet) flex justify-end" role="dialog" aria-modal="true" aria-label={`Task for ${task.patientName}`}>
       <button type="button" aria-label="Close" tabIndex={-1} onClick={onClose} className="absolute inset-0 drawer-backdrop bg-slate-900/30" />
       <div ref={ref} tabIndex={-1} className="relative flex h-full w-full max-w-md flex-col overflow-hidden drawer-panel focus:outline-none" data-testid="task-drawer">
         <div className="flex items-start justify-between gap-2 border-b border-line p-5">

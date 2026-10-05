@@ -52,7 +52,7 @@ export function PeriodSelect({
           position="popper"
           sideOffset={6}
           collisionPadding={12}
-          className="z-50 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-[12px] border border-line bg-white text-ink shadow-[0_10px_30px_rgba(16,42,67,0.14)]"
+          className="floating z-(--z-popover) min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-[12px] text-ink"
           data-testid={`${testId}-menu`}
         >
           <Select.Viewport className="max-h-[min(20rem,var(--radix-select-content-available-height))] p-1">

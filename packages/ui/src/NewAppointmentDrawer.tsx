@@ -180,7 +180,7 @@ export function NewAppointmentDrawer({
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true" aria-label="New Appointment">
+    <div className="fixed inset-0 z-(--z-sheet) flex justify-end" role="dialog" aria-modal="true" aria-label="New Appointment">
       <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 drawer-backdrop bg-slate-900/30" />
       <form
         ref={dialogRef}
@@ -331,7 +331,7 @@ export function NewAppointmentDrawer({
           </p>
         </div>
 
-        <div className="sticky bottom-0 flex gap-2 border-t border-line bg-white/90 p-4">
+        <div className="sticky bottom-0 flex gap-2 border-t border-line bg-surface p-4">
           <button type="button" onClick={onClose} className="flex-1 rounded-control border border-line-strong px-3 py-2.5 text-sm font-medium text-neutral-600 transition hover:bg-neutral-50">
             Cancel
           </button>

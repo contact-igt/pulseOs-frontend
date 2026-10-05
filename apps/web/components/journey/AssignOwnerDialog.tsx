@@ -46,7 +46,7 @@ export function AssignOwnerDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="assign-owner-title">
+    <div className="fixed inset-0 z-(--z-dialog) flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="assign-owner-title">
       <button type="button" aria-label="Cancel" tabIndex={-1} onClick={onClose} className="drawer-backdrop absolute inset-0 bg-slate-900/40" />
       <div ref={dialogRef} tabIndex={-1} className="dialog-panel relative w-full max-w-sm rounded-panel p-5 focus:outline-none" data-testid="assign-owner-dialog">
         <h2 id="assign-owner-title" className="text-sm font-semibold text-ink">Assign Team Member</h2>
