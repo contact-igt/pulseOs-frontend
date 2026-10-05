@@ -106,13 +106,16 @@ test.describe("Settings > Appearance (per hospital)", () => {
     await page.getByTestId("appearance-option-solid").check({ force: true });
     await expect(page.getByTestId("appearance-preview")).toHaveAttribute("data-surface", "solid");
     await expect.poll(() => alphaOf(page, "preview-menu")).toBe(1);
-    await expect.poll(() => surface(page)).toBe("balanced"); // the real interface changes only on Save
+    // The page the chooser is looking at follows the choice (live), but nothing is stored until Save and nobody else sees it.
+    await expect.poll(() => surface(page)).toBe("solid");
+    expect(sql(`SELECT coalesce(surface_style, 'none') FROM tenants WHERE login_slug = 'namokar-v1'`)).toBe("none");
     await page.getByTestId("appearance-option-airy").check({ force: true });
     await expect.poll(() => alphaOf(page, "preview-menu")).toBeLessThan(0.96);
     expect(await alphaOf(page, "preview-menu")).toBeGreaterThanOrEqual(0.92); // even the airiest menu stays near-opaque
     await page.getByTestId("appearance-cancel").click();
     await expect(page.getByTestId("appearance-option-balanced")).toBeChecked();
     await expect(page.getByTestId("appearance-preview")).toHaveAttribute("data-surface", "balanced");
+    await expect.poll(() => surface(page)).toBe("balanced"); // Cancel puts the saved look back
     await context.close();
   });
 
