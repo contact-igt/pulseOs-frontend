@@ -2,7 +2,7 @@ import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { eq } from "drizzle-orm";
 import { buildApp } from "../app.js";
 import { db, queryClient } from "../db/client.js";
-import { branches, patients } from "../db/schema.js";
+import { branches, patients, tenants, users } from "../db/schema.js";
 import type { FastifyInstance } from "fastify";
 
 const DEMO_PASSWORD = process.env.DEMO_PASSWORD;
@@ -125,7 +125,8 @@ describe.skipIf(!DEMO_PASSWORD)("patients and journeys (integration)", () => {
   });
 
   it("journeys list filtered by branch only returns journeys for patients in that branch", async () => {
-    const [branch] = await db.select().from(branches).limit(1);
+    // The signed-in hospital's own branch (not "any branch in the database": that depends on row order and other hospitals).
+    const [branch] = await db.select({ id: branches.id, name: branches.name }).from(branches).innerJoin(tenants, eq(tenants.id, branches.tenantId)).innerJoin(users, eq(users.tenantId, tenants.id)).where(eq(users.email, "gyn.admin@pulseos.local")).orderBy(branches.name).limit(1);
     const res = await app.inject({ method: "GET", url: `/journeys?branchId=${branch.id}`, cookies: { pulseos_session: cookie } });
     expect(res.statusCode).toBe(200);
     const rows = res.json() as { branchName: string | null }[];

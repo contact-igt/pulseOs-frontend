@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { SOURCE_LABEL } from "@/components/my-work/labels";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@pulseos/api-client";
@@ -27,6 +28,7 @@ export default function JourneysPage() {
   const showRevenue = useCapability("REVENUE_TRACKING");
   const showSpend = useCapability("SPEND_ATTRIBUTION");
   const lookups = useQuery({ queryKey: ["lookups"], queryFn: api.lookups, staleTime: 60_000 });
+  const multiDoctor = (lookups.data?.doctors.length ?? 0) > 1; // one doctor: the column would repeat the same name on every row
 
   const summary = useQuery({ queryKey: ["journeys-summary"], queryFn: api.journeysSummary });
   const journeys = useQuery({
@@ -87,7 +89,7 @@ export default function JourneysPage() {
                 <Th>Journey</Th>
                 <Th>Source / Campaign</Th>
                 <Th>Stage</Th>
-                <Th>Doctor</Th>
+                {multiDoctor && <Th>Doctor</Th>}
                 <Th>Owner</Th>
                 <Th>Last Activity</Th>
                 <Th>Next Action</Th>
@@ -105,11 +107,11 @@ export default function JourneysPage() {
                   </Td>
                   <Td className="text-neutral-600">{j.journeyType}</Td>
                   <Td className="text-neutral-600">
-                    <span className="block">{j.source}</span>
+                    <span className="block">{SOURCE_LABEL[j.source] ?? j.source}</span>
                     {j.campaignName && <span className="block text-[11px] text-neutral-400">{j.campaignName}</span>}
                   </Td>
                   <Td><Badge tone={STAGE_TONE[j.stage] ?? "neutral"}>{STAGE_LABEL[j.stage] ?? j.stage}</Badge></Td>
-                  <Td className="text-neutral-600">{j.doctorName ?? "—"}</Td>
+                  {multiDoctor && <Td className="text-neutral-600">{j.doctorName ?? "—"}</Td>}
                   <Td className={j.ownerName ? "text-neutral-600" : "text-ink-2"}>{j.ownerName ?? "Unassigned"}</Td>
                   <Td className="text-neutral-600">{fmtDate(j.lastActivityAt)}</Td>
                   <Td className="text-neutral-600">{fmtDate(j.nextActionDueAt)}</Td>

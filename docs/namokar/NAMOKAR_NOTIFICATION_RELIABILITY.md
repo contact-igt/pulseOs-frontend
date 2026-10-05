@@ -8,7 +8,7 @@
 5. A reminder is never created for a time that has already passed. A visit booked 40 minutes ahead gets its confirmation, but no "1 hour before" message.
 
 ## If the computer restarts at the wrong moment
-Confirming a visit is saved first; the message is planned a moment later. If the system restarted in that moment, the visit would be confirmed but have no message planned. To make sure that cannot stay unnoticed, PulseOS **checks every 5 minutes**: for every *Confirmed* visit in the next 7 days it asks "should there be a confirmation and a reminder?" and adds only what is missing. It never adds a second copy of something that already exists, and it never sends anything late on its own account (the sending step re-checks the visit just before it sends, and drops the message if the visit is no longer confirmed).
+Confirming a visit is saved first; the message is planned a moment later. If the system restarted in that moment, the visit would be confirmed but have no message planned. To make sure that cannot stay unnoticed, PulseOS **checks every 5 minutes**: for every *Confirmed* visit in the next 7 days it asks "should there be a confirmation and a reminder?" and adds only what is missing. It only fills gaps: it never adds a second copy, never brings back a message that was cancelled, and never re-confirms a visit that was confirmed more than a day ago (so switching WhatsApp on later does not message everyone). Reminders for upcoming visits are still added. The sending step re-checks the visit just before it sends, and drops the message if the visit is no longer confirmed.
 
 You do nothing for this; it runs in the background. Staff can tell it worked by opening the visit: the WhatsApp confirmation shows on the patient's timeline.
 

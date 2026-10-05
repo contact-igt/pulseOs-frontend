@@ -233,7 +233,14 @@ export async function cancelPendingForSubject(db: Db, tenantId: string, type: st
  * (Re)build the notifications for one visit/surgery from the tenant's rules. Safe to call any number of times: the
  * unique idempotency key means a repeat adds nothing. Does nothing unless the hospital has WhatsApp Notifications on.
  */
-export async function planForSubject(db: Db, tenantId: string, type: "APPOINTMENT" | "SURGERY", id: string, now: Date = new Date()): Promise<{ planned: number; suppressed: string[] }> {
+export interface PlanOptions {
+  /** Fill gaps only: a cancelled notification is never brought back (the event paths revive, the safety-net pass must not). */
+  onlyGaps?: boolean;
+  /** false: leave the immediate confirmation out (reminders only). */
+  confirmations?: boolean;
+}
+
+export async function planForSubject(db: Db, tenantId: string, type: "APPOINTMENT" | "SURGERY", id: string, now: Date = new Date(), opts: PlanOptions = {}): Promise<{ planned: number; suppressed: string[] }> {
   const caps = await tenantCapabilityMap(db, tenantId);
   if (!caps.WHATSAPP_NOTIFICATIONS) return { planned: 0, suppressed: [] };
   await ensureNotificationDefaults(db, tenantId);
@@ -247,9 +254,9 @@ export async function planForSubject(db: Db, tenantId: string, type: "APPOINTMEN
   const rows = await db.select({ key: notifications.idempotencyKey, status: notifications.status, scheduledFor: notifications.scheduledFor, subjectAt: notifications.subjectAt }).from(notifications).where(and(eq(notifications.tenantId, tenantId), eq(notifications.subjectType, type), eq(notifications.subjectId, id)));
   // A rule is settled for this exact visit time once its notification exists and was not cancelled; a cancelled one (the visit
   // moved away and came back) may be planned again. Settled ones still count toward the minimum gap.
-  const settled = new Set(rows.filter((r) => r.status !== "CANCELLED").map((r) => r.key));
+  const settled = new Set(rows.filter((r) => opts.onlyGaps || r.status !== "CANCELLED").map((r) => r.key));
   const existing = rows.filter((r) => r.subjectAt?.getTime() === ctx.start!.getTime() && ["PENDING", "PROCESSING", "SENT", "DELIVERED", "READ"].includes(r.status));
-  const open = rules.filter((r) => !settled.has(notificationKey(r.id, id, ctx.start!)));
+  const open = rules.filter((r) => !settled.has(notificationKey(r.id, id, ctx.start!)) && (opts.confirmations !== false || r.kind !== "CONFIRMATION"));
 
   const plan = planNotifications({ start: ctx.start, now, rules: open, cancelled: !!ctx.inactiveReason, alreadyScheduled: existing.map((e) => e.scheduledFor) });
   let planned = 0;

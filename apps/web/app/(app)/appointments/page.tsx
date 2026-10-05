@@ -172,7 +172,8 @@ export default function AppointmentsPage() {
             onAction={canManage ? workflow.handleAction : undefined}
             onComplete={canManage ? workflow.handleComplete : undefined}
             onRowClick={(row) => setSelected(row)}
-            showBranch
+            showBranch={(lookups.data?.branches.length ?? 0) > 1}
+            showDoctor={(lookups.data?.doctors.length ?? 0) > 1}
             showDate={tab !== "today"}
             emptyMessage="No appointments match these filters."
           />

@@ -102,6 +102,9 @@ export default function JourneyDetailPage() {
 
   const session = useQuery({ queryKey: ["session"], queryFn: api.session, retry: false });
   const lookups = useQuery({ queryKey: ["lookups"], queryFn: api.lookups, staleTime: 60_000 });
+  // One branch / one doctor: nothing to tell apart, so neither is repeated on the record.
+  const multiBranch = (lookups.data?.branches.length ?? 0) > 1;
+  const multiDoctor = (lookups.data?.doctors.length ?? 0) > 1;
   const detail = useQuery({
     queryKey: ["journey", journeyId],
     queryFn: () => api.journeyDetail(journeyId),
@@ -142,7 +145,7 @@ export default function JourneyDetailPage() {
       <PageHeader
         back={<JourneyBreadcrumb patient={{ id: patient.id, name: patient.name }} journey={{ id: journey.id, journeyType: journey.journeyType }} />}
         title={patient.name}
-        subtitle={`${patient.age !== null ? `${patient.age} yrs · ` : ""}${patient.phone}${patient.branchName ? ` · ${patient.branchName}` : ""}`}
+        subtitle={`${patient.age !== null ? `${patient.age} yrs · ` : ""}${patient.phone}${multiBranch && patient.branchName ? ` · ${patient.branchName}` : ""}`}
         actions={
           // The three things Staff do most, in one place: log a call, schedule a follow-up, book a visit.
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center" data-testid="journey-actions">
@@ -211,7 +214,7 @@ export default function JourneyDetailPage() {
               )}
             </span>
           </Fact>
-          <Fact label="Doctor">{journey.doctorName ?? "—"}</Fact>
+          {multiDoctor && <Fact label="Doctor">{journey.doctorName ?? "—"}</Fact>}
           <Fact label="Enquiry created">{fmtDate(journey.createdAt)} <span className="text-xs text-ink-2">· {relativeTime(journey.createdAt)}</span></Fact>
           <Fact label="Last interaction">{relativeTime(journey.lastInteractionAt)}</Fact>
         </dl>
@@ -303,7 +306,7 @@ export default function JourneyDetailPage() {
                     <button type="button" onClick={() => workflow.select(a)} className="flex min-h-11 w-full items-start justify-between gap-3 px-4 py-2.5 text-left hover:bg-primary-50/50 sm:min-h-0" data-testid={`journey-appointment-${a.id}`}>
                       <span className="min-w-0">
                         <span className="block truncate text-ink">{fmtDateTime(a.scheduledAt)}</span>
-                        <span className="block truncate text-xs text-ink-2">{a.doctorName ?? "Doctor not set"}{a.reason ? ` · ${a.reason}` : ""}</span>
+                        <span className="block truncate text-xs text-ink-2">{[multiDoctor ? (a.doctorName ?? "Doctor not set") : null, a.reason].filter(Boolean).join(" · ")}</span>
                       </span>
                       <Badge tone={APPOINTMENT_STATUS_TONE[a.status] ?? "neutral"}>{APPOINTMENT_STATUS_LABEL[a.status] ?? a.status}</Badge>
                     </button>

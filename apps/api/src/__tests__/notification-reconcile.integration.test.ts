@@ -4,7 +4,7 @@ import type { FastifyInstance } from "fastify";
 import type { AppointmentRow, NotificationRuleVm, Role } from "@pulseos/types";
 import { buildApp } from "../app.js";
 import { db, queryClient } from "../db/client.js";
-import { appointments, notifications, scheduleResources, tasks, tenants } from "../db/schema.js";
+import { appointments, notifications, scheduleResources, tasks, tenants, timelineEvents } from "../db/schema.js";
 import { getMessagingAdapter } from "../domain/connector/registry.js";
 import { processDueNotifications } from "../domain/notification/notification.service.js";
 import { reconcileAppointmentNotifications } from "../domain/notification/reconcile.js";
@@ -58,10 +58,12 @@ describe.skipIf(!DEMO_PASSWORD)("appointment notification reconciliation (integr
     return { ...(res.json() as AppointmentRow), patientId, journeyId };
   }
   /** The crash: the visit is CONFIRMED in the database and no confirmation event ever ran (so nothing was planned). */
-  async function confirmedWithoutEvent(tt: TestTenant, at: Date) {
+  async function confirmedWithoutEvent(tt: TestTenant, at: Date, confirmedHoursAgo = 0.1) {
     const a = await book(tt, new Date(Date.now() + 40 * HOUR + ++slot * 60_000)); // a valid future slot to book into
     await new Promise((r) => setTimeout(r, 300)); // let the booking's own (no-op: not confirmed yet) event handler finish first
     await db.update(appointments).set({ status: "confirmed", scheduledAt: at }).where(eq(appointments.id, a.id));
+    // The real confirm commits the status AND this timeline line together; only the planning event is lost in the crash.
+    await db.insert(timelineEvents).values({ tenantId: tt.tenantId, patientId: a.patientId, journeyId: a.journeyId, eventType: "appointment_confirmed", title: "Appointment confirmed", relatedEntityType: "appointment", relatedEntityId: a.id, occurredAt: new Date(Date.now() - confirmedHoursAgo * HOUR) });
     expect(await rows(a.id)).toHaveLength(0);
     return { ...a, at };
   }
@@ -69,7 +71,8 @@ describe.skipIf(!DEMO_PASSWORD)("appointment notification reconciliation (integr
     const rules = (await call(tt, "HOSPITAL_ADMIN", "GET", "/notifications/rules")).json() as NotificationRuleVm[];
     for (const r of rules.filter((x) => x.subject === "APPOINTMENT" && match(x))) expect((await call(tt, "HOSPITAL_ADMIN", "PATCH", `/notifications/rules/${r.id}`, { enabled })).statusCode).toBe(200);
   };
-  const reconcile = (now = new Date()) => reconcileAppointmentNotifications(db, now);
+  // Scoped to this file's own hospitals: the real pass is global, and other test files run at the same time in the same database.
+  const reconcile = (now = new Date()) => reconcileAppointmentNotifications(db, now, { tenantIds: tenantsUnderTest().map((x) => x.tenantId) });
 
   beforeAll(async () => {
     app = await buildApp();
@@ -242,6 +245,41 @@ describe.skipIf(!DEMO_PASSWORD)("appointment notification reconciliation (integr
     expect(await job.run(new Date(t0.getTime() + 5 * 60_000 + 1))).toBeDefined(); // five minutes on: runs again
   });
 
+  it("never revives: a cancelled confirmation stays cancelled (worker was late), the pass only fills gaps", async () => {
+    const a = await confirmedWithoutEvent(t, inHours(60));
+    await reconcile();
+    const conf = (await rows(a.id)).find((r) => r.scheduledFor.getTime() < Date.now() + 10_000)!;
+    await db.update(notifications).set({ status: "CANCELLED", reason: "TRIGGER_ALREADY_PASSED" }).where(eq(notifications.id, conf.id));
+    const again = await reconcile();
+    expect(again.recovered).toBe(0);
+    expect((await rows(a.id)).find((r) => r.id === conf.id)).toMatchObject({ status: "CANCELLED", reason: "TRIGGER_ALREADY_PASSED" });
+  });
+
+  it("no mass 'confirmed' message when a switch is turned on later: a visit confirmed days ago gets its reminders, not a new confirmation", async () => {
+    const a = await confirmedWithoutEvent(lean, inHours(30), 72); // confirmed three days ago, while nothing was planned
+    await reconcile();
+    const rs = await rows(a.id);
+    expect(rs).toHaveLength(1); // the 1-hour reminder only
+    expect(dueNowCount(rs)).toBe(0);
+    expect(rs[0]!.scheduledFor.getTime()).toBe(a.at.getTime() - HOUR);
+  });
+
+  it("a large backlog is walked in full across runs: a time-budgeted run hands back where to continue", async () => {
+    const ids: string[] = [];
+    for (let i = 0; i < 5; i++) ids.push((await confirmedWithoutEvent(lean, inHours(100 + i))).id);
+    const own = { tenantIds: [lean.tenantId], budgetMs: -1, pageSize: 2 };
+    let run = await reconcileAppointmentNotifications(db, new Date(), own);
+    let inspected = run.inspected;
+    expect(run.next).not.toBeNull(); // out of budget after the first page of two
+    expect(inspected).toBe(2);
+    for (let guard = 0; run.next && guard < 20; guard++) {
+      run = await reconcileAppointmentNotifications(db, new Date(), { ...own, after: run.next });
+      inspected += run.inspected;
+    }
+    expect(inspected).toBeGreaterThanOrEqual(5); // every visit was reached, none starved
+    for (const id of ids) expect((await rows(id)).length, id).toBeGreaterThanOrEqual(1);
+  });
+
   it("tenant scoping: one hospital's visit only ever produces that hospital's notifications", async () => {
     const a = await confirmedWithoutEvent(other, inHours(72));
     await reconcile();
@@ -257,6 +295,7 @@ describe.skipIf(!DEMO_PASSWORD)("appointment notification reconciliation (integr
     for (const zone of ["UTC", "Asia/Kolkata", "America/New_York"]) {
       await db.update(tenants).set({ timezone: zone }).where(eq(tenants.id, lean.tenantId));
       const a = await confirmedWithoutEvent(lean, start);
+      await db.update(timelineEvents).set({ occurredAt: now }).where(eq(timelineEvents.relatedEntityId, a.id)); // confirmed "just now" on the simulated clock
       await reconcile(now);
       const rs = (await rows(a.id)).sort((x, y) => x.scheduledFor.getTime() - y.scheduledFor.getTime());
       expect(rs, zone).toHaveLength(2);

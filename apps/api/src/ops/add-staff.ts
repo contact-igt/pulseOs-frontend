@@ -49,13 +49,18 @@ function arg(name: string): string | undefined {
 
 async function main() {
   const { db, queryClient } = await import("../db/client.js");
-  const r = await addStaff(db, { loginSlug: arg("hospital") ?? "", role: (arg("role") ?? "") as StaffRole, name: arg("name") ?? "", email: arg("email") ?? "", password: process.env.STAFF_PASSWORD ?? "" });
-  await queryClient.end();
-  if (!r.ok) {
-    console.error(`Not created: ${r.reason}`);
-    process.exit(1);
+  try {
+    const r = await addStaff(db, { loginSlug: arg("hospital") ?? "", role: (arg("role") ?? "") as StaffRole, name: arg("name") ?? "", email: arg("email") ?? "", password: process.env.STAFF_PASSWORD ?? "" });
+    if (!r.ok) {
+      console.error(`Not created: ${r.reason}`);
+      process.exitCode = 1;
+      return;
+    }
+    // The id and the sign-in address only: no email, no password.
+    console.log(`Created ${arg("role")} account ${r.userId} for /login/${arg("hospital")}`);
+  } finally {
+    await queryClient.end();
   }
-  console.log(`Created ${arg("role")} sign-in for ${arg("email")} at /login/${arg("hospital")}`);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) void main();
