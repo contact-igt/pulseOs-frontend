@@ -65,7 +65,12 @@ const diabetesQuestion = (page: Page) => page.locator("label", { hasText: /^\s*D
 test.describe("Namokar workflow: configurable fields, one-save call + appointment, clinic hours", () => {
   test.skip(!DEMO_PASSWORD, "DEMO_PASSWORD must be set to run this suite");
   test.beforeAll(() => purgePatients(MARKER));
-  test.afterAll(() => purgePatients(MARKER));
+  // V2 is configuration only: the configuration changes this spec makes are logged by the product; remove those log lines too.
+  const cleanV2 = () => {
+    purgePatients(MARKER);
+    sql(`DELETE FROM activity_log WHERE tenant_id = (SELECT id FROM tenants WHERE login_slug = '${V2}')`);
+  };
+  test.afterAll(cleanV2);
 
   test("1. Settings → CRM Fields: 'On Add Lead' adds and removes a question at once, per workspace; history is untouched", async ({ browser }) => {
     expect(DIABETES_PLACEMENTS(V2)).not.toContain("add_lead"); // Namokar's first entry stays short
